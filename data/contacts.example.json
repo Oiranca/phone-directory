@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "exportedAt": "2026-04-13T00:00:00Z",
+  "metadata": {
+    "recordCount": 2,
+    "generatedFrom": "example",
+    "generatedBy": "repository-fixture",
+    "editorName": "System",
+    "typeCounts": {
+      "service": 1,
+      "external-center": 1
+    },
+    "areaCounts": {
+      "gestion-administracion": 1,
+      "otros": 1
+    }
+  },
+  "catalogs": {
+    "recordTypes": [
+      "person",
+      "service",
+      "department",
+      "control",
+      "supervision",
+      "room",
+      "external-center",
+      "other"
+    ],
+    "areas": [
+      "sanitaria-asistencial",
+      "gestion-administracion",
+      "especialidades",
+      "otros"
+    ]
+  },
+  "records": [
+    {
+      "id": "cnt_0001",
+      "externalId": "example-1",
+      "type": "service",
+      "displayName": "Admisión General",
+      "organization": {
+        "department": "Admisión",
+        "service": "Información",
+        "area": "gestion-administracion"
+      },
+      "contactMethods": {
+        "phones": [
+          {
+            "id": "ph_0001_1",
+            "label": "Principal",
+            "number": "70005",
+            "kind": "internal",
+            "isPrimary": true,
+            "confidential": false,
+            "noPatientSharing": true
+          }
+        ],
+        "emails": []
+      },
+      "aliases": ["mostrador admisión"],
+      "tags": ["admisión"],
+      "status": "active",
+      "source": {
+        "externalId": "example-1",
+        "sheetSlug": "example",
+        "sheetRow": "1"
+      },
+      "audit": {
+        "createdAt": "2026-04-13T00:00:00Z",
+        "updatedAt": "2026-04-13T00:00:00Z",
+        "createdBy": "System",
+        "updatedBy": "System"
+      }
+    },
+    {
+      "id": "cnt_0002",
+      "externalId": "example-2",
+      "type": "external-center",
+      "displayName": "Centro de Salud Demo - Información",
+      "organization": {
+        "department": "Centros de salud",
+        "service": "Información",
+        "area": "otros"
+      },
+      "location": {
+        "text": "Avenida de ejemplo, 10"
+      },
+      "contactMethods": {
+        "phones": [
+          {
+            "id": "ph_0002_1",
+            "label": "General",
+            "number": "928000000",
+            "kind": "external",
+            "isPrimary": true,
+            "confidential": false,
+            "noPatientSharing": false
+          }
+        ],
+        "emails": []
+      },
+      "aliases": ["cs demo"],
+      "tags": [],
+      "status": "active",
+      "source": {
+        "externalId": "example-2",
+        "sheetSlug": "example",
+        "sheetRow": "2"
+      },
+      "audit": {
+        "createdAt": "2026-04-13T00:00:00Z",
+        "updatedAt": "2026-04-13T00:00:00Z",
+        "createdBy": "System",
+        "updatedBy": "System"
+      }
+    }
+  ]
+}
