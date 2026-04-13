@@ -90,11 +90,18 @@ def build_person(row: dict[str, str]) -> dict[str, str | None] | None:
     })
 
 
+def normalize_area(value: str) -> str | None:
+    area = maybe(value)
+    if area in CATALOGS["areas"]:
+        return area
+    return None
+
+
 def build_organization(row: dict[str, str]) -> dict[str, str | None]:
     return compact_object({
         "department": maybe(row.get("department", "")),
         "service": maybe(row.get("service", "")),
-        "area": maybe(row.get("area", "")),
+        "area": normalize_area(row.get("area", "")),
         "specialty": maybe(row.get("specialty", "")),
     })
 

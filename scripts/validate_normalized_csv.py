@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -147,7 +146,7 @@ def validate_rows(rows: list[dict[str, str]]) -> dict[str, object]:
             errors.append(issue(row_index, "missing_contact_or_location", "row must have phone, email, or location"))
 
         if area and area not in ALLOWED_AREAS:
-            warnings.append(issue(row_index, "unknown_area", f"unknown area: {area}"))
+            errors.append(issue(row_index, "invalid_area", f"unknown area: {area}"))
 
         if status and status not in ALLOWED_STATUS:
             errors.append(issue(row_index, "invalid_status", f"invalid status: {status}"))

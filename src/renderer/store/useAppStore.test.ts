@@ -4,7 +4,7 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 
 describe("selectVisibleRecords", () => {
   it("matches operational search fields beyond the display name", () => {
-    const record = defaultContacts.records[0];
+    const record = structuredClone(defaultContacts.records[0]);
     record.person = { firstName: "Ana", lastName: "Pérez" };
     record.location = { building: "Hospital General", floor: "Planta 2", room: "Sala 12", text: "Control norte" };
     record.notes = "Cobertura de noche";
