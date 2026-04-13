@@ -373,7 +373,7 @@ def normalize_centers_sheet(path: Path) -> list[dict[str, str]]:
         if len(phones) > 1:
             record["phone2Label"] = ""
             record["phone2Number"] = phones[1]
-            record["phone2Kind"] = "internal"
+            record["phone2Kind"] = "external"
             record["phone2IsPrimary"] = "false"
             record["phone2Confidential"] = "false"
             record["phone2NoPatientSharing"] = "false"
