@@ -39,3 +39,5 @@ data/*.json
 !data/*.example.json
 
 .codex/
+HANDOFF.md
+docs/DECISIONS.md
