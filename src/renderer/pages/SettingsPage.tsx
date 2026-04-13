@@ -4,12 +4,42 @@ import { useAppStore } from "../store/useAppStore";
 export const SettingsPage = () => {
   const { settings, contacts, initialize, setSettings } = useAppStore();
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [bootstrapError, setBootstrapError] = useState("");
+
+  const loadBootstrapData = async () => {
+    try {
+      setBootstrapError("");
+      const payload = await window.hospitalDirectory.getBootstrapData();
+      initialize(payload);
+    } catch {
+      setBootstrapError(
+        "No se pudo cargar la configuración local. Revisa los archivos de datos o restaura una copia válida."
+      );
+    }
+  };
 
   useEffect(() => {
     if (!settings || !contacts) {
-      void window.hospitalDirectory.getBootstrapData().then(initialize);
+      void loadBootstrapData();
     }
-  }, [contacts, initialize, settings]);
+  }, [contacts, settings]);
+
+  if (bootstrapError) {
+    return (
+      <section className="rounded-3xl bg-white p-6 shadow-panel">
+        <h2 className="text-2xl font-semibold text-scs-blueDark">Configuración no disponible</h2>
+        <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
+        <button
+          type="button"
+          onClick={() => void loadBootstrapData()}
+          className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+        >
+          Reintentar
+        </button>
+      </section>
+    );
+  }
 
   if (!settings) {
     return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;
@@ -17,9 +47,19 @@ export const SettingsPage = () => {
 
   const handleSave = async () => {
     setIsSaving(true);
-    const saved = await window.hospitalDirectory.saveSettings(settings);
-    setSettings(saved);
-    setIsSaving(false);
+    setSaveError("");
+
+    try {
+      const saved = await window.hospitalDirectory.saveSettings({
+        editorName: settings.editorName,
+        ui: settings.ui
+      });
+      setSettings(saved);
+    } catch {
+      setSaveError("No se pudo guardar la configuración. Inténtalo de nuevo.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -43,6 +83,7 @@ export const SettingsPage = () => {
       >
         {isSaving ? "Guardando…" : "Guardar configuración"}
       </button>
+      {saveError && <p className="mt-4 text-sm font-medium text-red-700">{saveError}</p>}
     </section>
   );
 };

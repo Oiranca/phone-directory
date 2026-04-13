@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
-import { appSettingsSchema, directoryDatasetSchema } from "../../shared/schemas/contact.js";
+import path from "node:path";
+import { appSettingsSchema, directoryDatasetSchema, editableAppSettingsSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
-import type { AppSettings, BootstrapData, DirectoryDataset } from "../../shared/types/contact.js";
+import type { AppSettings, BootstrapData, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 
@@ -32,23 +33,30 @@ export class AppDataService {
       await readJsonFile<DirectoryDataset>(getContactsFilePath())
     );
 
-    const settings = appSettingsSchema.parse(
-      await readJsonFile<AppSettings>(getSettingsFilePath())
-    );
+    const settings = await this.readSettings();
 
-    return { contacts, settings };
+    return { contacts, settings: this.toEditableSettings(settings) };
   }
 
-  async saveSettings(settings: AppSettings) {
-    const parsed = appSettingsSchema.parse(settings);
-    await writeJsonFile(getSettingsFilePath(), parsed);
-    return parsed;
+  async saveSettings(settings: EditableAppSettings) {
+    const parsed = editableAppSettingsSchema.parse(settings);
+    const currentSettings = await this.readSettings();
+    const nextSettings = {
+      ...currentSettings,
+      editorName: parsed.editorName,
+      ui: parsed.ui
+    };
+
+    await writeJsonFile(getSettingsFilePath(), nextSettings);
+    return nextSettings;
   }
 
   async createBackup() {
     const source = await readJsonFile<DirectoryDataset>(getContactsFilePath());
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupFilePath = `${getManagedBackupDirectory()}/contacts-${safeTimestamp}.json`;
+    const backupDirectory = getManagedBackupDirectory();
+    await ensureDirectory(backupDirectory);
+    const backupFilePath = path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
     await writeJsonFile(backupFilePath, source);
     return backupFilePath;
   }
@@ -60,5 +68,18 @@ export class AppDataService {
     } catch {
       return false;
     }
+  }
+
+  toEditableSettings(settings: AppSettings): EditableAppSettings {
+    return {
+      editorName: settings.editorName,
+      ui: settings.ui
+    };
+  }
+
+  private async readSettings() {
+    return appSettingsSchema.parse(
+      await readJsonFile<AppSettings>(getSettingsFilePath())
+    );
   }
 }

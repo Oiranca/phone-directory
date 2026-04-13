@@ -88,3 +88,8 @@ export const appSettingsSchema = z.object({
     showInactiveByDefault: z.boolean()
   })
 });
+
+export const editableAppSettingsSchema = appSettingsSchema.pick({
+  editorName: true,
+  ui: true
+});

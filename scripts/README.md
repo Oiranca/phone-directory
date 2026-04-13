@@ -52,7 +52,7 @@ python3 scripts/extract_ods_to_csv.py "/path/to/file.ods" \
 
 - Output CSV files are working files, not the final normalized import template.
 - The next step after extraction is normalization into the project CSV import template.
-- See [../ODS_TO_CSV_MAPPING.md](/Users/samuelromeroarbelo/Projects/phone-directory/ODS_TO_CSV_MAPPING.md) for mapping rules.
+- See [../ODS_TO_CSV_MAPPING.md](../ODS_TO_CSV_MAPPING.md) for mapping rules.
 
 ## `normalize_working_csvs.py`
 

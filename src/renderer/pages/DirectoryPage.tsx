@@ -1,15 +1,42 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 
 export const DirectoryPage = () => {
   const { contacts, settings, query, selectedRecordId, initialize, setQuery, setSelectedRecordId, isLoading } =
     useAppStore();
+  const [bootstrapError, setBootstrapError] = useState("");
+
+  const loadBootstrapData = async () => {
+    try {
+      setBootstrapError("");
+      const payload = await window.hospitalDirectory.getBootstrapData();
+      initialize(payload);
+    } catch {
+      setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");
+    }
+  };
 
   useEffect(() => {
     if (!contacts) {
-      void window.hospitalDirectory.getBootstrapData().then(initialize);
+      void loadBootstrapData();
     }
-  }, [contacts, initialize]);
+  }, [contacts]);
+
+  if (bootstrapError) {
+    return (
+      <section className="rounded-3xl bg-white p-8 shadow-panel">
+        <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
+        <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
+        <button
+          type="button"
+          onClick={() => void loadBootstrapData()}
+          className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+        >
+          Reintentar
+        </button>
+      </section>
+    );
+  }
 
   if (isLoading || !contacts || !settings) {
     return <section className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
@@ -38,7 +65,12 @@ export const DirectoryPage = () => {
             <h2 className="text-xl font-semibold text-scs-blueDark">Búsqueda principal</h2>
             <p className="text-sm text-slate-600">Base inicial lista para Fuse.js, filtros y detalle.</p>
           </div>
+          <label htmlFor="directory-search" className="sr-only">
+            Buscar contactos
+          </label>
           <input
+            id="directory-search"
+            aria-label="Buscar contactos"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar por nombre, servicio, alias o teléfono"

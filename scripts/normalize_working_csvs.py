@@ -286,7 +286,7 @@ def normalize_service_sheet(path: Path) -> list[dict[str, str]]:
 
         label_note = []
         if current_section and current_section != department:
-            label_note.append(f"Section: {current_section}")
+            label_note.append(f"Sección: {current_section}")
         if notes:
             label_note.append(notes)
         final_notes = " | ".join(clean_note_fragments(label_note))
@@ -308,7 +308,7 @@ def normalize_service_sheet(path: Path) -> list[dict[str, str]]:
         record["phone1NoPatientSharing"] = "true" if no_share else "false"
         record["phone1Notes"] = final_notes
         if len(phone_numbers) > 1:
-            record["phone2Label"] = "Secondary"
+            record["phone2Label"] = "Secundario"
             record["phone2Number"] = phone_numbers[1]
             record["phone2Kind"] = "internal"
             record["phone2IsPrimary"] = "false"
@@ -371,7 +371,7 @@ def normalize_centers_sheet(path: Path) -> list[dict[str, str]]:
             record["phone1Confidential"] = "false"
             record["phone1NoPatientSharing"] = "false"
         if len(phones) > 1:
-            record["phone2Label"] = "Short"
+            record["phone2Label"] = ""
             record["phone2Number"] = phones[1]
             record["phone2Kind"] = "internal"
             record["phone2IsPrimary"] = "false"

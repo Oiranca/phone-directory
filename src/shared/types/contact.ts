@@ -88,7 +88,14 @@ export interface AppSettings {
   };
 }
 
+export interface EditableAppSettings {
+  editorName: string;
+  ui: {
+    showInactiveByDefault: boolean;
+  };
+}
+
 export interface BootstrapData {
   contacts: DirectoryDataset;
-  settings: AppSettings;
+  settings: EditableAppSettings;
 }

@@ -12,16 +12,8 @@ from pathlib import Path
 
 
 REQUIRED_HEADERS = {
-    "externalId",
     "type",
     "displayName",
-    "area",
-    "status",
-    "phone1Number",
-    "phone1Kind",
-    "phone1IsPrimary",
-    "phone1Confidential",
-    "phone1NoPatientSharing",
 }
 
 ALLOWED_TYPES = {

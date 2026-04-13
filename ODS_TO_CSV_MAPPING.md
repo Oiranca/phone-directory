@@ -2,9 +2,7 @@
 
 ## Source File
 
-This mapping guide is based on the current source file:
-
-- `/Users/samuelromeroarbelo/Documents/Telefonista/Agenda/Agenda_Telefónica_22_04.ods`
+This mapping guide is based on the current hospital directory workbook used during discovery and migration design.
 
 ## Goal
 
@@ -12,8 +10,8 @@ The purpose of this document is to convert the current `.ods` hospital directory
 
 Reference template files:
 
-- [CSV_IMPORT_TEMPLATE.md](/Users/samuelromeroarbelo/Projects/phone-directory/CSV_IMPORT_TEMPLATE.md)
-- [csv/contacts-import-template.csv](/Users/samuelromeroarbelo/Projects/phone-directory/csv/contacts-import-template.csv)
+- [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
+- [csv/contacts-import-template.csv](./csv/contacts-import-template.csv)
 
 ## 1. Key Finding About the Source File
 

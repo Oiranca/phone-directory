@@ -13,5 +13,5 @@
     "outDir": "dist-electron"
   },
   "include": ["src/main", "src/preload", "src/shared"],
-  "exclude": ["src/shared/**/*.test.ts"]
+  "exclude": ["src/shared/**/*.test.ts", "src/main/**/*.test.ts"]
 }

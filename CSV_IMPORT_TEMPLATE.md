@@ -193,4 +193,4 @@ The importer should warn when:
 
 See:
 
-- [csv/contacts-import-template.csv](/Users/samuelromeroarbelo/Projects/phone-directory/csv/contacts-import-template.csv)
+- [csv/contacts-import-template.csv](./csv/contacts-import-template.csv)

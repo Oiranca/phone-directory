@@ -1,13 +1,13 @@
 /// <reference types="vite/client" />
 
-import type { AppSettings, BootstrapData } from "../shared/types/contact";
+import type { BootstrapData, EditableAppSettings } from "../shared/types/contact";
 
 declare global {
   interface Window {
     hospitalDirectory: {
       getBootstrapData: () => Promise<BootstrapData>;
-      saveSettings: (settings: AppSettings) => Promise<AppSettings>;
-      createBackup: () => Promise<string>;
+      saveSettings: (settings: EditableAppSettings) => Promise<EditableAppSettings>;
+      createBackup: () => Promise<void>;
     };
   }
 }

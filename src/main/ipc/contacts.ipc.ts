@@ -8,7 +8,9 @@ const CHANNELS = {
 
 export const registerContactsIpc = (service: AppDataService) => {
   ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
-  ipcMain.handle(CHANNELS.createBackup, () => service.createBackup());
+  ipcMain.handle(CHANNELS.createBackup, async () => {
+    await service.createBackup();
+  });
 };
 
 export type ContactsChannels = typeof CHANNELS;

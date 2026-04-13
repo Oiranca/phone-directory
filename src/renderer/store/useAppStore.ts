@@ -1,16 +1,16 @@
 import { create } from "zustand";
-import type { AppSettings, BootstrapData, ContactRecord, DirectoryDataset } from "../../shared/types/contact";
+import type { BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact";
 
 interface AppStore {
   contacts: DirectoryDataset | null;
-  settings: AppSettings | null;
+  settings: EditableAppSettings | null;
   selectedRecordId: string | null;
   query: string;
   isLoading: boolean;
   initialize: (payload: BootstrapData) => void;
   setQuery: (query: string) => void;
   setSelectedRecordId: (id: string | null) => void;
-  setSettings: (settings: AppSettings) => void;
+  setSettings: (settings: EditableAppSettings) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -42,10 +42,26 @@ export const selectVisibleRecords = (records: ContactRecord[], query: string, sh
     }
     return [
       record.displayName,
+      record.person?.firstName,
+      record.person?.lastName,
       record.organization.department,
       record.organization.service,
+      record.organization.specialty,
+      record.organization.area,
+      record.location?.building,
+      record.location?.floor,
+      record.location?.room,
+      record.location?.text,
+      record.notes,
       ...record.aliases,
-      ...record.contactMethods.phones.map((phone) => phone.number)
+      ...record.tags,
+      ...record.contactMethods.phones.flatMap((phone) => [
+        phone.label,
+        phone.number,
+        phone.extension,
+        phone.notes
+      ]),
+      ...record.contactMethods.emails.flatMap((email) => [email.label, email.address])
     ]
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(normalizedQuery));

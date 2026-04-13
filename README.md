@@ -25,6 +25,7 @@ The repository currently includes:
 
 Planning and migration reference files:
 
+- [HANDOFF.md](./HANDOFF.md)
 - [MVP_PLAN.md](./MVP_PLAN.md)
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
@@ -73,7 +74,7 @@ Run the test suite:
 npm run test
 ```
 
-Run the local pre-push CI gate:
+Run the local pre-commit CI gate:
 
 ```bash
 npm run ci
@@ -99,10 +100,9 @@ If the gate fails:
 
 - the commit is blocked
 - a failure report is written under `tmp/ci/`
-- `codex exec` is invoked automatically to attempt a local fix in the working tree
-- no commit is created automatically
+- no automatic fix is applied by the hook
 
-After the auto-fix attempt, review the changes, re-stage what you want, and run `git commit` again.
+After fixing the reported failures locally, re-stage what you want and run `git commit` again.
 
 Temporary bypass for an exceptional case:
 

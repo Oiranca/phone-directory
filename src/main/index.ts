@@ -7,6 +7,15 @@ import { AppDataService } from "./services/app-data.service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const DEV_SERVER_URL = "http://localhost:5173";
+
+const isAllowedNavigationUrl = (targetUrl: string) => {
+  if (isDev) {
+    return targetUrl.startsWith(`${DEV_SERVER_URL}/`) || targetUrl === DEV_SERVER_URL;
+  }
+
+  return targetUrl.startsWith("file://");
+};
 
 const createWindow = () => {
   const window = new BrowserWindow({
@@ -18,12 +27,20 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event, targetUrl) => {
+    if (!isAllowedNavigationUrl(targetUrl)) {
+      event.preventDefault();
     }
   });
 
   if (isDev) {
-    void window.loadURL("http://localhost:5173");
+    void window.loadURL(DEV_SERVER_URL);
     window.webContents.openDevTools({ mode: "detach" });
     return;
   }

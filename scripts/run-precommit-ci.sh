@@ -5,7 +5,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$REPO_ROOT/tmp/ci"
 STATUS_FILE="$LOG_DIR/pre-commit-status.txt"
 REPORT_FILE="$LOG_DIR/pre-commit-report.txt"
-CODEX_OUTPUT_FILE="$LOG_DIR/codex-last-message.txt"
 
 mkdir -p "$LOG_DIR"
 
@@ -53,40 +52,15 @@ fi
 
 cat <<EOF | tee -a "$REPORT_FILE"
 CI gate failed.
-
-Codex auto-fix mode will be invoked next.
 Expected behavior:
 - inspect the failure report
 - fix the repository locally
-- do not commit
-- do not reset or discard changes
-- stop after applying the smallest safe fix
+- re-run the failing checks
+- re-stage the intended changes
 EOF
 
-if command -v codex >/dev/null 2>&1; then
-  codex exec \
-    -C "$REPO_ROOT" \
-    --full-auto \
-    --output-last-message "$CODEX_OUTPUT_FILE" \
-    "You are fixing a failed pre-commit CI gate in this repository.
-
-Read the failure report at: $REPORT_FILE
-
-Requirements:
-- fix the failing checks in the current working tree
-- do not commit
-- do not reset, clean, or discard user changes
-- keep all code comments, identifiers, and documentation in English
-- keep user-facing application text in Spanish
-- after changes, rerun only the failing checks if needed
-- finish with a short summary of what was fixed
-"
-else
-  echo "Codex CLI not found. Auto-fix was skipped." | tee -a "$REPORT_FILE"
-fi
-
 echo
-echo "Commit blocked. Review the applied changes, re-stage as needed, and commit again."
+echo "Commit blocked. Fix the reported failures, re-stage as needed, and commit again."
 echo "Failure report: $REPORT_FILE"
 
 exit 1

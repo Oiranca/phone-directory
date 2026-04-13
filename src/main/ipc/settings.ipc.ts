@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import type { AppSettings } from "../../shared/types/contact.js";
+import type { EditableAppSettings } from "../../shared/types/contact.js";
 import { AppDataService } from "../services/app-data.service.js";
 
 const CHANNELS = {
@@ -7,7 +7,10 @@ const CHANNELS = {
 };
 
 export const registerSettingsIpc = (service: AppDataService) => {
-  ipcMain.handle(CHANNELS.save, (_event, payload: AppSettings) => service.saveSettings(payload));
+  ipcMain.handle(CHANNELS.save, async (_event, payload: EditableAppSettings) => {
+    const saved = await service.saveSettings(payload);
+    return service.toEditableSettings(saved);
+  });
 };
 
 export type SettingsChannels = typeof CHANNELS;
