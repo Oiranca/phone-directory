@@ -99,3 +99,57 @@ export interface BootstrapData {
   contacts: DirectoryDataset;
   settings: EditableAppSettings;
 }
+
+export interface EditablePhoneContact {
+  id: string;
+  label?: string;
+  number: string;
+  extension?: string;
+  kind: string;
+  isPrimary: boolean;
+  confidential: boolean;
+  noPatientSharing: boolean;
+  notes?: string;
+}
+
+export interface EditableEmailContact {
+  id: string;
+  address: string;
+  label?: string;
+  isPrimary: boolean;
+}
+
+export interface EditableContactRecord {
+  id?: string;
+  externalId?: string;
+  type: RecordType;
+  displayName: string;
+  person?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  organization: {
+    department?: string;
+    service?: string;
+    area?: AreaType;
+    specialty?: string;
+  };
+  location?: {
+    building?: string;
+    floor?: string;
+    room?: string;
+    text?: string;
+  };
+  contactMethods: {
+    phones: EditablePhoneContact[];
+    emails: EditableEmailContact[];
+  };
+  aliases: string[];
+  tags: string[];
+  notes?: string;
+  status: "active" | "inactive";
+}
+
+export interface SaveContactResult extends BootstrapData {
+  savedRecordId: string;
+}

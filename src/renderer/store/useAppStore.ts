@@ -20,6 +20,7 @@ interface AppStore {
   setShowInactive: (showInactive: boolean) => void;
   setSelectedRecordId: (id: string | null) => void;
   setSettings: (settings: EditableAppSettings) => void;
+  setContacts: (contacts: DirectoryDataset) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -46,7 +47,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setSelectedArea: (selectedArea) => set({ selectedArea }),
   setShowInactive: (showInactive) => set({ showInactive }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
-  setSettings: (settings) => set({ settings })
+  setSettings: (settings) => set({ settings }),
+  setContacts: (contacts) => set({ contacts })
 }));
 
 export const selectVisibleRecords = (
