@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectoryPage } from "./DirectoryPage";
 import { useAppStore } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
@@ -7,11 +7,14 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 const resetStore = () => {
   useAppStore.setState({
     contacts: null,
-    settings: null,
-    selectedRecordId: null,
-    query: "",
-    isLoading: true
-  });
+      settings: null,
+      selectedRecordId: null,
+      query: "",
+      selectedType: "all",
+      selectedArea: "all",
+      showInactive: false,
+      isLoading: true
+    });
 };
 
 describe("DirectoryPage", () => {
@@ -25,6 +28,10 @@ describe("DirectoryPage", () => {
         createBackup: vi.fn()
       }
     });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("shows a recovery state when bootstrap loading fails", async () => {
@@ -53,5 +60,36 @@ describe("DirectoryPage", () => {
       expect(screen.getByText("Búsqueda principal")).toBeInTheDocument();
       expect(screen.getByDisplayValue("")).toBeInTheDocument();
     });
+  });
+
+  it("filters by type and can reveal inactive records", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[0]),
+      id: "inactive-record",
+      displayName: "Control de Noche",
+      type: "control",
+      status: "inactive"
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    render(<DirectoryPage />);
+
+    expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
+    expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "control" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar registros inactivos/i }));
+
+    expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
   });
 });

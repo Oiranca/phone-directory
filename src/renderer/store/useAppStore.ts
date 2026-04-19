@@ -1,14 +1,22 @@
 import { create } from "zustand";
+import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact";
+import { searchRecords } from "../services/search.service";
 
 interface AppStore {
   contacts: DirectoryDataset | null;
   settings: EditableAppSettings | null;
   selectedRecordId: string | null;
   query: string;
+  selectedType: RecordType | "all";
+  selectedArea: AreaType | "all";
+  showInactive: boolean;
   isLoading: boolean;
   initialize: (payload: BootstrapData) => void;
   setQuery: (query: string) => void;
+  setSelectedType: (type: RecordType | "all") => void;
+  setSelectedArea: (area: AreaType | "all") => void;
+  setShowInactive: (showInactive: boolean) => void;
   setSelectedRecordId: (id: string | null) => void;
   setSettings: (settings: EditableAppSettings) => void;
 }
@@ -18,52 +26,34 @@ export const useAppStore = create<AppStore>((set) => ({
   settings: null,
   selectedRecordId: null,
   query: "",
+  selectedType: "all",
+  selectedArea: "all",
+  showInactive: false,
   isLoading: true,
   initialize: (payload) =>
     set({
       contacts: payload.contacts,
       settings: payload.settings,
       selectedRecordId: payload.contacts.records[0]?.id ?? null,
+      selectedType: "all",
+      selectedArea: "all",
+      showInactive: payload.settings.ui.showInactiveByDefault,
       isLoading: false
     }),
   setQuery: (query) => set({ query }),
+  setSelectedType: (selectedType) => set({ selectedType }),
+  setSelectedArea: (selectedArea) => set({ selectedArea }),
+  setShowInactive: (showInactive) => set({ showInactive }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setSettings: (settings) => set({ settings })
 }));
 
-export const selectVisibleRecords = (records: ContactRecord[], query: string, showInactive: boolean) => {
-  const normalizedQuery = query.trim().toLowerCase();
-  return records.filter((record) => {
-    if (!showInactive && record.status === "inactive") {
-      return false;
-    }
-    if (!normalizedQuery) {
-      return true;
-    }
-    return [
-      record.displayName,
-      record.person?.firstName,
-      record.person?.lastName,
-      record.organization.department,
-      record.organization.service,
-      record.organization.specialty,
-      record.organization.area,
-      record.location?.building,
-      record.location?.floor,
-      record.location?.room,
-      record.location?.text,
-      record.notes,
-      ...record.aliases,
-      ...record.tags,
-      ...record.contactMethods.phones.flatMap((phone) => [
-        phone.label,
-        phone.number,
-        phone.extension,
-        phone.notes
-      ]),
-      ...record.contactMethods.emails.flatMap((email) => [email.label, email.address])
-    ]
-      .filter(Boolean)
-      .some((value) => value!.toLowerCase().includes(normalizedQuery));
-  });
-};
+export const selectVisibleRecords = (
+  records: ContactRecord[],
+  query: string,
+  filters: {
+    selectedType: RecordType | "all";
+    selectedArea: AreaType | "all";
+    showInactive: boolean;
+  }
+) => searchRecords(records, query, filters);
