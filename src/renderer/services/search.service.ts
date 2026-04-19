@@ -10,7 +10,6 @@ export interface DirectoryFilters {
 }
 
 const fuseOptions: IFuseOptions<ContactRecord> = {
-  includeScore: true,
   ignoreLocation: true,
   threshold: 0.28,
   keys: [
@@ -27,6 +26,8 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
     { name: "contactMethods.emails.address", weight: 0.01 }
   ]
 };
+
+const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   records.filter((record) => {
@@ -46,15 +47,23 @@ const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   });
 
 export const searchRecords = (records: ContactRecord[], query: string, filters: DirectoryFilters) => {
-  const filteredRecords = applyFilters(records, filters);
   const normalizedQuery = query.trim();
 
   if (!normalizedQuery) {
-    return filteredRecords;
+    return applyFilters(records, filters);
   }
 
-  const fuse = new Fuse(filteredRecords, fuseOptions);
-  return fuse.search(normalizedQuery).map((result) => result.item);
+  const cachedFuse = fuseCache.get(records);
+  const fuse = cachedFuse ?? new Fuse(records, fuseOptions);
+
+  if (!cachedFuse) {
+    fuseCache.set(records, fuse);
+  }
+
+  return applyFilters(
+    fuse.search(normalizedQuery).map((result) => result.item),
+    filters
+  );
 };
 
 export const getPreferredResultPhone = (record: ContactRecord) =>

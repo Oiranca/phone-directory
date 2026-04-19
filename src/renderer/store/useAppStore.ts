@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact";
+import type { DirectoryFilters } from "../services/search.service";
 import { searchRecords } from "../services/search.service";
 
 interface AppStore {
@@ -51,9 +52,5 @@ export const useAppStore = create<AppStore>((set) => ({
 export const selectVisibleRecords = (
   records: ContactRecord[],
   query: string,
-  filters: {
-    selectedType: RecordType | "all";
-    selectedArea: AreaType | "all";
-    showInactive: boolean;
-  }
+  filters: DirectoryFilters
 ) => searchRecords(records, query, filters);
