@@ -73,17 +73,20 @@ export const getPreferredResultPhone = (record: ContactRecord) =>
   record.contactMethods.phones[0];
 
 export const getPhonePrivacyFlags = (record: ContactRecord) => {
-  const flags = new Set<string>();
+  const hasConfidentialPhone = record.contactMethods.phones.some((phone) => phone.confidential);
+  const hasNoPatientSharingPhone = record.contactMethods.phones.some(
+    (phone) => phone.noPatientSharing
+  );
 
-  record.contactMethods.phones.forEach((phone) => {
-    if (phone.confidential) {
-      flags.add("Confidencial");
-    }
+  const flags: string[] = [];
 
-    if (phone.noPatientSharing) {
-      flags.add("No facilitar a pacientes");
-    }
-  });
+  if (hasConfidentialPhone) {
+    flags.push("Confidencial");
+  }
 
-  return Array.from(flags);
+  if (hasNoPatientSharingPhone) {
+    flags.push("No facilitar a pacientes");
+  }
+
+  return flags;
 };

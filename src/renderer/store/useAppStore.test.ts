@@ -69,4 +69,24 @@ describe("search service helpers", () => {
     expect(getPreferredResultPhone(record)?.number).toBe("111");
     expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial", "No facilitar a pacientes"]);
   });
+
+  it("returns privacy flags in a stable priority order", () => {
+    const record = structuredClone(defaultContacts.records[0]);
+    record.contactMethods.phones = [
+      {
+        ...record.contactMethods.phones[0],
+        id: "no-patient-sharing-first",
+        noPatientSharing: true,
+        confidential: false
+      },
+      {
+        ...record.contactMethods.phones[0],
+        id: "confidential-second",
+        noPatientSharing: false,
+        confidential: true
+      }
+    ];
+
+    expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial", "No facilitar a pacientes"]);
+  });
 });
