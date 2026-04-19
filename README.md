@@ -68,6 +68,16 @@ Start the development environment:
 npm run dev
 ```
 
+Optional local development environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Available development variables:
+
+- `ELECTRON_OPEN_DEVTOOLS=1` opens Electron DevTools automatically in development.
+
 Run the test suite:
 
 ```bash
