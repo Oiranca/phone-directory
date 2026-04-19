@@ -3,7 +3,18 @@ import path from "node:path";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
-import type { AppSettings, BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings, EditableContactRecord, SaveContactResult } from "../../shared/types/contact.js";
+import type {
+  AppSettings,
+  BackupListItem,
+  BootstrapData,
+  ContactRecord,
+  DirectoryDataset,
+  EditableAppSettings,
+  EditableContactRecord,
+  ExportContactsResult,
+  ImportContactsResult,
+  SaveContactResult
+} from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 
@@ -59,6 +70,61 @@ export class AppDataService {
     const backupFilePath = path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
     await writeJsonFile(backupFilePath, source);
     return backupFilePath;
+  }
+
+  async listBackups(): Promise<BackupListItem[]> {
+    const backupDirectory = getManagedBackupDirectory();
+    await ensureDirectory(backupDirectory);
+    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+    const backupFiles = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          const filePath = path.join(backupDirectory, entry.name);
+          const stats = await fs.stat(filePath);
+
+          return {
+            fileName: entry.name,
+            filePath,
+            createdAt: stats.mtime.toISOString(),
+            sizeBytes: stats.size
+          } satisfies BackupListItem;
+        })
+    );
+
+    return backupFiles.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
+    const contacts = await this.readContacts();
+    const directory = path.dirname(targetFilePath);
+
+    await ensureDirectory(directory);
+    await writeJsonFile(targetFilePath, contacts);
+
+    return {
+      filePath: targetFilePath,
+      exportedAt: contacts.exportedAt,
+      recordCount: contacts.records.length
+    };
+  }
+
+  async importDataset(sourceFilePath: string): Promise<ImportContactsResult> {
+    const importedContacts = directoryDatasetSchema.parse(
+      await readJsonFile<DirectoryDataset>(sourceFilePath)
+    );
+    const backupPath = await this.createBackup();
+    const settings = await this.readSettings();
+
+    await writeJsonFile(getContactsFilePath(), importedContacts);
+
+    return {
+      contacts: importedContacts,
+      settings: this.toEditableSettings(settings),
+      backupPath,
+      importedFilePath: sourceFilePath,
+      recordCount: importedContacts.records.length
+    };
   }
 
   async createRecord(payload: EditableContactRecord): Promise<SaveContactResult> {
