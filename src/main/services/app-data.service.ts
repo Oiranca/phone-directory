@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { appSettingsSchema, directoryDatasetSchema, editableAppSettingsSchema } from "../../shared/schemas/contact.js";
+import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
-import type { AppSettings, BootstrapData, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact.js";
+import type { AppSettings, BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings, EditableContactRecord, SaveContactResult } from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 
@@ -61,6 +61,78 @@ export class AppDataService {
     return backupFilePath;
   }
 
+  async createRecord(payload: EditableContactRecord): Promise<SaveContactResult> {
+    const parsed = editableContactRecordSchema.parse(payload);
+    const contacts = await this.readContacts();
+    const settings = await this.readSettings();
+    const now = new Date().toISOString();
+    const editorName = this.getEditorName(settings);
+    const savedRecordId = this.createUniqueRecordId(contacts.records);
+
+    const nextRecord = contactRecordSchema.parse({
+      ...parsed,
+      id: savedRecordId,
+      contactMethods: {
+        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+      },
+      audit: {
+        createdAt: now,
+        updatedAt: now,
+        createdBy: editorName,
+        updatedBy: editorName
+      }
+    });
+
+    const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
+    await writeJsonFile(getContactsFilePath(), nextContacts);
+    return {
+      contacts: nextContacts,
+      settings: this.toEditableSettings(settings),
+      savedRecordId
+    };
+  }
+
+  async updateRecord(recordId: string, payload: EditableContactRecord): Promise<SaveContactResult> {
+    const parsed = editableContactRecordSchema.parse(payload);
+    const contacts = await this.readContacts();
+    const settings = await this.readSettings();
+    const now = new Date().toISOString();
+    const editorName = this.getEditorName(settings);
+    const recordIndex = contacts.records.findIndex((record) => record.id === recordId);
+
+    if (recordIndex === -1) {
+      throw new Error("No se encontró el registro solicitado.");
+    }
+
+    const currentRecord = contacts.records[recordIndex];
+    const updatedRecord = contactRecordSchema.parse({
+      ...parsed,
+      id: currentRecord.id,
+      source: currentRecord.source,
+      contactMethods: {
+        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+      },
+      audit: {
+        ...currentRecord.audit,
+        updatedAt: now,
+        updatedBy: editorName
+      }
+    });
+
+    const nextRecords = contacts.records.map((record, index) =>
+      index === recordIndex ? updatedRecord : record
+    );
+    const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
+    await writeJsonFile(getContactsFilePath(), nextContacts);
+    return {
+      contacts: nextContacts,
+      settings: this.toEditableSettings(settings),
+      savedRecordId: currentRecord.id
+    };
+  }
+
   private async fileExists(filePath: string) {
     try {
       await fs.access(filePath);
@@ -77,9 +149,97 @@ export class AppDataService {
     };
   }
 
+  private async readContacts() {
+    return directoryDatasetSchema.parse(
+      await readJsonFile<DirectoryDataset>(getContactsFilePath())
+    );
+  }
+
   private async readSettings() {
     return appSettingsSchema.parse(
       await readJsonFile<AppSettings>(getSettingsFilePath())
+    );
+  }
+
+  private buildNextDataset(
+    records: ContactRecord[],
+    currentDataset: DirectoryDataset,
+    editorName: string,
+    exportedAt: string
+  ): DirectoryDataset {
+    const typeCounts: Record<string, number> = {};
+    const areaCounts: Record<string, number> = {};
+
+    for (const record of records) {
+      typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
+
+      if (record.organization.area) {
+        areaCounts[record.organization.area] = (areaCounts[record.organization.area] ?? 0) + 1;
+      }
+    }
+
+    return directoryDatasetSchema.parse({
+      ...currentDataset,
+      exportedAt,
+      metadata: {
+        ...currentDataset.metadata,
+        recordCount: records.length,
+        editorName,
+        typeCounts,
+        areaCounts
+      },
+      records
+    });
+  }
+
+  private createEntityId(prefix: string) {
+    return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private createUniqueRecordId(records: ContactRecord[]) {
+    let candidate = this.createEntityId("cnt");
+
+    while (records.some((record) => record.id === candidate)) {
+      candidate = this.createEntityId("cnt");
+    }
+
+    return candidate;
+  }
+
+  private getEditorName(settings: AppSettings) {
+    return settings.editorName.trim() || "Editor local";
+  }
+
+  private normalizePrimaryEntries<T extends { isPrimary: boolean }>(entries: T[]) {
+    let primaryAssigned = false;
+
+    const normalizedEntries = entries.map((entry) => {
+      if (entry.isPrimary && !primaryAssigned) {
+        primaryAssigned = true;
+        return entry;
+      }
+
+      if (entry.isPrimary && primaryAssigned) {
+        return {
+          ...entry,
+          isPrimary: false
+        };
+      }
+
+      return entry;
+    });
+
+    if (primaryAssigned || normalizedEntries.length === 0) {
+      return normalizedEntries;
+    }
+
+    return normalizedEntries.map((entry, index) =>
+      index === 0
+        ? {
+            ...entry,
+            isPrimary: true
+          }
+        : entry
     );
   }
 }

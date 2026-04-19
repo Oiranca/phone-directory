@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
@@ -177,17 +178,25 @@ export const DirectoryPage = () => {
             <h2 className="text-xl font-semibold text-scs-blueDark">Búsqueda principal</h2>
             <p className="text-sm text-slate-600">Base inicial lista para Fuse.js, filtros y detalle.</p>
           </div>
-          <label htmlFor="directory-search" className="sr-only">
-            Buscar contactos
-          </label>
-          <input
-            id="directory-search"
-            aria-label="Buscar contactos"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por nombre, servicio, alias o teléfono"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2 sm:max-w-sm"
-          />
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <label htmlFor="directory-search" className="sr-only">
+              Buscar contactos
+            </label>
+            <input
+              id="directory-search"
+              aria-label="Buscar contactos"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por nombre, servicio, alias o teléfono"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2 sm:min-w-[280px]"
+            />
+            <Link
+              to="/contacts/new"
+              className="rounded-full bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white"
+            >
+              Nuevo registro
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-500">
@@ -315,6 +324,12 @@ export const DirectoryPage = () => {
                 <p className="font-medium text-slate-800">{selectedRecord.notes}</p>
               </div>
             )}
+            <Link
+              to={`/contacts/${selectedRecord.id}/edit`}
+              className="inline-flex rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+            >
+              Editar registro
+            </Link>
           </div>
         ) : (
           <p className="mt-4 text-sm text-slate-600">Selecciona un registro para ver su detalle.</p>

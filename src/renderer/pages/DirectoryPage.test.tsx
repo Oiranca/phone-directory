@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectoryPage } from "./DirectoryPage";
 import { useAppStore } from "../store/useAppStore";
@@ -25,7 +26,9 @@ describe("DirectoryPage", () => {
       value: {
         getBootstrapData: vi.fn(),
         saveSettings: vi.fn(),
-        createBackup: vi.fn()
+        createBackup: vi.fn(),
+        createRecord: vi.fn(),
+        updateRecord: vi.fn()
       }
     });
   });
@@ -34,10 +37,17 @@ describe("DirectoryPage", () => {
     cleanup();
   });
 
+  const renderPage = () =>
+    render(
+      <MemoryRouter>
+        <DirectoryPage />
+      </MemoryRouter>
+    );
+
   it("shows a recovery state when bootstrap loading fails", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
 
-    render(<DirectoryPage />);
+    renderPage();
 
     expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
@@ -54,7 +64,7 @@ describe("DirectoryPage", () => {
       }
     });
 
-    render(<DirectoryPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText("Búsqueda principal")).toBeInTheDocument();
@@ -82,7 +92,7 @@ describe("DirectoryPage", () => {
       }
     });
 
-    render(<DirectoryPage />);
+    renderPage();
 
     expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
     expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();

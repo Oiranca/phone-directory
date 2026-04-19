@@ -93,3 +93,60 @@ export const editableAppSettingsSchema = appSettingsSchema.pick({
   editorName: true,
   ui: true
 });
+
+const optionalTextField = () =>
+  z.string().trim().optional().transform((value) => value || undefined);
+
+export const editablePhoneContactSchema = z.object({
+  id: z.string().min(1),
+  label: optionalTextField(),
+  number: z.string().trim().min(1, "El teléfono es obligatorio."),
+  extension: optionalTextField(),
+  kind: z.string().trim().min(1, "El tipo de teléfono es obligatorio."),
+  isPrimary: z.boolean(),
+  confidential: z.boolean(),
+  noPatientSharing: z.boolean(),
+  notes: optionalTextField()
+});
+
+export const editableEmailContactSchema = z.object({
+  id: z.string().min(1),
+  address: z.string().trim().email("Introduce un correo electrónico válido."),
+  label: optionalTextField(),
+  isPrimary: z.boolean()
+});
+
+export const editableContactRecordSchema = z.object({
+  id: z.string().optional(),
+  externalId: optionalTextField(),
+  type: z.enum(RECORD_TYPES, {
+    errorMap: () => ({ message: "Selecciona un tipo de registro válido." })
+  }),
+  displayName: z.string().trim().min(1, "El nombre visible es obligatorio."),
+  person: z.object({
+    firstName: optionalTextField(),
+    lastName: optionalTextField()
+  }).optional(),
+  organization: z.object({
+    department: optionalTextField(),
+    service: optionalTextField(),
+    area: z.enum(AREAS).optional(),
+    specialty: optionalTextField()
+  }),
+  location: z.object({
+    building: optionalTextField(),
+    floor: optionalTextField(),
+    room: optionalTextField(),
+    text: optionalTextField()
+  }).optional(),
+  contactMethods: z.object({
+    phones: z.array(editablePhoneContactSchema),
+    emails: z.array(editableEmailContactSchema)
+  }),
+  aliases: z.array(z.string().trim().min(1)).default([]),
+  tags: z.array(z.string().trim().min(1)).default([]),
+  notes: optionalTextField(),
+  status: z.enum(["active", "inactive"], {
+    errorMap: () => ({ message: "Selecciona un estado válido." })
+  })
+});
