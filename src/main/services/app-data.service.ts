@@ -92,7 +92,15 @@ export class AppDataService {
         })
     );
 
-    return backupFiles.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return backupFiles.sort((left, right) => {
+      const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+
+      if (createdAtDelta !== 0) {
+        return createdAtDelta;
+      }
+
+      return right.fileName.localeCompare(left.fileName);
+    });
   }
 
   async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {

@@ -139,4 +139,32 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importación y backups no disponibles")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
+
+  it("shows a backup refresh error instead of throwing on rejection", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar JSON")).toBeInTheDocument();
+    window.hospitalDirectory.listBackups = vi.fn().mockRejectedValue(new Error("broken refresh"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+
+    expect(
+      await screen.findByText("No se pudo actualizar la lista de backups. Inténtalo de nuevo.")
+    ).toBeInTheDocument();
+  });
+
+  it("renders a fallback label for invalid timestamps in backups", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue([
+      {
+        fileName: "broken-date.json",
+        filePath: "/tmp/backups/broken-date.json",
+        createdAt: "not-a-date",
+        sizeBytes: 1200
+      }
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Fecha no válida")).toBeInTheDocument();
+  });
 });

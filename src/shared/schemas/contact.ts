@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { AREAS, RECORD_TYPES } from "../constants/catalogs.js";
 
+const isoDateTimeString = z.string().datetime({ offset: true });
+
 export const phoneContactSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
@@ -55,8 +57,8 @@ export const contactRecordSchema = z.object({
     sheetRow: z.string().optional()
   }).optional(),
   audit: z.object({
-    createdAt: z.string(),
-    updatedAt: z.string(),
+    createdAt: isoDateTimeString,
+    updatedAt: isoDateTimeString,
     createdBy: z.string(),
     updatedBy: z.string()
   })
@@ -64,7 +66,7 @@ export const contactRecordSchema = z.object({
 
 export const directoryDatasetSchema = z.object({
   version: z.string(),
-  exportedAt: z.string(),
+  exportedAt: isoDateTimeString,
   metadata: z.object({
     recordCount: z.number(),
     generatedFrom: z.string(),

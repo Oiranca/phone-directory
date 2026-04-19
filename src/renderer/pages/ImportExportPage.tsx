@@ -2,11 +2,18 @@ import { useEffect, useState } from "react";
 import type { BackupListItem } from "../../shared/types/contact";
 import { useAppStore } from "../store/useAppStore";
 
-const formatTimestamp = (value: string) =>
-  new Intl.DateTimeFormat("es-ES", {
+const formatTimestamp = (value: string) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Fecha no válida";
+  }
+
+  return new Intl.DateTimeFormat("es-ES", {
     dateStyle: "medium",
     timeStyle: "short"
-  }).format(new Date(value));
+  }).format(date);
+};
 
 const formatSize = (sizeBytes: number) => {
   if (sizeBytes < 1024) {
@@ -64,8 +71,13 @@ export const ImportExportPage = () => {
   }, []);
 
   const refreshBackups = async () => {
-    const backupItems = await window.hospitalDirectory.listBackups();
-    setBackups(backupItems);
+    try {
+      setActionError("");
+      const backupItems = await window.hospitalDirectory.listBackups();
+      setBackups(backupItems);
+    } catch {
+      setActionError("No se pudo actualizar la lista de backups. Inténtalo de nuevo.");
+    }
   };
 
   const handleCreateBackup = async () => {
@@ -192,7 +204,7 @@ export const ImportExportPage = () => {
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
             <p className="mt-2 text-sm text-slate-600">
-              Genera una copia inmediata del `contacts.json` actual en la carpeta local de backups.
+              Genera una copia inmediata del <code>contacts.json</code> actual en la carpeta local de backups.
             </p>
             <p className="mt-4 text-sm font-semibold text-scs-blue">
               {isCreatingBackup ? "Creando…" : "Crear ahora"}

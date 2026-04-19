@@ -380,4 +380,23 @@ describe("AppDataService", () => {
     ) as { records: Array<{ displayName: string }> };
     expect(persisted.records[0]?.displayName).toBe("Importado");
   });
+
+  it("rejects imported datasets with invalid timestamp fields", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "invalid.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+
+    const invalidDataset = structuredClone(
+      JSON.parse(await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8"))
+    ) as { exportedAt: string };
+    invalidDataset.exportedAt = "invalid-date";
+
+    await fs.writeFile(sourceFilePath, JSON.stringify(invalidDataset, null, 2) + "\n", "utf-8");
+
+    await expect(service.importDataset(sourceFilePath)).rejects.toThrow();
+  });
 });

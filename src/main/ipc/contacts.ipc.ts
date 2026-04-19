@@ -1,6 +1,6 @@
 import type { EditableContactRecord } from "../../shared/types/contact.js";
 import path from "node:path";
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 
 const CHANNELS = {
@@ -27,7 +27,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const saveOptions = {
       title: "Exportar directorio",
-      defaultPath: path.join("contacts-export.json"),
+      defaultPath: path.join(app.getPath("downloads"), "contacts-export.json"),
       filters: [{ name: "JSON", extensions: ["json"] }]
     };
     const { canceled, filePath } = window
