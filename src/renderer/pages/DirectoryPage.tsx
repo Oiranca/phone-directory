@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
+import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 
-const typeLabels: Record<string, string> = {
+const typeLabels = {
   all: "Todos los tipos",
   person: "Persona",
   service: "Servicio",
@@ -12,16 +13,16 @@ const typeLabels: Record<string, string> = {
   room: "Sala",
   "external-center": "Centro externo",
   other: "Otro"
-};
+} as const satisfies Record<RecordType | "all", string>;
 
-const areaLabels: Record<string, string> = {
+const areaLabels = {
   all: "Todas las áreas",
   none: "Sin área",
   "sanitaria-asistencial": "Sanitaria asistencial",
   "gestion-administracion": "Gestión y administración",
   especialidades: "Especialidades",
   otros: "Otros"
-};
+} as const satisfies Record<AreaType | "all" | "none", string>;
 
 export const DirectoryPage = () => {
   const {
@@ -41,6 +42,17 @@ export const DirectoryPage = () => {
     isLoading
   } = useAppStore();
   const [bootstrapError, setBootstrapError] = useState("");
+  const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
+  const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
+  const visibleRecords = useMemo(
+    () =>
+      selectVisibleRecords(
+        contacts?.records ?? [],
+        query,
+        { selectedType, selectedArea, showInactive }
+      ),
+    [contacts, query, selectedType, selectedArea, showInactive]
+  );
 
   const loadBootstrapData = async () => {
     try {
@@ -78,11 +90,24 @@ export const DirectoryPage = () => {
     return <section className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
   }
 
-  const visibleRecords = selectVisibleRecords(
-    contacts.records,
-    query,
-    { selectedType, selectedArea, showInactive }
-  );
+  const handleTypeChange = (value: string) => {
+    if (value === "all" || availableTypes.includes(value as RecordType)) {
+      setSelectedType(value as RecordType | "all");
+      return;
+    }
+
+    setSelectedType("all");
+  };
+
+  const handleAreaChange = (value: string) => {
+    if (value === "all" || availableAreas.includes(value as AreaType)) {
+      setSelectedArea(value as AreaType | "all");
+      return;
+    }
+
+    setSelectedArea("all");
+  };
+
   const selectedRecord =
     visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0] ?? null;
 
@@ -98,11 +123,11 @@ export const DirectoryPage = () => {
             <select
               id="directory-type-filter"
               value={selectedType}
-              onChange={(event) => setSelectedType(event.target.value as typeof selectedType)}
+              onChange={(event) => handleTypeChange(event.target.value)}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             >
               <option value="all">{typeLabels.all}</option>
-              {contacts.catalogs.recordTypes.map((type) => (
+              {availableTypes.map((type) => (
                 <option key={type} value={type}>
                   {typeLabels[type]}
                 </option>
@@ -117,11 +142,11 @@ export const DirectoryPage = () => {
             <select
               id="directory-area-filter"
               value={selectedArea}
-              onChange={(event) => setSelectedArea(event.target.value as typeof selectedArea)}
+              onChange={(event) => handleAreaChange(event.target.value)}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             >
               <option value="all">{areaLabels.all}</option>
-              {contacts.catalogs.areas.map((area) => (
+              {availableAreas.map((area) => (
                 <option key={area} value={area}>
                   {areaLabels[area]}
                 </option>
@@ -169,8 +194,8 @@ export const DirectoryPage = () => {
           <span className="rounded-full bg-slate-100 px-3 py-1">
             {visibleRecords.length} resultado{visibleRecords.length === 1 ? "" : "s"}
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">{typeLabels[selectedType]}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">{areaLabels[selectedArea]}</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1">{typeLabels[selectedType] ?? selectedType}</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1">{areaLabels[selectedArea] ?? selectedArea}</span>
         </div>
 
         <div className="mt-6 space-y-3">
