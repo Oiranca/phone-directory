@@ -35,6 +35,12 @@ describe("searchRecords", () => {
     expect(result[0]?.displayName).toBe("Admisión General");
   });
 
+  it("finds a record by phone number", () => {
+    const result = searchRecords(records, "928000000", defaultFilters);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]?.displayName).toBe("Centro de Salud Demo - Información");
+  });
+
   it("filters inactive records when showInactive is false", () => {
     const recordsWithInactive = structuredClone(records);
     recordsWithInactive[1]!.status = "inactive";
@@ -78,6 +84,125 @@ describe("searchRecords", () => {
     expect(fuseForOriginal).toBeDefined();
     expect(fuseForCopy).toBeDefined();
     expect(fuseForOriginal).not.toBe(fuseForCopy);
+  });
+
+  it("prioritizes display name matches over lower-weight service matches", () => {
+    const rankingRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "display-name-match",
+        displayName: "Urgencias",
+        organization: {
+          ...structuredClone(records[0]!.organization),
+          department: "Admisión",
+          service: "Información general"
+        },
+        aliases: [],
+        tags: []
+      },
+      {
+        ...structuredClone(records[1]),
+        id: "service-match",
+        displayName: "Mostrador principal",
+        organization: {
+          ...structuredClone(records[1]!.organization),
+          department: "Atención",
+          service: "Urgencias"
+        },
+        aliases: [],
+        tags: []
+      }
+    ];
+
+    const result = searchRecords(rankingRecords, "Urgencias", defaultFilters);
+
+    expect(result[0]?.id).toBe("display-name-match");
+  });
+
+  it("prioritizes extension matches over service-only matches", () => {
+    const rankingRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "extension-match",
+        displayName: "Control interno",
+        contactMethods: {
+          ...structuredClone(records[0]!.contactMethods),
+          phones: [
+            {
+              id: "phone-extension",
+              label: "Interno",
+              number: "70005",
+              extension: "4455",
+              kind: "internal",
+              isPrimary: true,
+              confidential: false,
+              noPatientSharing: false
+            }
+          ]
+        },
+        organization: {
+          ...structuredClone(records[0]!.organization),
+          service: "Admisión"
+        }
+      },
+      {
+        ...structuredClone(records[1]),
+        id: "service-only",
+        displayName: "Central telefónica",
+        organization: {
+          ...structuredClone(records[1]!.organization),
+          service: "4455"
+        },
+        contactMethods: {
+          ...structuredClone(records[1]!.contactMethods),
+          phones: [
+            {
+              id: "phone-main",
+              label: "Principal",
+              number: "928000001",
+              kind: "external",
+              isPrimary: true,
+              confidential: false,
+              noPatientSharing: false
+            }
+          ]
+        }
+      }
+    ];
+
+    const result = searchRecords(rankingRecords, "4455", defaultFilters);
+
+    expect(result[0]?.id).toBe("extension-match");
+  });
+
+  it("finds records by location text and notes", () => {
+    const rankingRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "location-match",
+        displayName: "Consulta externa",
+        location: {
+          building: "Edificio sur",
+          floor: "2",
+          room: "205",
+          text: "Pasillo azul"
+        },
+        notes: "Acceso por ascensor lateral"
+      },
+      {
+        ...structuredClone(records[1]),
+        id: "notes-match",
+        displayName: "Archivo",
+        location: undefined,
+        notes: "Pasillo azul junto al archivo clínico"
+      }
+    ];
+
+    const locationResult = searchRecords(rankingRecords, "Pasillo azul", defaultFilters);
+    const notesResult = searchRecords(rankingRecords, "ascensor lateral", defaultFilters);
+
+    expect(locationResult.map((record) => record.id)).toContain("location-match");
+    expect(notesResult[0]?.id).toBe("location-match");
   });
 });
 
