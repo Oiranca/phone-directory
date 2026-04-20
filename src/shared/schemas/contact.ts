@@ -72,8 +72,8 @@ export const directoryDatasetSchema = z.object({
     generatedFrom: z.string(),
     generatedBy: z.string(),
     editorName: z.string(),
-    typeCounts: z.record(z.number()),
-    areaCounts: z.record(z.number())
+    typeCounts: z.record(z.enum(RECORD_TYPES), z.number()),
+    areaCounts: z.record(z.enum(AREAS), z.number())
   }),
   catalogs: z.object({
     recordTypes: z.array(z.enum(RECORD_TYPES)),
