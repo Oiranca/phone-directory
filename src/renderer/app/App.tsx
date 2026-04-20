@@ -9,7 +9,7 @@ const isRecoveryBootstrap = (
 ): payload is Extract<BootstrapResult, { recovery: unknown }> => "recovery" in payload;
 
 const RecoveryPanel = () => {
-  const { recovery, initialize, clearRecovery } = useAppStore();
+  const { recovery, initialize } = useAppStore();
   const [actionError, setActionError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -20,7 +20,6 @@ const RecoveryPanel = () => {
   }
 
   const applyRecoveredData = (payload: ImportContactsResult | ResetContactsResult) => {
-    clearRecovery();
     initialize({
       contacts: payload.contacts,
       settings: payload.settings

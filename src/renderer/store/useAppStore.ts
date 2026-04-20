@@ -23,7 +23,6 @@ interface AppStore {
   initialize: (payload: BootstrapData) => void;
   initializeRecovery: (recovery: RecoveryState, settings: EditableAppSettings) => void;
   setIsLoading: (isLoading: boolean) => void;
-  clearRecovery: () => void;
   setQuery: (query: string) => void;
   setSelectedType: (type: RecordType | "all") => void;
   setSelectedArea: (area: AreaType | "all") => void;
@@ -66,7 +65,6 @@ export const useAppStore = create<AppStore>((set) => ({
       isLoading: false
     }),
   setIsLoading: (isLoading) => set({ isLoading }),
-  clearRecovery: () => set({ recovery: null }),
   setQuery: (query) => set({ query }),
   setSelectedType: (selectedType) => set({ selectedType }),
   setSelectedArea: (selectedArea) => set({ selectedArea }),
