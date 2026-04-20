@@ -25,10 +25,10 @@ The repository currently includes:
 
 Planning and migration reference files:
 
-- [HANDOFF.md](./HANDOFF.md)
-- [MVP_PLAN.md](./MVP_PLAN.md)
-- [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
-- [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
+- [HANDOFF.md](./docs/HANDOFF.md)
+- [MVP_PLAN.md](./docs/MVP_PLAN.md)
+- [CSV_IMPORT_TEMPLATE.md](./docs/CSV_IMPORT_TEMPLATE.md)
+- [ODS_TO_CSV_MAPPING.md](./docs/ODS_TO_CSV_MAPPING.md)
 - [scripts/README.md](./scripts/README.md)
 
 ## Tech Stack

@@ -67,47 +67,67 @@ export class AppDataService {
 
   async createBackup() {
     const backupFilePath = await this.createBackupFilePath();
-    await fs.copyFile(getContactsFilePath(), backupFilePath);
+    await this.copyFileWithContext(
+      getContactsFilePath(),
+      backupFilePath,
+      "No se pudo crear el backup del directorio."
+    );
     return backupFilePath;
   }
 
   async listBackups(): Promise<BackupListItem[]> {
     const backupDirectory = getManagedBackupDirectory();
-    await ensureDirectory(backupDirectory);
-    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-    const backupFiles = await Promise.all(
-      entries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-        .map(async (entry) => {
-          const filePath = path.join(backupDirectory, entry.name);
-          const stats = await fs.stat(filePath);
+    try {
+      await ensureDirectory(backupDirectory);
+      const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+      const backupFiles = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+          .map(async (entry) => {
+            const filePath = path.join(backupDirectory, entry.name);
+            const stats = await fs.stat(filePath);
 
-          return {
-            fileName: entry.name,
-            filePath,
-            createdAt: stats.mtime.toISOString(),
-            sizeBytes: stats.size
-          } satisfies BackupListItem;
-        })
-    );
+            return {
+              fileName: entry.name,
+              filePath,
+              createdAt: stats.mtime.toISOString(),
+              sizeBytes: stats.size
+            } satisfies BackupListItem;
+          })
+      );
 
-    return backupFiles.sort((left, right) => {
-      const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return backupFiles.sort((left, right) => {
+        const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
 
-      if (createdAtDelta !== 0) {
-        return createdAtDelta;
-      }
+        if (createdAtDelta !== 0) {
+          return createdAtDelta;
+        }
 
-      return right.fileName.localeCompare(left.fileName);
-    });
+        return right.fileName.localeCompare(left.fileName);
+      });
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo leer la carpeta de backups.",
+        { filePath: backupDirectory }
+      );
+    }
   }
 
   async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
     const contacts = await this.readContacts();
     const directory = path.dirname(targetFilePath);
 
-    await ensureDirectory(directory);
-    await writeJsonFile(targetFilePath, contacts);
+    try {
+      await ensureDirectory(directory);
+      await writeJsonFile(targetFilePath, contacts);
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo exportar el directorio al destino seleccionado.",
+        { filePath: targetFilePath }
+      );
+    }
 
     return {
       filePath: targetFilePath,
@@ -269,7 +289,15 @@ export class AppDataService {
   private async createBackupFilePath() {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = getManagedBackupDirectory();
-    await ensureDirectory(backupDirectory);
+    try {
+      await ensureDirectory(backupDirectory);
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo preparar la carpeta de backups del directorio.",
+        { filePath: backupDirectory }
+      );
+    }
     return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
   }
 
@@ -359,5 +387,78 @@ export class AppDataService {
           }
         : entry
     );
+  }
+
+  private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
+    try {
+      await fs.copyFile(sourceFilePath, targetFilePath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, {
+        sourceFilePath,
+        targetFilePath
+      });
+    }
+  }
+
+  private toFilesystemError(
+    error: unknown,
+    message: string,
+    context: {
+      filePath?: string;
+      sourceFilePath?: string;
+      targetFilePath?: string;
+    }
+  ) {
+    const routeDetails = new Set<string>();
+    const filesystemError = this.getErrnoException(error);
+
+    if (typeof filesystemError?.path === "string" && filesystemError.path.trim() !== "") {
+      routeDetails.add(`Ruta afectada: ${filesystemError.path}`);
+    }
+
+    if (typeof filesystemError?.dest === "string" && filesystemError.dest.trim() !== "") {
+      routeDetails.add(`Ruta de destino: ${filesystemError.dest}`);
+    }
+
+    if (routeDetails.size === 0 && context.filePath) {
+      routeDetails.add(`Ruta afectada: ${context.filePath}`);
+    }
+
+    if (context.sourceFilePath) {
+      routeDetails.add(`Ruta de origen: ${context.sourceFilePath}`);
+    }
+
+    if (context.targetFilePath) {
+      routeDetails.add(`Ruta de destino: ${context.targetFilePath}`);
+    }
+
+    const routeContext =
+      routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
+    const detail = this.getFilesystemErrorDetail(filesystemError);
+
+    return new Error(`${message}${routeContext} ${detail}`.trim());
+  }
+
+  private getErrnoException(error: unknown) {
+    if (typeof error === "object" && error !== null) {
+      return error as NodeJS.ErrnoException & { dest?: string };
+    }
+
+    return undefined;
+  }
+
+  private getFilesystemErrorDetail(error?: NodeJS.ErrnoException & { dest?: string }) {
+    switch (error?.code) {
+      case "EACCES":
+        return "No tienes permisos suficientes para acceder al archivo o directorio.";
+      case "ENOENT":
+        return "El archivo o directorio no existe.";
+      case "EROFS":
+        return "El archivo o directorio está en un sistema de solo lectura.";
+      case "ENOSPC":
+        return "No hay espacio suficiente en disco para completar la operación.";
+      default:
+        return "Se produjo un error al acceder al sistema de archivos.";
+    }
   }
 }

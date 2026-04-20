@@ -409,7 +409,7 @@ At least one of the following must also be present per row after normalization:
 Reference files:
 
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
-- [csv/contacts-import-template.csv](./csv/contacts-import-template.csv)
+- [csv/contacts-import-template.csv](../csv/contacts-import-template.csv)
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
 
 ### 9.3 JSON Export
@@ -1215,7 +1215,7 @@ No implementation bootstrap should start before explicit approval.
 Supporting migration files currently available in the repository:
 
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
-- [csv/contacts-import-template.csv](./csv/contacts-import-template.csv)
+- [csv/contacts-import-template.csv](../csv/contacts-import-template.csv)
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
-- [scripts/extract_ods_to_csv.py](./scripts/extract_ods_to_csv.py)
-- [scripts/README.md](./scripts/README.md)
+- [scripts/extract_ods_to_csv.py](../scripts/extract_ods_to_csv.py)
+- [scripts/README.md](../scripts/README.md)

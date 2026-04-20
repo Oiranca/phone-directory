@@ -21,6 +21,7 @@ describe("AppDataService", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(testRoot, { recursive: true, force: true });
     getPathMock.mockReset();
   });
@@ -279,6 +280,85 @@ describe("AppDataService", () => {
     expect(backups[0]?.filePath).toBe(secondBackupPath);
     expect(backups[1]?.filePath).toBe(firstBackupPath);
     expect(backups[0]?.sizeBytes).toBeGreaterThan(0);
+  });
+
+  it("surfaces the affected backup path when backup creation fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    const backupDirectoryPath = path.join(testRoot, "backups");
+    const backupFilePath = path.join(backupDirectoryPath, "contacts-backup.json");
+
+    const copyFileSpy = vi
+      .spyOn(fs, "copyFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+          path: contactsFilePath,
+          dest: backupFilePath
+        })
+      );
+
+    await expect(service.createBackup()).rejects.toThrow(
+      new RegExp(
+        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No tienes permisos suficientes para acceder al archivo o directorio\\.`
+      )
+    );
+    expect(copyFileSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the affected destination when export writing fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const writeFileSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EROFS: read-only file system"), {
+          code: "EROFS"
+        })
+      );
+    const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
+
+    await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
+      new RegExp(
+        `No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. El archivo o directorio está en un sistema de solo lectura\\.`
+      )
+    );
+    expect(writeFileSpy).toHaveBeenCalled();
+  });
+
+  it("surfaces the backup path when JSON import cannot create its safety copy", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const copyFileSpy = vi
+      .spyOn(fs, "copyFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("ENOSPC: no space left on device"), {
+          code: "ENOSPC",
+          path: path.join(testRoot, "data", "contacts.json")
+        })
+      );
+    const backupDirectoryPath = path.join(testRoot, "backups");
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+
+    await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
+      new RegExp(
+        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
+      )
+    );
+    expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
 
   it("imports a dataset from disk and creates an automatic backup first", async () => {

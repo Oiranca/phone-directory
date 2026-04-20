@@ -148,6 +148,21 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText(/Backup creado en/)).toBeInTheDocument();
   });
 
+  it("shows the backup service error message when manual backup fails", async () => {
+    window.hospitalDirectory.createBackup = vi
+      .fn()
+      .mockRejectedValue(new Error("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups."));
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+
+    expect(
+      await screen.findByText("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups.")
+    ).toBeInTheDocument();
+  });
+
   it("exports the dataset and shows completion feedback", async () => {
     renderPage();
 
@@ -158,6 +173,21 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.exportDataset).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByText(/Exportación completada en/)).toBeInTheDocument();
+  });
+
+  it("shows the export service error message when the target path is not writable", async () => {
+    window.hospitalDirectory.exportDataset = vi
+      .fn()
+      .mockRejectedValue(new Error("No se pudo exportar el directorio al destino seleccionado. Ruta afectada: /tmp/exports/share.json."));
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
+
+    expect(
+      await screen.findByText("No se pudo exportar el directorio al destino seleccionado. Ruta afectada: /tmp/exports/share.json.")
+    ).toBeInTheDocument();
   });
 
   it("imports a dataset after confirmation and refreshes the store", async () => {

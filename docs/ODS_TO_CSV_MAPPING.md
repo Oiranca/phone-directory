@@ -11,7 +11,7 @@ The purpose of this document is to convert the current `.ods` hospital directory
 Reference template files:
 
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
-- [csv/contacts-import-template.csv](./csv/contacts-import-template.csv)
+- [csv/contacts-import-template.csv](../csv/contacts-import-template.csv)
 
 ## 1. Key Finding About the Source File
 
