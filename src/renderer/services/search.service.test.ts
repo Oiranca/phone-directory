@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchRecords, fuseCache, getPreferredResultPhone, getPhonePrivacyFlags } from "./search.service";
+import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags } from "./search.service";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DirectoryFilters } from "./search.service";
@@ -56,10 +56,10 @@ describe("searchRecords", () => {
 
   it("reuses the Fuse instance for the same records array reference", () => {
     searchRecords(records, "Ana", defaultFilters);
-    const fuseInstanceAfterFirst = fuseCache.get(records);
+    const fuseInstanceAfterFirst = _getFuseCacheEntry(records);
 
     searchRecords(records, "Mostrador", defaultFilters);
-    const fuseInstanceAfterSecond = fuseCache.get(records);
+    const fuseInstanceAfterSecond = _getFuseCacheEntry(records);
 
     expect(fuseInstanceAfterFirst).toBeDefined();
     expect(fuseInstanceAfterSecond).toBeDefined();
@@ -72,9 +72,12 @@ describe("searchRecords", () => {
     searchRecords(records, "Admisión", defaultFilters);
     searchRecords(recordsCopy, "Admisión", defaultFilters);
 
-    expect(fuseCache.has(records)).toBe(true);
-    expect(fuseCache.has(recordsCopy)).toBe(true);
-    expect(fuseCache.get(records)).not.toBe(fuseCache.get(recordsCopy));
+    const fuseForOriginal = _getFuseCacheEntry(records);
+    const fuseForCopy = _getFuseCacheEntry(recordsCopy);
+
+    expect(fuseForOriginal).toBeDefined();
+    expect(fuseForCopy).toBeDefined();
+    expect(fuseForOriginal).not.toBe(fuseForCopy);
   });
 });
 

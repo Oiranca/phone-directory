@@ -27,7 +27,7 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
   ]
 };
 
-export const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
+const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   records.filter((record) => {
@@ -102,3 +102,8 @@ export const getPhonePrivacyFlags = (record: ContactRecord) => {
 
   return flags;
 };
+
+/** @internal — for tests only */
+export function _getFuseCacheEntry(records: ContactRecord[]): Fuse<ContactRecord> | undefined {
+  return fuseCache.get(records);
+}
