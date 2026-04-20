@@ -3,6 +3,13 @@
   "compilerOptions": {
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src/renderer/test", "src/**/*.test.ts", "src/**/*.test.tsx"],
+  "include": [
+    "src/renderer",
+    "src/shared",
+    "src/main",
+    "src/renderer/test",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }
