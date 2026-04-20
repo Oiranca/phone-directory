@@ -1,6 +1,7 @@
 import { BrowserWindow, app } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { env } from "./config/env.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
 import { AppDataService } from "./services/app-data.service.js";
@@ -28,7 +29,7 @@ const createWindow = () => {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: false
     }
   });
 
@@ -41,7 +42,9 @@ const createWindow = () => {
 
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
-    window.webContents.openDevTools({ mode: "detach" });
+    if (env.openDevTools) {
+      window.webContents.openDevTools({ mode: "detach" });
+    }
     return;
   }
 

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 
 const getPathMock = vi.fn();
 
@@ -250,5 +251,176 @@ describe("AppDataService", () => {
 
     expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(true);
     expect(result.contacts.records[0]?.contactMethods.phones[1]?.isPrimary).toBe(false);
+  });
+
+  it("exports the current dataset and lists backups in reverse chronological order", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
+    const exportResult = await service.exportDataset(exportFilePath);
+
+    expect(exportResult.filePath).toBe(exportFilePath);
+    expect(exportResult.recordCount).toBe(2);
+
+    const exportedDataset = JSON.parse(
+      await fs.readFile(exportFilePath, "utf-8")
+    ) as { records: unknown[] };
+    expect(exportedDataset.records).toHaveLength(2);
+
+    const firstBackupPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const secondBackupPath = await service.createBackup();
+    const backups = await service.listBackups();
+
+    expect(backups).toHaveLength(2);
+    expect(backups[0]?.filePath).toBe(secondBackupPath);
+    expect(backups[1]?.filePath).toBe(firstBackupPath);
+    expect(backups[0]?.sizeBytes).toBeGreaterThan(0);
+  });
+
+  it("imports a dataset from disk and creates an automatic backup first", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      JSON.stringify(
+        {
+          version: "1.0.0",
+          exportedAt: "2026-04-19T18:00:00.000Z",
+          metadata: {
+            recordCount: 1,
+            generatedFrom: "manual",
+            generatedBy: "test",
+            editorName: "QA",
+            typeCounts: {
+              person: 1
+            },
+            areaCounts: {
+              otros: 1
+            }
+          },
+          catalogs: {
+            recordTypes: [
+              "person",
+              "service",
+              "department",
+              "control",
+              "supervision",
+              "room",
+              "external-center",
+              "other"
+            ],
+            areas: [
+              "sanitaria-asistencial",
+              "gestion-administracion",
+              "especialidades",
+              "otros"
+            ]
+          },
+          records: [
+            {
+              id: "cnt_imported_1",
+              type: "person",
+              displayName: "Importado",
+              person: {
+                firstName: "Caso",
+                lastName: "Importado"
+              },
+              organization: {
+                department: "Archivo",
+                area: "otros"
+              },
+              contactMethods: {
+                phones: [
+                  {
+                    id: "ph_imported_1",
+                    number: "44556",
+                    kind: "internal",
+                    isPrimary: true,
+                    confidential: false,
+                    noPatientSharing: false
+                  }
+                ],
+                emails: []
+              },
+              aliases: [],
+              tags: [],
+              status: "active",
+              audit: {
+                createdAt: "2026-04-19T18:00:00.000Z",
+                updatedAt: "2026-04-19T18:00:00.000Z",
+                createdBy: "QA",
+                updatedBy: "QA"
+              }
+            }
+          ]
+        },
+        null,
+        2
+      ) + "\n",
+      "utf-8"
+    );
+
+    const importResult = await service.importDataset(sourceFilePath);
+
+    expect(importResult.importedFilePath).toBe(sourceFilePath);
+    expect(importResult.recordCount).toBe(1);
+    expect(importResult.contacts.records[0]?.displayName).toBe("Importado");
+    expect(importResult.backupPath).toContain(path.join(testRoot, "backups"));
+
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+    expect(persisted.records[0]?.displayName).toBe("Importado");
+  });
+
+  it("imports a valid dataset even when the current dataset is corrupt", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const corruptedCurrentDataset = "{ this-is-not-valid-json }\n";
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "recovery.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const importResult = await service.importDataset(sourceFilePath);
+    const backupContents = await fs.readFile(importResult.backupPath, "utf-8");
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+
+    expect(backupContents).toBe(corruptedCurrentDataset);
+    expect(persisted.records[0]?.displayName).toBe(defaultContacts.records[0]?.displayName);
+  });
+
+  it("rejects imported datasets with invalid timestamp fields", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "invalid.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+
+    const invalidDataset = structuredClone(
+      JSON.parse(await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8"))
+    ) as { exportedAt: string };
+    invalidDataset.exportedAt = "invalid-date";
+
+    await fs.writeFile(sourceFilePath, JSON.stringify(invalidDataset, null, 2) + "\n", "utf-8");
+
+    await expect(service.importDataset(sourceFilePath)).rejects.toThrow();
   });
 });

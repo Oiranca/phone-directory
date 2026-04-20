@@ -153,3 +153,22 @@ export interface EditableContactRecord {
 export interface SaveContactResult extends BootstrapData {
   savedRecordId: string;
 }
+
+export interface BackupListItem {
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+export interface ExportContactsResult {
+  filePath: string;
+  exportedAt: string;
+  recordCount: number;
+}
+
+export interface ImportContactsResult extends BootstrapData {
+  backupPath: string;
+  importedFilePath: string;
+  recordCount: number;
+}
