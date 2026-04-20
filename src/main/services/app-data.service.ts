@@ -104,10 +104,14 @@ export class AppDataService {
             const filePath = path.join(backupDirectory, entry.name);
             const stats = await fs.stat(filePath);
 
+            const createdAt = stats.birthtimeMs > 1000
+              ? stats.birthtime.toISOString()
+              : stats.mtime.toISOString();
+
             return {
               fileName: entry.name,
               filePath,
-              createdAt: stats.birthtime.toISOString(),
+              createdAt,
               sizeBytes: stats.size
             } satisfies BackupListItem;
           })
@@ -405,7 +409,7 @@ export class AppDataService {
       attempts += 1;
 
       if (attempts >= maxAttempts) {
-        throw new Error("Failed to generate unique record ID after 1000 attempts");
+        throw new Error("No se pudo generar un ID único para el registro después de 1000 intentos");
       }
 
       candidate = this.createEntityId("cnt");
@@ -502,9 +506,9 @@ export class AppDataService {
     let details: string;
 
     if (error instanceof ZodError) {
-      details = error.issues.map((i) => i.message).join("; ");
+      details = "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos.";
     } else if (error instanceof Error) {
-      details = error.message;
+      details = "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto.";
     } else {
       details = "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
     }
