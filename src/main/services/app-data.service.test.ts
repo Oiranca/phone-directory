@@ -611,6 +611,9 @@ describe("AppDataService", () => {
       expect(result.recovery.reason).toBe("invalid-contacts-json");
       expect(result.recovery.contactsFilePath).toBe(path.join(testRoot, "data", "contacts.json"));
       expect(result.settings.ui.showInactiveByDefault).toBe(false);
+      expect(result.recovery.details).toBe(
+        "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto."
+      );
     }
   });
 
@@ -858,6 +861,22 @@ describe("AppDataService", () => {
     }
   });
 
+  it("returns the unknown-error fallback details when toRecoveryState is called with a plain string", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const filePath = path.join(testRoot, "data", "contacts.json");
+    const recovery = (service as any).toRecoveryState("plain string", filePath) as {
+      details: string;
+    };
+
+    expect(recovery.details).toBe(
+      "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+    );
+  });
+
   it("listBackups createdAt values are valid ISO strings in descending order", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -881,5 +900,28 @@ describe("AppDataService", () => {
     const firstTime = new Date(backups[1]!.createdAt).getTime();
     const secondTime = new Date(backups[0]!.createdAt).getTime();
     expect(secondTime).toBeGreaterThanOrEqual(firstTime);
+  });
+
+  it("listBackups uses mtime as createdAt fallback when birthtimeMs is epoch (Linux)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.createBackup();
+
+    const knownMtime = new Date("2026-04-20T10:00:00.000Z");
+
+    vi.spyOn(fs, "stat").mockResolvedValueOnce({
+      birthtimeMs: 0,
+      birthtime: new Date(0),
+      mtime: knownMtime,
+      size: 512,
+      isFile: () => true,
+      isDirectory: () => false
+    } as unknown as import("node:fs").Stats);
+
+    const backups = await service.listBackups();
+
+    expect(backups[0]?.createdAt).toBe(knownMtime.toISOString());
   });
 });
