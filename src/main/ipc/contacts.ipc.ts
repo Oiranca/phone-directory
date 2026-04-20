@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 
+const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
+
 const CHANNELS = {
   bootstrap: "contacts:get-bootstrap-data",
   createBackup: "contacts:create-backup",
@@ -17,7 +19,24 @@ const CHANNELS = {
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
-  const pendingCsvImports = new Map<string, string>();
+  const pendingCsvImports = new Map<string, { sourceFilePath: string; senderId: number; timeout: NodeJS.Timeout }>();
+  const senderTokens = new Map<number, string>();
+  const senderCleanupAttached = new Set<number>();
+
+  const clearPendingCsvImport = (importToken: string) => {
+    const pendingImport = pendingCsvImports.get(importToken);
+
+    if (!pendingImport) {
+      return;
+    }
+
+    clearTimeout(pendingImport.timeout);
+    pendingCsvImports.delete(importToken);
+
+    if (senderTokens.get(pendingImport.senderId) === importToken) {
+      senderTokens.delete(pendingImport.senderId);
+    }
+  };
 
   ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
   ipcMain.handle(CHANNELS.createBackup, () => service.createBackup());
@@ -64,6 +83,7 @@ export const registerContactsIpc = (service: AppDataService) => {
   });
   ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
+    const senderId = event.sender.id;
     const openOptions = {
       title: "Preparar importación CSV",
       filters: [{ name: "CSV", extensions: ["csv"] }],
@@ -80,8 +100,35 @@ export const registerContactsIpc = (service: AppDataService) => {
     const sourceFilePath = filePaths[0]!;
     const preview = await service.previewCsvImport(sourceFilePath);
     const importToken = randomUUID();
+    const previousImportToken = senderTokens.get(senderId);
 
-    pendingCsvImports.set(importToken, sourceFilePath);
+    if (previousImportToken) {
+      clearPendingCsvImport(previousImportToken);
+    }
+
+    const timeout = setTimeout(() => {
+      clearPendingCsvImport(importToken);
+    }, CSV_IMPORT_TOKEN_TTL_MS);
+
+    pendingCsvImports.set(importToken, {
+      sourceFilePath,
+      senderId,
+      timeout
+    });
+    senderTokens.set(senderId, importToken);
+
+    if (!senderCleanupAttached.has(senderId)) {
+      senderCleanupAttached.add(senderId);
+      event.sender.once("destroyed", () => {
+        const activeImportToken = senderTokens.get(senderId);
+
+        if (activeImportToken) {
+          clearPendingCsvImport(activeImportToken);
+        }
+
+        senderCleanupAttached.delete(senderId);
+      });
+    }
 
     return {
       ...preview,
@@ -89,14 +136,14 @@ export const registerContactsIpc = (service: AppDataService) => {
     };
   });
   ipcMain.handle(CHANNELS.importCsvDataset, async (_event, importToken: string) => {
-    const sourceFilePath = pendingCsvImports.get(importToken);
+    const pendingImport = pendingCsvImports.get(importToken);
 
-    if (!sourceFilePath) {
+    if (!pendingImport) {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
-    pendingCsvImports.delete(importToken);
-    return service.importCsvDataset(sourceFilePath);
+    clearPendingCsvImport(importToken);
+    return service.importCsvDataset(pendingImport.sourceFilePath);
   });
 };
 
