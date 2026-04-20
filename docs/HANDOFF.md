@@ -54,9 +54,9 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Review Status
 
-Current branch work is not committed yet and is focused on `OIR-20`.
+This PR is focused on `OIR-20`.
 
-Implemented in the working tree:
+Included in this PR:
 
 - typed recovery bootstrap result from the main process when `contacts.json` is corrupt
 - reset-to-empty IPC surface and preload API
@@ -64,11 +64,11 @@ Implemented in the working tree:
 - recovery-mode shell treatment and focused tests for recovery import/reset actions
 - plan and handoff refresh to reflect merged `OIR-19` work and active `OIR-20` scope
 
-Required before commit and PR:
+Review expectations for this PR:
 
 - complete two QA and code review cycles on the final diff
 - keep commits small and in English
-- open a ready-for-review PR, not a draft
+- use a ready-for-review PR, not a draft
 - attach the PR link back to Linear
 
 ## Key Repository Rules
