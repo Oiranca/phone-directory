@@ -1342,7 +1342,7 @@ Scripts must set any required environment variables, resolve the executable path
 |-------|--------|----------|-------------|
 | OIR-18 | Done | Search | Weighted Fuse.js search with field prioritization |
 | OIR-19 | Done | Data Integrity | CSV import template validation and per-row error reporting |
-| OIR-20 | In Progress | Data Integrity | Data corruption recovery flow for invalid contacts.json |
+| OIR-20 | Done | Data Integrity | Data corruption recovery flow for invalid contacts.json |
 | OIR-21 | Todo | USB Deployment | Portable cross-platform USB packaging |
 | OIR-22 | Todo | Testing | Playwright end-to-end tests for critical MVP flows |
 | OIR-23 | Todo | UX | Global toast notification system |
