@@ -633,4 +633,26 @@ describe("AppDataService", () => {
       "El CSV supera el tamaño máximo permitido de 5 MB. Divide el archivo antes de importarlo."
     );
   });
+
+  it("rejects CSV preview when the header does not match the MVP template", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "unexpected-header.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,phone1Number,legacyDesk",
+        "service,Mostrador,55555,Antiguo"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+    );
+  });
 });

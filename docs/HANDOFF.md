@@ -24,63 +24,61 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Git State
 
-- Active branch: `feat/bootstrap-mvp-local-ci`
+- Active branch: `feat/oir-19-csv-template-validation`
 - Base branch: `main`
-- Active pull request: [#1 Bootstrap hospital directory MVP foundation and local CI workflow](https://github.com/Oiranca/phone-directory/pull/1)
+- Active pull request: verify the current branch in the repository for the latest PR status
 
 ## Current Linear Backlog
 
-- `OIR-10` Core local app foundation for the hospital directory MVP
-- `OIR-11` Consolidate the migration pipeline from ODS to normalized contacts dataset
-- `OIR-12` Implement the main directory workspace for search and record detail
-- `OIR-13` Implement the dedicated create and edit record workflow
-- `OIR-14` Implement MVP import, export, and backup flows
-- `OIR-15` Implement the MVP settings flow for editor identity and managed data paths
-- `OIR-16` Harden the MVP and define the release candidate quality gate
+- `OIR-18` Done — weighted Fuse.js search ranking landed in PR #10 and merged to `main`
+- `OIR-19` In Progress — CSV template validation and per-row error reporting
+- `OIR-20` Todo — recovery flow for invalid `contacts.json`
+- `OIR-21` Todo — portable USB packaging
+- `OIR-22` Todo — Playwright critical-flow coverage
+- `OIR-23` Todo — global toast notification system
+- `OIR-24` Todo — writable path validation in Settings
+- `OIR-25` Todo — restore-from-backup UI flow
+- `OIR-26` Todo — tag-based directory filtering
+- `OIR-27` Done — privacy inline warnings merged in PR #9
+- `OIR-28` Todo — executable-relative portable data paths
+- `OIR-29` Todo — USB launcher scripts
 
 ## What Is Already In Place
 
 - MVP planning documents and migration references
-- ODS extraction, CSV normalization, CSV validation, and JSON conversion scripts
-- Example `contacts.example.json` and `settings.example.json`
-- Electron main process bootstrap
-- React renderer scaffold and routing
-- Shared TypeScript types and Zod schemas
-- Local CI command and tracked pre-commit hook
-- Initial PR opened for the bootstrap work
+- JSON persistence, backups, import/export, and settings flows
+- Weighted Fuse.js search with ranking tests
+- Directory privacy warning UI for sensitive phones
+- CSV preview flow with row-level issues, warnings, and import confirmation
+- Local CI command and test/build/typecheck workflow
 
 ## Current Review Status
 
-The current PR is under review and has active follow-up work.
+Current branch work is committed and under review in PR #11, focused on `OIR-19`.
 
-Implemented or in progress during the current review pass:
+Implemented in this branch:
 
-- replacing absolute local documentation links with repository-relative links
-- adding a labeled search field for accessibility
-- hardening Electron window settings with `sandbox: true`
-- fixing non-portable backup path creation
-- aligning normalized CSV labels with the Spanish UI policy
-- relaxing CSV validator header requirements to match the documented import contract
-- adding recovery UI for bootstrap loading failures
-- expanding search matching to operational fields such as extensions, location, tags, emails, notes, and person names
-- adding tests for bootstrap recovery and broader search matching
+- strict CSV header validation against the MVP template contract
+- duplicate header detection before row parsing
+- unsupported column detection before row parsing
+- renderer test coverage that confirms template validation errors surface to the user
+- service coverage for unsupported and duplicate header failures
+- plan and handoff refresh to reflect post-merge repository state
 
-Outstanding review follow-up still to finish in the current branch:
+Required before merge:
 
-- reduce renderer trust and settings write surface where practical
-- rerun CI
-- perform the second QA and code review cycle
-- reply to PR review comments in English
-- close resolved review comments
-- push the branch and update the PR
+- address open PR review feedback
+- keep commits small and in English while finalizing follow-up changes
+- complete final QA/code review cycle on the latest diff before merge
+- close `OIR-19` in Linear after PR merge
 
 ## Key Repository Rules
 
 - Always work on a dedicated branch per Linear issue
-- Create or confirm the Linear issue before starting implementation work
-- Open a PR with a complete English description instead of pushing directly to `main`
+- Move the owning Linear issue to `In Progress` before implementation and to `Done` after merge
+- Run two QA and code review cycles before commits and before opening the PR
 - Keep commits small and logically scoped
-- Update `README.md` whenever setup, workflow, architecture, scripts, or operational behavior changes
+- Update `docs/MVP_PLAN.md` and `docs/HANDOFF.md` whenever plan status or active work changes
 - Keep all docs in English
 - Keep only user-facing application text in Spanish
 
@@ -88,6 +86,7 @@ Outstanding review follow-up still to finish in the current branch:
 
 - [README.md](../README.md)
 - [MVP_PLAN.md](./MVP_PLAN.md)
+- [HANDOFF.md](./HANDOFF.md)
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
 - [scripts/README.md](../scripts/README.md)
@@ -95,11 +94,11 @@ Outstanding review follow-up still to finish in the current branch:
 ## Recommended Start-Of-Session Checklist
 
 1. Read this file
-2. Check the active branch and `git status`
-3. Check the active PR and pending review comments
-4. Check the Linear issue that owns the current work
-5. Run the relevant local validation before making new claims
+2. Check `git status` and confirm the active branch
+3. Check the Linear issue that owns the current branch
+4. Review open PR comments if a PR already exists
+5. Run fresh validation before making any completion claim
 
 ## Recommended Next Step
 
-Finish the PR #1 review remediation on `feat/bootstrap-mvp-local-ci`, complete the second QA/review cycle, update the PR, and then branch from the next approved Linear issue.
+Address remaining PR feedback for `OIR-19` on `feat/oir-19-csv-template-validation`, run the final QA/code review cycle on the latest diff, and merge PR #11.

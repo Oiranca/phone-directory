@@ -15,11 +15,98 @@ import type {
 } from "../../shared/types/contact.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
+const SUPPORTED_COLUMNS = [
+  "externalId",
+  "type",
+  "displayName",
+  "firstName",
+  "lastName",
+  "area",
+  "department",
+  "service",
+  "specialty",
+  "building",
+  "floor",
+  "room",
+  "locationText",
+  "phone1Label",
+  "phone1Number",
+  "phone1Extension",
+  "phone1Kind",
+  "phone1IsPrimary",
+  "phone1Confidential",
+  "phone1NoPatientSharing",
+  "phone1Notes",
+  "phone2Label",
+  "phone2Number",
+  "phone2Extension",
+  "phone2Kind",
+  "phone2IsPrimary",
+  "phone2Confidential",
+  "phone2NoPatientSharing",
+  "phone2Notes",
+  "email1",
+  "email1Label",
+  "email1IsPrimary",
+  "email2",
+  "email2Label",
+  "email2IsPrimary",
+  "tags",
+  "aliases",
+  "notes",
+  "status"
+] as const;
 const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 
 type CsvRow = Record<string, string>;
+
+const validateCsvHeaders = (rawSource: string) => {
+  const headerResult = Papa.parse<string[]>(rawSource, {
+    preview: 1,
+    skipEmptyLines: "greedy",
+    transform: (value: string) => value.trim()
+  });
+
+  if (headerResult.errors.length > 0) {
+    throw new Error(`No se pudo leer la cabecera del CSV: ${headerResult.errors[0]?.message ?? "error desconocido"}.`);
+  }
+
+  const rawHeaders = headerResult.data[0]?.map((header) => header.trim()) ?? [];
+
+  if (rawHeaders.length === 0) {
+    throw new Error("El CSV no incluye una fila de cabecera válida.");
+  }
+
+  if (rawHeaders.some((header) => header.length === 0)) {
+    throw new Error("La cabecera del CSV contiene columnas vacías. Corrige la plantilla antes de importarla.");
+  }
+
+  const duplicateHeaders = rawHeaders.filter((header, index) => rawHeaders.indexOf(header) !== index);
+
+  if (duplicateHeaders.length > 0) {
+    throw new Error(
+      `La cabecera del CSV repite columnas: ${[...new Set(duplicateHeaders)].join(", ")}. Corrige la plantilla antes de importarla.`
+    );
+  }
+
+  const missingColumns = REQUIRED_COLUMNS.filter((column) => !rawHeaders.includes(column));
+
+  if (missingColumns.length > 0) {
+    throw new Error(`El CSV no incluye las columnas obligatorias: ${missingColumns.join(", ")}.`);
+  }
+
+  const unsupportedColumns = rawHeaders.filter(
+    (header) => !(SUPPORTED_COLUMNS as readonly string[]).includes(header)
+  );
+
+  if (unsupportedColumns.length > 0) {
+    throw new Error(
+      `La cabecera del CSV contiene columnas fuera de la plantilla MVP: ${unsupportedColumns.join(", ")}. Usa la plantilla oficial antes de importar.`
+    );
+  }
+};
 
 const maybe = (value: string | undefined) => {
   const trimmed = value?.trim() ?? "";
@@ -228,6 +315,7 @@ export const buildCsvImportPreview = async (
   }
 
   const rawSource = await fs.readFile(sourceFilePath, "utf-8");
+  validateCsvHeaders(rawSource);
   const parseResult = Papa.parse<CsvRow>(rawSource, {
     header: true,
     skipEmptyLines: "greedy",
@@ -238,14 +326,6 @@ export const buildCsvImportPreview = async (
   if (parseResult.errors.length > 0) {
     throw new Error(`No se pudo leer el CSV: ${parseResult.errors[0]?.message ?? "error desconocido"}.`);
   }
-
-  const fields = parseResult.meta.fields ?? [];
-  const missingColumns = REQUIRED_COLUMNS.filter((column) => !fields.includes(column));
-
-  if (missingColumns.length > 0) {
-    throw new Error(`El CSV no incluye las columnas obligatorias: ${missingColumns.join(", ")}.`);
-  }
-
   const records: ContactRecord[] = [];
   const rowIssues: CsvImportIssue[] = [];
   const warnings: CsvImportWarning[] = [];
