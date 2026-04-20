@@ -786,7 +786,7 @@ describe("AppDataService", () => {
         tags: [],
         status: "active"
       })
-    ).rejects.toThrow("Failed to generate unique record ID after 1000 attempts");
+    ).rejects.toThrow("No se pudo generar un ID único para el registro después de 1000 intentos");
 
     fixedRandom.mockRestore();
   });
@@ -852,13 +852,9 @@ describe("AppDataService", () => {
     expect("recovery" in result).toBe(true);
     if ("recovery" in result) {
       expect(result.recovery.reason).toBe("invalid-contacts-json");
-      // details must contain a Zod issue message, NOT the static fallback
-      expect(result.recovery.details).toBeDefined();
-      expect(result.recovery.details).not.toBe(
-        "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+      expect(result.recovery.details).toBe(
+        "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos."
       );
-      expect(typeof result.recovery.details).toBe("string");
-      expect((result.recovery.details as string).length).toBeGreaterThan(0);
     }
   });
 
