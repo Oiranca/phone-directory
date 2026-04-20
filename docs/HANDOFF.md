@@ -26,7 +26,7 @@ Use it at the start of every new Codex session to understand:
 
 - Active branch: `feat/oir-19-csv-template-validation`
 - Base branch: `main`
-- Active pull request: not opened yet for the current branch
+- Active pull request: verify the current branch in the repository for the latest PR status
 
 ## Current Linear Backlog
 
