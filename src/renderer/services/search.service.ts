@@ -9,6 +9,8 @@ export interface DirectoryFilters {
   showInactive: boolean;
 }
 
+export type PrivacyFlag = "Confidencial" | "No facilitar a pacientes";
+
 const fuseOptions: IFuseOptions<ContactRecord> = {
   ignoreLocation: true,
   threshold: 0.28,
@@ -72,7 +74,7 @@ export const getPreferredResultPhone = (record: ContactRecord) =>
   record.contactMethods.phones.find((phone) => phone.isPrimary) ??
   record.contactMethods.phones[0];
 
-export const getPhonePrivacyFlags = (record: ContactRecord) => {
+export const getPhonePrivacyFlags = (record: ContactRecord): PrivacyFlag[] => {
   let hasConfidentialPhone = false;
   let hasNoPatientSharingPhone = false;
 
@@ -90,7 +92,7 @@ export const getPhonePrivacyFlags = (record: ContactRecord) => {
     }
   }
 
-  const flags: string[] = [];
+  const flags: PrivacyFlag[] = [];
 
   if (hasConfidentialPhone) {
     flags.push("Confidencial");
