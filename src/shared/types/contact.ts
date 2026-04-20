@@ -88,12 +88,10 @@ export interface AppSettings {
   };
 }
 
-export interface EditableAppSettings {
-  editorName: string;
-  ui: {
-    showInactiveByDefault: boolean;
-  };
-}
+// EditableAppSettings is structurally derived from AppSettings so that adding a
+// field to AppSettings.ui forces a review of this type. If AppSettings.ui gains
+// new fields they will automatically appear here too.
+export type EditableAppSettings = Pick<AppSettings, "editorName" | "ui">;
 
 export interface BootstrapData {
   contacts: DirectoryDataset;

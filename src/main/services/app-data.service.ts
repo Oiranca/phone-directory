@@ -25,6 +25,7 @@ import type {
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   async ensureInitialFiles() {
@@ -237,8 +238,8 @@ export class AppDataService {
       ...parsed,
       id: savedRecordId,
       contactMethods: {
-        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
       },
       audit: {
         createdAt: now,
@@ -275,8 +276,8 @@ export class AppDataService {
       id: currentRecord.id,
       source: currentRecord.source,
       contactMethods: {
-        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
       },
       audit: {
         ...currentRecord.audit,
@@ -414,39 +415,6 @@ export class AppDataService {
 
   private getEditorName(settings: AppSettings) {
     return settings.editorName.trim() || "Editor local";
-  }
-
-  private normalizePrimaryEntries<T extends { isPrimary: boolean }>(entries: T[]) {
-    let primaryAssigned = false;
-
-    const normalizedEntries = entries.map((entry) => {
-      if (entry.isPrimary && !primaryAssigned) {
-        primaryAssigned = true;
-        return entry;
-      }
-
-      if (entry.isPrimary && primaryAssigned) {
-        return {
-          ...entry,
-          isPrimary: false
-        };
-      }
-
-      return entry;
-    });
-
-    if (primaryAssigned || normalizedEntries.length === 0) {
-      return normalizedEntries;
-    }
-
-    return normalizedEntries.map((entry, index) =>
-      index === 0
-        ? {
-            ...entry,
-            isPrimary: true
-          }
-        : entry
-    );
   }
 
   private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {

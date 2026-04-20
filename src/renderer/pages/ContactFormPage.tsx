@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
+import { normalizePrimaryEntries } from "../../shared/utils/contacts";
 import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
@@ -154,41 +155,6 @@ const buildErrorMap = (error: ZodError<EditableContactRecord>) => {
   return nextErrors;
 };
 
-const ensureSinglePrimary = <T extends { isPrimary: boolean }>(entries: T[]) => {
-  if (entries.length === 0) {
-    return entries;
-  }
-
-  let primaryAssigned = false;
-
-  const normalizedEntries = entries.map((entry) => {
-    if (entry.isPrimary && !primaryAssigned) {
-      primaryAssigned = true;
-      return entry;
-    }
-
-    if (entry.isPrimary && primaryAssigned) {
-      return {
-        ...entry,
-        isPrimary: false
-      };
-    }
-
-    return entry;
-  });
-
-  return primaryAssigned
-    ? normalizedEntries
-    : normalizedEntries.map((entry, index) =>
-        index === 0
-          ? {
-              ...entry,
-              isPrimary: true
-            }
-          : entry
-      );
-};
-
 const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   entries: T[],
   excludedId: string
@@ -200,7 +166,7 @@ const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   const fallbackIndex = entries.findIndex((entry) => entry.id !== excludedId);
 
   if (fallbackIndex === -1) {
-    return ensureSinglePrimary(entries);
+    return normalizePrimaryEntries(entries);
   }
 
   return entries.map((entry, index) =>
@@ -305,8 +271,8 @@ export const ContactFormPage = () => {
           });
 
           return patch.isPrimary === false
-            ? ensureSinglePrimary(promoteSiblingAsPrimary(nextPhones, phoneId))
-            : ensureSinglePrimary(nextPhones);
+            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextPhones, phoneId))
+            : normalizePrimaryEntries(nextPhones);
         })()
       }
     }));
@@ -330,8 +296,8 @@ export const ContactFormPage = () => {
           });
 
           return patch.isPrimary === false
-            ? ensureSinglePrimary(promoteSiblingAsPrimary(nextEmails, emailId))
-            : ensureSinglePrimary(nextEmails);
+            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextEmails, emailId))
+            : normalizePrimaryEntries(nextEmails);
         })()
       }
     }));
@@ -344,7 +310,7 @@ export const ContactFormPage = () => {
         ...current,
         contactMethods: {
           ...current.contactMethods,
-          phones: nextPhones.length > 0 ? ensureSinglePrimary(nextPhones) : [createPhoneDraft()]
+          phones: nextPhones.length > 0 ? normalizePrimaryEntries(nextPhones) : [createPhoneDraft()]
         }
       };
     });
@@ -355,7 +321,7 @@ export const ContactFormPage = () => {
       ...current,
       contactMethods: {
         ...current.contactMethods,
-        emails: ensureSinglePrimary(
+        emails: normalizePrimaryEntries(
           current.contactMethods.emails.filter((email) => email.id !== emailId)
         )
       }
