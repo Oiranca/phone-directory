@@ -307,6 +307,7 @@ export class AppDataService {
     }
   }
 
+  // Public because settings.ipc.ts calls service.toEditableSettings() directly.
   toEditableSettings(settings: AppSettings): EditableAppSettings {
     return {
       editorName: settings.editorName,
