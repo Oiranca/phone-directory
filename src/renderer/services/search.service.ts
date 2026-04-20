@@ -27,7 +27,7 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
   ]
 };
 
-const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
+export const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   records.filter((record) => {
