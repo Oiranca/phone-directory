@@ -1224,13 +1224,25 @@ Supporting migration files currently available in the repository:
 
 ## 31. Week 4 Hardening — Completed Work
 
-The following issue was completed during the Week 4 hardening pass:
+The following issues were completed during the Week 4 hardening pass:
 
 | Issue | Status | Description |
 |-------|--------|-------------|
 | OIR-17 | Done | Harden backup path configuration and filesystem error handling |
+| — | Done | QA hardening pass (tsconfig isolation, atomic writes, service unit tests) |
+
+### 31.1 — OIR-17: Backup and Export Filesystem Hardening
 
 OIR-17 addressed filesystem reliability gaps in the backup and export flows, including hardened error propagation, improved path validation, and actionable error messages surfaced to the renderer.
+
+### 31.2 — QA Hardening Pass
+
+Completed on branch `qa/full-review-pass`. Covers test infrastructure, write safety, and unit test coverage gaps identified after OIR-17.
+
+- **tsconfig isolation** — test-only types removed from `tsconfig.app.json`; new `tsconfig.vitest.json` added with explicit `exclude` override and full source directory coverage, preventing `tsc -b` failures caused by test-only matcher types leaking into the app build
+- **Atomic JSON writes** — `fs-json.ts` now writes via a temp file followed by a rename, with a `copyFile` fallback for Windows environments where `rename` raises `EPERM`/`EEXIST`; prevents data file corruption on power loss or mid-write failure
+- **CSV import service tests** — 10 unit tests added for `csv-import.service.ts` (previously 0); covers missing required headers, row-level validation, phone kind normalization, unknown area warnings, duplicate record deduplication, and import size limit enforcement
+- **Search service tests** — 16 unit tests added for `search.service.ts`; includes Fuse.js `WeakMap` cache identity verification via the `_getFuseCacheEntry` test accessor, confirming index reuse across identical dataset references
 
 ---
 
