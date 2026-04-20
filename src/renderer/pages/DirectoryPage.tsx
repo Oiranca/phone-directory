@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
+import type { PhoneContact } from "../../shared/types/contact";
 
 const typeLabels = {
   all: "Todos los tipos",
@@ -24,6 +25,36 @@ const areaLabels = {
   especialidades: "Especialidades",
   otros: "Otros"
 } as const satisfies Record<AreaType | "all" | "none", string>;
+
+const privacyInlineRiskText = {
+  Confidencial: "Número interno confidencial.",
+  "No facilitar a pacientes": "No compartir con pacientes."
+} as const;
+
+const privacyDetailWarningText = {
+  Confidencial: "Contiene números internos confidenciales.",
+  "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
+} as const;
+
+type PrivacyFlag = keyof typeof privacyInlineRiskText;
+
+const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
+  if (!phone) {
+    return [];
+  }
+
+  const flags: PrivacyFlag[] = [];
+
+  if (phone.confidential) {
+    flags.push("Confidencial");
+  }
+
+  if (phone.noPatientSharing) {
+    flags.push("No facilitar a pacientes");
+  }
+
+  return flags;
+};
 
 export const DirectoryPage = () => {
   const {
@@ -111,6 +142,7 @@ export const DirectoryPage = () => {
 
   const selectedRecord =
     visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0] ?? null;
+  const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
     <section className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
@@ -211,7 +243,7 @@ export const DirectoryPage = () => {
           {visibleRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
-            const privacyFlags = getPhonePrivacyFlags(record);
+            const privacyFlags = getPhoneInlinePrivacyFlags(primaryPhone);
 
             return (
               <button
@@ -243,17 +275,24 @@ export const DirectoryPage = () => {
                       Ext. {primaryPhone.extension}
                     </span>
                   )}
-                  {privacyFlags.map((flag) => (
-                    <span
-                      key={flag}
-                      className={[
-                        "rounded-full px-3 py-1 text-xs font-semibold",
-                        flag === "Confidencial" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"
-                      ].join(" ")}
-                    >
-                      {flag}
-                    </span>
-                  ))}
+                  {privacyFlags.map((flag) => {
+                    const badgeClass =
+                      flag === "Confidencial" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800";
+                    const typedFlag = flag as PrivacyFlag;
+
+                    return (
+                      <span
+                        key={typedFlag}
+                        className={[
+                          "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold",
+                          badgeClass
+                        ].join(" ")}
+                      >
+                        <span>{typedFlag}</span>
+                        <span className="font-medium">{privacyInlineRiskText[typedFlag]}</span>
+                      </span>
+                    );
+                  })}
                 </div>
               </button>
             );
@@ -294,6 +333,25 @@ export const DirectoryPage = () => {
                     .filter(Boolean)
                     .join(" · ") || "Sin ubicación detallada"}
                 </p>
+              </div>
+            )}
+            {selectedRecordPrivacyFlags.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                <p className="text-sm font-semibold uppercase tracking-wide">Atención de privacidad</p>
+                <p className="mt-2 text-sm">
+                  Este registro contiene teléfonos sensibles. Confirma el contexto antes de compartir cualquier número.
+                </p>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {selectedRecordPrivacyFlags.map((flag) => {
+                    const typedFlag = flag as PrivacyFlag;
+
+                    return (
+                      <li key={typedFlag} className="rounded-2xl bg-white/70 px-3 py-2">
+                        <span className="font-semibold">{typedFlag}.</span> {privacyDetailWarningText[typedFlag]}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
             <div className="space-y-3">
