@@ -63,12 +63,8 @@ export class AppDataService {
   }
 
   async createBackup() {
-    const source = await readJsonFile<DirectoryDataset>(getContactsFilePath());
-    const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupDirectory = getManagedBackupDirectory();
-    await ensureDirectory(backupDirectory);
-    const backupFilePath = path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
-    await writeJsonFile(backupFilePath, source);
+    const backupFilePath = await this.createBackupFilePath();
+    await fs.copyFile(getContactsFilePath(), backupFilePath);
     return backupFilePath;
   }
 
@@ -227,6 +223,13 @@ export class AppDataService {
     return directoryDatasetSchema.parse(
       await readJsonFile<DirectoryDataset>(getContactsFilePath())
     );
+  }
+
+  private async createBackupFilePath() {
+    const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupDirectory = getManagedBackupDirectory();
+    await ensureDirectory(backupDirectory);
+    return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
   }
 
   private async readSettings() {

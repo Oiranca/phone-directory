@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 
 const getPathMock = vi.fn();
 
@@ -379,6 +380,29 @@ describe("AppDataService", () => {
       await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
     ) as { records: Array<{ displayName: string }> };
     expect(persisted.records[0]?.displayName).toBe("Importado");
+  });
+
+  it("imports a valid dataset even when the current dataset is corrupt", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const corruptedCurrentDataset = "{ this-is-not-valid-json }\n";
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "recovery.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const importResult = await service.importDataset(sourceFilePath);
+    const backupContents = await fs.readFile(importResult.backupPath, "utf-8");
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+
+    expect(backupContents).toBe(corruptedCurrentDataset);
+    expect(persisted.records[0]?.displayName).toBe(defaultContacts.records[0]?.displayName);
   });
 
   it("rejects imported datasets with invalid timestamp fields", async () => {

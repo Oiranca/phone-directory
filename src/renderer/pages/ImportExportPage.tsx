@@ -186,7 +186,7 @@ export const ImportExportPage = () => {
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Última exportación del dataset</p>
+            <p className="text-sm font-semibold text-slate-500">Última actualización del dataset</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{formatTimestamp(contacts.exportedAt)}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
