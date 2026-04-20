@@ -519,10 +519,7 @@ export class AppDataService {
       reason: "invalid-contacts-json",
       contactsFilePath,
       message: "El archivo local contacts.json está dañado o tiene un formato no válido.",
-      details:
-        error instanceof Error
-          ? "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
-          : "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+      details: "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
     };
   }
 }
