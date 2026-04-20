@@ -86,9 +86,8 @@ export const DirectoryPage = () => {
     [contacts, query, selectedType, selectedArea, showInactive]
   );
 
-  // NOTE: App.tsx delegates bootstrap to each page individually.
-  // This local loadBootstrapData is intentionally kept to support the error-recovery
-  // retry flow and page-level tests. Removing it would break the bootstrap failure tests.
+  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
+  // This local loader is retained only for page-level retry and test isolation.
   const loadBootstrapData = async () => {
     try {
       setBootstrapError("");
