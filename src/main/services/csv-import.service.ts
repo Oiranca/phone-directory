@@ -17,6 +17,7 @@ import type {
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
+const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 
 type CsvRow = Record<string, string>;
 
@@ -143,7 +144,7 @@ const buildPhones = (
 
   return ensureSinglePrimary(
     phones,
-    "More than one phone was marked as primary. Only the first one will stay primary.",
+    "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
     warnings,
     rowNumber,
     displayName
@@ -177,7 +178,7 @@ const buildEmails = (
 
   return ensureSinglePrimary(
     emails,
-    "More than one email was marked as primary. Only the first one will stay primary.",
+    "Se marcaron varios correos como principales. Solo el primero se conservará como principal.",
     warnings,
     rowNumber,
     displayName
@@ -220,6 +221,12 @@ export const buildCsvImportPreview = async (
   sourceFilePath: string,
   editorName: string
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
+  const sourceStats = await fs.stat(sourceFilePath);
+
+  if (sourceStats.size > MAX_CSV_IMPORT_SIZE_BYTES) {
+    throw new Error("El CSV supera el tamaño máximo permitido de 5 MB. Divide el archivo antes de importarlo.");
+  }
+
   const rawSource = await fs.readFile(sourceFilePath, "utf-8");
   const parseResult = Papa.parse<CsvRow>(rawSource, {
     header: true,
@@ -251,13 +258,13 @@ export const buildCsvImportPreview = async (
     const type = maybe(row.type)?.toLowerCase();
 
     if (!type) {
-      issues.push("Type is required.");
+      issues.push("El tipo es obligatorio.");
     } else if (!RECORD_TYPES.includes(type as ContactRecord["type"])) {
-      issues.push(`Type "${type}" is not supported.`);
+      issues.push(`El tipo "${type}" no está soportado.`);
     }
 
     if (!displayName) {
-      issues.push("Display name is required.");
+      issues.push("El nombre visible es obligatorio.");
     }
 
     const rawArea = maybe(row.area)?.toLowerCase();
@@ -269,7 +276,7 @@ export const buildCsvImportPreview = async (
       rowWarnings.push({
         rowNumber,
         displayName,
-        message: `Unknown area "${rawArea}" will be omitted.`
+        message: `El área "${rawArea}" no está soportada y se omitirá.`
       });
     }
 
@@ -280,7 +287,7 @@ export const buildCsvImportPreview = async (
       rowWarnings.push({
         rowNumber,
         displayName,
-        message: "Duplicate tags were collapsed."
+        message: "Las etiquetas duplicadas se consolidaron."
       });
     }
 
@@ -288,7 +295,7 @@ export const buildCsvImportPreview = async (
       rowWarnings.push({
         rowNumber,
         displayName,
-        message: "Duplicate aliases were collapsed."
+        message: "Los alias duplicados se consolidaron."
       });
     }
 
@@ -302,14 +309,14 @@ export const buildCsvImportPreview = async (
     });
 
     if (phones.length === 0 && emails.length === 0 && Object.keys(location).length === 0) {
-      issues.push("Each row needs at least one phone, one email, or one location field.");
+      issues.push("Cada fila necesita al menos un teléfono, un correo o un dato de ubicación.");
     }
 
     const rawStatus = maybe(row.status)?.toLowerCase();
     const status = rawStatus ?? "active";
 
     if (rawStatus && !SUPPORTED_STATUSES.has(rawStatus)) {
-      issues.push(`Status "${rawStatus}" is not supported.`);
+      issues.push(`El estado "${rawStatus}" no está soportado.`);
     }
 
     if (issues.length > 0) {
@@ -362,8 +369,8 @@ export const buildCsvImportPreview = async (
     } catch (error) {
       const messages =
         error instanceof Error
-          ? [error.message]
-          : ["The row could not be converted into a valid record."];
+          ? ["La fila no se pudo convertir en un registro válido."]
+          : ["La fila no se pudo convertir en un registro válido."];
 
       rowIssues.push({
         rowNumber,
@@ -379,6 +386,7 @@ export const buildCsvImportPreview = async (
   return {
     dataset,
     preview: {
+      importToken: "",
       sourceFilePath,
       fileName: path.basename(sourceFilePath),
       totalRowCount: parseResult.data.length,

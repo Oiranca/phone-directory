@@ -407,8 +407,8 @@ describe("AppDataService", () => {
     expect(preview.validRowCount).toBe(2);
     expect(preview.invalidRowCount).toBe(1);
     expect(preview.warningCount).toBe(1);
-    expect(preview.rowIssues[0]?.messages).toContain("Type is required.");
-    expect(preview.warnings[0]?.message).toContain("Unknown area");
+    expect(preview.rowIssues[0]?.messages).toContain("El tipo es obligatorio.");
+    expect(preview.warnings[0]?.message).toContain("no está soportada");
   });
 
   it("imports a normalized CSV and replaces the dataset after backup", async () => {
@@ -512,6 +512,21 @@ describe("AppDataService", () => {
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
       "El CSV contiene filas inválidas. Corrige el archivo antes de importarlo."
+    );
+  });
+
+  it("rejects CSV preview when the file exceeds the supported size limit", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "too-large.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, "a".repeat(5 * 1024 * 1024 + 1), "utf-8");
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "El CSV supera el tamaño máximo permitido de 5 MB. Divide el archivo antes de importarlo."
     );
   });
 });
