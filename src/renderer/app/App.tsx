@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
 import type { BootstrapResult, ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { AppShell } from "../components/layout/AppShell";
@@ -11,7 +11,6 @@ export const isRecoveryBootstrap = (
 const RecoveryPanel = () => {
   const { recovery, initialize } = useAppStore();
   const [actionError, setActionError] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
@@ -30,11 +29,9 @@ const RecoveryPanel = () => {
     try {
       setIsImporting(true);
       setActionError("");
-      setStatusMessage("");
       const result = await window.hospitalDirectory.importDataset();
 
       if (!result) {
-        setStatusMessage("Selección de JSON cancelada.");
         return;
       }
 
@@ -62,7 +59,6 @@ const RecoveryPanel = () => {
     try {
       setIsResetting(true);
       setActionError("");
-      setStatusMessage("");
       const result = await window.hospitalDirectory.resetDataset();
       applyRecoveredData(result);
     } catch (error) {
@@ -106,12 +102,6 @@ const RecoveryPanel = () => {
         </button>
       </div>
 
-      {statusMessage && (
-        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {statusMessage}
-        </div>
-      )}
-
       {actionError && (
         <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {actionError}
@@ -124,6 +114,7 @@ const RecoveryPanel = () => {
 export const App = () => {
   const { contacts, settings, recovery, isLoading, initialize, initializeRecovery, setIsLoading } = useAppStore();
   const [bootstrapError, setBootstrapError] = useState("");
+  const hasAttempted = useRef(false);
 
   const loadBootstrapData = async () => {
     try {
@@ -144,10 +135,15 @@ export const App = () => {
   };
 
   useEffect(() => {
+    if (hasAttempted.current) {
+      return;
+    }
+
     if (contacts || (settings && recovery)) {
       return;
     }
 
+    hasAttempted.current = true;
     void loadBootstrapData();
   }, [contacts, recovery, settings]);
 
