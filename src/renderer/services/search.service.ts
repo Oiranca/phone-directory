@@ -102,3 +102,8 @@ export const getPhonePrivacyFlags = (record: ContactRecord) => {
 
   return flags;
 };
+
+/** @internal — for tests only */
+export function _getFuseCacheEntry(records: ContactRecord[]): Fuse<ContactRecord> | undefined {
+  return fuseCache.get(records);
+}

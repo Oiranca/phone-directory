@@ -1219,3 +1219,110 @@ Supporting migration files currently available in the repository:
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
 - [scripts/extract_ods_to_csv.py](../scripts/extract_ods_to_csv.py)
 - [scripts/README.md](../scripts/README.md)
+
+---
+
+## 31. Week 4 Hardening — Completed Work
+
+The following issue was completed during the Week 4 hardening pass:
+
+| Issue | Status | Description |
+|-------|--------|-------------|
+| OIR-17 | Done | Harden backup path configuration and filesystem error handling |
+
+OIR-17 addressed filesystem reliability gaps in the backup and export flows, including hardened error propagation, improved path validation, and actionable error messages surfaced to the renderer.
+
+---
+
+## 32. Phase 2 — Quality and Completeness Backlog
+
+Phase 2 begins after the four-week MVP is stable. It targets quality gaps, UX completeness, cross-platform distribution, and end-to-end test coverage. All items below are currently in backlog (Todo status).
+
+### 32.1 Search and Discovery
+
+**OIR-18 — Implement weighted Fuse.js full-text search with field prioritization**
+
+Replace the initial basic Fuse.js configuration with a tuned weighted search that ranks results by field relevance. Fields such as `displayName`, `aliases`, `department`, and `service` should have explicit weight assignments to improve operational search accuracy.
+
+**OIR-26 — Add tag-based filtering to directory search**
+
+Extend the existing filter surface to support tag-based selection. Users should be able to filter results by one or more tags defined on contact records. Tag filters should compose correctly with existing type and area filters.
+
+### 32.2 Data Integrity and Recovery
+
+**OIR-19 — Add CSV import template validation and per-row error reporting**
+
+Extend the CSV import flow to validate that incoming files conform to the agreed MVP CSV template. Invalid or unrecognized column structures should be caught before row-level processing begins. Per-row validation errors must be surfaced in the import preview with enough detail for operational staff to identify and fix the source file.
+
+**OIR-20 — Implement data corruption recovery flow for invalid contacts.json**
+
+When `contacts.json` fails schema validation at startup, the application must enter a safe recovery state. In recovery state, normal editing is blocked and the user is presented with clear options: import a valid JSON backup or reset to a clean empty dataset. This flow was described in the startup flow (section 6.1) and this issue delivers the full implementation.
+
+**OIR-24 — Validate writable paths in Settings and surface actionable errors**
+
+When a user saves custom data or backup paths in Settings, the application must verify that those paths are writable before accepting them. If a path is not writable or does not exist, the UI must surface a specific, actionable error message rather than a generic failure.
+
+### 32.3 UX and Polish
+
+**OIR-23 — Replace inline status messages with a global toast notification system**
+
+The current implementation surfaces feedback through inline status strings scattered across pages. This issue replaces that pattern with a centralized toast notification region (`ToastRegion` component, already in the component list at section 17). Toasts must support success, warning, and error variants and must auto-dismiss after a reasonable timeout.
+
+**OIR-25 — Add restore-from-backup UI flow in Import/Export page**
+
+Extend the Import and Export page to list available backup files and allow the user to restore from a selected backup directly through the UI. This removes the need to locate backup files manually in the filesystem and makes the backup strategy more accessible to non-technical staff.
+
+**OIR-27 — Enhance privacy badge UI with inline risk text and detail view warning block**
+
+Implement the sensitive phone presentation rules defined in section 20 of this plan. In result cards, sensitive phones must include explicit inline risk text alongside the badge rather than a badge alone. In the detail view, a warning block must appear above the phone list when any sensitive phones are present. This aligns the UI with the documented privacy behavior specification.
+
+### 32.4 Testing
+
+**OIR-22 — Write Playwright end-to-end tests for critical MVP flows**
+
+Implement the Playwright end-to-end test suite covering the critical flows identified in section 26.3:
+
+- open app and load sample dataset
+- search and open a contact detail
+- create a contact
+- edit a contact
+- import valid JSON
+- import valid CSV with preview
+- export JSON
+
+### 32.5 USB Deployment — Cross-Platform Distribution
+
+**OIR-21 — Package Electron app as portable cross-platform USB deployment (Windows, Linux, macOS)**
+
+Package the application as a portable Electron build that runs directly from a USB drive without installation. Targets are Windows, Linux, and macOS. The packaged build must not write to system locations and must resolve all data paths relative to the executable.
+
+**OIR-28 — Store all app data on USB drive using paths relative to the executable**
+
+Update the data path resolution logic so that when the app is running in portable mode, all data files (`contacts.json`, `settings.json`) and backup files are stored in paths relative to the executable rather than the user's system app-data directory. This ensures the full dataset travels with the USB drive.
+
+**OIR-29 — Add cross-platform launcher scripts at USB root for one-click app launch**
+
+Provide launcher scripts at the USB root level for each supported platform:
+
+- `launch.bat` for Windows
+- `launch.sh` for Linux
+- `launch.command` for macOS
+
+Scripts must set any required environment variables, resolve the executable path, and launch the application without requiring the user to navigate the filesystem manually.
+
+### 32.6 Phase 2 Summary Table
+
+| Issue | Category | Description |
+|-------|----------|-------------|
+| OIR-18 | Search | Weighted Fuse.js search with field prioritization |
+| OIR-19 | Data Integrity | CSV import template validation and per-row error reporting |
+| OIR-20 | Data Integrity | Data corruption recovery flow for invalid contacts.json |
+| OIR-21 | USB Deployment | Portable cross-platform USB packaging |
+| OIR-22 | Testing | Playwright end-to-end tests for critical MVP flows |
+| OIR-23 | UX | Global toast notification system |
+| OIR-24 | Data Integrity | Writable path validation in Settings |
+| OIR-25 | UX | Restore-from-backup UI flow in Import/Export page |
+| OIR-26 | Search | Tag-based filtering for directory search |
+| OIR-27 | UX | Privacy badge inline risk text and detail view warning block |
+| OIR-28 | USB Deployment | App data stored on USB using executable-relative paths |
+| OIR-29 | USB Deployment | Cross-platform launcher scripts at USB root |
