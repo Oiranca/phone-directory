@@ -12,20 +12,27 @@ export interface DirectoryFilters {
 export type PrivacyFlag = "Confidencial" | "No facilitar a pacientes";
 
 const fuseOptions: IFuseOptions<ContactRecord> = {
-  ignoreLocation: true,
-  threshold: 0.28,
+  distance: 120,
+  ignoreLocation: false,
+  location: 0,
+  threshold: 0.22,
   keys: [
-    { name: "displayName", weight: 0.3 },
-    { name: "aliases", weight: 0.18 },
-    { name: "organization.department", weight: 0.14 },
-    { name: "organization.service", weight: 0.12 },
-    { name: "organization.specialty", weight: 0.07 },
-    { name: "organization.area", weight: 0.05 },
-    { name: "tags", weight: 0.04 },
-    { name: "contactMethods.phones.number", weight: 0.06 },
-    { name: "contactMethods.phones.extension", weight: 0.02 },
-    { name: "contactMethods.phones.label", weight: 0.01 },
-    { name: "contactMethods.emails.address", weight: 0.01 }
+    { name: "displayName", weight: 10 },
+    { name: "contactMethods.phones.extension", weight: 8 },
+    { name: "contactMethods.phones.number", weight: 7 },
+    { name: "organization.service", weight: 6 },
+    { name: "organization.department", weight: 5 },
+    { name: "tags", weight: 4 },
+    { name: "location.building", weight: 3 },
+    { name: "location.floor", weight: 3 },
+    { name: "location.room", weight: 3 },
+    { name: "location.text", weight: 3 },
+    { name: "aliases", weight: 3 },
+    { name: "organization.specialty", weight: 2 },
+    { name: "organization.area", weight: 2 },
+    { name: "contactMethods.phones.label", weight: 2 },
+    { name: "contactMethods.emails.address", weight: 2 },
+    { name: "notes", weight: 1 }
   ]
 };
 
