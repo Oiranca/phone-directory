@@ -186,6 +186,7 @@ export interface CsvImportWarning {
 }
 
 export interface CsvImportPreview {
+  importToken: string;
   sourceFilePath: string;
   fileName: string;
   totalRowCount: number;

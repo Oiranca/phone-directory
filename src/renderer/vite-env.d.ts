@@ -24,7 +24,7 @@ declare global {
       exportDataset: () => Promise<ExportContactsResult | null>;
       importDataset: () => Promise<ImportContactsResult | null>;
       previewCsvImport: () => Promise<CsvImportPreview | null>;
-      importCsvDataset: (sourceFilePath: string) => Promise<CsvImportResult>;
+      importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
     };
   }
 }

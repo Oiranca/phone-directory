@@ -212,7 +212,7 @@ export const ImportExportPage = () => {
     try {
       setIsImportingCsv(true);
       setActionError("");
-      const result = await window.hospitalDirectory.importCsvDataset(csvPreview.sourceFilePath);
+      const result = await window.hospitalDirectory.importCsvDataset(csvPreview.importToken);
 
       initialize({
         contacts: result.contacts,

@@ -24,8 +24,8 @@ const api = {
   exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
   importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
   previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreview | null>,
-  importCsvDataset: (sourceFilePath: string) =>
-    ipcRenderer.invoke("contacts:import-csv-dataset", sourceFilePath) as Promise<CsvImportResult>
+  importCsvDataset: (importToken: string) =>
+    ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>
 };
 
 contextBridge.exposeInMainWorld("hospitalDirectory", api);

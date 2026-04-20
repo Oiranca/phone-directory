@@ -1,5 +1,6 @@
 import type { EditableContactRecord } from "../../shared/types/contact.js";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 
@@ -16,6 +17,8 @@ const CHANNELS = {
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
+  const pendingCsvImports = new Map<string, string>();
+
   ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
   ipcMain.handle(CHANNELS.createBackup, () => service.createBackup());
   ipcMain.handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
@@ -74,11 +77,27 @@ export const registerContactsIpc = (service: AppDataService) => {
       return null;
     }
 
-    return service.previewCsvImport(filePaths[0]!);
+    const sourceFilePath = filePaths[0]!;
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const importToken = randomUUID();
+
+    pendingCsvImports.set(importToken, sourceFilePath);
+
+    return {
+      ...preview,
+      importToken
+    };
   });
-  ipcMain.handle(CHANNELS.importCsvDataset, (_event, sourceFilePath: string) =>
-    service.importCsvDataset(sourceFilePath)
-  );
+  ipcMain.handle(CHANNELS.importCsvDataset, async (_event, importToken: string) => {
+    const sourceFilePath = pendingCsvImports.get(importToken);
+
+    if (!sourceFilePath) {
+      throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
+    }
+
+    pendingCsvImports.delete(importToken);
+    return service.importCsvDataset(sourceFilePath);
+  });
 };
 
 export type ContactsChannels = typeof CHANNELS;

@@ -61,6 +61,7 @@ describe("ImportExportPage", () => {
           recordCount: defaultContacts.records.length
         }),
         previewCsvImport: vi.fn().mockResolvedValue({
+          importToken: "csv-token-1",
           sourceFilePath: "/tmp/incoming/directory.csv",
           fileName: "directory.csv",
           totalRowCount: 2,
@@ -80,7 +81,7 @@ describe("ImportExportPage", () => {
             {
               rowNumber: 3,
               displayName: "Urgencias",
-              message: "Unknown area \"urgencias\" will be omitted."
+              message: "El área \"urgencias\" no está soportada y se omitirá."
             }
           ]
         }),
@@ -218,12 +219,12 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Vista previa CSV")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
-    expect(screen.getByText("Unknown area \"urgencias\" will be omitted.")).toBeInTheDocument();
+    expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación CSV/ }));
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
+      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
     expect(await screen.findByText(/Importación CSV completada desde/)).toBeInTheDocument();
@@ -231,6 +232,7 @@ describe("ImportExportPage", () => {
 
   it("blocks CSV confirmation when the preview contains invalid rows", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-invalid",
       sourceFilePath: "/tmp/incoming/broken.csv",
       fileName: "broken.csv",
       totalRowCount: 2,
@@ -246,7 +248,7 @@ describe("ImportExportPage", () => {
         {
           rowNumber: 3,
           displayName: "Fila rota",
-          messages: ["Type is required."]
+          messages: ["El tipo es obligatorio."]
         }
       ],
       warnings: []
@@ -266,6 +268,7 @@ describe("ImportExportPage", () => {
     window.hospitalDirectory.previewCsvImport = vi
       .fn()
       .mockResolvedValueOnce({
+        importToken: "csv-token-first",
         sourceFilePath: "/tmp/incoming/directory.csv",
         fileName: "directory.csv",
         totalRowCount: 2,
