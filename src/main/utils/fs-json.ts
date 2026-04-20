@@ -9,6 +9,13 @@ export const readJsonFile = async <T>(filePath: string): Promise<T> => {
   return JSON.parse(contents) as T;
 };
 
-export const writeJsonFile = async (filePath: string, payload: unknown) => {
-  await fs.writeFile(filePath, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+export const writeJsonFile = async (filePath: string, payload: unknown): Promise<void> => {
+  const tmp = filePath + ".tmp";
+  await fs.writeFile(tmp, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+  try {
+    await fs.rename(tmp, filePath);
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => undefined);
+    throw err;
+  }
 };
