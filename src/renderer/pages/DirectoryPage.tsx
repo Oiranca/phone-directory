@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
+import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact } from "../../shared/types/contact";
 
@@ -34,9 +35,7 @@ const privacyInlineRiskText = {
 const privacyDetailWarningText = {
   Confidencial: "Contiene números internos confidenciales.",
   "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
-} as const;
-
-type PrivacyFlag = keyof typeof privacyInlineRiskText;
+} as const satisfies Record<PrivacyFlag, string>;
 
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
   if (!phone) {
@@ -278,18 +277,17 @@ export const DirectoryPage = () => {
                   {privacyFlags.map((flag) => {
                     const badgeClass =
                       flag === "Confidencial" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800";
-                    const typedFlag = flag as PrivacyFlag;
 
                     return (
                       <span
-                        key={typedFlag}
+                        key={flag}
                         className={[
                           "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold",
                           badgeClass
                         ].join(" ")}
                       >
-                        <span>{typedFlag}</span>
-                        <span className="font-medium">{privacyInlineRiskText[typedFlag]}</span>
+                        <span>{flag}</span>
+                        <span className="font-medium">{privacyInlineRiskText[flag]}</span>
                       </span>
                     );
                   })}
@@ -342,15 +340,11 @@ export const DirectoryPage = () => {
                   Este registro contiene teléfonos sensibles. Confirma el contexto antes de compartir cualquier número.
                 </p>
                 <ul className="mt-3 space-y-2 text-sm">
-                  {selectedRecordPrivacyFlags.map((flag) => {
-                    const typedFlag = flag as PrivacyFlag;
-
-                    return (
-                      <li key={typedFlag} className="rounded-2xl bg-white/70 px-3 py-2">
-                        <span className="font-semibold">{typedFlag}.</span> {privacyDetailWarningText[typedFlag]}
-                      </li>
-                    );
-                  })}
+                  {selectedRecordPrivacyFlags.map((flag) => (
+                    <li key={flag} className="rounded-2xl bg-white/70 px-3 py-2">
+                      <span className="font-semibold">{flag}.</span> {privacyDetailWarningText[flag]}
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
