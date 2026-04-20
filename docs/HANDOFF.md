@@ -26,7 +26,7 @@ Use it at the start of every new Codex session to understand:
 
 - Active branch: `feat/oir-20-recovery-flow`
 - Base branch: `main`
-- Active pull request: not opened yet for the current branch
+- Active pull request: check the repository for the current PR associated with this branch
 
 ## Current Linear Backlog
 
