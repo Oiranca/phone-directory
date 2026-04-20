@@ -54,9 +54,9 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Review Status
 
-Current branch work is not committed yet and is focused on `OIR-19`.
+Current branch work is committed and under review in PR #11, focused on `OIR-19`.
 
-Implemented in the working tree:
+Implemented in this branch:
 
 - strict CSV header validation against the MVP template contract
 - duplicate header detection before row parsing
@@ -65,12 +65,12 @@ Implemented in the working tree:
 - service coverage for unsupported and duplicate header failures
 - plan and handoff refresh to reflect post-merge repository state
 
-Required before commit and PR:
+Required before merge:
 
-- complete two QA and code review cycles on the final diff
-- keep commits small and in English
-- open a ready-for-review PR, not a draft
-- attach the PR link back to Linear
+- address open PR review feedback
+- keep commits small and in English while finalizing follow-up changes
+- complete final QA/code review cycle on the latest diff before merge
+- close `OIR-19` in Linear after PR merge
 
 ## Key Repository Rules
 
@@ -101,4 +101,4 @@ Required before commit and PR:
 
 ## Recommended Next Step
 
-Finish `OIR-19` on `feat/oir-19-csv-template-validation`, run the second QA/code review cycle on the full diff, commit the work in small English commits, and open the PR.
+Address remaining PR feedback for `OIR-19` on `feat/oir-19-csv-template-validation`, run the final QA/code review cycle on the latest diff, and merge PR #11.
