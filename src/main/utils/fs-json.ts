@@ -15,18 +15,16 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
   try {
     await fs.rename(tmp, filePath);
   } catch (err: unknown) {
-    // On Windows, rename fails with EEXIST/EPERM if destination exists.
-    // Fall back to: delete destination, then rename.
-    if (
-      (err as NodeJS.ErrnoException).code === "EPERM" ||
-      (err as NodeJS.ErrnoException).code === "EEXIST"
-    ) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EPERM" || code === "EEXIST") {
+      // Windows: rename over existing file fails. Use copyFile which overwrites atomically.
+      // If copyFile fails, the original file is untouched — no data loss.
       try {
-        await fs.unlink(filePath);
-        await fs.rename(tmp, filePath);
-      } catch {
+        await fs.copyFile(tmp, filePath);
         await fs.unlink(tmp).catch(() => undefined);
-        throw err;
+      } catch (copyErr) {
+        await fs.unlink(tmp).catch(() => undefined);
+        throw copyErr;
       }
     } else {
       await fs.unlink(tmp).catch(() => undefined);
