@@ -328,4 +328,26 @@ describe("ImportExportPage", () => {
     });
     expect(await screen.findByText("Selección de CSV cancelada.")).toBeInTheDocument();
   });
+
+  it("shows the CSV template validation error when preview preparation fails before row parsing", async () => {
+    window.hospitalDirectory.previewCsvImport = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+        )
+      );
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
+
+    expect(
+      await screen.findByText(
+        "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Vista previa CSV")).not.toBeInTheDocument();
+  });
 });

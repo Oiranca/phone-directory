@@ -53,6 +53,39 @@ describe("buildCsvImportPreview", () => {
     );
   });
 
+  it("throws when the header contains unsupported columns", async () => {
+    const filePath = await writeFile(
+      "unsupported-cols.csv",
+      ["type,displayName,phone1Number,legacyDesk", "person,Ana Pérez,12345,Mostrador antiguo"].join("\n") + "\n"
+    );
+
+    await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "columnas fuera de la plantilla MVP"
+    );
+  });
+
+  it("throws when the header repeats a column", async () => {
+    const filePath = await writeFile(
+      "duplicate-cols.csv",
+      ["type,displayName,displayName,phone1Number", "person,Ana Pérez,Ana duplicada,12345"].join("\n") + "\n"
+    );
+
+    await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "repite columnas"
+    );
+  });
+
+  it("throws when the header contains empty column names", async () => {
+    const filePath = await writeFile(
+      "empty-header.csv",
+      ["type,displayName,,phone1Number", "person,Ana Pérez,,12345"].join("\n") + "\n"
+    );
+
+    await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "columnas vacías"
+    );
+  });
+
   it("skips row and adds issue when displayName is missing", async () => {
     const filePath = await writeFile(
       "no-displayname.csv",
