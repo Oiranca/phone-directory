@@ -244,6 +244,10 @@ export const ContactFormPage = () => {
       try {
         setBootstrapError("");
         const payload = await window.hospitalDirectory.getBootstrapData();
+        if ("recovery" in payload) {
+          setBootstrapError(payload.recovery.message);
+          return;
+        }
         initialize(payload);
       } catch {
         setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
@@ -400,7 +404,14 @@ export const ContactFormPage = () => {
               setBootstrapError("");
               void window.hospitalDirectory
                 .getBootstrapData()
-                .then((payload) => initialize(payload))
+                .then((payload) => {
+                  if ("recovery" in payload) {
+                    setBootstrapError(payload.recovery.message);
+                    return;
+                  }
+
+                  initialize(payload);
+                })
                 .catch(() => {
                   setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
                 });

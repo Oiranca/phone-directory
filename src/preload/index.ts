@@ -1,18 +1,19 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BackupListItem,
-  BootstrapData,
+  BootstrapResult,
   CsvImportPreview,
   CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
   ImportContactsResult,
+  ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact.js";
 
 const api = {
-  getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapData>,
+  getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
   saveSettings: (settings: EditableAppSettings) =>
     ipcRenderer.invoke("settings:save", settings) as Promise<EditableAppSettings>,
   createBackup: () => ipcRenderer.invoke("contacts:create-backup") as Promise<string>,
@@ -23,6 +24,7 @@ const api = {
   listBackups: () => ipcRenderer.invoke("contacts:list-backups") as Promise<BackupListItem[]>,
   exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
   importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
+  resetDataset: () => ipcRenderer.invoke("contacts:reset-dataset") as Promise<ResetContactsResult>,
   previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreview | null>,
   importCsvDataset: (importToken: string) =>
     ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>

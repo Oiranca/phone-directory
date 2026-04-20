@@ -55,6 +55,11 @@ export const ImportExportPage = () => {
         window.hospitalDirectory.listBackups()
       ]);
 
+      if ("recovery" in payload) {
+        setBootstrapError(payload.recovery.message);
+        return;
+      }
+
       if (!contacts || !settings) {
         initialize(payload);
       }

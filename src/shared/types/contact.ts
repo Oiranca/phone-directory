@@ -100,6 +100,20 @@ export interface BootstrapData {
   settings: EditableAppSettings;
 }
 
+export interface RecoveryState {
+  reason: "invalid-contacts-json";
+  contactsFilePath: string;
+  message: string;
+  details?: string;
+}
+
+export interface RecoveryBootstrapData {
+  recovery: RecoveryState;
+  settings: EditableAppSettings;
+}
+
+export type BootstrapResult = BootstrapData | RecoveryBootstrapData;
+
 export interface EditablePhoneContact {
   id: string;
   label?: string;
@@ -171,6 +185,10 @@ export interface ImportContactsResult extends BootstrapData {
   backupPath: string;
   importedFilePath: string;
   recordCount: number;
+}
+
+export interface ResetContactsResult extends BootstrapData {
+  backupPath: string;
 }
 
 export interface CsvImportIssue {

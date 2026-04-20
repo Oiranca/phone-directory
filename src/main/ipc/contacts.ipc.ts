@@ -9,6 +9,7 @@ const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CHANNELS = {
   bootstrap: "contacts:get-bootstrap-data",
   createBackup: "contacts:create-backup",
+  resetDataset: "contacts:reset-dataset",
   createRecord: "contacts:create-record",
   updateRecord: "contacts:update-record",
   listBackups: "contacts:list-backups",
@@ -40,6 +41,7 @@ export const registerContactsIpc = (service: AppDataService) => {
 
   ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
   ipcMain.handle(CHANNELS.createBackup, () => service.createBackup());
+  ipcMain.handle(CHANNELS.resetDataset, () => service.resetDataset());
   ipcMain.handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
     service.createRecord(payload)
   );

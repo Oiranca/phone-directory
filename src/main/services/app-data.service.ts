@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
@@ -8,6 +9,7 @@ import type {
   AppSettings,
   BackupListItem,
   BootstrapData,
+  BootstrapResult,
   ContactRecord,
   CsvImportPreview,
   CsvImportResult,
@@ -16,6 +18,8 @@ import type {
   EditableContactRecord,
   ExportContactsResult,
   ImportContactsResult,
+  RecoveryState,
+  ResetContactsResult,
   SaveContactResult
 } from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
@@ -40,16 +44,27 @@ export class AppDataService {
     }
   }
 
-  async getBootstrapData(): Promise<BootstrapData> {
+  async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
-
-    const contacts = directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(getContactsFilePath())
-    );
-
     const settings = await this.readSettings();
+    const contactsFilePath = getContactsFilePath();
 
-    return { contacts, settings: this.toEditableSettings(settings) };
+    try {
+      const contacts = directoryDatasetSchema.parse(
+        await readJsonFile<DirectoryDataset>(contactsFilePath)
+      );
+
+      return { contacts, settings: this.toEditableSettings(settings) };
+    } catch (error) {
+      if (!this.isRecoverableContactsError(error)) {
+        throw error;
+      }
+
+      return {
+        recovery: this.toRecoveryState(error, contactsFilePath),
+        settings: this.toEditableSettings(settings)
+      };
+    }
   }
 
   async saveSettings(settings: EditableAppSettings) {
@@ -151,6 +166,20 @@ export class AppDataService {
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: importedContacts.records.length
+    };
+  }
+
+  async resetDataset(): Promise<ResetContactsResult> {
+    const settings = await this.readSettings();
+    const backupPath = await this.createBackup();
+    const contacts = this.buildEmptyDataset(this.getEditorName(settings));
+
+    await writeJsonFile(getContactsFilePath(), contacts);
+
+    return {
+      contacts,
+      settings: this.toEditableSettings(settings),
+      backupPath
     };
   }
 
@@ -338,6 +367,25 @@ export class AppDataService {
     });
   }
 
+  private buildEmptyDataset(editorName: string): DirectoryDataset {
+    const exportedAt = new Date().toISOString();
+
+    return directoryDatasetSchema.parse({
+      version: defaultContacts.version,
+      exportedAt,
+      metadata: {
+        recordCount: 0,
+        generatedFrom: "recovery-reset",
+        generatedBy: "app-recovery-reset",
+        editorName,
+        typeCounts: {},
+        areaCounts: {}
+      },
+      catalogs: defaultContacts.catalogs,
+      records: []
+    });
+  }
+
   private createEntityId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
   }
@@ -460,5 +508,21 @@ export class AppDataService {
       default:
         return "Se produjo un error al acceder al sistema de archivos.";
     }
+  }
+
+  private isRecoverableContactsError(error: unknown) {
+    return error instanceof SyntaxError || error instanceof ZodError;
+  }
+
+  private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
+    return {
+      reason: "invalid-contacts-json",
+      contactsFilePath,
+      message: "El archivo local contacts.json está dañado o tiene un formato no válido.",
+      details:
+        error instanceof Error
+          ? "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+          : "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+    };
   }
 }

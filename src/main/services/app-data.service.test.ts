@@ -597,6 +597,52 @@ describe("AppDataService", () => {
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow();
   });
 
+  it("returns a recovery payload when contacts.json is corrupted at startup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), "{ invalid-json }\n", "utf-8");
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.reason).toBe("invalid-contacts-json");
+      expect(result.recovery.contactsFilePath).toBe(path.join(testRoot, "data", "contacts.json"));
+      expect(result.settings.ui.showInactiveByDefault).toBe(false);
+    }
+  });
+
+  it("resets the dataset to empty and preserves a backup of the corrupted file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: true
+      }
+    });
+
+    const corruptedCurrentDataset = "{ invalid-json }\n";
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
+
+    const result = await service.resetDataset();
+    const backupContents = await fs.readFile(result.backupPath, "utf-8");
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { metadata: { recordCount: number }; records: unknown[] };
+
+    expect(backupContents).toBe(corruptedCurrentDataset);
+    expect(result.contacts.records).toHaveLength(0);
+    expect(result.contacts.metadata.recordCount).toBe(0);
+    expect(result.settings.ui.showInactiveByDefault).toBe(true);
+    expect(persisted.records).toHaveLength(0);
+    expect(persisted.metadata.recordCount).toBe(0);
+  });
+
   it("rejects CSV replacement when the preview still contains invalid rows", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

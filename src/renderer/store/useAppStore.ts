@@ -1,12 +1,19 @@
 import { create } from "zustand";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
-import type { BootstrapData, ContactRecord, DirectoryDataset, EditableAppSettings } from "../../shared/types/contact";
+import type {
+  BootstrapData,
+  ContactRecord,
+  DirectoryDataset,
+  EditableAppSettings,
+  RecoveryState
+} from "../../shared/types/contact";
 import type { DirectoryFilters } from "../services/search.service";
 import { searchRecords } from "../services/search.service";
 
 interface AppStore {
   contacts: DirectoryDataset | null;
   settings: EditableAppSettings | null;
+  recovery: RecoveryState | null;
   selectedRecordId: string | null;
   query: string;
   selectedType: RecordType | "all";
@@ -14,6 +21,9 @@ interface AppStore {
   showInactive: boolean;
   isLoading: boolean;
   initialize: (payload: BootstrapData) => void;
+  initializeRecovery: (recovery: RecoveryState, settings: EditableAppSettings) => void;
+  setIsLoading: (isLoading: boolean) => void;
+  clearRecovery: () => void;
   setQuery: (query: string) => void;
   setSelectedType: (type: RecordType | "all") => void;
   setSelectedArea: (area: AreaType | "all") => void;
@@ -26,6 +36,7 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set) => ({
   contacts: null,
   settings: null,
+  recovery: null,
   selectedRecordId: null,
   query: "",
   selectedType: "all",
@@ -36,12 +47,26 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       contacts: payload.contacts,
       settings: payload.settings,
+      recovery: null,
       selectedRecordId: payload.contacts.records[0]?.id ?? null,
       selectedType: "all",
       selectedArea: "all",
       showInactive: payload.settings.ui.showInactiveByDefault,
       isLoading: false
     }),
+  initializeRecovery: (recovery, settings) =>
+    set({
+      contacts: null,
+      settings,
+      recovery,
+      selectedRecordId: null,
+      selectedType: "all",
+      selectedArea: "all",
+      showInactive: settings.ui.showInactiveByDefault,
+      isLoading: false
+    }),
+  setIsLoading: (isLoading) => set({ isLoading }),
+  clearRecovery: () => set({ recovery: null }),
   setQuery: (query) => set({ query }),
   setSelectedType: (selectedType) => set({ selectedType }),
   setSelectedArea: (selectedArea) => set({ selectedArea }),

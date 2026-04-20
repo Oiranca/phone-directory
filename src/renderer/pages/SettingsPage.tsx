@@ -14,6 +14,10 @@ export const SettingsPage = () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
+      if ("recovery" in payload) {
+        setBootstrapError(payload.recovery.message);
+        return;
+      }
       initialize(payload);
     } catch {
       setBootstrapError(
