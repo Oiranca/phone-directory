@@ -128,7 +128,9 @@ export const App = () => {
       }
 
       initialize(payload);
-    } catch {
+    } catch (error) {
+      console.error('[App] Bootstrap failed:', error);
+      hasAttempted.current = false;
       setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");
       setIsLoading(false);
     }

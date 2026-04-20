@@ -245,4 +245,23 @@ describe("App recovery flow", () => {
     expect(await screen.findByText("Custom reset failure")).toBeInTheDocument();
     expect(screen.queryByText("No se pudo restablecer el directorio vacío.")).not.toBeInTheDocument();
   });
+
+  it("shows bootstrap error UI when getBootstrapData rejects, and Reintentar retries the call", async () => {
+    const getBootstrapData = vi.fn()
+      .mockRejectedValueOnce(new Error("IPC not ready"))
+      .mockResolvedValue({ contacts: defaultContacts, settings: editableSettings });
+
+    window.hospitalDirectory.getBootstrapData = getBootstrapData;
+
+    renderApp();
+
+    expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    await waitFor(() => {
+      expect(getBootstrapData).toHaveBeenCalledTimes(2);
+    });
+  });
 });
