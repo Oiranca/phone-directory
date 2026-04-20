@@ -158,4 +158,47 @@ describe("App recovery flow", () => {
     });
     expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
   });
+
+  it("shows the error message in the recovery panel when importDataset throws", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+    window.hospitalDirectory.importDataset = vi.fn().mockRejectedValue(
+      new Error("No se pudo importar una copia JSON válida.")
+    );
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+
+    expect(await screen.findByText("No se pudo importar una copia JSON válida.")).toBeInTheDocument();
+  });
+
+  it("shows the error message in the recovery panel when resetDataset throws", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    window.hospitalDirectory.resetDataset = vi.fn().mockRejectedValue(
+      new Error("No se pudo restablecer el directorio vacío.")
+    );
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+
+    expect(await screen.findByText("No se pudo restablecer el directorio vacío.")).toBeInTheDocument();
+  });
 });
