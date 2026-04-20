@@ -382,6 +382,75 @@ describe("AppDataService", () => {
     expect(persisted.records[0]?.displayName).toBe("Importado");
   });
 
+  it("previews a normalized CSV with counts, warnings, and row issues", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "preview.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,area,phone1Number,status",
+        "person,Ana Pérez,Admisión,otros,12345,active",
+        "service,Mostrador,Recepción,desconocida,55555,active",
+        ",Fila rota,Archivo,otros,,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.totalRowCount).toBe(3);
+    expect(preview.validRowCount).toBe(2);
+    expect(preview.invalidRowCount).toBe(1);
+    expect(preview.warningCount).toBe(1);
+    expect(preview.rowIssues[0]?.messages).toContain("Type is required.");
+    expect(preview.warnings[0]?.message).toContain("Unknown area");
+  });
+
+  it("imports a normalized CSV and replaces the dataset after backup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+
+    const sourceFilePath = path.join(testRoot, "incoming", "directory.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,area,phone1Number,phone1Kind,aliases,tags,status",
+        "person,Ana Pérez,Admisión,otros,12345,internal,ana|ana,front|front,active",
+        "service,Mostrador,Recepción,especialidades,55555,desk,,,inactive"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
+
+    expect(result.recordCount).toBe(2);
+    expect(result.warningCount).toBe(3);
+    expect(result.invalidRowCount).toBe(0);
+    expect(result.contacts.records[0]?.displayName).toBe("Ana Pérez");
+    expect(result.contacts.records[0]?.aliases).toEqual(["ana"]);
+    expect(result.contacts.records[0]?.tags).toEqual(["front"]);
+    expect(result.contacts.records[1]?.contactMethods.phones[0]?.kind).toBe("other");
+    expect(result.backupPath).toContain(path.join(testRoot, "backups"));
+    expect(persisted.records[1]?.status).toBe("inactive");
+  });
+
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -422,5 +491,27 @@ describe("AppDataService", () => {
     await fs.writeFile(sourceFilePath, JSON.stringify(invalidDataset, null, 2) + "\n", "utf-8");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow();
+  });
+
+  it("rejects CSV replacement when the preview still contains invalid rows", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "invalid.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department",
+        "person,,Admisión"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
+      "El CSV contiene filas inválidas. Corrige el archivo antes de importarlo."
+    );
   });
 });

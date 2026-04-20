@@ -10,7 +10,9 @@ const CHANNELS = {
   updateRecord: "contacts:update-record",
   listBackups: "contacts:list-backups",
   exportDataset: "contacts:export-dataset",
-  importDataset: "contacts:import-dataset"
+  importDataset: "contacts:import-dataset",
+  previewCsvImport: "contacts:preview-csv-import",
+  importCsvDataset: "contacts:import-csv-dataset"
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -57,6 +59,26 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return service.importDataset(filePaths[0]!);
   });
+  ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const openOptions = {
+      title: "Preparar importación CSV",
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+      properties: ["openFile"]
+    } satisfies Electron.OpenDialogOptions;
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+
+    if (canceled || filePaths.length === 0) {
+      return null;
+    }
+
+    return service.previewCsvImport(filePaths[0]!);
+  });
+  ipcMain.handle(CHANNELS.importCsvDataset, (_event, sourceFilePath: string) =>
+    service.importCsvDataset(sourceFilePath)
+  );
 };
 
 export type ContactsChannels = typeof CHANNELS;

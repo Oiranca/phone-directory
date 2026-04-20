@@ -3,11 +3,14 @@ import path from "node:path";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
+import { buildCsvImportPreview } from "./csv-import.service.js";
 import type {
   AppSettings,
   BackupListItem,
   BootstrapData,
   ContactRecord,
+  CsvImportPreview,
+  CsvImportResult,
   DirectoryDataset,
   EditableAppSettings,
   EditableContactRecord,
@@ -128,6 +131,44 @@ export class AppDataService {
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: importedContacts.records.length
+    };
+  }
+
+  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
+    const settings = await this.readSettings();
+    const { preview } = await buildCsvImportPreview(
+      sourceFilePath,
+      this.getEditorName(settings)
+    );
+    return preview;
+  }
+
+  async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
+    const settings = await this.readSettings();
+    const { dataset, preview } = await buildCsvImportPreview(
+      sourceFilePath,
+      this.getEditorName(settings)
+    );
+
+    if (preview.invalidRowCount > 0) {
+      throw new Error("El CSV contiene filas inválidas. Corrige el archivo antes de importarlo.");
+    }
+
+    if (preview.validRowCount === 0) {
+      throw new Error("El CSV no contiene filas válidas para importar.");
+    }
+
+    const backupPath = await this.createBackup();
+    await writeJsonFile(getContactsFilePath(), dataset);
+
+    return {
+      contacts: dataset,
+      settings: this.toEditableSettings(settings),
+      backupPath,
+      importedFilePath: sourceFilePath,
+      recordCount: dataset.records.length,
+      warningCount: preview.warningCount,
+      invalidRowCount: preview.invalidRowCount
     };
   }
 
