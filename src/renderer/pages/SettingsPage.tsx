@@ -11,6 +11,9 @@ export const SettingsPage = () => {
   const [saveSuccess, setSaveSuccess] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
 
+  // NOTE: App.tsx delegates bootstrap to each page individually.
+  // This local loadBootstrapData is intentionally kept to support the error-recovery
+  // retry flow and page-level tests. Removing it would break the bootstrap failure tests.
   const loadBootstrapData = async () => {
     try {
       setBootstrapError("");

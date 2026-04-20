@@ -46,6 +46,7 @@ const phoneKindOptions = [
   { value: "other", label: "Otro" }
 ];
 
+// client-side only: used as React keys for draft phone/email entries, discarded on save
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 
 const createPhoneDraft = (): EditablePhoneContact => ({
@@ -236,6 +237,9 @@ export const ContactFormPage = () => {
     [contacts, id]
   );
 
+  // NOTE: App.tsx delegates bootstrap to each page individually.
+  // This local bootstrap effect is intentionally kept to support the error-recovery
+  // retry flow and page-level tests. Removing it would break the bootstrap failure tests.
   useEffect(() => {
     if (contacts) {
       return;
