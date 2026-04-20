@@ -411,6 +411,30 @@ describe("AppDataService", () => {
     expect(preview.warnings[0]?.message).toContain("no está soportada");
   });
 
+  it("localizes unsupported phone kind warnings during CSV preview", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "phone-kind.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,phone1Number,phone1Kind",
+        "service,Mostrador,Recepción,55555,desk"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.warnings[0]?.message).toBe(
+      "El tipo de teléfono \"desk\" no está soportado y se normalizó como \"other\"."
+    );
+  });
+
   it("imports a normalized CSV and replaces the dataset after backup", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

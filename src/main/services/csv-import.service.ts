@@ -122,7 +122,7 @@ const buildPhones = (
       warnings.push({
         rowNumber,
         displayName,
-        message: `Unknown phone kind "${rawKind}" was normalized to "other".`
+        message: `El tipo de teléfono "${rawKind}" no está soportado y se normalizó como "other".`
       });
       kind = "other";
     }
