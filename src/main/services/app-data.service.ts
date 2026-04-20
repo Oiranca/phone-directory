@@ -109,7 +109,7 @@ export class AppDataService {
       throw this.toFilesystemError(
         error,
         "No se pudo leer la carpeta de backups.",
-        backupDirectory
+        { filePath: backupDirectory }
       );
     }
   }
@@ -125,7 +125,7 @@ export class AppDataService {
       throw this.toFilesystemError(
         error,
         "No se pudo exportar el directorio al destino seleccionado.",
-        targetFilePath
+        { filePath: targetFilePath }
       );
     }
 
@@ -295,7 +295,7 @@ export class AppDataService {
       throw this.toFilesystemError(
         error,
         "No se pudo preparar la carpeta de backups del directorio.",
-        backupDirectory
+        { filePath: backupDirectory }
       );
     }
     return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
@@ -393,16 +393,72 @@ export class AppDataService {
     try {
       await fs.copyFile(sourceFilePath, targetFilePath);
     } catch (error) {
-      throw this.toFilesystemError(error, message, targetFilePath);
+      throw this.toFilesystemError(error, message, {
+        sourceFilePath,
+        targetFilePath
+      });
     }
   }
 
-  private toFilesystemError(error: unknown, message: string, filePath: string) {
-    if (error instanceof Error) {
-      const detail = error.message.trim();
-      return new Error(`${message} Ruta afectada: ${filePath}. ${detail}`);
+  private toFilesystemError(
+    error: unknown,
+    message: string,
+    context: {
+      filePath?: string;
+      sourceFilePath?: string;
+      targetFilePath?: string;
+    }
+  ) {
+    const routeDetails = new Set<string>();
+    const filesystemError = this.getErrnoException(error);
+
+    if (typeof filesystemError?.path === "string" && filesystemError.path.trim() !== "") {
+      routeDetails.add(`Ruta afectada: ${filesystemError.path}`);
     }
 
-    return new Error(`${message} Ruta afectada: ${filePath}.`);
+    if (typeof filesystemError?.dest === "string" && filesystemError.dest.trim() !== "") {
+      routeDetails.add(`Ruta de destino: ${filesystemError.dest}`);
+    }
+
+    if (routeDetails.size === 0 && context.filePath) {
+      routeDetails.add(`Ruta afectada: ${context.filePath}`);
+    }
+
+    if (context.sourceFilePath) {
+      routeDetails.add(`Ruta de origen: ${context.sourceFilePath}`);
+    }
+
+    if (context.targetFilePath) {
+      routeDetails.add(`Ruta de destino: ${context.targetFilePath}`);
+    }
+
+    const routeContext =
+      routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
+    const detail = this.getFilesystemErrorDetail(filesystemError);
+
+    return new Error(`${message}${routeContext} ${detail}`.trim());
+  }
+
+  private getErrnoException(error: unknown) {
+    if (typeof error === "object" && error !== null) {
+      return error as NodeJS.ErrnoException & { dest?: string };
+    }
+
+    return undefined;
+  }
+
+  private getFilesystemErrorDetail(error?: NodeJS.ErrnoException & { dest?: string }) {
+    switch (error?.code) {
+      case "EACCES":
+        return "No tienes permisos suficientes para acceder al archivo o directorio.";
+      case "ENOENT":
+        return "El archivo o directorio no existe.";
+      case "EROFS":
+        return "El archivo o directorio está en un sistema de solo lectura.";
+      case "ENOSPC":
+        return "No hay espacio suficiente en disco para completar la operación.";
+      default:
+        return "Se produjo un error al acceder al sistema de archivos.";
+    }
   }
 }

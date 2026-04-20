@@ -287,13 +287,24 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    const backupDirectoryPath = path.join(testRoot, "backups");
+    const backupFilePath = path.join(backupDirectoryPath, "contacts-backup.json");
 
     const copyFileSpy = vi
       .spyOn(fs, "copyFile")
-      .mockRejectedValueOnce(new Error("EACCES: permission denied"));
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+          path: contactsFilePath,
+          dest: backupFilePath
+        })
+      );
 
     await expect(service.createBackup()).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada:/
+      new RegExp(
+        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No tienes permisos suficientes para acceder al archivo o directorio\\.`
+      )
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -306,11 +317,17 @@ describe("AppDataService", () => {
 
     const writeFileSpy = vi
       .spyOn(fs, "writeFile")
-      .mockRejectedValueOnce(new Error("EROFS: read-only file system"));
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EROFS: read-only file system"), {
+          code: "EROFS"
+        })
+      );
     const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
 
     await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
-      new RegExp(`No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      new RegExp(
+        `No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. El archivo o directorio está en un sistema de solo lectura\\.`
+      )
     );
     expect(writeFileSpy).toHaveBeenCalled();
   });
@@ -327,10 +344,19 @@ describe("AppDataService", () => {
 
     const copyFileSpy = vi
       .spyOn(fs, "copyFile")
-      .mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
+      .mockRejectedValueOnce(
+        Object.assign(new Error("ENOSPC: no space left on device"), {
+          code: "ENOSPC",
+          path: path.join(testRoot, "data", "contacts.json")
+        })
+      );
+    const backupDirectoryPath = path.join(testRoot, "backups");
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada:/
+      new RegExp(
+        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
+      )
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
