@@ -24,15 +24,15 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Git State
 
-- Active branch: `feat/oir-19-csv-template-validation`
+- Active branch: `feat/oir-20-recovery-flow`
 - Base branch: `main`
-- Active pull request: verify the current branch in the repository for the latest PR status
+- Active pull request: not opened yet for the current branch
 
 ## Current Linear Backlog
 
-- `OIR-18` Done — weighted Fuse.js search ranking landed in PR #10 and merged to `main`
-- `OIR-19` In Progress — CSV template validation and per-row error reporting
-- `OIR-20` Todo — recovery flow for invalid `contacts.json`
+- `OIR-18` Done — weighted Fuse.js search ranking merged in PR #10
+- `OIR-19` Done — CSV template header validation merged in PR #11
+- `OIR-20` In Progress — corruption recovery flow for invalid `contacts.json`
 - `OIR-21` Todo — portable USB packaging
 - `OIR-22` Todo — Playwright critical-flow coverage
 - `OIR-23` Todo — global toast notification system
@@ -49,28 +49,27 @@ Use it at the start of every new Codex session to understand:
 - JSON persistence, backups, import/export, and settings flows
 - Weighted Fuse.js search with ranking tests
 - Directory privacy warning UI for sensitive phones
-- CSV preview flow with row-level issues, warnings, and import confirmation
+- CSV preview flow with row-level issues, warnings, and template header validation
 - Local CI command and test/build/typecheck workflow
 
 ## Current Review Status
 
-Current branch work is committed and under review in PR #11, focused on `OIR-19`.
+Current branch work is not committed yet and is focused on `OIR-20`.
 
-Implemented in this branch:
+Implemented in the working tree:
 
-- strict CSV header validation against the MVP template contract
-- duplicate header detection before row parsing
-- unsupported column detection before row parsing
-- renderer test coverage that confirms template validation errors surface to the user
-- service coverage for unsupported and duplicate header failures
-- plan and handoff refresh to reflect post-merge repository state
+- typed recovery bootstrap result from the main process when `contacts.json` is corrupt
+- reset-to-empty IPC surface and preload API
+- global recovery gate in the renderer that blocks navigation until JSON import or empty reset succeeds
+- recovery-mode shell treatment and focused tests for recovery import/reset actions
+- plan and handoff refresh to reflect merged `OIR-19` work and active `OIR-20` scope
 
-Required before merge:
+Required before commit and PR:
 
-- address open PR review feedback
-- keep commits small and in English while finalizing follow-up changes
-- complete final QA/code review cycle on the latest diff before merge
-- close `OIR-19` in Linear after PR merge
+- complete two QA and code review cycles on the final diff
+- keep commits small and in English
+- open a ready-for-review PR, not a draft
+- attach the PR link back to Linear
 
 ## Key Repository Rules
 
@@ -101,4 +100,4 @@ Required before merge:
 
 ## Recommended Next Step
 
-Address remaining PR feedback for `OIR-19` on `feat/oir-19-csv-template-validation`, run the final QA/code review cycle on the latest diff, and merge PR #11.
+Finish `OIR-20` on `feat/oir-20-recovery-flow`, run two QA/code review cycles on the final diff, commit the work in small English commits, and open the PR.
