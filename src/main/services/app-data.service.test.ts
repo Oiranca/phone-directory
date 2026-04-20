@@ -701,4 +701,189 @@ describe("AppDataService", () => {
       "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
     );
   });
+
+  it("throws after 1000 attempts when Math.random always returns the same value", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Math.random returning 0.5 always produces the same ID string
+    const fixedId = `cnt_${(0.5).toString(36).slice(2, 10)}`;
+
+    // Pre-populate contacts.json with a valid record that has the fixed ID
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    const existing = JSON.parse(await fs.readFile(contactsFilePath, "utf-8")) as {
+      version: string;
+      exportedAt: string;
+      metadata: {
+        recordCount: number;
+        generatedFrom: string;
+        generatedBy: string;
+        editorName: string;
+        typeCounts: Record<string, number>;
+        areaCounts: Record<string, number>;
+      };
+      catalogs: { recordTypes: string[]; areas: string[] };
+      records: Array<unknown>;
+    };
+
+    const collisionRecord = {
+      id: fixedId,
+      type: "service",
+      displayName: "Colisión forzada",
+      organization: { department: "Test" },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_collision",
+            number: "00000",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active",
+      audit: {
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-20T00:00:00.000Z",
+        createdBy: "Test",
+        updatedBy: "Test"
+      }
+    };
+
+    existing.records.push(collisionRecord);
+    existing.metadata.recordCount = existing.records.length;
+    await fs.writeFile(contactsFilePath, JSON.stringify(existing, null, 2), "utf-8");
+
+    const fixedRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    await expect(
+      service.createRecord({
+        type: "service",
+        displayName: "Desbordamiento",
+        organization: { department: "Test" },
+        contactMethods: {
+          phones: [
+            {
+              id: "ph_overflow",
+              label: "Principal",
+              number: "99999",
+              kind: "internal",
+              isPrimary: true,
+              confidential: false,
+              noPatientSharing: false
+            }
+          ],
+          emails: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active"
+      })
+    ).rejects.toThrow("Failed to generate unique record ID after 1000 attempts");
+
+    fixedRandom.mockRestore();
+  });
+
+  it("returns backupPath null and succeeds when contacts.json does not exist before resetDataset", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Remove contacts.json to simulate a missing file before reset
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    await fs.rm(contactsFilePath, { force: true });
+
+    const result = await service.resetDataset();
+
+    expect(result.backupPath).toBeNull();
+    expect(result.contacts.records).toHaveLength(0);
+    expect(result.contacts.metadata.recordCount).toBe(0);
+
+    const persisted = JSON.parse(
+      await fs.readFile(contactsFilePath, "utf-8")
+    ) as { records: unknown[]; metadata: { recordCount: number } };
+    expect(persisted.records).toHaveLength(0);
+    expect(persisted.metadata.recordCount).toBe(0);
+  });
+
+  it("returns Zod issue messages in recovery details when contacts.json has valid JSON but invalid schema", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Write valid JSON that fails the directoryDatasetSchema (missing required 'version' field)
+    const invalidSchemaDataset = {
+      exportedAt: "2026-04-20T00:00:00.000Z",
+      metadata: {
+        recordCount: 0,
+        generatedFrom: "test",
+        generatedBy: "test",
+        editorName: "Test",
+        typeCounts: {},
+        areaCounts: {}
+      },
+      catalogs: { recordTypes: [], areas: [] },
+      records: [
+        {
+          id: "cnt_bad",
+          type: "INVALID_TYPE_VALUE",
+          displayName: "Broken record"
+        }
+      ]
+    };
+
+    await fs.writeFile(
+      path.join(testRoot, "data", "contacts.json"),
+      JSON.stringify(invalidSchemaDataset),
+      "utf-8"
+    );
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.reason).toBe("invalid-contacts-json");
+      // details must contain a Zod issue message, NOT the static fallback
+      expect(result.recovery.details).toBeDefined();
+      expect(result.recovery.details).not.toBe(
+        "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+      );
+      expect(typeof result.recovery.details).toBe("string");
+      expect((result.recovery.details as string).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("listBackups createdAt values are valid ISO strings in descending order", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const firstBackupPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondBackupPath = await service.createBackup();
+
+    const backups = await service.listBackups();
+
+    expect(backups).toHaveLength(2);
+    expect(backups[0]?.filePath).toBe(secondBackupPath);
+    expect(backups[1]?.filePath).toBe(firstBackupPath);
+
+    const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    expect(backups[0]?.createdAt).toMatch(isoRegex);
+    expect(backups[1]?.createdAt).toMatch(isoRegex);
+
+    const firstTime = new Date(backups[1]!.createdAt).getTime();
+    const secondTime = new Date(backups[0]!.createdAt).getTime();
+    expect(secondTime).toBeGreaterThanOrEqual(firstTime);
+  });
 });

@@ -201,4 +201,48 @@ describe("App recovery flow", () => {
 
     expect(await screen.findByText("No se pudo restablecer el directorio vacío.")).toBeInTheDocument();
   });
+
+  it("importDataset throws with a custom message → custom message appears (not the hardcoded fallback)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+    window.hospitalDirectory.importDataset = vi.fn().mockRejectedValue(
+      new Error("Custom import failure")
+    );
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+
+    expect(await screen.findByText("Custom import failure")).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo importar una copia JSON válida.")).not.toBeInTheDocument();
+  });
+
+  it("resetDataset throws with a custom message → custom message appears (not the hardcoded fallback)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+    window.hospitalDirectory.resetDataset = vi.fn().mockRejectedValue(
+      new Error("Custom reset failure")
+    );
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+
+    expect(await screen.findByText("Custom reset failure")).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo restablecer el directorio vacío.")).not.toBeInTheDocument();
+  });
 });
