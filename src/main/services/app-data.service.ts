@@ -67,47 +67,67 @@ export class AppDataService {
 
   async createBackup() {
     const backupFilePath = await this.createBackupFilePath();
-    await fs.copyFile(getContactsFilePath(), backupFilePath);
+    await this.copyFileWithContext(
+      getContactsFilePath(),
+      backupFilePath,
+      "No se pudo crear el backup automático del directorio."
+    );
     return backupFilePath;
   }
 
   async listBackups(): Promise<BackupListItem[]> {
     const backupDirectory = getManagedBackupDirectory();
-    await ensureDirectory(backupDirectory);
-    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-    const backupFiles = await Promise.all(
-      entries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-        .map(async (entry) => {
-          const filePath = path.join(backupDirectory, entry.name);
-          const stats = await fs.stat(filePath);
+    try {
+      await ensureDirectory(backupDirectory);
+      const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+      const backupFiles = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+          .map(async (entry) => {
+            const filePath = path.join(backupDirectory, entry.name);
+            const stats = await fs.stat(filePath);
 
-          return {
-            fileName: entry.name,
-            filePath,
-            createdAt: stats.mtime.toISOString(),
-            sizeBytes: stats.size
-          } satisfies BackupListItem;
-        })
-    );
+            return {
+              fileName: entry.name,
+              filePath,
+              createdAt: stats.mtime.toISOString(),
+              sizeBytes: stats.size
+            } satisfies BackupListItem;
+          })
+      );
 
-    return backupFiles.sort((left, right) => {
-      const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return backupFiles.sort((left, right) => {
+        const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
 
-      if (createdAtDelta !== 0) {
-        return createdAtDelta;
-      }
+        if (createdAtDelta !== 0) {
+          return createdAtDelta;
+        }
 
-      return right.fileName.localeCompare(left.fileName);
-    });
+        return right.fileName.localeCompare(left.fileName);
+      });
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo leer la carpeta de backups.",
+        backupDirectory
+      );
+    }
   }
 
   async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
     const contacts = await this.readContacts();
     const directory = path.dirname(targetFilePath);
 
-    await ensureDirectory(directory);
-    await writeJsonFile(targetFilePath, contacts);
+    try {
+      await ensureDirectory(directory);
+      await writeJsonFile(targetFilePath, contacts);
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo exportar el directorio al destino seleccionado.",
+        targetFilePath
+      );
+    }
 
     return {
       filePath: targetFilePath,
@@ -269,7 +289,15 @@ export class AppDataService {
   private async createBackupFilePath() {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = getManagedBackupDirectory();
-    await ensureDirectory(backupDirectory);
+    try {
+      await ensureDirectory(backupDirectory);
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo preparar la carpeta de backups del directorio.",
+        backupDirectory
+      );
+    }
     return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
   }
 
@@ -359,5 +387,22 @@ export class AppDataService {
           }
         : entry
     );
+  }
+
+  private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
+    try {
+      await fs.copyFile(sourceFilePath, targetFilePath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, targetFilePath);
+    }
+  }
+
+  private toFilesystemError(error: unknown, message: string, filePath: string) {
+    if (error instanceof Error) {
+      const detail = error.message.trim();
+      return new Error(`${message} Ruta afectada: ${filePath}. ${detail}`);
+    }
+
+    return new Error(`${message} Ruta afectada: ${filePath}.`);
   }
 }

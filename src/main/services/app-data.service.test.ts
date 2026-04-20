@@ -281,6 +281,62 @@ describe("AppDataService", () => {
     expect(backups[0]?.sizeBytes).toBeGreaterThan(0);
   });
 
+  it("surfaces the affected backup path when backup creation fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const copyFileSpy = vi
+      .spyOn(fs, "copyFile")
+      .mockRejectedValueOnce(new Error("EACCES: permission denied"));
+
+    await expect(service.createBackup()).rejects.toThrow(
+      /No se pudo crear el backup automático del directorio\. Ruta afectada:/
+    );
+
+    copyFileSpy.mockRestore();
+  });
+
+  it("surfaces the affected destination when export writing fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const writeFileSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockRejectedValueOnce(new Error("EROFS: read-only file system"));
+    const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
+
+    await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
+      new RegExp(`No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+    );
+
+    writeFileSpy.mockRestore();
+  });
+
+  it("surfaces the backup path when JSON import cannot create its safety copy", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const copyFileSpy = vi
+      .spyOn(fs, "copyFile")
+      .mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
+
+    await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
+      /No se pudo crear el backup automático del directorio\. Ruta afectada:/
+    );
+
+    copyFileSpy.mockRestore();
+  });
+
   it("imports a dataset from disk and creates an automatic backup first", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

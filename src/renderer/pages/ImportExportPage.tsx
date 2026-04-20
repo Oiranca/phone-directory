@@ -90,8 +90,12 @@ export const ImportExportPage = () => {
       const backupPath = await window.hospitalDirectory.createBackup();
       await refreshBackups();
       setStatusMessage(`Backup creado en ${backupPath}.`);
-    } catch {
-      setActionError("No se pudo crear el backup manual. Inténtalo de nuevo.");
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear el backup manual. Inténtalo de nuevo."
+      );
     } finally {
       setIsCreatingBackup(false);
     }
@@ -109,8 +113,12 @@ export const ImportExportPage = () => {
       }
 
       setStatusMessage(`Exportación completada en ${result.filePath}.`);
-    } catch {
-      setActionError("No se pudo exportar el dataset actual.");
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo exportar el dataset actual."
+      );
     } finally {
       setIsExporting(false);
     }
