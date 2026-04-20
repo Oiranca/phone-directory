@@ -1230,6 +1230,8 @@ The following issues were completed during the Week 4 hardening pass:
 |-------|--------|-------------|
 | OIR-17 | Done | Harden backup path configuration and filesystem error handling |
 | — | Done | QA hardening pass (tsconfig isolation, atomic writes, service unit tests) |
+| OIR-18 | Done | Tune weighted Fuse.js search ranking and search coverage |
+| OIR-27 | Done | Add privacy inline risk text and detail warning block |
 
 ### 31.1 — OIR-17: Backup and Export Filesystem Hardening
 
@@ -1244,11 +1246,19 @@ Completed on branch `qa/full-review-pass`. Covers test infrastructure, write saf
 - **CSV import service tests** — 10 unit tests added for `csv-import.service.ts` (previously 0); covers missing required headers, row-level validation, phone kind normalization, unknown area warnings, duplicate record deduplication, and import size limit enforcement
 - **Search service tests** — 16 unit tests added for `search.service.ts`; includes Fuse.js `WeakMap` cache identity verification via the `_getFuseCacheEntry` test accessor, confirming index reuse across identical dataset references
 
+### 31.3 — OIR-18: Weighted Fuse.js Search Ranking
+
+OIR-18 replaced the initial lightweight Fuse.js setup with a tuned weighted ranking model aligned to the MVP search contract. Search now prioritizes display names, extensions, phone numbers, services, departments, tags, location fields, aliases, and notes with explicit relevance ordering and dedicated ranking tests.
+
+### 31.4 — OIR-27: Privacy Warning Presentation
+
+OIR-27 completed the sensitive phone presentation rules for the directory workspace. Result cards now add inline risk text only when the visible phone is sensitive, and the detail panel shows a privacy warning block whenever the selected record contains sensitive phones.
+
 ---
 
 ## 32. Phase 2 — Quality and Completeness Backlog
 
-Phase 2 begins after the four-week MVP is stable. It targets quality gaps, UX completeness, cross-platform distribution, and end-to-end test coverage. All items below are currently in backlog (Todo status).
+Phase 2 begins after the four-week MVP is stable. It targets quality gaps, UX completeness, cross-platform distribution, and end-to-end test coverage. Items below remain in backlog unless marked otherwise.
 
 ### 32.1 Search and Discovery
 
@@ -1324,17 +1334,17 @@ Scripts must set any required environment variables, resolve the executable path
 
 ### 32.6 Phase 2 Summary Table
 
-| Issue | Category | Description |
-|-------|----------|-------------|
-| OIR-18 | Search | Weighted Fuse.js search with field prioritization |
-| OIR-19 | Data Integrity | CSV import template validation and per-row error reporting |
-| OIR-20 | Data Integrity | Data corruption recovery flow for invalid contacts.json |
-| OIR-21 | USB Deployment | Portable cross-platform USB packaging |
-| OIR-22 | Testing | Playwright end-to-end tests for critical MVP flows |
-| OIR-23 | UX | Global toast notification system |
-| OIR-24 | Data Integrity | Writable path validation in Settings |
-| OIR-25 | UX | Restore-from-backup UI flow in Import/Export page |
-| OIR-26 | Search | Tag-based filtering for directory search |
-| OIR-27 | UX | Privacy badge inline risk text and detail view warning block |
-| OIR-28 | USB Deployment | App data stored on USB using executable-relative paths |
-| OIR-29 | USB Deployment | Cross-platform launcher scripts at USB root |
+| Issue | Status | Category | Description |
+|-------|--------|----------|-------------|
+| OIR-18 | Done | Search | Weighted Fuse.js search with field prioritization |
+| OIR-19 | In Progress | Data Integrity | CSV import template validation and per-row error reporting |
+| OIR-20 | Todo | Data Integrity | Data corruption recovery flow for invalid contacts.json |
+| OIR-21 | Todo | USB Deployment | Portable cross-platform USB packaging |
+| OIR-22 | Todo | Testing | Playwright end-to-end tests for critical MVP flows |
+| OIR-23 | Todo | UX | Global toast notification system |
+| OIR-24 | Todo | Data Integrity | Writable path validation in Settings |
+| OIR-25 | Todo | UX | Restore-from-backup UI flow in Import/Export page |
+| OIR-26 | Todo | Search | Tag-based filtering for directory search |
+| OIR-27 | Done | UX | Privacy badge inline risk text and detail view warning block |
+| OIR-28 | Todo | USB Deployment | App data stored on USB using executable-relative paths |
+| OIR-29 | Todo | USB Deployment | Cross-platform launcher scripts at USB root |
