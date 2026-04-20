@@ -69,8 +69,8 @@ export interface DirectoryDataset {
     generatedFrom: string;
     generatedBy: string;
     editorName: string;
-    typeCounts: Record<string, number>;
-    areaCounts: Record<string, number>;
+    typeCounts: Partial<Record<RecordType, number>>;
+    areaCounts: Partial<Record<AreaType, number>>;
   };
   catalogs: {
     recordTypes: RecordType[];
@@ -212,8 +212,8 @@ export interface CsvImportPreview {
   invalidRowCount: number;
   warningCount: number;
   recordCount: number;
-  typeCounts: Record<string, number>;
-  areaCounts: Record<string, number>;
+  typeCounts: Partial<Record<RecordType, number>>;
+  areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
   warnings: CsvImportWarning[];
 }

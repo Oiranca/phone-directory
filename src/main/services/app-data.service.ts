@@ -22,6 +22,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../../shared/types/contact.js";
+import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 
@@ -345,8 +346,8 @@ export class AppDataService {
     editorName: string,
     exportedAt: string
   ): DirectoryDataset {
-    const typeCounts: Record<string, number> = {};
-    const areaCounts: Record<string, number> = {};
+    const typeCounts: Partial<Record<RecordType, number>> = {};
+    const areaCounts: Partial<Record<AreaType, number>> = {};
 
     for (const record of records) {
       typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
@@ -493,17 +494,20 @@ export class AppDataService {
 
     const routeContext =
       routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
-    const detail = this.getFilesystemErrorDetail(filesystemError);
+    const detail = this.getFilesystemErrorDetail(filesystemError ?? undefined);
 
     return new Error(`${message}${routeContext} ${detail}`.trim());
   }
 
-  private getErrnoException(error: unknown) {
-    if (typeof error === "object" && error !== null) {
+  private getErrnoException(error: unknown): (NodeJS.ErrnoException & { dest?: string }) | null {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      ("code" in error || "message" in error)
+    ) {
       return error as NodeJS.ErrnoException & { dest?: string };
     }
-
-    return undefined;
+    return null;
   }
 
   private getFilesystemErrorDetail(error?: NodeJS.ErrnoException & { dest?: string }) {

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import Papa from "papaparse";
 import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
-import type { AreaType } from "../../shared/constants/catalogs.js";
+import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { contactRecordSchema, directoryDatasetSchema } from "../../shared/schemas/contact.js";
 import type {
   ContactRecord,
@@ -274,8 +274,8 @@ const buildEmails = (
 
 const buildDataset = (records: ContactRecord[], editorName: string) => {
   const exportedAt = new Date().toISOString();
-  const typeCounts: Record<string, number> = {};
-  const areaCounts: Record<string, number> = {};
+  const typeCounts: Partial<Record<RecordType, number>> = {};
+  const areaCounts: Partial<Record<AreaType, number>> = {};
 
   for (const record of records) {
     typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
