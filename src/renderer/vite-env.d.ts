@@ -3,6 +3,8 @@
 import type {
   BackupListItem,
   BootstrapData,
+  CsvImportPreview,
+  CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
@@ -21,6 +23,8 @@ declare global {
       listBackups: () => Promise<BackupListItem[]>;
       exportDataset: () => Promise<ExportContactsResult | null>;
       importDataset: () => Promise<ImportContactsResult | null>;
+      previewCsvImport: () => Promise<CsvImportPreview | null>;
+      importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
     };
   }
 }

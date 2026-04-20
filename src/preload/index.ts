@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   BackupListItem,
   BootstrapData,
+  CsvImportPreview,
+  CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
@@ -20,7 +22,10 @@ const api = {
     ipcRenderer.invoke("contacts:update-record", recordId, record) as Promise<SaveContactResult>,
   listBackups: () => ipcRenderer.invoke("contacts:list-backups") as Promise<BackupListItem[]>,
   exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
-  importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>
+  importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
+  previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreview | null>,
+  importCsvDataset: (importToken: string) =>
+    ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>
 };
 
 contextBridge.exposeInMainWorld("hospitalDirectory", api);

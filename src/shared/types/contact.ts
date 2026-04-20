@@ -172,3 +172,35 @@ export interface ImportContactsResult extends BootstrapData {
   importedFilePath: string;
   recordCount: number;
 }
+
+export interface CsvImportIssue {
+  rowNumber: number;
+  displayName?: string;
+  messages: string[];
+}
+
+export interface CsvImportWarning {
+  rowNumber: number;
+  displayName?: string;
+  message: string;
+}
+
+export interface CsvImportPreview {
+  importToken: string;
+  sourceFilePath: string;
+  fileName: string;
+  totalRowCount: number;
+  validRowCount: number;
+  invalidRowCount: number;
+  warningCount: number;
+  recordCount: number;
+  typeCounts: Record<string, number>;
+  areaCounts: Record<string, number>;
+  rowIssues: CsvImportIssue[];
+  warnings: CsvImportWarning[];
+}
+
+export interface CsvImportResult extends ImportContactsResult {
+  warningCount: number;
+  invalidRowCount: number;
+}

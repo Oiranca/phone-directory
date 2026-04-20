@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BackupListItem } from "../../shared/types/contact";
+import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
 import { useAppStore } from "../store/useAppStore";
 
 const formatTimestamp = (value: string) => {
@@ -37,6 +37,9 @@ export const ImportExportPage = () => {
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isPreparingCsvPreview, setIsPreparingCsvPreview] = useState(false);
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
 
   const loadPageData = async () => {
     try {
@@ -151,6 +154,86 @@ export const ImportExportPage = () => {
     }
   };
 
+  const handlePreviewCsvImport = async () => {
+    try {
+      setIsPreparingCsvPreview(true);
+      setActionError("");
+      setCsvPreview(null);
+      const preview = await window.hospitalDirectory.previewCsvImport();
+
+      if (!preview) {
+        setStatusMessage("Selección de CSV cancelada.");
+        return;
+      }
+
+      setCsvPreview(preview);
+
+      if (preview.invalidRowCount > 0) {
+        setActionError("El CSV tiene filas inválidas. Corrige el archivo antes de reemplazar el directorio.");
+        setStatusMessage("");
+        return;
+      }
+
+      setStatusMessage(
+        preview.warningCount > 0
+          ? `CSV listo con ${preview.warningCount} advertencias para revisar antes de importar.`
+          : `CSV listo para importar con ${preview.validRowCount} registros válidos.`
+      );
+    } catch (error) {
+      setCsvPreview(null);
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo preparar la vista previa del CSV."
+      );
+    } finally {
+      setIsPreparingCsvPreview(false);
+    }
+  };
+
+  const handleImportCsv = async () => {
+    if (!csvPreview) {
+      return;
+    }
+
+    if (csvPreview.invalidRowCount > 0) {
+      setActionError("El CSV tiene filas inválidas. Corrige el archivo antes de importarlo.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `El CSV reemplazará todo el directorio actual con ${csvPreview.validRowCount} registros válidos y creará un backup automático. ¿Quieres continuar?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsImportingCsv(true);
+      setActionError("");
+      const result = await window.hospitalDirectory.importCsvDataset(csvPreview.importToken);
+
+      initialize({
+        contacts: result.contacts,
+        settings: result.settings
+      });
+      await refreshBackups();
+      setCsvPreview(null);
+      setStatusMessage(
+        `Importación CSV completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
+      );
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo importar el archivo CSV seleccionado."
+      );
+    } finally {
+      setIsImportingCsv(false);
+    }
+  };
+
   if (bootstrapError) {
     return (
       <section className="rounded-3xl bg-white p-6 shadow-panel">
@@ -175,9 +258,9 @@ export const ImportExportPage = () => {
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
       <article className="rounded-3xl bg-white p-6 shadow-panel">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Intercambio de datos</p>
-        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark">Importar y exportar JSON</h2>
+        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
         <p className="mt-3 max-w-3xl text-sm text-slate-600">
-          Exporta el directorio activo para compartirlo, o reemplaza el dataset local con un JSON válido. La importación crea un backup automático antes de sobrescribir.
+          Exporta el directorio activo como JSON, o reemplaza el dataset local con un archivo JSON o CSV normalizado. Cada importación crea un backup automático antes de sobrescribir.
         </p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -195,7 +278,7 @@ export const ImportExportPage = () => {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
             onClick={() => void handleCreateBackup()}
@@ -240,6 +323,21 @@ export const ImportExportPage = () => {
               {isImporting ? "Importando…" : "Seleccionar archivo"}
             </p>
           </button>
+
+          <button
+            type="button"
+            onClick={() => void handlePreviewCsvImport()}
+            disabled={isPreparingCsvPreview || isImportingCsv}
+            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 disabled:opacity-60"
+          >
+            <p className="text-lg font-semibold text-emerald-900">Preparar CSV</p>
+            <p className="mt-2 text-sm text-emerald-900/80">
+              Abre un CSV normalizado, valida filas y revisa advertencias antes de confirmar el reemplazo.
+            </p>
+            <p className="mt-4 text-sm font-semibold text-emerald-900">
+              {isPreparingCsvPreview ? "Analizando…" : "Seleccionar CSV"}
+            </p>
+          </button>
         </div>
 
         {(statusMessage || actionError) && (
@@ -253,6 +351,126 @@ export const ImportExportPage = () => {
           >
             {actionError || statusMessage}
           </div>
+        )}
+
+        {csvPreview && (
+          <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Vista previa CSV</p>
+                <h3 className="mt-2 text-xl font-semibold text-emerald-950">{csvPreview.fileName}</h3>
+                <p className="mt-1 text-sm text-emerald-900/80">{csvPreview.sourceFilePath}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCsvPreview(null)}
+                  className="rounded-full border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-900"
+                >
+                  Cerrar vista previa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleImportCsv()}
+                  disabled={isImportingCsv || csvPreview.invalidRowCount > 0}
+                  className="rounded-full bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {isImportingCsv ? "Importando CSV…" : "Confirmar importación CSV"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Filas leídas</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.totalRowCount}</p>
+              </div>
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Válidas</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.validRowCount}</p>
+              </div>
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Inválidas</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.invalidRowCount}</p>
+              </div>
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Advertencias</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.warningCount}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(csvPreview.typeCounts).length === 0 ? (
+                    <span className="text-sm text-emerald-900/80">Sin registros válidos todavía.</span>
+                  ) : (
+                    Object.entries(csvPreview.typeCounts).map(([type, count]) => (
+                      <span key={type} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
+                        {type}: {count}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-sm font-semibold text-emerald-950">Áreas detectadas</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(csvPreview.areaCounts).length === 0 ? (
+                    <span className="text-sm text-emerald-900/80">Sin áreas clasificadas en el CSV.</span>
+                  ) : (
+                    Object.entries(csvPreview.areaCounts).map(([area, count]) => (
+                      <span key={area} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
+                        {area}: {count}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-sm font-semibold text-emerald-950">Filas inválidas</p>
+                {csvPreview.rowIssues.length === 0 ? (
+                  <p className="mt-3 text-sm text-emerald-900/80">No se detectaron filas inválidas.</p>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {csvPreview.rowIssues.slice(0, 5).map((issue) => (
+                      <article key={`issue-${issue.rowNumber}`} className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                        <p className="font-semibold">
+                          Fila {issue.rowNumber}
+                          {issue.displayName ? ` · ${issue.displayName}` : ""}
+                        </p>
+                        <p className="mt-1">{issue.messages.join(" ")}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-sm font-semibold text-emerald-950">Advertencias</p>
+                {csvPreview.warnings.length === 0 ? (
+                  <p className="mt-3 text-sm text-emerald-900/80">No se detectaron advertencias.</p>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {csvPreview.warnings.slice(0, 5).map((warning, index) => (
+                      <article key={`warning-${warning.rowNumber}-${index}`} className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        <p className="font-semibold">
+                          Fila {warning.rowNumber}
+                          {warning.displayName ? ` · ${warning.displayName}` : ""}
+                        </p>
+                        <p className="mt-1">{warning.message}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         )}
       </article>
 
