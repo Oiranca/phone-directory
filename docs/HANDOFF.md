@@ -26,13 +26,13 @@ Use it at the start of every new Codex session to understand:
 
 - Active branch: `feat/oir-20-recovery-flow`
 - Base branch: `main`
-- Active pull request: check the repository for the current PR associated with this branch
+- Active pull request: PR #12 — `feat/oir-20-recovery-flow` — currently under Copilot review
 
 ## Current Linear Backlog
 
 - `OIR-18` Done — weighted Fuse.js search ranking merged in PR #10
 - `OIR-19` Done — CSV template header validation merged in PR #11
-- `OIR-20` In Progress — corruption recovery flow for invalid `contacts.json`
+- `OIR-20` In Review — corruption recovery flow for invalid `contacts.json` (PR #12)
 - `OIR-21` Todo — portable USB packaging
 - `OIR-22` Todo — Playwright critical-flow coverage
 - `OIR-23` Todo — global toast notification system
@@ -64,12 +64,13 @@ Included in this PR:
 - recovery-mode shell treatment and focused tests for recovery import/reset actions
 - plan and handoff refresh to reflect merged `OIR-19` work and active `OIR-20` scope
 
-Review expectations for this PR:
+PR #12 is open and under review. Copilot review round 1 findings are being addressed in this commit batch.
 
-- complete two QA and code review cycles on the final diff
+Review expectations:
+
+- address all Copilot review comments before re-requesting review
 - keep commits small and in English
-- use a ready-for-review PR, not a draft
-- attach the PR link back to Linear
+- verify build and tests pass after all fixes
 
 ## Key Repository Rules
 
@@ -100,4 +101,4 @@ Review expectations for this PR:
 
 ## Recommended Next Step
 
-Finish `OIR-20` on `feat/oir-20-recovery-flow`, run two QA/code review cycles on the final diff, commit the work in small English commits, and open the PR.
+Address all remaining Copilot review comments on PR #12, run build and tests to confirm clean, commit in small English commits, and re-request review.
