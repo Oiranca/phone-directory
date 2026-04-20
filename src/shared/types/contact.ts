@@ -188,7 +188,7 @@ export interface ImportContactsResult extends BootstrapData {
 }
 
 export interface ResetContactsResult extends BootstrapData {
-  backupPath: string;
+  backupPath: string | null;
 }
 
 export interface CsvImportIssue {

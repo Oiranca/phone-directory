@@ -105,7 +105,7 @@ export class AppDataService {
             return {
               fileName: entry.name,
               filePath,
-              createdAt: stats.mtime.toISOString(),
+              createdAt: stats.birthtime.toISOString(),
               sizeBytes: stats.size
             } satisfies BackupListItem;
           })
@@ -171,7 +171,10 @@ export class AppDataService {
 
   async resetDataset(): Promise<ResetContactsResult> {
     const settings = await this.readSettings();
-    const backupPath = await this.createBackup();
+    const contactsFilePath = getContactsFilePath();
+    const backupPath = (await this.fileExists(contactsFilePath))
+      ? await this.createBackup()
+      : null;
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
     await writeJsonFile(getContactsFilePath(), contacts);
@@ -391,9 +394,17 @@ export class AppDataService {
   }
 
   private createUniqueRecordId(records: ContactRecord[]) {
+    const maxAttempts = 1000;
+    let attempts = 0;
     let candidate = this.createEntityId("cnt");
 
     while (records.some((record) => record.id === candidate)) {
+      attempts += 1;
+
+      if (attempts >= maxAttempts) {
+        throw new Error("Failed to generate unique record ID after 1000 attempts");
+      }
+
       candidate = this.createEntityId("cnt");
     }
 
@@ -515,11 +526,21 @@ export class AppDataService {
   }
 
   private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
+    let details: string;
+
+    if (error instanceof ZodError) {
+      details = error.issues.map((i) => i.message).join("; ");
+    } else if (error instanceof Error) {
+      details = error.message;
+    } else {
+      details = "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
+    }
+
     return {
       reason: "invalid-contacts-json",
       contactsFilePath,
       message: "El archivo local contacts.json está dañado o tiene un formato no válido.",
-      details: "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+      details
     };
   }
 }

@@ -630,7 +630,7 @@ describe("AppDataService", () => {
     await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
 
     const result = await service.resetDataset();
-    const backupContents = await fs.readFile(result.backupPath, "utf-8");
+    const backupContents = await fs.readFile(result.backupPath!, "utf-8");
     const persisted = JSON.parse(
       await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
     ) as { metadata: { recordCount: number }; records: unknown[] };

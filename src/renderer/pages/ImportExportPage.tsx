@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
+import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
 const formatTimestamp = (value: string) => {
@@ -55,7 +56,7 @@ export const ImportExportPage = () => {
         window.hospitalDirectory.listBackups()
       ]);
 
-      if ("recovery" in payload) {
+      if (isRecoveryBootstrap(payload)) {
         setBootstrapError(payload.recovery.message);
         return;
       }

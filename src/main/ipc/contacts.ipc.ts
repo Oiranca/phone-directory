@@ -50,14 +50,14 @@ export const registerContactsIpc = (service: AppDataService) => {
   );
   ipcMain.handle(CHANNELS.listBackups, () => service.listBackups());
   ipcMain.handle(CHANNELS.exportDataset, async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const saveOptions = {
       title: "Exportar directorio",
       defaultPath: path.join(app.getPath("downloads"), "contacts-export.json"),
       filters: [{ name: "JSON", extensions: ["json"] }]
     };
-    const { canceled, filePath } = window
-      ? await dialog.showSaveDialog(window, saveOptions)
+    const { canceled, filePath } = browserWindow
+      ? await dialog.showSaveDialog(browserWindow, saveOptions)
       : await dialog.showSaveDialog(saveOptions);
 
     if (canceled || !filePath) {
@@ -67,14 +67,14 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.exportDataset(filePath);
   });
   ipcMain.handle(CHANNELS.importDataset, async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const openOptions = {
       title: "Importar directorio JSON",
       filters: [{ name: "JSON", extensions: ["json"] }],
       properties: ["openFile"]
     } satisfies Electron.OpenDialogOptions;
-    const { canceled, filePaths } = window
-      ? await dialog.showOpenDialog(window, openOptions)
+    const { canceled, filePaths } = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, openOptions)
       : await dialog.showOpenDialog(openOptions);
 
     if (canceled || filePaths.length === 0) {
@@ -84,15 +84,15 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.importDataset(filePaths[0]!);
   });
   ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const senderId = event.sender.id;
     const openOptions = {
       title: "Preparar importación CSV",
       filters: [{ name: "CSV", extensions: ["csv"] }],
       properties: ["openFile"]
     } satisfies Electron.OpenDialogOptions;
-    const { canceled, filePaths } = window
-      ? await dialog.showOpenDialog(window, openOptions)
+    const { canceled, filePaths } = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, openOptions)
       : await dialog.showOpenDialog(openOptions);
 
     if (canceled || filePaths.length === 0) {

@@ -4,7 +4,7 @@ import type { BootstrapResult, ImportContactsResult, ResetContactsResult } from 
 import { AppShell } from "../components/layout/AppShell";
 import { useAppStore } from "../store/useAppStore";
 
-const isRecoveryBootstrap = (
+export const isRecoveryBootstrap = (
   payload: BootstrapResult
 ): payload is Extract<BootstrapResult, { recovery: unknown }> => "recovery" in payload;
 

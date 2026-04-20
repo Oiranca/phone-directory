@@ -1,8 +1,9 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
 export const SettingsPage = () => {
-  const { settings, contacts, initialize, setSettings } = useAppStore();
+  const { settings, initialize, setSettings } = useAppStore();
   const [editorName, setEditorName] = useState("");
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -14,7 +15,7 @@ export const SettingsPage = () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
-      if ("recovery" in payload) {
+      if (isRecoveryBootstrap(payload)) {
         setBootstrapError(payload.recovery.message);
         return;
       }
@@ -27,10 +28,10 @@ export const SettingsPage = () => {
   };
 
   useEffect(() => {
-    if (!settings || !contacts) {
+    if (!settings) {
       void loadBootstrapData();
     }
-  }, [contacts, settings]);
+  }, [settings]);
 
   useEffect(() => {
     if (!settings) {

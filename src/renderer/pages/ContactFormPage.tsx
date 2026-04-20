@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
+import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
 type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
@@ -244,7 +245,7 @@ export const ContactFormPage = () => {
       try {
         setBootstrapError("");
         const payload = await window.hospitalDirectory.getBootstrapData();
-        if ("recovery" in payload) {
+        if (isRecoveryBootstrap(payload)) {
           setBootstrapError(payload.recovery.message);
           return;
         }
@@ -405,7 +406,7 @@ export const ContactFormPage = () => {
               void window.hospitalDirectory
                 .getBootstrapData()
                 .then((payload) => {
-                  if ("recovery" in payload) {
+                  if (isRecoveryBootstrap(payload)) {
                     setBootstrapError(payload.recovery.message);
                     return;
                   }

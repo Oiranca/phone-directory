@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
@@ -89,7 +90,7 @@ export const DirectoryPage = () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
-      if ("recovery" in payload) {
+      if (isRecoveryBootstrap(payload)) {
         setBootstrapError(payload.recovery.message);
         return;
       }
