@@ -151,7 +151,7 @@ describe("ImportExportPage", () => {
   it("shows the backup service error message when manual backup fails", async () => {
     window.hospitalDirectory.createBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo crear el backup automático del directorio. Ruta afectada: /tmp/backups."));
+      .mockRejectedValue(new Error("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups."));
 
     renderPage();
 
@@ -159,7 +159,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
 
     expect(
-      await screen.findByText("No se pudo crear el backup automático del directorio. Ruta afectada: /tmp/backups.")
+      await screen.findByText("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups.")
     ).toBeInTheDocument();
   });
 

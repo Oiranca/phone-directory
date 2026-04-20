@@ -70,7 +70,7 @@ export class AppDataService {
     await this.copyFileWithContext(
       getContactsFilePath(),
       backupFilePath,
-      "No se pudo crear el backup automático del directorio."
+      "No se pudo crear el backup del directorio."
     );
     return backupFilePath;
   }

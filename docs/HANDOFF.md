@@ -86,11 +86,11 @@ Outstanding review follow-up still to finish in the current branch:
 
 ## Important Files
 
-- [README.md](./README.md)
+- [README.md](../README.md)
 - [MVP_PLAN.md](./MVP_PLAN.md)
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./ODS_TO_CSV_MAPPING.md)
-- [scripts/README.md](./scripts/README.md)
+- [scripts/README.md](../scripts/README.md)
 
 ## Recommended Start-Of-Session Checklist
 

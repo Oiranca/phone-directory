@@ -21,6 +21,7 @@ describe("AppDataService", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(testRoot, { recursive: true, force: true });
     getPathMock.mockReset();
   });
@@ -292,10 +293,9 @@ describe("AppDataService", () => {
       .mockRejectedValueOnce(new Error("EACCES: permission denied"));
 
     await expect(service.createBackup()).rejects.toThrow(
-      /No se pudo crear el backup automático del directorio\. Ruta afectada:/
+      /No se pudo crear el backup del directorio\. Ruta afectada:/
     );
-
-    copyFileSpy.mockRestore();
+    expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces the affected destination when export writing fails", async () => {
@@ -312,8 +312,7 @@ describe("AppDataService", () => {
     await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
       new RegExp(`No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
     );
-
-    writeFileSpy.mockRestore();
+    expect(writeFileSpy).toHaveBeenCalled();
   });
 
   it("surfaces the backup path when JSON import cannot create its safety copy", async () => {
@@ -331,10 +330,9 @@ describe("AppDataService", () => {
       .mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      /No se pudo crear el backup automático del directorio\. Ruta afectada:/
+      /No se pudo crear el backup del directorio\. Ruta afectada:/
     );
-
-    copyFileSpy.mockRestore();
+    expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
 
   it("imports a dataset from disk and creates an automatic backup first", async () => {
