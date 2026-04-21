@@ -6,6 +6,7 @@ import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/searc
 import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact } from "../../shared/types/contact";
+import { SelectField } from "../components/inputs/SelectField";
 
 const typeLabels = {
   all: "Todos los tipos",
@@ -37,11 +38,6 @@ const privacyDetailWarningText = {
   Confidencial: "Contiene números internos confidenciales.",
   "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
 } as const satisfies Record<PrivacyFlag, string>;
-
-const formControlClass =
-  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
-
-const selectClass = `${formControlClass} pr-10`;
 
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
   if (!phone) {
@@ -158,7 +154,7 @@ export const DirectoryPage = () => {
   return (
     <section className="space-y-6">
       <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-start">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(420px,500px)] xl:items-start xl:gap-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Directorio</p>
             <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Búsqueda principal</h2>
@@ -178,14 +174,14 @@ export const DirectoryPage = () => {
               placeholder="Buscar por nombre, servicio, alias o teléfono"
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(156px,172px)_1fr] sm:items-center">
               <Link
                 to="/contacts/new"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-scs-blue px-4 py-3 text-center text-sm font-semibold text-white shadow-sm sm:w-auto"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-scs-blue px-4 py-3 text-center text-sm font-semibold text-white shadow-sm"
               >
                 Nuevo registro
               </Link>
-              <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500">
+              <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500 sm:justify-end">
                 <span className="rounded-full bg-slate-100 px-3 py-1">
                   {visibleRecords.length} resultado{visibleRecords.length === 1 ? "" : "s"}
                 </span>
@@ -197,7 +193,7 @@ export const DirectoryPage = () => {
         </div>
       </div>
 
-      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_minmax(300px,360px)]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] xl:items-start">
         <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-scs-blueDark">Resultados</h3>
@@ -205,7 +201,7 @@ export const DirectoryPage = () => {
               {visibleRecords.length}
             </span>
           </div>
-        <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-3">
           {visibleRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
@@ -267,71 +263,60 @@ export const DirectoryPage = () => {
               No hay resultados para la búsqueda actual.
             </div>
           )}
-        </div>
-        </div>
-
-        <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
-          <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
-          <div className="mt-4 space-y-4">
-            <div>
-              <label htmlFor="directory-type-filter" className="text-sm font-medium text-slate-700">
-                Tipo
-              </label>
-              <select
-                id="directory-type-filter"
-                value={selectedType}
-                onChange={(event) => handleTypeChange(event.target.value)}
-                className={selectClass}
-              >
-                <option value="all">{typeLabels.all}</option>
-                {availableTypes.map((type) => (
-                  <option key={type} value={type} className="bg-white text-slate-900">
-                    {typeLabels[type]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="directory-area-filter" className="text-sm font-medium text-slate-700">
-                Área
-              </label>
-              <select
-                id="directory-area-filter"
-                value={selectedArea}
-                onChange={(event) => handleAreaChange(event.target.value)}
-                className={selectClass}
-              >
-                <option value="all">{areaLabels.all}</option>
-                {availableAreas.map((area) => (
-                  <option key={area} value={area} className="bg-white text-slate-900">
-                    {areaLabels[area]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(event) => setShowInactive(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
-              />
-              <span>
-                <span className="block text-sm font-medium text-slate-700">Mostrar registros inactivos</span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Valor inicial tomado de la configuración local.
-                </span>
-              </span>
-            </label>
           </div>
-        </aside>
+        </div>
 
-        <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
-        <h3 className="text-xl font-semibold text-scs-blueDark">Detalle</h3>
-        {selectedRecord ? (
-          <div className="mt-4 space-y-4">
+        <div className="space-y-6 xl:sticky xl:top-6">
+          <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel sm:p-6">
+            <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <SelectField
+                  id="directory-type-filter"
+                  label="Tipo"
+                  value={selectedType}
+                  onChange={handleTypeChange}
+                  options={[
+                    { value: "all", label: typeLabels.all },
+                    ...availableTypes.map((type) => ({ value: type, label: typeLabels[type] }))
+                  ]}
+                />
+              </div>
+
+              <div>
+                <SelectField
+                  id="directory-area-filter"
+                  label="Área"
+                  value={selectedArea}
+                  onChange={handleAreaChange}
+                  options={[
+                    { value: "all", label: areaLabels.all },
+                    ...availableAreas.map((area) => ({ value: area, label: areaLabels[area] }))
+                  ]}
+                />
+              </div>
+
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(event) => setShowInactive(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-700">Mostrar registros inactivos</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Valor inicial tomado de la configuración local.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </aside>
+
+          <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel sm:p-6">
+          <h3 className="text-xl font-semibold text-scs-blueDark">Detalle</h3>
+          {selectedRecord ? (
+            <div className="mt-4 space-y-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{selectedRecord.type}</p>
               <p className="text-2xl font-semibold text-scs-blueDark">{selectedRecord.displayName}</p>
@@ -412,6 +397,7 @@ export const DirectoryPage = () => {
           <p className="mt-4 text-sm text-slate-600">Selecciona un registro para ver su detalle.</p>
         )}
         </aside>
+        </div>
       </section>
     </section>
   );

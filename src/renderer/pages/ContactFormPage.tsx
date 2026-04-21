@@ -6,6 +6,7 @@ import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
+import { SelectField } from "../components/inputs/SelectField";
 import { useAppStore } from "../store/useAppStore";
 
 type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
@@ -48,9 +49,7 @@ const phoneKindOptions = [
 ];
 
 const formControlClass =
-  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
-
-const selectClass = `${formControlClass} pr-10`;
+  "mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
 
 // client-side only: used as React keys for draft phone/email entries, discarded on save
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -465,43 +464,33 @@ export const ContactFormPage = () => {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="type" className="text-sm font-medium text-slate-700">
-                  Tipo
-                </label>
-                <select
+                <SelectField
                   id="type"
+                  label="Tipo"
                   value={formState.type}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, type: event.target.value as RecordType }))
+                  onChange={(value) =>
+                    setFormState((current) => ({ ...current, type: value as RecordType }))
                   }
-                  className={selectClass}
-                >
-                  {recordTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value} className="bg-white text-slate-900">
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={recordTypeOptions}
+                />
               </div>
 
               <div>
-                <label htmlFor="status" className="text-sm font-medium text-slate-700">
-                  Estado
-                </label>
-                <select
+                <SelectField
                   id="status"
+                  label="Estado"
                   value={formState.status}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((current) => ({
                       ...current,
-                      status: event.target.value as "active" | "inactive"
+                      status: value as "active" | "inactive"
                     }))
                   }
-                  className={selectClass}
-                >
-                  <option value="active" className="bg-white text-slate-900">Activo</option>
-                  <option value="inactive" className="bg-white text-slate-900">Inactivo</option>
-                </select>
+                  options={[
+                    { value: "active", label: "Activo" },
+                    { value: "inactive", label: "Inactivo" }
+                  ]}
+                />
               </div>
             </div>
 
@@ -594,35 +583,27 @@ export const ContactFormPage = () => {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="area" className="text-sm font-medium text-slate-700">
-                  Área
-                </label>
-                <select
+                <SelectField
                   id="area"
+                  label="Área"
                   value={formState.organization.area ?? ""}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((current) => ({
                       ...current,
                       organization: {
                         ...current.organization,
-                        area: event.target.value
-                          ? (event.target.value as AreaType)
-                          : undefined
+                        area: value ? (value as AreaType) : undefined
                       }
                     }))
                   }
-                  className={selectClass}
-                >
-                  <option value="" className="bg-white text-slate-900">Sin área</option>
-                  {availableAreas.map((area) => {
-                    const label = areaOptions.find((option) => option.value === area)?.label ?? area;
-                    return (
-                      <option key={area} value={area} className="bg-white text-slate-900">
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Sin área" },
+                    ...availableAreas.map((area) => ({
+                      value: area,
+                      label: areaOptions.find((option) => option.value === area)?.label ?? area
+                    }))
+                  ]}
+                />
               </div>
 
               <div>
@@ -792,19 +773,13 @@ export const ContactFormPage = () => {
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div>
-                    <label htmlFor={`phone-kind-${phone.id}`} className="text-sm font-medium text-slate-700">Tipo de teléfono</label>
-                    <select
+                    <SelectField
                       id={`phone-kind-${phone.id}`}
+                      label="Tipo de teléfono"
                       value={phone.kind}
-                      onChange={(event) => updatePhone(phone.id, { kind: event.target.value })}
-                      className={selectClass}
-                    >
-                      {phoneKindOptions.map((option) => (
-                        <option key={option.value} value={option.value} className="bg-white text-slate-900">
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => updatePhone(phone.id, { kind: value })}
+                      options={phoneKindOptions}
+                    />
                   </div>
                   <div>
                     <label htmlFor={`phone-notes-${phone.id}`} className="text-sm font-medium text-slate-700">Notas</label>

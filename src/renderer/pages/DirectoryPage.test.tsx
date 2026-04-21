@@ -50,6 +50,11 @@ describe("DirectoryPage", () => {
       </MemoryRouter>
     );
 
+  const chooseOption = async (label: string, optionLabel: string) => {
+    fireEvent.click(screen.getByLabelText(label));
+    fireEvent.click(await screen.findByRole("option", { name: optionLabel }));
+  };
+
   it("shows a recovery state when bootstrap loading fails", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
 
@@ -103,7 +108,7 @@ describe("DirectoryPage", () => {
     expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
     expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "control" } });
+    await chooseOption("Tipo", "Control");
     fireEvent.click(screen.getByRole("checkbox", { name: /mostrar registros inactivos/i }));
 
     expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
