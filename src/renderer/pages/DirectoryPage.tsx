@@ -178,7 +178,7 @@ export const DirectoryPage = () => {
               placeholder="Buscar por nombre, servicio, alias o teléfono"
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-            <div className="mt-3 flex flex-col gap-3">
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Link
                 to="/contacts/new"
                 className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-scs-blue px-4 py-3 text-center text-sm font-semibold text-white shadow-sm sm:w-auto"
