@@ -193,65 +193,7 @@ export const DirectoryPage = () => {
       </div>
 
       <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_minmax(300px,360px)]">
-        <aside className="order-2 rounded-3xl bg-white p-5 shadow-panel xl:order-1 xl:sticky xl:top-6 xl:self-start">
-        <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
-        <div className="mt-4 space-y-4">
-          <div>
-            <label htmlFor="directory-type-filter" className="text-sm font-medium text-slate-700">
-              Tipo
-            </label>
-            <select
-              id="directory-type-filter"
-              value={selectedType}
-              onChange={(event) => handleTypeChange(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-            >
-              <option value="all">{typeLabels.all}</option>
-              {availableTypes.map((type) => (
-                <option key={type} value={type}>
-                  {typeLabels[type]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="directory-area-filter" className="text-sm font-medium text-slate-700">
-              Área
-            </label>
-            <select
-              id="directory-area-filter"
-              value={selectedArea}
-              onChange={(event) => handleAreaChange(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-            >
-              <option value="all">{areaLabels.all}</option>
-              {availableAreas.map((area) => (
-                <option key={area} value={area}>
-                  {areaLabels[area]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <input
-              type="checkbox"
-              checked={showInactive}
-              onChange={(event) => setShowInactive(event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
-            />
-            <span>
-              <span className="block text-sm font-medium text-slate-700">Mostrar registros inactivos</span>
-              <span className="mt-1 block text-xs text-slate-500">
-                Valor inicial tomado de la configuración local.
-              </span>
-            </span>
-          </label>
-        </div>
-        </aside>
-
-        <div className="order-1 rounded-3xl bg-white p-5 shadow-panel sm:p-6 xl:order-2">
+        <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-scs-blueDark">Resultados</h3>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -323,8 +265,66 @@ export const DirectoryPage = () => {
         </div>
         </div>
 
-        <aside className="order-3 rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
-        <h2 className="text-xl font-semibold text-scs-blueDark">Detalle</h2>
+        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+          <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="directory-type-filter" className="text-sm font-medium text-slate-700">
+                Tipo
+              </label>
+              <select
+                id="directory-type-filter"
+                value={selectedType}
+                onChange={(event) => handleTypeChange(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+              >
+                <option value="all">{typeLabels.all}</option>
+                {availableTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {typeLabels[type]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="directory-area-filter" className="text-sm font-medium text-slate-700">
+                Área
+              </label>
+              <select
+                id="directory-area-filter"
+                value={selectedArea}
+                onChange={(event) => handleAreaChange(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+              >
+                <option value="all">{areaLabels.all}</option>
+                {availableAreas.map((area) => (
+                  <option key={area} value={area}>
+                    {areaLabels[area]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(event) => setShowInactive(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-700">Mostrar registros inactivos</span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  Valor inicial tomado de la configuración local.
+                </span>
+              </span>
+            </label>
+          </div>
+        </aside>
+
+        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <h3 className="text-xl font-semibold text-scs-blueDark">Detalle</h3>
         {selectedRecord ? (
           <div className="mt-4 space-y-4">
             <div>

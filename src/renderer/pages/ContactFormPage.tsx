@@ -969,13 +969,7 @@ export const ContactFormPage = () => {
           </div>
         )}
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          <Link
-            to="/"
-            className="w-full rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
-          >
-            Cancelar
-          </Link>
+        <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <button
             type="submit"
             disabled={isSubmitting}
@@ -983,6 +977,12 @@ export const ContactFormPage = () => {
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
+          <Link
+            to="/"
+            className="w-full rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+          >
+            Cancelar
+          </Link>
         </div>
       </form>
     </section>
