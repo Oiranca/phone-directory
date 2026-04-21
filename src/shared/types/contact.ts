@@ -69,8 +69,8 @@ export interface DirectoryDataset {
     generatedFrom: string;
     generatedBy: string;
     editorName: string;
-    typeCounts: Record<string, number>;
-    areaCounts: Record<string, number>;
+    typeCounts: Partial<Record<RecordType, number>>;
+    areaCounts: Partial<Record<AreaType, number>>;
   };
   catalogs: {
     recordTypes: RecordType[];
@@ -88,17 +88,32 @@ export interface AppSettings {
   };
 }
 
-export interface EditableAppSettings {
-  editorName: string;
-  ui: {
-    showInactiveByDefault: boolean;
-  };
-}
+// EditableAppSettings is structurally derived from AppSettings so that adding a
+// field to AppSettings.ui forces a review of this type. If AppSettings.ui gains
+// new fields they will automatically appear here too.
+export type EditableAppSettings = Pick<AppSettings, "editorName" | "ui">;
 
 export interface BootstrapData {
   contacts: DirectoryDataset;
   settings: EditableAppSettings;
 }
+
+export interface RecoveryState {
+  reason: "invalid-contacts-json";
+  contactsFilePath: string;
+  message: string;
+  details?: string;
+}
+
+export interface RecoveryBootstrapData {
+  recovery: RecoveryState;
+  settings: EditableAppSettings;
+}
+
+export type BootstrapResult = BootstrapData | RecoveryBootstrapData;
+
+export const isRecoveryBootstrap = (payload: BootstrapResult): payload is RecoveryBootstrapData =>
+  "recovery" in payload;
 
 export interface EditablePhoneContact {
   id: string;
@@ -173,6 +188,10 @@ export interface ImportContactsResult extends BootstrapData {
   recordCount: number;
 }
 
+export interface ResetContactsResult extends BootstrapData {
+  backupPath: string | null;
+}
+
 export interface CsvImportIssue {
   rowNumber: number;
   displayName?: string;
@@ -194,8 +213,8 @@ export interface CsvImportPreview {
   invalidRowCount: number;
   warningCount: number;
   recordCount: number;
-  typeCounts: Record<string, number>;
-  areaCounts: Record<string, number>;
+  typeCounts: Partial<Record<RecordType, number>>;
+  areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
   warnings: CsvImportWarning[];
 }

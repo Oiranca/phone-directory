@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
+import { normalizePrimaryEntries } from "../../shared/utils/contacts";
 import { useAppStore } from "../store/useAppStore";
 
 type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
@@ -45,6 +47,7 @@ const phoneKindOptions = [
   { value: "other", label: "Otro" }
 ];
 
+// client-side only: used as React keys for draft phone/email entries, discarded on save
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 
 const createPhoneDraft = (): EditablePhoneContact => ({
@@ -152,41 +155,6 @@ const buildErrorMap = (error: ZodError<EditableContactRecord>) => {
   return nextErrors;
 };
 
-const ensureSinglePrimary = <T extends { isPrimary: boolean }>(entries: T[]) => {
-  if (entries.length === 0) {
-    return entries;
-  }
-
-  let primaryAssigned = false;
-
-  const normalizedEntries = entries.map((entry) => {
-    if (entry.isPrimary && !primaryAssigned) {
-      primaryAssigned = true;
-      return entry;
-    }
-
-    if (entry.isPrimary && primaryAssigned) {
-      return {
-        ...entry,
-        isPrimary: false
-      };
-    }
-
-    return entry;
-  });
-
-  return primaryAssigned
-    ? normalizedEntries
-    : normalizedEntries.map((entry, index) =>
-        index === 0
-          ? {
-              ...entry,
-              isPrimary: true
-            }
-          : entry
-      );
-};
-
 const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   entries: T[],
   excludedId: string
@@ -198,7 +166,7 @@ const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   const fallbackIndex = entries.findIndex((entry) => entry.id !== excludedId);
 
   if (fallbackIndex === -1) {
-    return ensureSinglePrimary(entries);
+    return normalizePrimaryEntries(entries);
   }
 
   return entries.map((entry, index) =>
@@ -235,6 +203,8 @@ export const ContactFormPage = () => {
     [contacts, id]
   );
 
+  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
+  // This local loader is retained only for page-level retry and test isolation.
   useEffect(() => {
     if (contacts) {
       return;
@@ -244,6 +214,10 @@ export const ContactFormPage = () => {
       try {
         setBootstrapError("");
         const payload = await window.hospitalDirectory.getBootstrapData();
+        if (isRecoveryBootstrap(payload)) {
+          setBootstrapError(payload.recovery.message);
+          return;
+        }
         initialize(payload);
       } catch {
         setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
@@ -296,8 +270,8 @@ export const ContactFormPage = () => {
           });
 
           return patch.isPrimary === false
-            ? ensureSinglePrimary(promoteSiblingAsPrimary(nextPhones, phoneId))
-            : ensureSinglePrimary(nextPhones);
+            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextPhones, phoneId))
+            : normalizePrimaryEntries(nextPhones);
         })()
       }
     }));
@@ -321,8 +295,8 @@ export const ContactFormPage = () => {
           });
 
           return patch.isPrimary === false
-            ? ensureSinglePrimary(promoteSiblingAsPrimary(nextEmails, emailId))
-            : ensureSinglePrimary(nextEmails);
+            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextEmails, emailId))
+            : normalizePrimaryEntries(nextEmails);
         })()
       }
     }));
@@ -335,7 +309,7 @@ export const ContactFormPage = () => {
         ...current,
         contactMethods: {
           ...current.contactMethods,
-          phones: nextPhones.length > 0 ? ensureSinglePrimary(nextPhones) : [createPhoneDraft()]
+          phones: nextPhones.length > 0 ? normalizePrimaryEntries(nextPhones) : [createPhoneDraft()]
         }
       };
     });
@@ -346,7 +320,7 @@ export const ContactFormPage = () => {
       ...current,
       contactMethods: {
         ...current.contactMethods,
-        emails: ensureSinglePrimary(
+        emails: normalizePrimaryEntries(
           current.contactMethods.emails.filter((email) => email.id !== emailId)
         )
       }
@@ -400,7 +374,14 @@ export const ContactFormPage = () => {
               setBootstrapError("");
               void window.hospitalDirectory
                 .getBootstrapData()
-                .then((payload) => initialize(payload))
+                .then((payload) => {
+                  if (isRecoveryBootstrap(payload)) {
+                    setBootstrapError(payload.recovery.message);
+                    return;
+                  }
+
+                  initialize(payload);
+                })
                 .catch(() => {
                   setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
                 });

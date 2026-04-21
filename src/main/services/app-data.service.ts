@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
@@ -8,6 +9,7 @@ import type {
   AppSettings,
   BackupListItem,
   BootstrapData,
+  BootstrapResult,
   ContactRecord,
   CsvImportPreview,
   CsvImportResult,
@@ -16,10 +18,14 @@ import type {
   EditableContactRecord,
   ExportContactsResult,
   ImportContactsResult,
+  RecoveryState,
+  ResetContactsResult,
   SaveContactResult
 } from "../../shared/types/contact.js";
+import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   async ensureInitialFiles() {
@@ -40,16 +46,27 @@ export class AppDataService {
     }
   }
 
-  async getBootstrapData(): Promise<BootstrapData> {
+  async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
-
-    const contacts = directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(getContactsFilePath())
-    );
-
     const settings = await this.readSettings();
+    const contactsFilePath = getContactsFilePath();
 
-    return { contacts, settings: this.toEditableSettings(settings) };
+    try {
+      const contacts = directoryDatasetSchema.parse(
+        await readJsonFile<DirectoryDataset>(contactsFilePath)
+      );
+
+      return { contacts, settings: this.toEditableSettings(settings) };
+    } catch (error) {
+      if (!this.isRecoverableContactsError(error)) {
+        throw error;
+      }
+
+      return {
+        recovery: this.toRecoveryState(error, contactsFilePath),
+        settings: this.toEditableSettings(settings)
+      };
+    }
   }
 
   async saveSettings(settings: EditableAppSettings) {
@@ -87,10 +104,14 @@ export class AppDataService {
             const filePath = path.join(backupDirectory, entry.name);
             const stats = await fs.stat(filePath);
 
+            const createdAt = stats.birthtimeMs > 1000
+              ? stats.birthtime.toISOString()
+              : stats.mtime.toISOString();
+
             return {
               fileName: entry.name,
               filePath,
-              createdAt: stats.mtime.toISOString(),
+              createdAt,
               sizeBytes: stats.size
             } satisfies BackupListItem;
           })
@@ -154,6 +175,23 @@ export class AppDataService {
     };
   }
 
+  async resetDataset(): Promise<ResetContactsResult> {
+    const settings = await this.readSettings();
+    const contactsFilePath = getContactsFilePath();
+    const backupPath = (await this.fileExists(contactsFilePath))
+      ? await this.createBackup()
+      : null;
+    const contacts = this.buildEmptyDataset(this.getEditorName(settings));
+
+    await writeJsonFile(getContactsFilePath(), contacts);
+
+    return {
+      contacts,
+      settings: this.toEditableSettings(settings),
+      backupPath
+    };
+  }
+
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
     const settings = await this.readSettings();
     const { preview } = await buildCsvImportPreview(
@@ -204,8 +242,8 @@ export class AppDataService {
       ...parsed,
       id: savedRecordId,
       contactMethods: {
-        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
       },
       audit: {
         createdAt: now,
@@ -242,8 +280,8 @@ export class AppDataService {
       id: currentRecord.id,
       source: currentRecord.source,
       contactMethods: {
-        phones: this.normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: this.normalizePrimaryEntries(parsed.contactMethods.emails)
+        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
       },
       audit: {
         ...currentRecord.audit,
@@ -273,6 +311,7 @@ export class AppDataService {
     }
   }
 
+  // Public because settings.ipc.ts calls service.toEditableSettings() directly.
   toEditableSettings(settings: AppSettings): EditableAppSettings {
     return {
       editorName: settings.editorName,
@@ -313,8 +352,8 @@ export class AppDataService {
     editorName: string,
     exportedAt: string
   ): DirectoryDataset {
-    const typeCounts: Record<string, number> = {};
-    const areaCounts: Record<string, number> = {};
+    const typeCounts: Partial<Record<RecordType, number>> = {};
+    const areaCounts: Partial<Record<AreaType, number>> = {};
 
     for (const record of records) {
       typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
@@ -338,14 +377,41 @@ export class AppDataService {
     });
   }
 
+  private buildEmptyDataset(editorName: string): DirectoryDataset {
+    const exportedAt = new Date().toISOString();
+
+    return directoryDatasetSchema.parse({
+      version: defaultContacts.version,
+      exportedAt,
+      metadata: {
+        recordCount: 0,
+        generatedFrom: "recovery-reset",
+        generatedBy: "app-recovery-reset",
+        editorName,
+        typeCounts: {},
+        areaCounts: {}
+      },
+      catalogs: defaultContacts.catalogs,
+      records: []
+    });
+  }
+
   private createEntityId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
   private createUniqueRecordId(records: ContactRecord[]) {
+    const maxAttempts = 1000;
+    let attempts = 0;
     let candidate = this.createEntityId("cnt");
 
     while (records.some((record) => record.id === candidate)) {
+      attempts += 1;
+
+      if (attempts >= maxAttempts) {
+        throw new Error("No se pudo generar un ID único para el registro después de 1000 intentos");
+      }
+
       candidate = this.createEntityId("cnt");
     }
 
@@ -354,39 +420,6 @@ export class AppDataService {
 
   private getEditorName(settings: AppSettings) {
     return settings.editorName.trim() || "Editor local";
-  }
-
-  private normalizePrimaryEntries<T extends { isPrimary: boolean }>(entries: T[]) {
-    let primaryAssigned = false;
-
-    const normalizedEntries = entries.map((entry) => {
-      if (entry.isPrimary && !primaryAssigned) {
-        primaryAssigned = true;
-        return entry;
-      }
-
-      if (entry.isPrimary && primaryAssigned) {
-        return {
-          ...entry,
-          isPrimary: false
-        };
-      }
-
-      return entry;
-    });
-
-    if (primaryAssigned || normalizedEntries.length === 0) {
-      return normalizedEntries;
-    }
-
-    return normalizedEntries.map((entry, index) =>
-      index === 0
-        ? {
-            ...entry,
-            isPrimary: true
-          }
-        : entry
-    );
   }
 
   private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
@@ -434,17 +467,20 @@ export class AppDataService {
 
     const routeContext =
       routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
-    const detail = this.getFilesystemErrorDetail(filesystemError);
+    const detail = this.getFilesystemErrorDetail(filesystemError ?? undefined);
 
     return new Error(`${message}${routeContext} ${detail}`.trim());
   }
 
-  private getErrnoException(error: unknown) {
-    if (typeof error === "object" && error !== null) {
+  private getErrnoException(error: unknown): (NodeJS.ErrnoException & { dest?: string }) | null {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      ("code" in error || "message" in error)
+    ) {
       return error as NodeJS.ErrnoException & { dest?: string };
     }
-
-    return undefined;
+    return null;
   }
 
   private getFilesystemErrorDetail(error?: NodeJS.ErrnoException & { dest?: string }) {
@@ -460,5 +496,28 @@ export class AppDataService {
       default:
         return "Se produjo un error al acceder al sistema de archivos.";
     }
+  }
+
+  private isRecoverableContactsError(error: unknown) {
+    return error instanceof SyntaxError || error instanceof ZodError;
+  }
+
+  private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
+    let details: string;
+
+    if (error instanceof ZodError) {
+      details = "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos.";
+    } else if (error instanceof Error) {
+      details = "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto.";
+    } else {
+      details = "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
+    }
+
+    return {
+      reason: "invalid-contacts-json",
+      contactsFilePath,
+      message: "El archivo local contacts.json está dañado o tiene un formato no válido.",
+      details
+    };
   }
 }

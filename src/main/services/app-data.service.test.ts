@@ -597,6 +597,55 @@ describe("AppDataService", () => {
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow();
   });
 
+  it("returns a recovery payload when contacts.json is corrupted at startup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), "{ invalid-json }\n", "utf-8");
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.reason).toBe("invalid-contacts-json");
+      expect(result.recovery.contactsFilePath).toBe(path.join(testRoot, "data", "contacts.json"));
+      expect(result.settings.ui.showInactiveByDefault).toBe(false);
+      expect(result.recovery.details).toBe(
+        "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto."
+      );
+    }
+  });
+
+  it("resets the dataset to empty and preserves a backup of the corrupted file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: true
+      }
+    });
+
+    const corruptedCurrentDataset = "{ invalid-json }\n";
+    await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
+
+    const result = await service.resetDataset();
+    const backupContents = await fs.readFile(result.backupPath!, "utf-8");
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { metadata: { recordCount: number }; records: unknown[] };
+
+    expect(backupContents).toBe(corruptedCurrentDataset);
+    expect(result.contacts.records).toHaveLength(0);
+    expect(result.contacts.metadata.recordCount).toBe(0);
+    expect(result.settings.ui.showInactiveByDefault).toBe(true);
+    expect(persisted.records).toHaveLength(0);
+    expect(persisted.metadata.recordCount).toBe(0);
+  });
+
   it("rejects CSV replacement when the preview still contains invalid rows", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -654,5 +703,225 @@ describe("AppDataService", () => {
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
     );
+  });
+
+  it("throws after 1000 attempts when Math.random always returns the same value", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Math.random returning 0.5 always produces the same ID string
+    const fixedId = `cnt_${(0.5).toString(36).slice(2, 10)}`;
+
+    // Pre-populate contacts.json with a valid record that has the fixed ID
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    const existing = JSON.parse(await fs.readFile(contactsFilePath, "utf-8")) as {
+      version: string;
+      exportedAt: string;
+      metadata: {
+        recordCount: number;
+        generatedFrom: string;
+        generatedBy: string;
+        editorName: string;
+        typeCounts: Record<string, number>;
+        areaCounts: Record<string, number>;
+      };
+      catalogs: { recordTypes: string[]; areas: string[] };
+      records: Array<unknown>;
+    };
+
+    const collisionRecord = {
+      id: fixedId,
+      type: "service",
+      displayName: "Colisión forzada",
+      organization: { department: "Test" },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_collision",
+            number: "00000",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active",
+      audit: {
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-20T00:00:00.000Z",
+        createdBy: "Test",
+        updatedBy: "Test"
+      }
+    };
+
+    existing.records.push(collisionRecord);
+    existing.metadata.recordCount = existing.records.length;
+    await fs.writeFile(contactsFilePath, JSON.stringify(existing, null, 2), "utf-8");
+
+    const fixedRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    await expect(
+      service.createRecord({
+        type: "service",
+        displayName: "Desbordamiento",
+        organization: { department: "Test" },
+        contactMethods: {
+          phones: [
+            {
+              id: "ph_overflow",
+              label: "Principal",
+              number: "99999",
+              kind: "internal",
+              isPrimary: true,
+              confidential: false,
+              noPatientSharing: false
+            }
+          ],
+          emails: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active"
+      })
+    ).rejects.toThrow("No se pudo generar un ID único para el registro después de 1000 intentos");
+
+    fixedRandom.mockRestore();
+  });
+
+  it("returns backupPath null and succeeds when contacts.json does not exist before resetDataset", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Remove contacts.json to simulate a missing file before reset
+    const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+    await fs.rm(contactsFilePath, { force: true });
+
+    const result = await service.resetDataset();
+
+    expect(result.backupPath).toBeNull();
+    expect(result.contacts.records).toHaveLength(0);
+    expect(result.contacts.metadata.recordCount).toBe(0);
+
+    const persisted = JSON.parse(
+      await fs.readFile(contactsFilePath, "utf-8")
+    ) as { records: unknown[]; metadata: { recordCount: number } };
+    expect(persisted.records).toHaveLength(0);
+    expect(persisted.metadata.recordCount).toBe(0);
+  });
+
+  it("returns Zod issue messages in recovery details when contacts.json has valid JSON but invalid schema", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Write valid JSON that fails the directoryDatasetSchema (missing required 'version' field)
+    const invalidSchemaDataset = {
+      exportedAt: "2026-04-20T00:00:00.000Z",
+      metadata: {
+        recordCount: 0,
+        generatedFrom: "test",
+        generatedBy: "test",
+        editorName: "Test",
+        typeCounts: {},
+        areaCounts: {}
+      },
+      catalogs: { recordTypes: [], areas: [] },
+      records: [
+        {
+          id: "cnt_bad",
+          type: "INVALID_TYPE_VALUE",
+          displayName: "Broken record"
+        }
+      ]
+    };
+
+    await fs.writeFile(
+      path.join(testRoot, "data", "contacts.json"),
+      JSON.stringify(invalidSchemaDataset),
+      "utf-8"
+    );
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.reason).toBe("invalid-contacts-json");
+      expect(result.recovery.details).toBe(
+        "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos."
+      );
+    }
+  });
+
+  it("returns the unknown-error fallback details when toRecoveryState is called with a plain string", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const filePath = path.join(testRoot, "data", "contacts.json");
+    const recovery = (service as any).toRecoveryState("plain string", filePath) as {
+      details: string;
+    };
+
+    expect(recovery.details).toBe(
+      "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar."
+    );
+  });
+
+  it("listBackups createdAt values are valid ISO strings in descending order", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const firstBackupPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondBackupPath = await service.createBackup();
+
+    const backups = await service.listBackups();
+
+    expect(backups).toHaveLength(2);
+    expect(backups[0]?.filePath).toBe(secondBackupPath);
+    expect(backups[1]?.filePath).toBe(firstBackupPath);
+
+    const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    expect(backups[0]?.createdAt).toMatch(isoRegex);
+    expect(backups[1]?.createdAt).toMatch(isoRegex);
+
+    const firstTime = new Date(backups[1]!.createdAt).getTime();
+    const secondTime = new Date(backups[0]!.createdAt).getTime();
+    expect(secondTime).toBeGreaterThanOrEqual(firstTime);
+  });
+
+  it("listBackups uses mtime as createdAt fallback when birthtimeMs is epoch (Linux)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.createBackup();
+
+    const knownMtime = new Date("2026-04-20T10:00:00.000Z");
+
+    vi.spyOn(fs, "stat").mockResolvedValueOnce({
+      birthtimeMs: 0,
+      birthtime: new Date(0),
+      mtime: knownMtime,
+      size: 512,
+      isFile: () => true,
+      isDirectory: () => false
+    } as unknown as import("node:fs").Stats);
+
+    const backups = await service.listBackups();
+
+    expect(backups[0]?.createdAt).toBe(knownMtime.toISOString());
   });
 });

@@ -9,6 +9,7 @@ const resetStore = () => {
   useAppStore.setState({
     contacts: null,
     settings: null,
+    recovery: null,
     selectedRecordId: null,
     query: "",
     selectedType: "all",

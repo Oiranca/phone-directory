@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
@@ -85,10 +86,16 @@ export const DirectoryPage = () => {
     [contacts, query, selectedType, selectedArea, showInactive]
   );
 
+  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
+  // This local loader is retained only for page-level retry and test isolation.
   const loadBootstrapData = async () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
+      if (isRecoveryBootstrap(payload)) {
+        setBootstrapError(payload.recovery.message);
+        return;
+      }
       initialize(payload);
     } catch {
       setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");

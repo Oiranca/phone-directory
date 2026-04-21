@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
 import { useAppStore } from "../store/useAppStore";
 
@@ -54,6 +55,11 @@ export const ImportExportPage = () => {
         bootstrapPromise,
         window.hospitalDirectory.listBackups()
       ]);
+
+      if (isRecoveryBootstrap(payload)) {
+        setBootstrapError(payload.recovery.message);
+        return;
+      }
 
       if (!contacts || !settings) {
         initialize(payload);

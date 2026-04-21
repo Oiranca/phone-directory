@@ -1254,6 +1254,10 @@ OIR-18 replaced the initial lightweight Fuse.js setup with a tuned weighted rank
 
 OIR-27 completed the sensitive phone presentation rules for the directory workspace. Result cards now add inline risk text only when the visible phone is sensitive, and the detail panel shows a privacy warning block whenever the selected record contains sensitive phones.
 
+### 31.5 — OIR-19: CSV Template Header Validation
+
+OIR-19 hardened the CSV preview flow by validating the import header contract before row parsing begins. The importer now rejects unsupported, duplicate, and empty header cells using plain operational language, while keeping row-level issues and warnings for valid-template files that still contain bad data.
+
 ---
 
 ## 32. Phase 2 — Quality and Completeness Backlog
@@ -1337,8 +1341,8 @@ Scripts must set any required environment variables, resolve the executable path
 | Issue | Status | Category | Description |
 |-------|--------|----------|-------------|
 | OIR-18 | Done | Search | Weighted Fuse.js search with field prioritization |
-| OIR-19 | In Progress | Data Integrity | CSV import template validation and per-row error reporting |
-| OIR-20 | Todo | Data Integrity | Data corruption recovery flow for invalid contacts.json |
+| OIR-19 | Done | Data Integrity | CSV import template validation and per-row error reporting |
+| OIR-20 | Done | Data Integrity | Data corruption recovery flow for invalid contacts.json |
 | OIR-21 | Todo | USB Deployment | Portable cross-platform USB packaging |
 | OIR-22 | Todo | Testing | Playwright end-to-end tests for critical MVP flows |
 | OIR-23 | Todo | UX | Global toast notification system |

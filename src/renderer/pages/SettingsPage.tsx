@@ -1,8 +1,9 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore } from "../store/useAppStore";
 
 export const SettingsPage = () => {
-  const { settings, contacts, initialize, setSettings } = useAppStore();
+  const { settings, initialize, setSettings } = useAppStore();
   const [editorName, setEditorName] = useState("");
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -10,10 +11,16 @@ export const SettingsPage = () => {
   const [saveSuccess, setSaveSuccess] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
 
+  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
+  // This local loader is retained only for page-level retry and test isolation.
   const loadBootstrapData = async () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
+      if (isRecoveryBootstrap(payload)) {
+        setBootstrapError(payload.recovery.message);
+        return;
+      }
       initialize(payload);
     } catch {
       setBootstrapError(
@@ -23,10 +30,10 @@ export const SettingsPage = () => {
   };
 
   useEffect(() => {
-    if (!settings || !contacts) {
+    if (!settings) {
       void loadBootstrapData();
     }
-  }, [contacts, settings]);
+  }, [settings]);
 
   useEffect(() => {
     if (!settings) {
