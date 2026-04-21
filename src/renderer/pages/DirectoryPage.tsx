@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { isRecoveryBootstrap } from "../app/App";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";

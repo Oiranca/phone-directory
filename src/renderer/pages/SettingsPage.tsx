@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { isRecoveryBootstrap } from "../app/App";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore } from "../store/useAppStore";
 
 export const SettingsPage = () => {

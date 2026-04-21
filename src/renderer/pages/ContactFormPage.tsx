@@ -3,9 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
-import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
 type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {

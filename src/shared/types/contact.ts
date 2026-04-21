@@ -112,6 +112,9 @@ export interface RecoveryBootstrapData {
 
 export type BootstrapResult = BootstrapData | RecoveryBootstrapData;
 
+export const isRecoveryBootstrap = (payload: BootstrapResult): payload is RecoveryBootstrapData =>
+  "recovery" in payload;
+
 export interface EditablePhoneContact {
   id: string;
   label?: string;

@@ -257,11 +257,28 @@ describe("App recovery flow", () => {
 
     expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getBootstrapData).toHaveBeenCalledTimes(1);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
     await waitFor(() => {
       expect(getBootstrapData).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("shows a browser-only guidance message when the Electron bridge is unavailable", async () => {
+    // @ts-expect-error test intentionally removes the preload bridge
+    delete window.hospitalDirectory;
+
+    renderApp();
+
+    expect(
+      await screen.findByText("La interfaz abierta en el navegador no puede acceder a los datos locales.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Usa la ventana de Electron que arranca con `npm run dev`\./)
+    ).toBeInTheDocument();
   });
 });

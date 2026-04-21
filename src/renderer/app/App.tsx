@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
-import type { BootstrapResult, ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
+import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { AppShell } from "../components/layout/AppShell";
 import { useAppStore } from "../store/useAppStore";
-
-export const isRecoveryBootstrap = (
-  payload: BootstrapResult
-): payload is Extract<BootstrapResult, { recovery: unknown }> => "recovery" in payload;
 
 const RecoveryPanel = () => {
   const { recovery, initialize } = useAppStore();
@@ -114,12 +111,22 @@ const RecoveryPanel = () => {
 export const App = () => {
   const { contacts, settings, recovery, isLoading, initialize, initializeRecovery, setIsLoading } = useAppStore();
   const [bootstrapError, setBootstrapError] = useState("");
+  const [bootstrapHelp, setBootstrapHelp] = useState("");
   const hasAttempted = useRef(false);
 
   const loadBootstrapData = async () => {
     try {
       setIsLoading(true);
       setBootstrapError("");
+      setBootstrapHelp("");
+
+      if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
+        setBootstrapError("La interfaz abierta en el navegador no puede acceder a los datos locales.");
+        setBootstrapHelp("Usa la ventana de Electron que arranca con `npm run dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.");
+        setIsLoading(false);
+        return;
+      }
+
       const payload = await window.hospitalDirectory.getBootstrapData();
 
       if (isRecoveryBootstrap(payload)) {
@@ -130,8 +137,8 @@ export const App = () => {
       initialize(payload);
     } catch (error) {
       console.error('[App] Bootstrap failed:', error);
-      hasAttempted.current = false;
       setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");
+      setBootstrapHelp("");
       setIsLoading(false);
     }
   };
@@ -155,6 +162,7 @@ export const App = () => {
         <section className="rounded-3xl bg-white p-8 shadow-panel">
           <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
           <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
+          {bootstrapHelp ? <p className="mt-2 text-sm text-slate-500">{bootstrapHelp}</p> : null}
           <button
             type="button"
             onClick={() => {

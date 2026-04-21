@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
-import { isRecoveryBootstrap } from "../app/App";
 import { useAppStore } from "../store/useAppStore";
 
 const formatTimestamp = (value: string) => {
