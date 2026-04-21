@@ -47,6 +47,11 @@ const phoneKindOptions = [
   { value: "other", label: "Otro" }
 ];
 
+const formControlClass =
+  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
+
+const selectClass = `${formControlClass} pr-10`;
+
 // client-side only: used as React keys for draft phone/email entries, discarded on save
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -469,10 +474,10 @@ export const ContactFormPage = () => {
                   onChange={(event) =>
                     setFormState((current) => ({ ...current, type: event.target.value as RecordType }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                  className={selectClass}
                 >
                   {recordTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <option key={option.value} value={option.value} className="bg-white text-slate-900">
                       {option.label}
                     </option>
                   ))}
@@ -492,10 +497,10 @@ export const ContactFormPage = () => {
                       status: event.target.value as "active" | "inactive"
                     }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                  className={selectClass}
                 >
-                  <option value="active">Activo</option>
-                  <option value="inactive">Inactivo</option>
+                  <option value="active" className="bg-white text-slate-900">Activo</option>
+                  <option value="inactive" className="bg-white text-slate-900">Inactivo</option>
                 </select>
               </div>
             </div>
@@ -606,13 +611,13 @@ export const ContactFormPage = () => {
                       }
                     }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                  className={selectClass}
                 >
-                  <option value="">Sin área</option>
+                  <option value="" className="bg-white text-slate-900">Sin área</option>
                   {availableAreas.map((area) => {
                     const label = areaOptions.find((option) => option.value === area)?.label ?? area;
                     return (
-                      <option key={area} value={area}>
+                      <option key={area} value={area} className="bg-white text-slate-900">
                         {label}
                       </option>
                     );
@@ -792,10 +797,10 @@ export const ContactFormPage = () => {
                       id={`phone-kind-${phone.id}`}
                       value={phone.kind}
                       onChange={(event) => updatePhone(phone.id, { kind: event.target.value })}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                      className={selectClass}
                     >
                       {phoneKindOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
+                        <option key={option.value} value={option.value} className="bg-white text-slate-900">
                           {option.label}
                         </option>
                       ))}

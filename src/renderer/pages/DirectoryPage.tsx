@@ -38,6 +38,11 @@ const privacyDetailWarningText = {
   "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
 } as const satisfies Record<PrivacyFlag, string>;
 
+const formControlClass =
+  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
+
+const selectClass = `${formControlClass} pr-10`;
+
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
   if (!phone) {
     return [];
@@ -173,14 +178,14 @@ export const DirectoryPage = () => {
               placeholder="Buscar por nombre, servicio, alias o teléfono"
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-3 flex flex-col gap-3">
               <Link
                 to="/contacts/new"
-                className="inline-flex min-h-12 items-center justify-center whitespace-nowrap rounded-2xl bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white shadow-sm"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-scs-blue px-4 py-3 text-center text-sm font-semibold text-white shadow-sm sm:w-auto"
               >
                 Nuevo registro
               </Link>
-              <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500 sm:justify-end">
+              <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500">
                 <span className="rounded-full bg-slate-100 px-3 py-1">
                   {visibleRecords.length} resultado{visibleRecords.length === 1 ? "" : "s"}
                 </span>
@@ -276,11 +281,11 @@ export const DirectoryPage = () => {
                 id="directory-type-filter"
                 value={selectedType}
                 onChange={(event) => handleTypeChange(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className={selectClass}
               >
                 <option value="all">{typeLabels.all}</option>
                 {availableTypes.map((type) => (
-                  <option key={type} value={type}>
+                  <option key={type} value={type} className="bg-white text-slate-900">
                     {typeLabels[type]}
                   </option>
                 ))}
@@ -295,11 +300,11 @@ export const DirectoryPage = () => {
                 id="directory-area-filter"
                 value={selectedArea}
                 onChange={(event) => handleAreaChange(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className={selectClass}
               >
                 <option value="all">{areaLabels.all}</option>
                 {availableAreas.map((area) => (
-                  <option key={area} value={area}>
+                  <option key={area} value={area} className="bg-white text-slate-900">
                     {areaLabels[area]}
                   </option>
                 ))}
