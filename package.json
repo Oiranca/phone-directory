@@ -9,7 +9,7 @@
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\" \"npm:dev:app\"",
     "dev:renderer": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
-    "dev:app": "wait-on http://localhost:5173 dist-electron/main/index.js dist-electron/preload/index.cjs && ELECTRON_OPEN_DEVTOOLS=1 node scripts/run-electron-dev.mjs",
+    "dev:app": "wait-on http://localhost:5173 dist-electron/main/index.js dist-electron/preload/index.cjs && node scripts/run-electron-dev.mjs",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",

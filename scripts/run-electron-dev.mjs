@@ -42,6 +42,10 @@ const parseEnvFile = async (filePath) => {
 await parseEnvFile(path.join(projectRoot, ".env"));
 await parseEnvFile(path.join(projectRoot, ".env.local"));
 
+if (process.env.ELECTRON_OPEN_DEVTOOLS === undefined) {
+  process.env.ELECTRON_OPEN_DEVTOOLS = "1";
+}
+
 const child = spawn(electronBinary, ["."], {
   cwd: projectRoot,
   stdio: "inherit",
