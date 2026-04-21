@@ -424,7 +424,7 @@ export const ContactFormPage = () => {
 
   return (
     <section className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">
             {isEditing ? "Editar registro" : "Nuevo registro"}
@@ -436,7 +436,7 @@ export const ContactFormPage = () => {
             Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
           </p>
         </div>
-        <Link to="/" className="text-sm font-semibold text-scs-blue hover:text-scs-blueDark">
+        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
           Cancelar
         </Link>
       </div>
@@ -732,7 +732,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
             >
               Añadir teléfono
             </button>
@@ -863,7 +863,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
             >
               Añadir correo
             </button>
@@ -973,13 +973,13 @@ export const ContactFormPage = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+            className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:w-auto"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
           <Link
             to="/"
-            className="w-full rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
           >
             Cancelar
           </Link>

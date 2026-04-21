@@ -300,7 +300,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleCreateBackup()}
             disabled={isCreatingBackup}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue disabled:opacity-60"
+            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -315,7 +315,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleExport()}
             disabled={isExporting}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue disabled:opacity-60"
+            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -330,7 +330,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleImport()}
             disabled={isImporting}
-            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 disabled:opacity-60"
+            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
@@ -345,7 +345,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isPreparingCsvPreview || isImportingCsv}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 disabled:opacity-60"
+            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar CSV</p>
             <p className="mt-2 text-sm text-emerald-900/80">
@@ -491,7 +491,7 @@ export const ImportExportPage = () => {
         )}
         </article>
 
-        <aside className="rounded-3xl bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>

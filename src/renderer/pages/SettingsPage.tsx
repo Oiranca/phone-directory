@@ -169,7 +169,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={isSaving || !isDirty}
-              className="w-full rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
             </button>
@@ -177,7 +177,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={handleReset}
               disabled={isSaving || !isDirty}
-              className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               Descartar cambios
             </button>
@@ -188,7 +188,7 @@ export const SettingsPage = () => {
         </div>
         </section>
 
-        <aside className="space-y-4 rounded-3xl bg-slate-50 p-5 xl:sticky xl:top-6 xl:self-start">
+        <aside className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5 xl:sticky xl:top-6 xl:self-start">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <p className="text-sm font-semibold text-slate-500">Estado actual</p>
             <dl className="mt-3 space-y-3 text-sm text-slate-700">

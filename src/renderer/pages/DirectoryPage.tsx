@@ -153,7 +153,7 @@ export const DirectoryPage = () => {
   return (
     <section className="space-y-6">
       <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-start">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Directorio</p>
             <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Búsqueda principal</h2>
@@ -161,7 +161,7 @@ export const DirectoryPage = () => {
               Busca, filtra y revisa el detalle operativo sin perder el contexto del registro seleccionado.
             </p>
           </div>
-          <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[320px]">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
             <label htmlFor="directory-search" className="sr-only">
               Buscar contactos
             </label>
@@ -171,12 +171,12 @@ export const DirectoryPage = () => {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar por nombre, servicio, alias o teléfono"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Link
                 to="/contacts/new"
-                className="rounded-full bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white"
+                className="inline-flex min-h-12 items-center justify-center whitespace-nowrap rounded-2xl bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white shadow-sm"
               >
                 Nuevo registro
               </Link>
@@ -196,7 +196,7 @@ export const DirectoryPage = () => {
         <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-scs-blueDark">Resultados</h3>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
               {visibleRecords.length}
             </span>
           </div>
@@ -225,7 +225,7 @@ export const DirectoryPage = () => {
                       {record.type} · {record.organization.department ?? "Sin unidad"}
                     </p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     {record.organization.area ?? "Sin área"}
                   </span>
                 </div>
@@ -265,7 +265,7 @@ export const DirectoryPage = () => {
         </div>
         </div>
 
-        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
           <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
           <div className="mt-4 space-y-4">
             <div>
@@ -323,7 +323,7 @@ export const DirectoryPage = () => {
           </div>
         </aside>
 
-        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <h3 className="text-xl font-semibold text-scs-blueDark">Detalle</h3>
         {selectedRecord ? (
           <div className="mt-4 space-y-4">
