@@ -48,9 +48,6 @@ const phoneKindOptions = [
   { value: "other", label: "Otro" }
 ];
 
-const formControlClass =
-  "mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2";
-
 // client-side only: used as React keys for draft phone/email entries, discarded on save
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 
