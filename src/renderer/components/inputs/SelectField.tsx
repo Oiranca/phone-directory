@@ -21,6 +21,7 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
   const labelId = `${id}-label`;
   const valueId = `${id}-value`;
   const listboxId = `${id}-listbox`;
+  const getOptionId = (index: number) => `${listboxId}-option-${index}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -47,6 +48,36 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !rootRef.current) {
+      return;
+    }
+
+    const rootElement = rootRef.current;
+    const handleFocusOut = (event: FocusEvent) => {
+      const nextFocusedElement = event.relatedTarget as Node | null;
+
+      if (!nextFocusedElement || !rootElement.contains(nextFocusedElement)) {
+        setIsOpen(false);
+      }
+    };
+
+    rootElement.addEventListener("focusout", handleFocusOut);
+    return () => rootElement.removeEventListener("focusout", handleFocusOut);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (options.length === 0) {
+      setActiveIndex(-1);
+      setIsOpen(false);
+      return;
+    }
+
+    if (activeIndex >= options.length) {
+      setActiveIndex(options.length - 1);
+    }
+  }, [activeIndex, options, options.length]);
+
   const commitValue = (nextValue: string) => {
     onChange(nextValue);
     setIsOpen(false);
@@ -54,11 +85,19 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
   };
 
   const openListbox = () => {
+    if (options.length === 0) {
+      return;
+    }
+
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
     setIsOpen(true);
   };
 
   const moveActiveIndex = (direction: 1 | -1) => {
+    if (options.length === 0) {
+      return;
+    }
+
     const nextIndex = activeIndex < 0
       ? selectedIndex >= 0 ? selectedIndex : 0
       : (activeIndex + direction + options.length) % options.length;
@@ -79,6 +118,7 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
         aria-haspopup="listbox"
         aria-controls={listboxId}
         aria-labelledby={`${labelId} ${valueId}`}
+        aria-activedescendant={isOpen && activeIndex >= 0 ? getOptionId(activeIndex) : undefined}
         className={triggerClassName}
         onClick={() => {
           if (isOpen) {
@@ -128,7 +168,10 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
                 return;
               }
               if (activeIndex >= 0) {
-                commitValue(options[activeIndex]!.value);
+                const activeOption = options[activeIndex];
+                if (activeOption) {
+                  commitValue(activeOption.value);
+                }
               }
               return;
             case "Escape":
@@ -137,6 +180,11 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
               }
               event.preventDefault();
               setIsOpen(false);
+              return;
+            case "Tab":
+              if (isOpen) {
+                setIsOpen(false);
+              }
               return;
             default:
               return;
@@ -180,7 +228,7 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
               return (
                 <li key={`${instanceId}-${option.value}`} role="presentation" className="px-2">
                   <button
-                    id={`${listboxId}-option-${index}`}
+                    id={getOptionId(index)}
                     type="button"
                     role="option"
                     aria-selected={isSelected}
