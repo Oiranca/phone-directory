@@ -114,10 +114,12 @@ export const SelectField = ({ id, label, onChange, options, value }: SelectField
         ref={buttonRef}
         id={id}
         type="button"
+        role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-controls={listboxId}
-        aria-labelledby={`${labelId} ${valueId}`}
+        aria-labelledby={labelId}
+        aria-describedby={valueId}
         aria-activedescendant={isOpen && activeIndex >= 0 ? getOptionId(activeIndex) : undefined}
         className={triggerClassName}
         onClick={() => {
