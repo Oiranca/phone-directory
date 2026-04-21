@@ -972,14 +972,14 @@ export const ContactFormPage = () => {
         <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <Link
             to="/"
-            className="rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700"
+            className="w-full rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="w-full rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>

@@ -169,7 +169,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={isSaving || !isDirty}
-              className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
             </button>
@@ -177,7 +177,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={handleReset}
               disabled={isSaving || !isDirty}
-              className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               Descartar cambios
             </button>

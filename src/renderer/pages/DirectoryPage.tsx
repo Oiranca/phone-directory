@@ -193,7 +193,7 @@ export const DirectoryPage = () => {
       </div>
 
       <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_minmax(300px,360px)]">
-        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <aside className="order-2 rounded-3xl bg-white p-5 shadow-panel xl:order-1 xl:sticky xl:top-6 xl:self-start">
         <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
         <div className="mt-4 space-y-4">
           <div>
@@ -251,7 +251,7 @@ export const DirectoryPage = () => {
         </div>
         </aside>
 
-        <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
+        <div className="order-1 rounded-3xl bg-white p-5 shadow-panel sm:p-6 xl:order-2">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-scs-blueDark">Resultados</h3>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -323,7 +323,7 @@ export const DirectoryPage = () => {
         </div>
         </div>
 
-        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
+        <aside className="order-3 rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <h2 className="text-xl font-semibold text-scs-blueDark">Detalle</h2>
         {selectedRecord ? (
           <div className="mt-4 space-y-4">

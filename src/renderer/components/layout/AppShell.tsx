@@ -30,7 +30,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
             El directorio está bloqueado hasta importar una copia JSON válida o restablecer un dataset vacío.
           </div>
         ) : (
-          <nav className="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
+          <nav className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
