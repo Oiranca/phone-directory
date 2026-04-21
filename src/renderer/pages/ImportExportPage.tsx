@@ -269,15 +269,18 @@ export const ImportExportPage = () => {
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-      <article className="rounded-3xl bg-white p-6 shadow-panel">
+    <section className="space-y-6">
+      <div className="rounded-3xl bg-white p-6 shadow-panel">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Intercambio de datos</p>
-        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
+        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Importar y exportar datos</h2>
         <p className="mt-3 max-w-3xl text-sm text-slate-600">
           Exporta el directorio activo como JSON, o reemplaza el dataset local con un archivo JSON o CSV normalizado. Cada importación crea un backup automático antes de sobrescribir.
         </p>
+      </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+        <article className="rounded-3xl bg-white p-6 shadow-panel">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-500">Registros activos en memoria</p>
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
@@ -292,7 +295,7 @@ export const ImportExportPage = () => {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <button
             type="button"
             onClick={() => void handleCreateBackup()}
@@ -394,7 +397,7 @@ export const ImportExportPage = () => {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Filas leídas</p>
                 <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.totalRowCount}</p>
@@ -413,7 +416,7 @@ export const ImportExportPage = () => {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -445,7 +448,7 @@ export const ImportExportPage = () => {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-sm font-semibold text-emerald-950">Filas inválidas</p>
                 {csvPreview.rowIssues.length === 0 ? (
@@ -486,9 +489,9 @@ export const ImportExportPage = () => {
             </div>
           </section>
         )}
-      </article>
+        </article>
 
-      <aside className="rounded-3xl bg-white p-6 shadow-panel">
+        <aside className="rounded-3xl bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
@@ -521,7 +524,8 @@ export const ImportExportPage = () => {
             ))
           )}
         </div>
-      </aside>
+        </aside>
+      </div>
     </section>
   );
 };

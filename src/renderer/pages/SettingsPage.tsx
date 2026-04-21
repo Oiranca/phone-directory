@@ -113,10 +113,19 @@ export const SettingsPage = () => {
   };
 
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-panel">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+    <section className="space-y-6">
+      <div className="rounded-3xl bg-white p-6 shadow-panel">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Configuración</p>
+        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Preferencias locales</h2>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
+          Ajusta quién firma los cambios y cómo debe arrancar el directorio en esta instalación.
+        </p>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+        <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
-          <h2 className="text-2xl font-semibold text-scs-blueDark">Configuración básica</h2>
+          <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
             Define quién firma los cambios locales y cómo debe arrancar el directorio cuando se vuelva a abrir.
           </p>
@@ -177,8 +186,9 @@ export const SettingsPage = () => {
           {saveSuccess && <p className="mt-4 text-sm font-medium text-emerald-700">{saveSuccess}</p>}
           {saveError && <p className="mt-4 text-sm font-medium text-red-700">{saveError}</p>}
         </div>
+        </section>
 
-        <aside className="space-y-4 rounded-3xl bg-slate-50 p-5">
+        <aside className="space-y-4 rounded-3xl bg-slate-50 p-5 xl:sticky xl:top-6 xl:self-start">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <p className="text-sm font-semibold text-slate-500">Estado actual</p>
             <dl className="mt-3 space-y-3 text-sm text-slate-700">

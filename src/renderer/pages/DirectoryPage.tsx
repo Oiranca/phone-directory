@@ -151,8 +151,49 @@ export const DirectoryPage = () => {
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
-      <aside className="rounded-3xl bg-white p-5 shadow-panel">
+    <section className="space-y-6">
+      <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Directorio</p>
+            <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Búsqueda principal</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">
+              Busca, filtra y revisa el detalle operativo sin perder el contexto del registro seleccionado.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[320px]">
+            <label htmlFor="directory-search" className="sr-only">
+              Buscar contactos
+            </label>
+            <input
+              id="directory-search"
+              aria-label="Buscar contactos"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por nombre, servicio, alias o teléfono"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+            />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                to="/contacts/new"
+                className="rounded-full bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white"
+              >
+                Nuevo registro
+              </Link>
+              <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500 sm:justify-end">
+                <span className="rounded-full bg-slate-100 px-3 py-1">
+                  {visibleRecords.length} resultado{visibleRecords.length === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">{typeLabels[selectedType] ?? selectedType}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">{areaLabels[selectedArea] ?? selectedArea}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_minmax(300px,360px)]">
+        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <p className="text-sm font-semibold text-scs-blue">Filtros rápidos</p>
         <div className="mt-4 space-y-4">
           <div>
@@ -208,43 +249,15 @@ export const DirectoryPage = () => {
             </span>
           </label>
         </div>
-      </aside>
+        </aside>
 
-      <div className="rounded-3xl bg-white p-5 shadow-panel">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-scs-blueDark">Búsqueda principal</h2>
-            <p className="text-sm text-slate-600">Base inicial lista para Fuse.js, filtros y detalle.</p>
+        <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-scs-blueDark">Resultados</h3>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {visibleRecords.length}
+            </span>
           </div>
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-            <label htmlFor="directory-search" className="sr-only">
-              Buscar contactos
-            </label>
-            <input
-              id="directory-search"
-              aria-label="Buscar contactos"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por nombre, servicio, alias o teléfono"
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2 sm:min-w-[280px]"
-            />
-            <Link
-              to="/contacts/new"
-              className="rounded-full bg-scs-blue px-5 py-3 text-center text-sm font-semibold text-white"
-            >
-              Nuevo registro
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-500">
-          <span className="rounded-full bg-slate-100 px-3 py-1">
-            {visibleRecords.length} resultado{visibleRecords.length === 1 ? "" : "s"}
-          </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">{typeLabels[selectedType] ?? selectedType}</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">{areaLabels[selectedArea] ?? selectedArea}</span>
-        </div>
-
         <div className="mt-6 space-y-3">
           {visibleRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
@@ -308,9 +321,9 @@ export const DirectoryPage = () => {
             </div>
           )}
         </div>
-      </div>
+        </div>
 
-      <aside className="rounded-3xl bg-white p-5 shadow-panel">
+        <aside className="rounded-3xl bg-white p-5 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <h2 className="text-xl font-semibold text-scs-blueDark">Detalle</h2>
         {selectedRecord ? (
           <div className="mt-4 space-y-4">
@@ -393,7 +406,8 @@ export const DirectoryPage = () => {
         ) : (
           <p className="mt-4 text-sm text-slate-600">Selecciona un registro para ver su detalle.</p>
         )}
-      </aside>
+        </aside>
+      </section>
     </section>
   );
 };

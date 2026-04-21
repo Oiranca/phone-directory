@@ -423,7 +423,7 @@ export const ContactFormPage = () => {
   }
 
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-panel">
+    <section className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">
@@ -442,8 +442,8 @@ export const ContactFormPage = () => {
       </div>
 
       <form className="mt-6 space-y-8" onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
             <div>
               <label htmlFor="displayName" className="text-sm font-medium text-slate-700">
@@ -547,9 +547,9 @@ export const ContactFormPage = () => {
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-4">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Organización y ubicación</h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -709,11 +709,11 @@ export const ContactFormPage = () => {
                 />
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
             <button
               type="button"
@@ -740,8 +740,8 @@ export const ContactFormPage = () => {
 
           <div className="space-y-4">
             {formState.contactMethods.phones.map((phone, index) => (
-              <div key={phone.id} className="rounded-3xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
+              <div key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</p>
                   <button
                     type="button"
@@ -752,7 +752,7 @@ export const ContactFormPage = () => {
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <div className="mt-4 grid gap-4 xl:grid-cols-3">
                   <div>
                     <label htmlFor={`phone-label-${phone.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
                     <input
@@ -785,7 +785,7 @@ export const ContactFormPage = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div>
                     <label htmlFor={`phone-kind-${phone.id}`} className="text-sm font-medium text-slate-700">Tipo de teléfono</label>
                     <select
@@ -841,10 +841,10 @@ export const ContactFormPage = () => {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Correos electrónicos</h3>
             <button
               type="button"
@@ -871,8 +871,8 @@ export const ContactFormPage = () => {
 
           <div className="space-y-4">
             {formState.contactMethods.emails.map((email, index) => (
-              <div key={email.id} className="rounded-3xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
+              <div key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-semibold text-slate-700">Correo {index + 1}</p>
                   <button
                     type="button"
@@ -883,7 +883,7 @@ export const ContactFormPage = () => {
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div>
                     <label htmlFor={`email-label-${email.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
                     <input
@@ -918,10 +918,10 @@ export const ContactFormPage = () => {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Clasificación</h3>
             <div>
               <label htmlFor="aliases" className="text-sm font-medium text-slate-700">
@@ -947,9 +947,9 @@ export const ContactFormPage = () => {
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
             </div>
-          </div>
+          </section>
 
-          <div>
+          <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <label htmlFor="notes" className="text-sm font-medium text-slate-700">
               Notas
             </label>
@@ -960,7 +960,7 @@ export const ContactFormPage = () => {
               rows={6}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-          </div>
+          </section>
         </div>
 
         {submitError && (
@@ -969,10 +969,10 @@ export const ContactFormPage = () => {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-5">
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <Link
             to="/"
-            className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
+            className="rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700"
           >
             Cancelar
           </Link>
