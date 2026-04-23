@@ -2,14 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-  font-family: "Source Sans 3", "Segoe UI", sans-serif;
+@layer base {
+  :root {
+    color-scheme: light;
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    @apply text-base leading-relaxed text-scs-ink;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply leading-snug font-semibold;
+  }
+
+  p {
+    @apply leading-relaxed max-w-[70ch];
+  }
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
+@layer components {
+  /* Minimum touch target for interactive elements */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Shared focus ring for accessibility */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2;
+  }
+
+  /* Selected state styles */
+  .state-selected {
+    @apply bg-scs-mist border-scs-blue;
+  }
+
+  /* Destructive action state */
+  .state-destructive {
+    @apply text-white bg-scs-danger hover:bg-red-800 focus-visible:ring-scs-danger;
+  }
 }
 
 #root {
