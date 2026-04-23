@@ -437,7 +437,7 @@ export const ContactFormPage = () => {
             Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
           </p>
         </div>
-        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark">
+        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
           Cancelar
         </Link>
       </div>
@@ -960,17 +960,17 @@ export const ContactFormPage = () => {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark disabled:opacity-60 sm:w-auto"
+            className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:w-auto"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
           <Link
             to="/"
-            className="w-full rounded-lg p-2 text-center text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark sm:w-auto"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
           >
             Cancelar
           </Link>
