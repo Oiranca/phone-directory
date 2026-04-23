@@ -197,7 +197,7 @@ Definition of done:
 - All interactive controls meet the 44x44 minimum target rule.
 - Typography rules are documented before page refactors begin.
 
-### Phase 2. Fix form accessibility and mobile ergonomics
+### ✅ Phase 2. Fix form accessibility and mobile ergonomics
 
 Goal: make `ContactFormPage` reliable on small screens and assistive tech.
 
