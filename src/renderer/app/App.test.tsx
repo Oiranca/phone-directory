@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { App } from "./App";
+import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 
@@ -43,7 +44,11 @@ const renderApp = () => {
     { initialEntries: ["/"] }
   );
 
-  render(<RouterProvider router={router} />);
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  );
   return router;
 };
 
