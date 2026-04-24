@@ -325,6 +325,12 @@ const blankRecord = (): NormalizedImportRow => ({
   status: ""
 });
 
+const buildStableExternalId = (parts: Array<string | undefined>) =>
+  parts
+    .map((part) => normalizeAscii(part ?? ""))
+    .filter(Boolean)
+    .join("-") || "row";
+
 const normalizeServiceSheet = (sheet: SheetData) => {
   const metadata = SERVICE_SHEETS[sheet.slug];
   const data = sheet.rows.slice(1);
@@ -400,7 +406,12 @@ const normalizeServiceSheet = (sheet: SheetData) => {
     const record = blankRecord();
     const rowNumber = rowIndex + 1;
 
-    record.externalId = `${sheet.slug}-${rowNumber}`;
+    record.externalId = `${sheet.slug}-${buildStableExternalId([
+      metadata.department,
+      currentSection && currentSection !== metadata.department ? currentSection : label,
+      dedupedPhoneNumbers[0],
+      dedupedPhoneNumbers[1]
+    ])}`;
     record.type = classifyType(label, sheet.slug);
     record.displayName = label;
     record.area = metadata.area;
@@ -550,9 +561,12 @@ const normalizeCentersSheet = (sheet: SheetData) => {
 
     const phones = dedupeKeepOrder([...extractNumbers(longNumber), ...extractNumbers(shortNumber)]);
     const record = blankRecord();
-    const rowNumber = rowIndex + 1;
-
-    record.externalId = `${sheet.slug}-${rowNumber}`;
+    record.externalId = `${sheet.slug}-${buildStableExternalId([
+      currentCenter,
+      service,
+      phones[0],
+      phones[1]
+    ])}`;
     record.type = "external-center";
     record.displayName = `${currentCenter} - ${service}`;
     record.area = "otros";

@@ -603,6 +603,58 @@ describe("AppDataService", () => {
     ).toBe(true);
   });
 
+  it("updates an existing external center when row order changes but phone and service stay the same", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+
+    const firstWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      firstWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928304114", ""]
+      ]),
+      "Centros de salud"
+    );
+
+    const secondWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      secondWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["OTRO c/ Secundaria", "URG.", "928304121", ""],
+        ["INGENIO A c/ Principal", "ADM.", "928304114", ""]
+      ]),
+      "Centros de salud"
+    );
+
+    const firstPath = path.join(testRoot, "incoming", "centers-first.ods");
+    const secondPath = path.join(testRoot, "incoming", "centers-second.ods");
+    await fs.mkdir(path.dirname(firstPath), { recursive: true });
+    XLSX.writeFile(firstWorkbook, firstPath);
+    XLSX.writeFile(secondWorkbook, secondPath);
+
+    const firstImport = await service.importCsvDataset(firstPath);
+    const secondImport = await service.importCsvDataset(secondPath);
+    const ingenioMatches = secondImport.contacts.records.filter(
+      (record) => record.contactMethods.phones.some((phone) => phone.number === "928304114")
+    );
+
+    expect(firstImport.contacts.records.some((record) => record.displayName === "Ingenio - Administración")).toBe(true);
+    expect(secondImport.updatedCount).toBe(1);
+    expect(secondImport.createdCount).toBe(1);
+    expect(ingenioMatches).toHaveLength(1);
+    expect(ingenioMatches[0]?.displayName).toBe("Ingenio A - Administración");
+  });
+
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

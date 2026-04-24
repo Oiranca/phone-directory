@@ -399,10 +399,17 @@ export class AppDataService {
     const currentRecords = [...currentDataset.records];
     const createdRecords: ContactRecord[] = [];
     const currentIndexesByExternalId = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, number>();
 
     currentRecords.forEach((record, index) => {
       if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
         currentIndexesByExternalId.set(record.externalId, index);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, index);
+        }
       }
     });
 
@@ -410,13 +417,17 @@ export class AppDataService {
     let updatedCount = 0;
 
     for (const importedRecord of importedDataset.records) {
-      const matchIndex = importedRecord.externalId
+      const externalIdMatchIndex = importedRecord.externalId
         ? currentIndexesByExternalId.get(importedRecord.externalId)
         : undefined;
+      const stableMatchIndex = this.buildStableMergeKeys(importedRecord)
+        .map((stableKey) => currentIndexesByStableKey.get(stableKey))
+        .find((index): index is number => index !== undefined);
+      const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
 
       if (matchIndex !== undefined) {
         const currentRecord = currentRecords[matchIndex]!;
-        currentRecords[matchIndex] = contactRecordSchema.parse({
+        const mergedRecord = contactRecordSchema.parse({
           ...importedRecord,
           id: currentRecord.id,
           audit: {
@@ -425,11 +436,23 @@ export class AppDataService {
             updatedBy: editorName
           }
         });
+        currentRecords[matchIndex] = mergedRecord;
+
+        if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
+          currentIndexesByExternalId.set(mergedRecord.externalId, matchIndex);
+        }
+
+        for (const stableKey of this.buildStableMergeKeys(mergedRecord)) {
+          if (!currentIndexesByStableKey.has(stableKey)) {
+            currentIndexesByStableKey.set(stableKey, matchIndex);
+          }
+        }
+
         updatedCount += 1;
         continue;
       }
 
-      createdRecords.push(contactRecordSchema.parse({
+      const createdRecord = contactRecordSchema.parse({
         ...importedRecord,
         id: this.createUniqueRecordId([...createdRecords, ...currentRecords]),
         audit: {
@@ -438,7 +461,20 @@ export class AppDataService {
           createdBy: editorName,
           updatedBy: editorName
         }
-      }));
+      });
+      createdRecords.push(createdRecord);
+      const createdIndex = currentRecords.length + createdRecords.length - 1;
+
+      if (createdRecord.externalId && !currentIndexesByExternalId.has(createdRecord.externalId)) {
+        currentIndexesByExternalId.set(createdRecord.externalId, createdIndex);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(createdRecord)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, createdIndex);
+        }
+      }
+
       createdCount += 1;
     }
 
@@ -447,6 +483,39 @@ export class AppDataService {
       createdCount,
       updatedCount
     };
+  }
+
+  private buildStableMergeKeys(record: ContactRecord): string[] {
+    const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
+    const phoneNumbers = record.contactMethods.phones
+      .map((phone) => phone.number.replace(/\D/g, ""))
+      .filter(Boolean)
+      .sort();
+    const emailAddresses = record.contactMethods.emails
+      .map((email) => normalized(email.address))
+      .filter(Boolean)
+      .sort();
+    const keys = new Set<string>();
+    const base = [
+      normalized(record.type),
+      normalized(record.organization.department),
+      normalized(record.organization.service),
+      normalized(record.location?.text)
+    ].join("|");
+
+    if (phoneNumbers.length > 0) {
+      keys.add(`${base}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    if (emailAddresses.length > 0) {
+      keys.add(`${base}|emails:${emailAddresses.join(",")}`);
+    }
+
+    if (normalized(record.displayName) && phoneNumbers.length > 0) {
+      keys.add(`${normalized(record.type)}|${normalized(record.displayName)}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    return [...keys];
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {
