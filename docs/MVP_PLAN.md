@@ -1264,6 +1264,60 @@ OIR-19 hardened the CSV preview flow by validating the import header contract be
 
 Phase 2 begins after the four-week MVP is stable. It targets quality gaps, UX completeness, cross-platform distribution, and end-to-end test coverage. Items below remain in backlog unless marked otherwise.
 
+### 32.1 — Import Detection Engine
+
+Instead of depending on:
+
+- sheet name
+- file name
+- a single exact header row
+
+we need to move to:
+
+- column-profile detection
+- structure inference
+- heuristic normalization
+
+Recommended approach:
+
+1. Read the first few rows.
+2. Score what kind of file it is:
+   - normalized template
+   - raw health-centers export
+   - raw service-sheet export
+   - another similar variant
+3. Pick the parser with the best match.
+4. If confidence is low:
+   - show a preview
+   - say what format was detected
+   - let the user confirm
+
+Typical rules:
+
+- if you see columns like `externalId,type,displayName`, treat it as the normalized template
+- if you see something like `Center/Service/Long Number/Short Number`, treat it as raw health-centers data
+- if you see rows with text in one column and phone numbers in others, treat it as a raw operational sheet
+- if the first row is not enough, inspect rows 2-5 instead of relying on a single header row
+
+Useful extras:
+
+- header aliases such as `long number`, `número largo`, `telefono largo`, `tlf largo`
+- tolerate `Sheet1`, `Hoja1`, and unusual sheet names
+- detect continuation rows by cell pattern, not by a specific sheet
+
+Real automation is possible, but the importer must be redesigned as a detection engine rather than a fixed list of hardcoded cases.
+
+Planned implementation:
+
+- build profile-based detection
+- add smart fallback for `CSV/ODS/XLSX`
+- show preview with “detected format”
+- add tests for variants without depending on sheet names
+
+Reason:
+
+- we do not currently have access to the Linear workspace where these issues would normally be created, so this plan item is tracked directly in the repository plan
+
 ### 32.1 Search and Discovery
 
 **OIR-18 — Implement weighted Fuse.js full-text search with field prioritization**
