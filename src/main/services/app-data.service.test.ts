@@ -655,6 +655,35 @@ describe("AppDataService", () => {
     expect(ingenioMatches[0]?.displayName).toBe("Ingenio A - Administración");
   });
 
+  it("expands compact slash suffixes into full phone numbers during spreadsheet import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928 30 41 14 /15", "(84114 /84115)"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "compact-suffix.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+
+    expect(imported?.contactMethods.phones.map((phone) => phone.number)).toEqual([
+      "928304114",
+      "928304115"
+    ]);
+  });
+
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

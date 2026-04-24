@@ -175,6 +175,19 @@ const expandCompactRange = (part: string) => {
   return Array.from({ length: end - start + 1 }, (_, index) => String(start + index));
 };
 
+const expandCompactSuffix = (previousDigits: string | undefined, currentPart: string) => {
+  const currentDigits = currentPart.replace(/\D/g, "");
+
+  if (!previousDigits || currentDigits.length === 0 || currentDigits.length >= previousDigits.length) {
+    return null;
+  }
+
+  const prefix = previousDigits.slice(0, previousDigits.length - currentDigits.length);
+  const candidate = `${prefix}${currentDigits}`;
+
+  return /^\d+$/.test(candidate) ? candidate : null;
+};
+
 const extractNumbers = (text: string) => {
   const value = clean(text);
 
@@ -183,6 +196,7 @@ const extractNumbers = (text: string) => {
   }
 
   const results: string[] = [];
+  let previousDigits: string | undefined;
 
   for (const part of value.split(/\s*\/\s*/)) {
     const normalizedPart = clean(part);
@@ -195,6 +209,7 @@ const extractNumbers = (text: string) => {
 
     if (expanded) {
       results.push(...expanded);
+      previousDigits = expanded[expanded.length - 1];
       continue;
     }
 
@@ -202,6 +217,15 @@ const extractNumbers = (text: string) => {
 
     if (digits.length >= 4) {
       results.push(digits);
+      previousDigits = digits;
+      continue;
+    }
+
+    const expandedSuffix = expandCompactSuffix(previousDigits, normalizedPart);
+
+    if (expandedSuffix) {
+      results.push(expandedSuffix);
+      previousDigits = expandedSuffix;
     }
   }
 

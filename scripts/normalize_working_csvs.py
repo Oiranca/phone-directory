@@ -145,6 +145,7 @@ def extract_numbers(text: str) -> list[str]:
         return []
 
     results: list[str] = []
+    previous_digits: str | None = None
     for part in re.split(r"\s*/\s*", value):
         part = clean(part)
         if not part:
@@ -152,10 +153,17 @@ def extract_numbers(text: str) -> list[str]:
         expanded = expand_compact_range(part)
         if expanded:
             results.extend(expanded)
+            previous_digits = expanded[-1]
             continue
         digits = re.sub(r"\D", "", part)
         if len(digits) >= 4:
             results.append(digits)
+            previous_digits = digits
+            continue
+        expanded_suffix = expand_compact_suffix(previous_digits, part)
+        if expanded_suffix:
+            results.append(expanded_suffix)
+            previous_digits = expanded_suffix
     return dedupe_keep_order(results)
 
 
@@ -176,6 +184,15 @@ def expand_compact_range(part: str) -> list[str] | None:
     if end < start or end - start > 20:
         return None
     return [str(number) for number in range(start, end + 1)]
+
+
+def expand_compact_suffix(previous_digits: str | None, part: str) -> str | None:
+    digits = re.sub(r"\D", "", part)
+    if not previous_digits or not digits or len(digits) >= len(previous_digits):
+        return None
+    prefix = previous_digits[: len(previous_digits) - len(digits)]
+    candidate = prefix + digits
+    return candidate if candidate.isdigit() else None
 
 
 def dedupe_keep_order(values: list[str]) -> list[str]:
