@@ -42,10 +42,9 @@ export const SettingsPage = () => {
       return;
     }
 
-    setEditorName(clearEditorAfterSaveRef.current ? "" : settings.editorName);
+    setEditorName(settings.editorName);
     setHasEditorDraft(false);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
-    clearEditorAfterSaveRef.current = false;
   }, [settings]);
 
   if (bootstrapError) {
