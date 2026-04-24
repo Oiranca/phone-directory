@@ -24,9 +24,9 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Git State
 
-- Active branch: `feat/oir-20-recovery-flow`
+- Active branch: `feat/oir-31-ui-improvement-plan`
 - Base branch: `main`
-- Active pull request: PR #12 — `feat/oir-20-recovery-flow` — currently under Copilot review
+- Active pull request: Pending PR for `feat/oir-31-ui-improvement-plan`
 
 ## Current Linear Backlog
 
@@ -42,6 +42,7 @@ Use it at the start of every new Codex session to understand:
 - `OIR-27` Done — privacy inline warnings merged in PR #9
 - `OIR-28` Todo — executable-relative portable data paths
 - `OIR-29` Todo — USB launcher scripts
+- `OIR-31` Done — Redesign Directory Page layout to master-detail and move filters to header
 
 ## What Is Already In Place
 
@@ -54,21 +55,15 @@ Use it at the start of every new Codex session to understand:
 
 ## Current Review Status
 
-This PR is focused on `OIR-20`.
+This PR is focused on `OIR-31`.
 
 Included in this PR:
 
-- typed recovery bootstrap result from the main process when `contacts.json` is corrupt
-- reset-to-empty IPC surface and preload API
-- global recovery gate in the renderer that blocks navigation until JSON import or empty reset succeeds
-- recovery-mode shell treatment and focused tests for recovery import/reset actions
-- plan and handoff refresh to reflect merged `OIR-19` work and active `OIR-20` scope
-
-PR #12 is open and under review. Copilot review round 1 findings are being addressed in this commit batch.
+- Master-Detail layout for the directory page.
+- Filters moved to the top search header.
 
 Review expectations:
 
-- address all Copilot review comments before re-requesting review
 - keep commits small and in English
 - verify build and tests pass after all fixes
 
