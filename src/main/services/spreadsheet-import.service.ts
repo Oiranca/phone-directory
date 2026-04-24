@@ -680,6 +680,21 @@ const readSheetRows = (sheet: XLSX.WorkSheet) =>
     .map((row) => row.map((value) => clean(String(value ?? ""))))
     .filter((row) => row.some((value) => value));
 
+const RAW_HEADER_SLUGS: Record<string, string> = {
+  CENTROSDESALUD: "centros-de-salud",
+  URGENCIAS: "urgencias",
+  ADMISIONCENTRAL: "admision-central",
+  RAYOS: "rayos",
+  SECRETARIAS: "secretarias",
+  HOSPITALESDEDIA: "hospitales-de-dia",
+  UMI: "umi"
+};
+
+const detectRawSheetSlugFromRows = (rows: string[][], fallbackSlug: string) => {
+  const firstHeader = normalizeMarker(rows[0]?.[0] ?? "");
+  return RAW_HEADER_SLUGS[firstHeader] ?? fallbackSlug;
+};
+
 const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   const workbook = XLSX.readFile(sourceFilePath, {
     dense: true,
@@ -691,7 +706,8 @@ const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   return workbook.SheetNames.map((sheetName) => {
     const rows = readSheetRows(workbook.Sheets[sheetName]!);
     const normalizedName = normalizeAscii(sheetName);
-    const slug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
+    const baseSlug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
+    const slug = detectRawSheetSlugFromRows(rows, baseSlug);
 
     return {
       name: sheetName,

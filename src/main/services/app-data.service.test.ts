@@ -763,6 +763,37 @@ describe("AppDataService", () => {
     expect(preview.invalidRowCount).toBe(0);
   });
 
+  it("imports raw health-center CSV files by header shape even when the filename is arbitrary", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda-export.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        '"CENTROS DE SALUD","SERVICIO","NUMERO LARGO","NUMERO CORTO",,',
+        '"INGENIO\\nAv. de los Artesanos, 8","Adm.","928 30 41 14 /15","(84114 /84115)",,',
+        ',"Urgencias","928 30 41 21","(84121)",,'
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const ingenioAdmin = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+    const ingenioUrg = result.contacts.records.find((record) => record.displayName === "Ingenio - Urgencias");
+
+    expect(ingenioAdmin?.contactMethods.phones).toHaveLength(2);
+    expect(ingenioAdmin?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(ingenioAdmin?.contactMethods.phones[0]?.extension).toBe("84114");
+    expect(ingenioAdmin?.contactMethods.phones[1]?.number).toBe("928304115");
+    expect(ingenioAdmin?.contactMethods.phones[1]?.extension).toBe("84115");
+    expect(ingenioUrg?.contactMethods.phones[0]?.number).toBe("928304121");
+    expect(ingenioUrg?.contactMethods.phones[0]?.extension).toBe("84121");
+  });
+
   it("imports continuation rows in service sheets when the label lives in a later column", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
