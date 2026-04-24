@@ -10,6 +10,7 @@ interface ToastInput {
 }
 
 interface ToastRecord {
+  durationMs?: number;
   id: number;
   type: ToastType;
   title?: string;
@@ -54,12 +55,17 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
     setToasts((current) => [
       ...current,
       {
+        durationMs: toast.type === "error" || toast.type === "warning" ? undefined : durationMs,
         id,
         type: toast.type ?? "info",
         title: toast.title,
         message: toast.message
       }
     ]);
+
+    if (toast.type === "error" || toast.type === "warning") {
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       dismissToast(id);
@@ -93,6 +99,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                 key={toast.id}
                 role={isAlert ? "alert" : "status"}
                 aria-live={isAlert ? "assertive" : "polite"}
+                aria-atomic="true"
                 className={[
                   "pointer-events-auto rounded-3xl border px-4 py-3 shadow-lg shadow-slate-900/10 backdrop-blur",
                   toastStyles[toast.type]
@@ -107,7 +114,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                     type="button"
                     onClick={() => dismissToast(toast.id)}
                     aria-label="Cerrar notificación"
-                    className="rounded-full px-2 py-1 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current"
+                    className="min-h-11 min-w-11 rounded-full px-3 py-2 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current"
                   >
                     Cerrar
                   </button>
