@@ -62,18 +62,20 @@ const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 
 export type NormalizedImportRow = Record<string, string>;
 
+const stripBom = (value: string) => value.replace(/^\uFEFF/, "");
+
 const validateCsvHeaders = (rawSource: string) => {
   const headerResult = Papa.parse<string[]>(rawSource, {
     preview: 1,
     skipEmptyLines: "greedy",
-    transform: (value: string) => value.trim()
+    transform: (value: string) => stripBom(value).trim()
   });
 
   if (headerResult.errors.length > 0) {
     throw new Error(`No se pudo leer la cabecera del CSV: ${headerResult.errors[0]?.message ?? "error desconocido"}.`);
   }
 
-  const rawHeaders = headerResult.data[0]?.map((header) => header.trim()) ?? [];
+  const rawHeaders = headerResult.data[0]?.map((header) => stripBom(header).trim()) ?? [];
 
   if (rawHeaders.length === 0) {
     throw new Error("El CSV no incluye una fila de cabecera válida.");
@@ -319,8 +321,8 @@ export const buildCsvImportPreview = async (
   const parseResult = Papa.parse<NormalizedImportRow>(rawSource, {
     header: true,
     skipEmptyLines: "greedy",
-    transformHeader: (value: string) => value.trim(),
-    transform: (value: string) => value.trim()
+    transformHeader: (value: string) => stripBom(value).trim(),
+    transform: (value: string) => stripBom(value).trim()
   });
 
   if (parseResult.errors.length > 0) {
