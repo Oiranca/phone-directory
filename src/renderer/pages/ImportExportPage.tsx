@@ -29,6 +29,30 @@ const formatSize = (sizeBytes: number) => {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const toUserFacingError = (error: unknown, fallback: string) => {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  return error.message.replace(/^Error invoking remote method '[^']+': Error: /, "");
+};
+
+const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"]) => {
+  if (value === "high") {
+    return "alta";
+  }
+
+  if (value === "medium") {
+    return "media";
+  }
+
+  if (value === "low") {
+    return "baja";
+  }
+
+  return "";
+};
+
 export const ImportExportPage = () => {
   const { contacts, settings, initialize } = useAppStore();
   const { pushToast } = useToast();
@@ -191,7 +215,7 @@ export const ImportExportPage = () => {
       if (!preview) {
         pushToast({
           type: "warning",
-          message: "Selección de CSV cancelada."
+          message: "Selección de archivo cancelada."
         });
         return;
       }
@@ -201,7 +225,7 @@ export const ImportExportPage = () => {
       if (preview.invalidRowCount > 0) {
         pushToast({
           type: "error",
-          message: "El CSV tiene filas inválidas. Corrige el archivo antes de reemplazar el directorio."
+          message: "El archivo tiene filas inválidas. Corrige el origen antes de importar."
         });
         return;
       }
@@ -209,16 +233,21 @@ export const ImportExportPage = () => {
       pushToast({
         type: preview.warningCount > 0 ? "warning" : "success",
         message: preview.warningCount > 0
-          ? `CSV listo con ${preview.warningCount} advertencias para revisar antes de importar.`
-          : `CSV listo para importar con ${preview.validRowCount} registros válidos.`
+          ? `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+          : `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista: ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
       });
+
+      if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
+        pushToast({
+          type: "warning",
+          message: `La detección del formato tiene confianza ${formatDetectionConfidence(preview.detectionConfidence)}. Revisa la vista previa antes de importar.`
+        });
+      }
     } catch (error) {
       setCsvPreview(null);
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo preparar la vista previa del CSV."
+        message: toUserFacingError(error, "No se pudo preparar la vista previa del archivo.")
       });
     } finally {
       setIsPreparingCsvPreview(false);
@@ -233,13 +262,17 @@ export const ImportExportPage = () => {
     if (csvPreview.invalidRowCount > 0) {
       pushToast({
         type: "error",
-        message: "El CSV tiene filas inválidas. Corrige el archivo antes de importarlo."
+        message: "El archivo tiene filas inválidas. Corrige el origen antes de importarlo."
       });
       return;
     }
 
     const confirmed = window.confirm(
-      `El CSV reemplazará todo el directorio actual con ${csvPreview.validRowCount} registros válidos y creará un backup automático. ¿Quieres continuar?`
+      `Se importarán ${csvPreview.validRowCount} registros válidos desde ${csvPreview.fileName}. ${csvPreview.createdCount} se crearán y ${csvPreview.updatedCount} se actualizarán. ${
+        csvPreview.detectionConfidence === "medium" || csvPreview.detectionConfidence === "low"
+          ? `La detección del formato tiene confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)} y debe revisarse con atención. `
+          : ""
+      }Se creará un backup automático. ¿Quieres continuar?`
     );
 
     if (!confirmed) {
@@ -258,14 +291,12 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "success",
-        message: `Importación CSV completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
+        message: `Importación completada desde ${result.importedFilePath}. ${result.createdCount} altas, ${result.updatedCount} actualizaciones. Backup: ${result.backupPath}.`
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo importar el archivo CSV seleccionado."
+        message: toUserFacingError(error, "No se pudo importar el archivo seleccionado.")
       });
     } finally {
       setIsImportingCsv(false);
@@ -298,7 +329,7 @@ export const ImportExportPage = () => {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Intercambio de datos</p>
         <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Importar y exportar datos</h2>
         <p className="mt-3 max-w-3xl text-sm text-slate-600">
-          Exporta el directorio activo como JSON, o reemplaza el dataset local con un archivo JSON o CSV normalizado. Cada importación crea un backup automático antes de sobrescribir.
+          Exporta el directorio activo como JSON, o importa archivos JSON, CSV, ODS o XLSX. Las hojas se normalizan al template interno y cada importación crea un backup automático.
         </p>
       </div>
 
@@ -371,12 +402,12 @@ export const ImportExportPage = () => {
             disabled={isPreparingCsvPreview || isImportingCsv}
             className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
-            <p className="text-lg font-semibold text-emerald-900">Preparar CSV</p>
+            <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
             <p className="mt-2 text-sm text-emerald-900/80">
-              Abre un CSV normalizado, valida filas y revisa advertencias antes de confirmar el reemplazo.
+              Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
             </p>
             <p className="mt-4 text-sm font-semibold text-emerald-900">
-              {isPreparingCsvPreview ? "Analizando…" : "Seleccionar CSV"}
+              {isPreparingCsvPreview ? "Analizando…" : "Seleccionar archivo"}
             </p>
           </button>
         </div>
@@ -385,9 +416,17 @@ export const ImportExportPage = () => {
           <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Vista previa CSV</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Vista previa importación</p>
                 <h3 className="mt-2 text-xl font-semibold text-emerald-950">{csvPreview.fileName}</h3>
                 <p className="mt-1 text-sm text-emerald-900/80">{csvPreview.sourceFilePath}</p>
+                {csvPreview.detectedFormat && (
+                  <p className="mt-2 text-sm text-emerald-900/80">
+                    Formato detectado: {csvPreview.detectedFormat}
+                    {csvPreview.detectionConfidence
+                      ? ` (confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)})`
+                      : ""}
+                  </p>
+                )}
               </div>
               <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                 <button
@@ -403,7 +442,7 @@ export const ImportExportPage = () => {
                   disabled={isImportingCsv || csvPreview.invalidRowCount > 0}
                   className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {isImportingCsv ? "Importando CSV…" : "Confirmar importación CSV"}
+                  {isImportingCsv ? "Importando…" : "Confirmar importación"}
                 </button>
               </div>
             </div>
@@ -424,6 +463,21 @@ export const ImportExportPage = () => {
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Advertencias</p>
                 <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.warningCount}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Altas</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.createdCount}</p>
+              </div>
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Actualizaciones</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.updatedCount}</p>
+              </div>
+              <div className="rounded-2xl bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Total final</p>
+                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.mergedRecordCount}</p>
               </div>
             </div>
 
