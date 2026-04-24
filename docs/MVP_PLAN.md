@@ -1314,6 +1314,14 @@ Planned implementation:
 - show preview with “detected format”
 - add tests for variants without depending on sheet names
 
+Current implementation status:
+
+- profile-based detection is in progress in the spreadsheet import pipeline
+- normalized CSV, raw health-centers exports, and raw service-sheet exports are all being routed through the detection layer
+- preview UI now shows detected format and confidence when available
+- false-positive guards are being tightened after review feedback
+- review cycle 1 is complete, review cycle 2 is pending after the latest fixes land
+
 Reason:
 
 - we do not currently have access to the Linear workspace where these issues would normally be created, so this plan item is tracked directly in the repository plan
