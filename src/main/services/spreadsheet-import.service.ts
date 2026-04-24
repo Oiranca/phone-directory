@@ -355,6 +355,16 @@ const buildStableExternalId = (parts: Array<string | undefined>) =>
     .filter(Boolean)
     .join("-") || "row";
 
+const buildCenterPhones = (longNumber: string, shortNumber: string) => {
+  const longNumbers = extractNumbers(longNumber);
+  const shortNumbers = extractNumbers(shortNumber);
+
+  return longNumbers.slice(0, 2).map((number, index) => ({
+    number,
+    extension: shortNumbers[index] ?? undefined
+  }));
+};
+
 const normalizeServiceSheet = (sheet: SheetData) => {
   const metadata = SERVICE_SHEETS[sheet.slug];
   const data = sheet.rows.slice(1);
@@ -583,13 +593,13 @@ const normalizeCentersSheet = (sheet: SheetData) => {
       return;
     }
 
-    const phones = dedupeKeepOrder([...extractNumbers(longNumber), ...extractNumbers(shortNumber)]);
+    const phones = buildCenterPhones(longNumber, shortNumber);
     const record = blankRecord();
     record.externalId = `${sheet.slug}-${buildStableExternalId([
       currentCenter,
       service,
-      phones[0],
-      phones[1]
+      phones[0]?.number,
+      phones[1]?.number
     ])}`;
     record.type = "external-center";
     record.displayName = `${currentCenter} - ${service}`;
@@ -602,7 +612,8 @@ const normalizeCentersSheet = (sheet: SheetData) => {
 
     if (phones.length > 0) {
       record.phone1Label = "General";
-      record.phone1Number = phones[0] ?? "";
+      record.phone1Number = phones[0]?.number ?? "";
+      record.phone1Extension = phones[0]?.extension ?? "";
       record.phone1Kind = "external";
       record.phone1IsPrimary = "true";
       record.phone1Confidential = "false";
@@ -610,7 +621,9 @@ const normalizeCentersSheet = (sheet: SheetData) => {
     }
 
     if (phones.length > 1) {
-      record.phone2Number = phones[1] ?? "";
+      record.phone2Label = "Secundario";
+      record.phone2Number = phones[1]?.number ?? "";
+      record.phone2Extension = phones[1]?.extension ?? "";
       record.phone2Kind = "external";
       record.phone2IsPrimary = "false";
       record.phone2Confidential = "false";

@@ -678,10 +678,39 @@ describe("AppDataService", () => {
     const result = await service.importCsvDataset(sourceFilePath);
     const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
 
-    expect(imported?.contactMethods.phones.map((phone) => phone.number)).toEqual([
-      "928304114",
-      "928304115"
-    ]);
+    expect(imported?.contactMethods.phones).toHaveLength(2);
+    expect(imported?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(imported?.contactMethods.phones[0]?.extension).toBe("84114");
+    expect(imported?.contactMethods.phones[1]?.number).toBe("928304115");
+    expect(imported?.contactMethods.phones[1]?.extension).toBe("84115");
+  });
+
+  it("stores short numbering as extension instead of a separate phone for health centers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928 30 41 14", "84114"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "single-extension.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+
+    expect(imported?.contactMethods.phones).toHaveLength(1);
+    expect(imported?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(imported?.contactMethods.phones[0]?.extension).toBe("84114");
   });
 
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
