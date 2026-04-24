@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
+import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 const formatTimestamp = (value: string) => {
@@ -30,10 +31,9 @@ const formatSize = (sizeBytes: number) => {
 
 export const ImportExportPage = () => {
   const { contacts, settings, initialize } = useAppStore();
+  const { pushToast } = useToast();
   const [backups, setBackups] = useState<BackupListItem[]>([]);
   const [bootstrapError, setBootstrapError] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -45,7 +45,6 @@ export const ImportExportPage = () => {
   const loadPageData = async () => {
     try {
       setBootstrapError("");
-      setActionError("");
       setIsLoading(true);
 
       const bootstrapPromise = contacts && settings
@@ -81,27 +80,32 @@ export const ImportExportPage = () => {
 
   const refreshBackups = async () => {
     try {
-      setActionError("");
       const backupItems = await window.hospitalDirectory.listBackups();
       setBackups(backupItems);
     } catch {
-      setActionError("No se pudo actualizar la lista de backups. Inténtalo de nuevo.");
+      pushToast({
+        type: "error",
+        message: "No se pudo actualizar la lista de backups. Inténtalo de nuevo."
+      });
     }
   };
 
   const handleCreateBackup = async () => {
     try {
       setIsCreatingBackup(true);
-      setActionError("");
       const backupPath = await window.hospitalDirectory.createBackup();
       await refreshBackups();
-      setStatusMessage(`Backup creado en ${backupPath}.`);
+      pushToast({
+        type: "success",
+        message: `Backup creado en ${backupPath}.`
+      });
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo crear el backup manual. Inténtalo de nuevo."
-      );
+      });
     } finally {
       setIsCreatingBackup(false);
     }
@@ -110,21 +114,27 @@ export const ImportExportPage = () => {
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      setActionError("");
       const result = await window.hospitalDirectory.exportDataset();
 
       if (!result) {
-        setStatusMessage("Exportación cancelada.");
+        pushToast({
+          type: "warning",
+          message: "Exportación cancelada."
+        });
         return;
       }
 
-      setStatusMessage(`Exportación completada en ${result.filePath}.`);
+      pushToast({
+        type: "success",
+        message: `Exportación completada en ${result.filePath}.`
+      });
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo exportar el dataset actual."
-      );
+      });
     } finally {
       setIsExporting(false);
     }
@@ -141,11 +151,13 @@ export const ImportExportPage = () => {
 
     try {
       setIsImporting(true);
-      setActionError("");
       const result = await window.hospitalDirectory.importDataset();
 
       if (!result) {
-        setStatusMessage("Importación cancelada.");
+        pushToast({
+          type: "warning",
+          message: "Importación cancelada."
+        });
         return;
       }
 
@@ -154,15 +166,17 @@ export const ImportExportPage = () => {
         settings: result.settings
       });
       await refreshBackups();
-      setStatusMessage(
-        `Importación completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
-      );
+      pushToast({
+        type: "success",
+        message: `Importación completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
+      });
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo importar el archivo JSON seleccionado."
-      );
+      });
     } finally {
       setIsImporting(false);
     }
@@ -171,35 +185,41 @@ export const ImportExportPage = () => {
   const handlePreviewCsvImport = async () => {
     try {
       setIsPreparingCsvPreview(true);
-      setActionError("");
       setCsvPreview(null);
       const preview = await window.hospitalDirectory.previewCsvImport();
 
       if (!preview) {
-        setStatusMessage("Selección de CSV cancelada.");
+        pushToast({
+          type: "warning",
+          message: "Selección de CSV cancelada."
+        });
         return;
       }
 
       setCsvPreview(preview);
 
       if (preview.invalidRowCount > 0) {
-        setActionError("El CSV tiene filas inválidas. Corrige el archivo antes de reemplazar el directorio.");
-        setStatusMessage("");
+        pushToast({
+          type: "error",
+          message: "El CSV tiene filas inválidas. Corrige el archivo antes de reemplazar el directorio."
+        });
         return;
       }
 
-      setStatusMessage(
-        preview.warningCount > 0
+      pushToast({
+        type: preview.warningCount > 0 ? "warning" : "success",
+        message: preview.warningCount > 0
           ? `CSV listo con ${preview.warningCount} advertencias para revisar antes de importar.`
           : `CSV listo para importar con ${preview.validRowCount} registros válidos.`
-      );
+      });
     } catch (error) {
       setCsvPreview(null);
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo preparar la vista previa del CSV."
-      );
+      });
     } finally {
       setIsPreparingCsvPreview(false);
     }
@@ -211,7 +231,10 @@ export const ImportExportPage = () => {
     }
 
     if (csvPreview.invalidRowCount > 0) {
-      setActionError("El CSV tiene filas inválidas. Corrige el archivo antes de importarlo.");
+      pushToast({
+        type: "error",
+        message: "El CSV tiene filas inválidas. Corrige el archivo antes de importarlo."
+      });
       return;
     }
 
@@ -225,7 +248,6 @@ export const ImportExportPage = () => {
 
     try {
       setIsImportingCsv(true);
-      setActionError("");
       const result = await window.hospitalDirectory.importCsvDataset(csvPreview.importToken);
 
       initialize({
@@ -234,15 +256,17 @@ export const ImportExportPage = () => {
       });
       await refreshBackups();
       setCsvPreview(null);
-      setStatusMessage(
-        `Importación CSV completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
-      );
+      pushToast({
+        type: "success",
+        message: `Importación CSV completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
+      });
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo importar el archivo CSV seleccionado."
-      );
+      });
     } finally {
       setIsImportingCsv(false);
     }
@@ -356,21 +380,6 @@ export const ImportExportPage = () => {
             </p>
           </button>
         </div>
-
-        {(statusMessage || actionError) && (
-          <div
-            role={actionError ? "alert" : "status"}
-            aria-live={actionError ? "assertive" : "polite"}
-            className={[
-              "mt-6 rounded-2xl px-4 py-3 text-sm font-medium",
-              actionError
-                ? "border border-red-200 bg-red-50 text-red-700"
-                : "border border-emerald-200 bg-emerald-50 text-emerald-700"
-            ].join(" ")}
-          >
-            {actionError || statusMessage}
-          </div>
-        )}
 
         {csvPreview && (
           <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">

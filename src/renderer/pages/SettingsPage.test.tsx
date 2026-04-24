@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+import { ToastProvider } from "../components/feedback/ToastRegion";
 import { SettingsPage } from "./SettingsPage";
 import { useAppStore } from "../store/useAppStore";
 
@@ -28,9 +29,11 @@ const editableSettings = {
 
 const renderPage = () =>
   render(
-    <MemoryRouter>
-      <SettingsPage />
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    </ToastProvider>
   );
 
 describe("SettingsPage", () => {
@@ -100,6 +103,7 @@ describe("SettingsPage", () => {
         showInactiveByDefault: true
       }
     });
+    expect(screen.getByLabelText("Nombre del editor")).toHaveValue("");
   });
 
   it("restores the last persisted values when discarding changes", async () => {

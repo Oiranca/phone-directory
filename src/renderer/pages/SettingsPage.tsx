@@ -1,15 +1,17 @@
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
+import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
+  const { pushToast } = useToast();
   const [editorName, setEditorName] = useState("");
+  const [hasEditorDraft, setHasEditorDraft] = useState(false);
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
+  const clearEditorAfterSaveRef = useRef(false);
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
   // This local loader is retained only for page-level retry and test isolation.
@@ -41,6 +43,7 @@ export const SettingsPage = () => {
     }
 
     setEditorName(settings.editorName);
+    setHasEditorDraft(false);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
   }, [settings]);
 
@@ -65,26 +68,22 @@ export const SettingsPage = () => {
   }
 
   const isDirty =
-    editorName !== settings.editorName ||
+    (hasEditorDraft && editorName !== settings.editorName) ||
     showInactiveByDefault !== settings.ui.showInactiveByDefault;
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
-    setSaveError("");
-    setSaveSuccess("");
+    setHasEditorDraft(true);
   };
 
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
     setShowInactiveByDefault(event.target.checked);
-    setSaveError("");
-    setSaveSuccess("");
   };
 
   const handleReset = () => {
     setEditorName(settings.editorName);
+    setHasEditorDraft(false);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
-    setSaveError("");
-    setSaveSuccess("");
   };
 
   const handleSave = async () => {
@@ -93,8 +92,6 @@ export const SettingsPage = () => {
     }
 
     setIsSaving(true);
-    setSaveError("");
-    setSaveSuccess("");
 
     try {
       const saved = await window.hospitalDirectory.saveSettings({
@@ -103,10 +100,17 @@ export const SettingsPage = () => {
           showInactiveByDefault
         }
       });
+      clearEditorAfterSaveRef.current = true;
       setSettings(saved);
-      setSaveSuccess("Configuración guardada. El filtro por defecto se aplicará en la próxima carga.");
+      pushToast({
+        type: "success",
+        message: "Configuración guardada. El filtro por defecto se aplicará en la próxima carga."
+      });
     } catch {
-      setSaveError("No se pudo guardar la configuración. Inténtalo de nuevo.");
+      pushToast({
+        type: "error",
+        message: "No se pudo guardar la configuración. Inténtalo de nuevo."
+      });
     } finally {
       setIsSaving(false);
     }
@@ -182,9 +186,6 @@ export const SettingsPage = () => {
               Descartar cambios
             </button>
           </div>
-
-          {saveSuccess && <p className="mt-4 text-sm font-medium text-emerald-700">{saveSuccess}</p>}
-          {saveError && <p className="mt-4 text-sm font-medium text-red-700">{saveError}</p>}
         </div>
         </section>
 

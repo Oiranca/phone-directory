@@ -3,13 +3,14 @@ import { Outlet } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { AppShell } from "../components/layout/AppShell";
+import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 const RecoveryPanel = () => {
   const { recovery, initialize } = useAppStore();
-  const [actionError, setActionError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const { pushToast } = useToast();
 
   if (!recovery) {
     return null;
@@ -25,7 +26,6 @@ const RecoveryPanel = () => {
   const handleImportJson = async () => {
     try {
       setIsImporting(true);
-      setActionError("");
       const result = await window.hospitalDirectory.importDataset();
 
       if (!result) {
@@ -34,11 +34,12 @@ const RecoveryPanel = () => {
 
       applyRecoveredData(result);
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo importar una copia JSON válida."
-      );
+      });
     } finally {
       setIsImporting(false);
     }
@@ -55,15 +56,15 @@ const RecoveryPanel = () => {
 
     try {
       setIsResetting(true);
-      setActionError("");
       const result = await window.hospitalDirectory.resetDataset();
       applyRecoveredData(result);
     } catch (error) {
-      setActionError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo restablecer el directorio vacío."
-      );
+      });
     } finally {
       setIsResetting(false);
     }
@@ -98,12 +99,6 @@ const RecoveryPanel = () => {
           {isResetting ? "Restableciendo…" : "Restablecer directorio vacío"}
         </button>
       </div>
-
-      {actionError && (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {actionError}
-        </div>
-      )}
     </section>
   );
 };

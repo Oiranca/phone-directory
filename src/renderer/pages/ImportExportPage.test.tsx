@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+import { ToastProvider } from "../components/feedback/ToastRegion";
 import { ImportExportPage } from "./ImportExportPage";
 import { useAppStore } from "../store/useAppStore";
 
@@ -28,9 +29,11 @@ const editableSettings = {
 
 const renderPage = () =>
   render(
-    <MemoryRouter>
-      <ImportExportPage />
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter>
+        <ImportExportPage />
+      </MemoryRouter>
+    </ToastProvider>
   );
 
 describe("ImportExportPage", () => {
