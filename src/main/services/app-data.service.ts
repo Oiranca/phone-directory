@@ -218,11 +218,11 @@ export class AppDataService {
     );
 
     if (preview.invalidRowCount > 0) {
-      throw new Error("El CSV contiene filas inválidas. Corrige el archivo antes de importarlo.");
+      throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
     }
 
     if (preview.validRowCount === 0) {
-      throw new Error("El CSV no contiene filas válidas para importar.");
+      throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
     const currentContacts = await this.readContacts();
@@ -396,12 +396,11 @@ export class AppDataService {
     editorName: string
   ) {
     const exportedAt = new Date().toISOString();
-    const currentRecords = [...currentDataset.records];
-    const createdRecords: ContactRecord[] = [];
+    const mergedRecords = [...currentDataset.records];
     const currentIndexesByExternalId = new Map<string, number>();
     const currentIndexesByStableKey = new Map<string, number>();
 
-    currentRecords.forEach((record, index) => {
+    mergedRecords.forEach((record, index) => {
       if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
         currentIndexesByExternalId.set(record.externalId, index);
       }
@@ -426,7 +425,7 @@ export class AppDataService {
       const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
 
       if (matchIndex !== undefined) {
-        const currentRecord = currentRecords[matchIndex]!;
+        const currentRecord = mergedRecords[matchIndex]!;
         const mergedRecord = contactRecordSchema.parse({
           ...importedRecord,
           id: currentRecord.id,
@@ -436,7 +435,7 @@ export class AppDataService {
             updatedBy: editorName
           }
         });
-        currentRecords[matchIndex] = mergedRecord;
+        mergedRecords[matchIndex] = mergedRecord;
 
         if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
           currentIndexesByExternalId.set(mergedRecord.externalId, matchIndex);
@@ -454,7 +453,7 @@ export class AppDataService {
 
       const createdRecord = contactRecordSchema.parse({
         ...importedRecord,
-        id: this.createUniqueRecordId([...createdRecords, ...currentRecords]),
+        id: this.createUniqueRecordId(mergedRecords),
         audit: {
           createdAt: exportedAt,
           updatedAt: exportedAt,
@@ -462,8 +461,8 @@ export class AppDataService {
           updatedBy: editorName
         }
       });
-      createdRecords.push(createdRecord);
-      const createdIndex = currentRecords.length + createdRecords.length - 1;
+      mergedRecords.push(createdRecord);
+      const createdIndex = mergedRecords.length - 1;
 
       if (createdRecord.externalId && !currentIndexesByExternalId.has(createdRecord.externalId)) {
         currentIndexesByExternalId.set(createdRecord.externalId, createdIndex);
@@ -479,7 +478,7 @@ export class AppDataService {
     }
 
     return {
-      contacts: this.buildNextDataset([...createdRecords, ...currentRecords], currentDataset, editorName, exportedAt),
+      contacts: this.buildNextDataset(mergedRecords, currentDataset, editorName, exportedAt),
       createdCount,
       updatedCount
     };

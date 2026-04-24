@@ -404,7 +404,7 @@ export const ImportExportPage = () => {
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
             <p className="mt-2 text-sm text-emerald-900/80">
-              Abre CSV, ODS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
+              Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
             </p>
             <p className="mt-4 text-sm font-semibold text-emerald-900">
               {isPreparingCsvPreview ? "Analizando…" : "Seleccionar archivo"}

@@ -804,8 +804,9 @@ const isNormalizedTemplateHeaders = (headers: string[]) => {
   }
 
   const headerSet = new Set(headers);
+  const recognizedTemplateHeaders = headers.filter((header) => NORMALIZED_TEMPLATE_HEADERS.has(header)).length;
 
-  return headerSet.has("type") && headerSet.has("displayName");
+  return recognizedTemplateHeaders >= 2 && headerSet.has("type") && headerSet.has("displayName");
 };
 
 const isNormalizedTemplateCsv = async (sourceFilePath: string) => {

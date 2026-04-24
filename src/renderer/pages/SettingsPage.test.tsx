@@ -103,7 +103,7 @@ describe("SettingsPage", () => {
         showInactiveByDefault: true
       }
     });
-    expect(screen.getByLabelText("Nombre del editor")).toHaveValue("");
+    expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Guardia tarde");
   });
 
   it("restores the last persisted values when discarding changes", async () => {

@@ -1254,8 +1254,45 @@ describe("AppDataService", () => {
     );
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El CSV contiene filas inválidas. Corrige el archivo antes de importarlo."
+      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
     );
+  });
+
+  it("updates a later row that matches a record created earlier in the same import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+
+    const sourceFilePath = path.join(testRoot, "incoming", "same-import-merge.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,service,phone1Number,phone1Kind,status",
+        "generated-1,service,Mostrador,Urgencias,Mostrador,55555,internal,active",
+        ",service,Mostrador actualizado,Urgencias,Mostrador,55555,internal,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const matches = result.contacts.records.filter((record) =>
+      record.organization.department === "Urgencias" &&
+      record.organization.service === "Mostrador" &&
+      record.contactMethods.phones.some((phone) => phone.number === "55555")
+    );
+
+    expect(result.createdCount).toBe(1);
+    expect(result.updatedCount).toBe(1);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.displayName).toBe("Mostrador actualizado");
   });
 
   it("rejects CSV preview when the file exceeds the supported size limit", async () => {

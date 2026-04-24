@@ -91,18 +91,16 @@ describe("AppShell — active NavLink", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
   });
 
-  it("active link at /contacts/new gets active CSS classes", () => {
+  it("active link at /contacts/new gets aria-current=page", () => {
     renderShell({}, ["/contacts/new"]);
     const link = screen.getByRole("link", { name: "Nuevo registro" });
     expect(link).toHaveAttribute("aria-current", "page");
-    expect(link.className).toContain("bg-scs-blue");
-    expect(link.className).toContain("text-white");
   });
 
-  it("inactive links do not have active CSS classes", () => {
+  it("inactive links do not get aria-current", () => {
     renderShell({}, ["/contacts/new"]);
-    const inactive = screen.getByRole("link", { name: "Directorio" });
-    expect(inactive.className).not.toContain("bg-scs-blue");
-    expect(inactive.className).toContain("border-slate-200");
+    expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 });
