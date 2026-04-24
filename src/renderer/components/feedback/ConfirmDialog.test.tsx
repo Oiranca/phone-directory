@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
+
+const originalHTMLDialogElement = globalThis.HTMLDialogElement;
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
 
 // Mocking showModal and close for HTMLDialogElement as they are not implemented in JSDOM
 beforeAll(() => {
@@ -12,10 +17,13 @@ beforeAll(() => {
     vi.stubGlobal('HTMLDialogElement', HTMLDialogElementStub);
   }
 
-  const dialogPrototype =
+  dialogPrototype =
     typeof globalThis.HTMLDialogElement !== 'undefined'
       ? globalThis.HTMLDialogElement.prototype
       : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
 
   dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
     this.open = true;
@@ -23,6 +31,19 @@ beforeAll(() => {
   dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
     this.open = false;
   });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+
+  if (originalHTMLDialogElement) {
+    vi.stubGlobal('HTMLDialogElement', originalHTMLDialogElement);
+  } else {
+    vi.unstubAllGlobals();
+  }
 });
 
 describe('ConfirmDialog', () => {

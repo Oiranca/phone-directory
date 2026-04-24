@@ -152,12 +152,12 @@ export const DirectoryPage = () => {
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
-    <div className="flex flex-col gap-6">
+    <section aria-labelledby="directory-page-title" className="flex flex-col gap-6">
       {/* Search Header */}
       <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
         <div className="flex flex-col gap-5">
           <div>
-            <h2 className="text-2xl font-semibold text-scs-blueDark sm:text-3xl">Directorio</h2>
+            <h2 id="directory-page-title" className="text-2xl font-semibold text-scs-blueDark sm:text-3xl">Directorio</h2>
             <p className="mt-1 text-sm text-slate-600">
               Busca, filtra y revisa el detalle operativo.
             </p>
@@ -386,6 +386,6 @@ export const DirectoryPage = () => {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

@@ -63,6 +63,16 @@ describe("SelectField", () => {
     expect(trigger).toHaveAttribute("aria-activedescendant", "kind-listbox-option-1");
   });
 
+  it("only points aria-controls at the listbox while open", () => {
+    renderSelectField();
+
+    const trigger = screen.getByLabelText("Tipo");
+    expect(trigger).not.toHaveAttribute("aria-controls");
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-controls", "kind-listbox");
+  });
+
   it("renders helper text and associates it with the trigger", () => {
     renderSelectField({ helperText: "Choose carefully" });
     
