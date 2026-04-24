@@ -6,6 +6,7 @@ import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
+import { SelectField } from "../components/inputs/SelectField";
 import { useAppStore } from "../store/useAppStore";
 
 type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
@@ -423,8 +424,8 @@ export const ContactFormPage = () => {
   }
 
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-panel">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">
             {isEditing ? "Editar registro" : "Nuevo registro"}
@@ -436,14 +437,14 @@ export const ContactFormPage = () => {
             Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
           </p>
         </div>
-        <Link to="/" className="text-sm font-semibold text-scs-blue hover:text-scs-blueDark">
+        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
           Cancelar
         </Link>
       </div>
 
       <form className="mt-6 space-y-8" onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
             <div>
               <label htmlFor="displayName" className="text-sm font-medium text-slate-700">
@@ -453,50 +454,46 @@ export const ContactFormPage = () => {
                 id="displayName"
                 value={formState.displayName}
                 onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
+                aria-invalid={!!fieldErrors.displayName}
+                aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
-              {fieldErrors.displayName && <p className="mt-2 text-sm text-red-600">{fieldErrors.displayName}</p>}
+              {fieldErrors.displayName && (
+                <p id="displayName-error" role="alert" className="mt-2 text-sm text-red-600">
+                  {fieldErrors.displayName}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="type" className="text-sm font-medium text-slate-700">
-                  Tipo
-                </label>
-                <select
+                <SelectField
                   id="type"
+                  label="Tipo"
                   value={formState.type}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, type: event.target.value as RecordType }))
+                  onChange={(value) =>
+                    setFormState((current) => ({ ...current, type: value as RecordType }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-                >
-                  {recordTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={recordTypeOptions}
+                />
               </div>
 
               <div>
-                <label htmlFor="status" className="text-sm font-medium text-slate-700">
-                  Estado
-                </label>
-                <select
+                <SelectField
                   id="status"
+                  label="Estado"
                   value={formState.status}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((current) => ({
                       ...current,
-                      status: event.target.value as "active" | "inactive"
+                      status: value as "active" | "inactive"
                     }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-                >
-                  <option value="active">Activo</option>
-                  <option value="inactive">Inactivo</option>
-                </select>
+                  options={[
+                    { value: "active", label: "Activo" },
+                    { value: "inactive", label: "Inactivo" }
+                  ]}
+                />
               </div>
             </div>
 
@@ -547,9 +544,9 @@ export const ContactFormPage = () => {
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-4">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Organización y ubicación</h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -589,35 +586,27 @@ export const ContactFormPage = () => {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="area" className="text-sm font-medium text-slate-700">
-                  Área
-                </label>
-                <select
+                <SelectField
                   id="area"
+                  label="Área"
                   value={formState.organization.area ?? ""}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((current) => ({
                       ...current,
                       organization: {
                         ...current.organization,
-                        area: event.target.value
-                          ? (event.target.value as AreaType)
-                          : undefined
+                        area: value ? (value as AreaType) : undefined
                       }
                     }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-                >
-                  <option value="">Sin área</option>
-                  {availableAreas.map((area) => {
-                    const label = areaOptions.find((option) => option.value === area)?.label ?? area;
-                    return (
-                      <option key={area} value={area}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Sin área" },
+                    ...availableAreas.map((area) => ({
+                      value: area,
+                      label: areaOptions.find((option) => option.value === area)?.label ?? area
+                    }))
+                  ]}
+                />
               </div>
 
               <div>
@@ -709,11 +698,11 @@ export const ContactFormPage = () => {
                 />
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
             <button
               type="button"
@@ -732,7 +721,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir teléfono
             </button>
@@ -740,19 +729,19 @@ export const ContactFormPage = () => {
 
           <div className="space-y-4">
             {formState.contactMethods.phones.map((phone, index) => (
-              <div key={phone.id} className="rounded-3xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
+              <div key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</p>
                   <button
                     type="button"
                     onClick={() => removePhone(phone.id)}
-                    className="text-sm font-semibold text-slate-500 hover:text-red-600"
+                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <div className="mt-4 grid gap-4 xl:grid-cols-3">
                   <div>
                     <label htmlFor={`phone-label-${phone.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
                     <input
@@ -768,10 +757,14 @@ export const ContactFormPage = () => {
                       id={`phone-number-${phone.id}`}
                       value={phone.number}
                       onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
+                      aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
+                      aria-describedby={fieldErrors[`contactMethods.phones.${index}.number`] ? `phone-number-${phone.id}-error` : undefined}
                       className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
                     />
                     {fieldErrors[`contactMethods.phones.${index}.number`] && (
-                      <p className="mt-2 text-sm text-red-600">{fieldErrors[`contactMethods.phones.${index}.number`]}</p>
+                      <p id={`phone-number-${phone.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
+                        {fieldErrors[`contactMethods.phones.${index}.number`]}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -785,21 +778,15 @@ export const ContactFormPage = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div>
-                    <label htmlFor={`phone-kind-${phone.id}`} className="text-sm font-medium text-slate-700">Tipo de teléfono</label>
-                    <select
+                    <SelectField
                       id={`phone-kind-${phone.id}`}
+                      label="Tipo de teléfono"
                       value={phone.kind}
-                      onChange={(event) => updatePhone(phone.id, { kind: event.target.value })}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
-                    >
-                      {phoneKindOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => updatePhone(phone.id, { kind: value })}
+                      options={phoneKindOptions}
+                    />
                   </div>
                   <div>
                     <label htmlFor={`phone-notes-${phone.id}`} className="text-sm font-medium text-slate-700">Notas</label>
@@ -841,10 +828,10 @@ export const ContactFormPage = () => {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Correos electrónicos</h3>
             <button
               type="button"
@@ -863,7 +850,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir correo
             </button>
@@ -871,19 +858,19 @@ export const ContactFormPage = () => {
 
           <div className="space-y-4">
             {formState.contactMethods.emails.map((email, index) => (
-              <div key={email.id} className="rounded-3xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
+              <div key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-semibold text-slate-700">Correo {index + 1}</p>
                   <button
                     type="button"
                     onClick={() => removeEmail(email.id)}
-                    className="text-sm font-semibold text-slate-500 hover:text-red-600"
+                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div>
                     <label htmlFor={`email-label-${email.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
                     <input
@@ -899,10 +886,14 @@ export const ContactFormPage = () => {
                       id={`email-address-${email.id}`}
                       value={email.address}
                       onChange={(event) => updateEmail(email.id, { address: event.target.value })}
+                      aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}
+                      aria-describedby={fieldErrors[`contactMethods.emails.${index}.address`] ? `email-address-${email.id}-error` : undefined}
                       className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
                     />
                     {fieldErrors[`contactMethods.emails.${index}.address`] && (
-                      <p className="mt-2 text-sm text-red-600">{fieldErrors[`contactMethods.emails.${index}.address`]}</p>
+                      <p id={`email-address-${email.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
+                        {fieldErrors[`contactMethods.emails.${index}.address`]}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -918,10 +909,10 @@ export const ContactFormPage = () => {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Clasificación</h3>
             <div>
               <label htmlFor="aliases" className="text-sm font-medium text-slate-700">
@@ -947,9 +938,9 @@ export const ContactFormPage = () => {
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
             </div>
-          </div>
+          </section>
 
-          <div>
+          <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <label htmlFor="notes" className="text-sm font-medium text-slate-700">
               Notas
             </label>
@@ -960,29 +951,29 @@ export const ContactFormPage = () => {
               rows={6}
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
             />
-          </div>
+          </section>
         </div>
 
         {submitError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {submitError}
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-5">
-          <Link
-            to="/"
-            className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
-          >
-            Cancelar
-          </Link>
+        <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:w-auto"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
+          <Link
+            to="/"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+          >
+            Cancelar
+          </Link>
         </div>
       </form>
     </section>

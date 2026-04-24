@@ -180,7 +180,7 @@ export const App = () => {
   if (isLoading) {
     return (
       <AppShell>
-        <section className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>
+        <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>
       </AppShell>
     );
   }

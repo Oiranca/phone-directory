@@ -38,7 +38,9 @@ tmp/
 data/*.json
 !data/*.example.json
 
+# Local Codex/session artifacts
 .codex/
+.agent-cache/
 AGENTS.md
-HANDOFF.md
+**/HANDOFF.md
 docs/DECISIONS.md

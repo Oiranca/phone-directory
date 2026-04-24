@@ -1290,6 +1290,11 @@ When a user saves custom data or backup paths in Settings, the application must 
 
 ### 32.3 UX and Polish
 
+
+**OIR-31 — Redesign Directory Page Layout**
+
+Implement a master-detail layout for the directory page to improve scanability. Move the quick filters (type, area, inactive status) into the top search header to consolidate all discovery controls in one place.
+
 **OIR-23 — Replace inline status messages with a global toast notification system**
 
 The current implementation surfaces feedback through inline status strings scattered across pages. This issue replaces that pattern with a centralized toast notification region (`ToastRegion` component, already in the component list at section 17). Toasts must support success, warning, and error variants and must auto-dismiss after a reasonable timeout.
@@ -1352,3 +1357,4 @@ Scripts must set any required environment variables, resolve the executable path
 | OIR-27 | Done | UX | Privacy badge inline risk text and detail view warning block |
 | OIR-28 | Todo | USB Deployment | App data stored on USB using executable-relative paths |
 | OIR-29 | Todo | USB Deployment | Cross-platform launcher scripts at USB root |
+| OIR-31 | Done | UX | Redesign Directory Page layout to master-detail and move filters to header |

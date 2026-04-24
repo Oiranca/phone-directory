@@ -269,15 +269,18 @@ export const ImportExportPage = () => {
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-      <article className="rounded-3xl bg-white p-6 shadow-panel">
+    <section className="space-y-6">
+      <div className="rounded-3xl bg-white p-6 shadow-panel">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Intercambio de datos</p>
-        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
+        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Importar y exportar datos</h2>
         <p className="mt-3 max-w-3xl text-sm text-slate-600">
           Exporta el directorio activo como JSON, o reemplaza el dataset local con un archivo JSON o CSV normalizado. Cada importación crea un backup automático antes de sobrescribir.
         </p>
+      </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+        <article className="rounded-3xl bg-white p-6 shadow-panel">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-500">Registros activos en memoria</p>
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
@@ -292,12 +295,12 @@ export const ImportExportPage = () => {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <button
             type="button"
             onClick={() => void handleCreateBackup()}
             disabled={isCreatingBackup}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue disabled:opacity-60"
+            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -312,7 +315,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleExport()}
             disabled={isExporting}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue disabled:opacity-60"
+            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -327,7 +330,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleImport()}
             disabled={isImporting}
-            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 disabled:opacity-60"
+            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
@@ -342,7 +345,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isPreparingCsvPreview || isImportingCsv}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 disabled:opacity-60"
+            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar CSV</p>
             <p className="mt-2 text-sm text-emerald-900/80">
@@ -356,6 +359,8 @@ export const ImportExportPage = () => {
 
         {(statusMessage || actionError) && (
           <div
+            role={actionError ? "alert" : "status"}
+            aria-live={actionError ? "assertive" : "polite"}
             className={[
               "mt-6 rounded-2xl px-4 py-3 text-sm font-medium",
               actionError
@@ -375,11 +380,11 @@ export const ImportExportPage = () => {
                 <h3 className="mt-2 text-xl font-semibold text-emerald-950">{csvPreview.fileName}</h3>
                 <p className="mt-1 text-sm text-emerald-900/80">{csvPreview.sourceFilePath}</p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setCsvPreview(null)}
-                  className="rounded-full border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-900"
+                  className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900"
                 >
                   Cerrar vista previa
                 </button>
@@ -387,14 +392,14 @@ export const ImportExportPage = () => {
                   type="button"
                   onClick={() => void handleImportCsv()}
                   disabled={isImportingCsv || csvPreview.invalidRowCount > 0}
-                  className="rounded-full bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {isImportingCsv ? "Importando CSV…" : "Confirmar importación CSV"}
                 </button>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Filas leídas</p>
                 <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.totalRowCount}</p>
@@ -413,7 +418,7 @@ export const ImportExportPage = () => {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -445,7 +450,7 @@ export const ImportExportPage = () => {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
               <div className="rounded-2xl bg-white/80 p-4">
                 <p className="text-sm font-semibold text-emerald-950">Filas inválidas</p>
                 {csvPreview.rowIssues.length === 0 ? (
@@ -486,9 +491,9 @@ export const ImportExportPage = () => {
             </div>
           </section>
         )}
-      </article>
+        </article>
 
-      <aside className="rounded-3xl bg-white p-6 shadow-panel">
+        <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
@@ -512,7 +517,7 @@ export const ImportExportPage = () => {
             backups.map((backup) => (
               <article key={backup.filePath} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
-                <p className="mt-1 text-xs text-slate-500">{backup.filePath}</p>
+                <p className="mt-1 break-all text-xs text-slate-500">{backup.filePath}</p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatTimestamp(backup.createdAt)}</span>
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatSize(backup.sizeBytes)}</span>
@@ -521,7 +526,8 @@ export const ImportExportPage = () => {
             ))
           )}
         </div>
-      </aside>
+        </aside>
+      </div>
     </section>
   );
 };
