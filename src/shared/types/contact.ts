@@ -208,11 +208,16 @@ export interface CsvImportPreview {
   importToken: string;
   sourceFilePath: string;
   fileName: string;
+  detectedFormat?: string;
+  detectionConfidence?: "high" | "medium" | "low";
   totalRowCount: number;
   validRowCount: number;
   invalidRowCount: number;
   warningCount: number;
   recordCount: number;
+  mergedRecordCount: number;
+  createdCount: number;
+  updatedCount: number;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
@@ -222,4 +227,6 @@ export interface CsvImportPreview {
 export interface CsvImportResult extends ImportContactsResult {
   warningCount: number;
   invalidRowCount: number;
+  createdCount: number;
+  updatedCount: number;
 }

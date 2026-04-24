@@ -60,20 +60,22 @@ const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", 
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 
-type CsvRow = Record<string, string>;
+export type NormalizedImportRow = Record<string, string>;
+
+const stripBom = (value: string) => value.replace(/^\uFEFF/, "");
 
 const validateCsvHeaders = (rawSource: string) => {
   const headerResult = Papa.parse<string[]>(rawSource, {
     preview: 1,
     skipEmptyLines: "greedy",
-    transform: (value: string) => value.trim()
+    transform: (value: string) => stripBom(value).trim()
   });
 
   if (headerResult.errors.length > 0) {
     throw new Error(`No se pudo leer la cabecera del CSV: ${headerResult.errors[0]?.message ?? "error desconocido"}.`);
   }
 
-  const rawHeaders = headerResult.data[0]?.map((header) => header.trim()) ?? [];
+  const rawHeaders = headerResult.data[0]?.map((header) => stripBom(header).trim()) ?? [];
 
   if (rawHeaders.length === 0) {
     throw new Error("El CSV no incluye una fila de cabecera válida.");
@@ -188,7 +190,7 @@ const ensureSinglePrimary = <T extends { isPrimary: boolean }>(
 };
 
 const buildPhones = (
-  row: CsvRow,
+  row: NormalizedImportRow,
   rowNumber: number,
   displayName: string | undefined,
   warnings: CsvImportWarning[]
@@ -239,7 +241,7 @@ const buildPhones = (
 };
 
 const buildEmails = (
-  row: CsvRow,
+  row: NormalizedImportRow,
   rowNumber: number,
   displayName: string | undefined,
   warnings: CsvImportWarning[]
@@ -316,21 +318,38 @@ export const buildCsvImportPreview = async (
 
   const rawSource = await fs.readFile(sourceFilePath, "utf-8");
   validateCsvHeaders(rawSource);
-  const parseResult = Papa.parse<CsvRow>(rawSource, {
+  const parseResult = Papa.parse<NormalizedImportRow>(rawSource, {
     header: true,
     skipEmptyLines: "greedy",
-    transformHeader: (value: string) => value.trim(),
-    transform: (value: string) => value.trim()
+    transformHeader: (value: string) => stripBom(value).trim(),
+    transform: (value: string) => stripBom(value).trim()
   });
 
   if (parseResult.errors.length > 0) {
     throw new Error(`No se pudo leer el CSV: ${parseResult.errors[0]?.message ?? "error desconocido"}.`);
   }
+  return buildImportPreviewFromRows(parseResult.data, {
+    sourceFilePath,
+    fileName: path.basename(sourceFilePath),
+    editorName
+  });
+};
+
+export const buildImportPreviewFromRows = async (
+  rows: NormalizedImportRow[],
+  options: {
+    sourceFilePath: string;
+    fileName: string;
+    editorName: string;
+    detectedFormat?: string;
+    detectionConfidence?: "high" | "medium" | "low";
+  }
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
   const records: ContactRecord[] = [];
   const rowIssues: CsvImportIssue[] = [];
   const warnings: CsvImportWarning[] = [];
 
-  parseResult.data.forEach((row: CsvRow, index: number) => {
+  rows.forEach((row: NormalizedImportRow, index: number) => {
     const rowNumber = index + 2;
     const displayName = maybe(row.displayName);
     const issues: string[] = [];
@@ -439,8 +458,8 @@ export const buildCsvImportPreview = async (
         audit: {
           createdAt: now,
           updatedAt: now,
-          createdBy: editorName,
-          updatedBy: editorName
+          createdBy: options.editorName,
+          updatedBy: options.editorName
         }
       });
 
@@ -461,19 +480,24 @@ export const buildCsvImportPreview = async (
     }
   });
 
-  const dataset = buildDataset(records, editorName);
+  const dataset = buildDataset(records, options.editorName);
 
   return {
     dataset,
     preview: {
       importToken: "",
-      sourceFilePath,
-      fileName: path.basename(sourceFilePath),
-      totalRowCount: parseResult.data.length,
+      sourceFilePath: options.sourceFilePath,
+      fileName: options.fileName,
+      detectedFormat: options.detectedFormat,
+      detectionConfidence: options.detectionConfidence,
+      totalRowCount: rows.length,
       validRowCount: records.length,
       invalidRowCount: rowIssues.length,
       warningCount: warnings.length,
       recordCount: dataset.records.length,
+      mergedRecordCount: dataset.records.length,
+      createdCount: dataset.records.length,
+      updatedCount: 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

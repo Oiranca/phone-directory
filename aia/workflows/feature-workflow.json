@@ -1,0 +1,16 @@
+{
+  "id": "feature-workflow",
+  "name": "Feature / Fix",
+  "description": "Flujo estándar para cualquier issue: implementación → QA → revisión de seguridad → PR a develop",
+  "entryPointAgentId": "developer",
+  "connections": [
+    {
+      "from": "developer",
+      "to": "qa-engineer"
+    },
+    {
+      "from": "qa-engineer",
+      "to": "security-reviewer"
+    }
+  ]
+}

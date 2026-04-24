@@ -44,3 +44,6 @@ data/*.json
 AGENTS.md
 **/HANDOFF.md
 docs/DECISIONS.md
+
+# AIA internal data (secrets, executions, sessions)
+.aia/

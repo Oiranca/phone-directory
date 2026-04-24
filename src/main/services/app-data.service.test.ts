@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 
@@ -515,7 +516,53 @@ describe("AppDataService", () => {
     );
   });
 
-  it("imports a normalized CSV and replaces the dataset after backup", async () => {
+  it("imports a normalized CSV and merges records by externalId after backup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "directory.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,area,phone1Number,phone1Kind,aliases,tags,status",
+        `${existing.externalId},service,${existing.displayName} Actualizada,${existing.organization.department},especialidades,12345,internal,ana|ana,front|front,active`,
+        "legacy-2,service,Mostrador,Recepción,especialidades,55555,desk,,,inactive"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
+
+    expect(result.recordCount).toBe(initial.contacts.records.length + 1);
+    expect(result.warningCount).toBe(3);
+    expect(result.invalidRowCount).toBe(0);
+    expect(result.createdCount).toBe(1);
+    expect(result.updatedCount).toBe(1);
+    const updated = result.contacts.records.find((record) => record.id === existing.id);
+    const created = result.contacts.records.find((record) => record.externalId === "legacy-2");
+    expect(updated?.displayName).toBe(`${existing.displayName} Actualizada`);
+    expect(updated?.aliases).toEqual(["ana"]);
+    expect(updated?.tags).toEqual(["front"]);
+    expect(created?.contactMethods.phones[0]?.kind).toBe("other");
+    expect(result.backupPath).toContain(path.join(testRoot, "backups"));
+    expect(persisted.records.some((record) => record.status === "inactive")).toBe(true);
+  });
+
+  it("previews and imports an ODS workbook through the spreadsheet pipeline", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -527,32 +574,575 @@ describe("AppDataService", () => {
       }
     });
 
-    const sourceFilePath = path.join(testRoot, "incoming", "directory.csv");
+    const workbook = XLSX.utils.book_new();
+    const urgenciasSheet = XLSX.utils.aoa_to_sheet([
+      ["Servicio", "Número", "Notas"],
+      ["Urgencias", "", ""],
+      ["Mostrador", "55555", ""],
+      ["Control boxes", "55556", "No pasar llamadas externas"]
+    ]);
+    XLSX.utils.book_append_sheet(workbook, urgenciasSheet, "Urgencias");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    expect(preview.validRowCount).toBe(2);
+    expect(preview.createdCount).toBe(2);
+    expect(preview.updatedCount).toBe(0);
+    expect(result.createdCount).toBe(2);
+    expect(result.updatedCount).toBe(0);
+    expect(result.contacts.records.some((record) => record.displayName === "Mostrador")).toBe(true);
+    expect(
+      result.contacts.records.some((record) =>
+        record.contactMethods.phones.some((phone) => phone.noPatientSharing)
+      )
+    ).toBe(true);
+  });
+
+  it("updates an existing external center when row order changes but phone and service stay the same", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+
+    const firstWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      firstWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928304114", ""]
+      ]),
+      "Centros de salud"
+    );
+
+    const secondWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      secondWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["OTRO c/ Secundaria", "URG.", "928304121", ""],
+        ["INGENIO A c/ Principal", "ADM.", "928304114", ""]
+      ]),
+      "Centros de salud"
+    );
+
+    const firstPath = path.join(testRoot, "incoming", "centers-first.ods");
+    const secondPath = path.join(testRoot, "incoming", "centers-second.ods");
+    await fs.mkdir(path.dirname(firstPath), { recursive: true });
+    XLSX.writeFile(firstWorkbook, firstPath);
+    XLSX.writeFile(secondWorkbook, secondPath);
+
+    const firstImport = await service.importCsvDataset(firstPath);
+    const secondImport = await service.importCsvDataset(secondPath);
+    const ingenioMatches = secondImport.contacts.records.filter(
+      (record) => record.contactMethods.phones.some((phone) => phone.number === "928304114")
+    );
+
+    expect(firstImport.contacts.records.some((record) => record.displayName === "Ingenio - Administración")).toBe(true);
+    expect(secondImport.updatedCount).toBe(1);
+    expect(secondImport.createdCount).toBe(1);
+    expect(ingenioMatches).toHaveLength(1);
+    expect(ingenioMatches[0]?.displayName).toBe("Ingenio A - Administración");
+  });
+
+  it("expands compact slash suffixes into full phone numbers during spreadsheet import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928 30 41 14 /15", "(84114 /84115)"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "compact-suffix.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+
+    expect(imported?.contactMethods.phones).toHaveLength(2);
+    expect(imported?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(imported?.contactMethods.phones[0]?.extension).toBe("84114");
+    expect(imported?.contactMethods.phones[1]?.number).toBe("928304115");
+    expect(imported?.contactMethods.phones[1]?.extension).toBe("84115");
+  });
+
+  it("stores short numbering as extension instead of a separate phone for health centers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "ADM.", "928 30 41 14", "84114"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "single-extension.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+
+    expect(imported?.contactMethods.phones).toHaveLength(1);
+    expect(imported?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(imported?.contactMethods.phones[0]?.extension).toBe("84114");
+  });
+
+  it("imports continuation rows from health centers when the first column is empty", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "Adm.", "928 30 41 14", "84114"],
+        ["", "Adm. 2", "928 30 41 15", "84115"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "center-children.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const ingenioRecords = result.contacts.records.filter((record) => record.displayName.startsWith("Ingenio -"));
+
+    expect(ingenioRecords).toHaveLength(2);
+    expect(ingenioRecords.some((record) => record.displayName === "Ingenio - Administración")).toBe(true);
+    expect(ingenioRecords.some((record) => record.displayName === "Ingenio - Adm. 2")).toBe(true);
+  });
+
+  it("accepts normalized CSV files saved with UTF-8 BOM", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "bom-template.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      "\uFEFFexternalId,type,displayName,department,phone1Number,phone1Extension,phone1Kind,status\n" +
+      "row-1,service,Mostrador,Recepción,928304114,84114,external,active\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.invalidRowCount).toBe(0);
+  });
+
+  it("imports raw health-center CSV files by header shape even when the filename is arbitrary", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda-export.csv");
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     await fs.writeFile(
       sourceFilePath,
       [
-        "type,displayName,department,area,phone1Number,phone1Kind,aliases,tags,status",
-        "person,Ana Pérez,Admisión,otros,12345,internal,ana|ana,front|front,active",
-        "service,Mostrador,Recepción,especialidades,55555,desk,,,inactive"
+        '"CENTROS DE SALUD","SERVICIO","NUMERO LARGO","NUMERO CORTO",,',
+        '"INGENIO\\nAv. de los Artesanos, 8","Adm.","928 30 41 14 /15","(84114 /84115)",,',
+        ',"Urgencias","928 30 41 21","(84121)",,'
       ].join("\n") + "\n",
       "utf-8"
     );
 
     const result = await service.importCsvDataset(sourceFilePath);
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
-    ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
+    const ingenioAdmin = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
+    const ingenioUrg = result.contacts.records.find((record) => record.displayName === "Ingenio - Urgencias");
 
-    expect(result.recordCount).toBe(2);
-    expect(result.warningCount).toBe(3);
-    expect(result.invalidRowCount).toBe(0);
-    expect(result.contacts.records[0]?.displayName).toBe("Ana Pérez");
-    expect(result.contacts.records[0]?.aliases).toEqual(["ana"]);
-    expect(result.contacts.records[0]?.tags).toEqual(["front"]);
-    expect(result.contacts.records[1]?.contactMethods.phones[0]?.kind).toBe("other");
-    expect(result.backupPath).toContain(path.join(testRoot, "backups"));
-    expect(persisted.records[1]?.status).toBe("inactive");
+    expect(ingenioAdmin?.contactMethods.phones).toHaveLength(2);
+    expect(ingenioAdmin?.contactMethods.phones[0]?.number).toBe("928304114");
+    expect(ingenioAdmin?.contactMethods.phones[0]?.extension).toBe("84114");
+    expect(ingenioAdmin?.contactMethods.phones[1]?.number).toBe("928304115");
+    expect(ingenioAdmin?.contactMethods.phones[1]?.extension).toBe("84115");
+    expect(ingenioUrg?.contactMethods.phones[0]?.number).toBe("928304121");
+    expect(ingenioUrg?.contactMethods.phones[0]?.extension).toBe("84121");
+  });
+
+  it("does not misclassify partial-overlap CSV headers as the normalized template", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "partial-overlap.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "status,legacyDesk,name",
+        "active,desk-1,Mostrador"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("imports service-sheet XLSX files with arbitrary sheet names by row profile", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Sheet1"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "custom-export.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath);
+    const controlRecord = result.contacts.records.find((record) => record.displayName === "Control boxes");
+
+    expect(preview.detectedFormat).toBe("exportación cruda de hoja de servicios");
+    expect(preview.detectionConfidence).toBe("high");
+    expect(preview.validRowCount).toBe(2);
+    expect(controlRecord?.organization.department).toBe("Urgencias");
+    expect(controlRecord?.contactMethods.phones[0]?.noPatientSharing).toBe(true);
+  });
+
+  it("accepts canonical one-row service sheets with a detected service header", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-single-row.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.createdCount).toBe(1);
+    expect(preview.detectedFormat).toBe("exportación cruda de hoja de servicios");
+    expect(preview.detectionConfidence).toBe("medium");
+  });
+
+  it("rejects alias-matched sheets when they do not carry service-sheet structure", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Fecha", "ID", "Valor"],
+        ["2026-04-24", "1234", "55"],
+        ["2026-04-25", "4567", "89"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "bad-urgencias.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects alias-matched sheets with service-like headers but date-shaped junk rows", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Valor"],
+        ["Mostrador", "2026-04-24", "55"],
+        ["Control", "2026-04-25", "89"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "alias-header-junk.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects canonical sheets that only match generic name-extension headers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Nombre", "Extensión", "Valor"],
+        ["Mostrador", "55555", "12"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-name-extension.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects generic service-like sheets with a single numeric row and no structural evidence", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Agenda abril"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "generic-single-row.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects two-row numeric tables that only mimic service headers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Valor"],
+        ["Mostrador", "55555", "12"],
+        ["Control", "55556", "18"]
+      ]),
+      "Agenda abril"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "generic-two-row-junk.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("keeps service-sheet merge ids stable when the same export uses a custom sheet title", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const canonicalWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      canonicalWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Sheet1"
+    );
+
+    const canonicalPath = path.join(testRoot, "incoming", "service-canonical.xlsx");
+    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
+    XLSX.writeFile(canonicalWorkbook, canonicalPath);
+    await service.importCsvDataset(canonicalPath);
+
+    const customWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      customWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Agenda abril"
+    );
+
+    const customPath = path.join(testRoot, "incoming", "service-custom-title.xlsx");
+    XLSX.writeFile(customWorkbook, customPath);
+
+    const preview = await service.previewCsvImport(customPath);
+
+    expect(preview.createdCount).toBe(0);
+    expect(preview.updatedCount).toBe(2);
+  });
+
+  it("keeps health-center merge ids stable when the sheet title is arbitrary", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const canonicalWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      canonicalWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+        ["", "Urgencias", "928 30 41 21", "(84121)"]
+      ]),
+      "Centros de salud"
+    );
+
+    const canonicalPath = path.join(testRoot, "incoming", "centers-canonical.xlsx");
+    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
+    XLSX.writeFile(canonicalWorkbook, canonicalPath);
+    await service.importCsvDataset(canonicalPath);
+
+    const customWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      customWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+        ["", "Urgencias", "928 30 41 21", "(84121)"]
+      ]),
+      "Agenda abril"
+    );
+
+    const customPath = path.join(testRoot, "incoming", "centers-custom-title.xlsx");
+    XLSX.writeFile(customWorkbook, customPath);
+
+    const preview = await service.previewCsvImport(customPath);
+
+    expect(preview.createdCount).toBe(0);
+    expect(preview.updatedCount).toBe(2);
+  });
+
+  it("labels normalized template previews with detected format metadata", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "normalized-template.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,phone1Number",
+        "service,Mostrador,Recepción,55555"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.detectedFormat).toBe("plantilla normalizada");
+    expect(preview.detectionConfidence).toBe("high");
+  });
+
+  it("imports continuation rows in service sheets when the label lives in a later column", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["col1", "col2", "col3", "col4"],
+        ["HOSPITAL DE DÍA RADIOTERÁPIA", "", "", ""],
+        ["Citas 08:00 – 14:00", "79530", "Mostrador (Auxiliar Adm)", "79246"],
+        ["", "79145", "Auxiliar Enfermería", "79230"]
+      ]),
+      "Hospitales_de_día"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "service-continuation.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Auxiliar Enfermería");
+
+    expect(imported).toBeDefined();
+    expect(imported?.organization.department).toBe("Hospitales de día");
+    expect(imported?.organization.service).toBe("HOSPITAL DE DÍA RADIOTERÁPIA");
+    expect(imported?.contactMethods.phones.map((phone) => phone.number)).toEqual(["79145", "79230"]);
   });
 
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
@@ -664,8 +1254,45 @@ describe("AppDataService", () => {
     );
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El CSV contiene filas inválidas. Corrige el archivo antes de importarlo."
+      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
     );
+  });
+
+  it("updates a later row that matches a record created earlier in the same import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+
+    const sourceFilePath = path.join(testRoot, "incoming", "same-import-merge.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,service,phone1Number,phone1Kind,status",
+        "generated-1,service,Mostrador,Urgencias,Mostrador,55555,internal,active",
+        ",service,Mostrador actualizado,Urgencias,Mostrador,55555,internal,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const matches = result.contacts.records.filter((record) =>
+      record.organization.department === "Urgencias" &&
+      record.organization.service === "Mostrador" &&
+      record.contactMethods.phones.some((phone) => phone.number === "55555")
+    );
+
+    expect(result.createdCount).toBe(1);
+    expect(result.updatedCount).toBe(1);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.displayName).toBe("Mostrador actualizado");
   });
 
   it("rejects CSV preview when the file exceeds the supported size limit", async () => {

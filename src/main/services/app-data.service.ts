@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
-import { buildCsvImportPreview } from "./csv-import.service.js";
+import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 import type {
   AppSettings,
   BackupListItem,
@@ -194,39 +194,52 @@ export class AppDataService {
 
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
     const settings = await this.readSettings();
-    const { preview } = await buildCsvImportPreview(
+    const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       this.getEditorName(settings)
     );
-    return preview;
+    const currentContacts = await this.readContacts();
+    const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
+
+    return {
+      ...preview,
+      mergedRecordCount: mergeSummary.contacts.records.length,
+      createdCount: mergeSummary.createdCount,
+      updatedCount: mergeSummary.updatedCount
+    };
   }
 
   async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
     const settings = await this.readSettings();
-    const { dataset, preview } = await buildCsvImportPreview(
+    const editorName = this.getEditorName(settings);
+    const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
-      this.getEditorName(settings)
+      editorName
     );
 
     if (preview.invalidRowCount > 0) {
-      throw new Error("El CSV contiene filas inválidas. Corrige el archivo antes de importarlo.");
+      throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
     }
 
     if (preview.validRowCount === 0) {
-      throw new Error("El CSV no contiene filas válidas para importar.");
+      throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
+    const currentContacts = await this.readContacts();
+    const merged = this.mergeImportedDataset(currentContacts, dataset, editorName);
     const backupPath = await this.createBackup();
-    await writeJsonFile(getContactsFilePath(), dataset);
+    await writeJsonFile(getContactsFilePath(), merged.contacts);
 
     return {
-      contacts: dataset,
+      contacts: merged.contacts,
       settings: this.toEditableSettings(settings),
       backupPath,
       importedFilePath: sourceFilePath,
-      recordCount: dataset.records.length,
+      recordCount: merged.contacts.records.length,
       warningCount: preview.warningCount,
-      invalidRowCount: preview.invalidRowCount
+      invalidRowCount: preview.invalidRowCount,
+      createdCount: merged.createdCount,
+      updatedCount: merged.updatedCount
     };
   }
 
@@ -375,6 +388,133 @@ export class AppDataService {
       },
       records
     });
+  }
+
+  private mergeImportedDataset(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset,
+    editorName: string
+  ) {
+    const exportedAt = new Date().toISOString();
+    const mergedRecords = [...currentDataset.records];
+    const currentIndexesByExternalId = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, number>();
+
+    mergedRecords.forEach((record, index) => {
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, index);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, index);
+        }
+      }
+    });
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const importedRecord of importedDataset.records) {
+      const externalIdMatchIndex = importedRecord.externalId
+        ? currentIndexesByExternalId.get(importedRecord.externalId)
+        : undefined;
+      const stableMatchIndex = this.buildStableMergeKeys(importedRecord)
+        .map((stableKey) => currentIndexesByStableKey.get(stableKey))
+        .find((index): index is number => index !== undefined);
+      const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
+
+      if (matchIndex !== undefined) {
+        const currentRecord = mergedRecords[matchIndex]!;
+        const mergedRecord = contactRecordSchema.parse({
+          ...importedRecord,
+          id: currentRecord.id,
+          audit: {
+            ...currentRecord.audit,
+            updatedAt: exportedAt,
+            updatedBy: editorName
+          }
+        });
+        mergedRecords[matchIndex] = mergedRecord;
+
+        if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
+          currentIndexesByExternalId.set(mergedRecord.externalId, matchIndex);
+        }
+
+        for (const stableKey of this.buildStableMergeKeys(mergedRecord)) {
+          if (!currentIndexesByStableKey.has(stableKey)) {
+            currentIndexesByStableKey.set(stableKey, matchIndex);
+          }
+        }
+
+        updatedCount += 1;
+        continue;
+      }
+
+      const createdRecord = contactRecordSchema.parse({
+        ...importedRecord,
+        id: this.createUniqueRecordId(mergedRecords),
+        audit: {
+          createdAt: exportedAt,
+          updatedAt: exportedAt,
+          createdBy: editorName,
+          updatedBy: editorName
+        }
+      });
+      mergedRecords.push(createdRecord);
+      const createdIndex = mergedRecords.length - 1;
+
+      if (createdRecord.externalId && !currentIndexesByExternalId.has(createdRecord.externalId)) {
+        currentIndexesByExternalId.set(createdRecord.externalId, createdIndex);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(createdRecord)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, createdIndex);
+        }
+      }
+
+      createdCount += 1;
+    }
+
+    return {
+      contacts: this.buildNextDataset(mergedRecords, currentDataset, editorName, exportedAt),
+      createdCount,
+      updatedCount
+    };
+  }
+
+  private buildStableMergeKeys(record: ContactRecord): string[] {
+    const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
+    const phoneNumbers = record.contactMethods.phones
+      .map((phone) => phone.number.replace(/\D/g, ""))
+      .filter(Boolean)
+      .sort();
+    const emailAddresses = record.contactMethods.emails
+      .map((email) => normalized(email.address))
+      .filter(Boolean)
+      .sort();
+    const keys = new Set<string>();
+    const base = [
+      normalized(record.type),
+      normalized(record.organization.department),
+      normalized(record.organization.service),
+      normalized(record.location?.text)
+    ].join("|");
+
+    if (phoneNumbers.length > 0) {
+      keys.add(`${base}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    if (emailAddresses.length > 0) {
+      keys.add(`${base}|emails:${emailAddresses.join(",")}`);
+    }
+
+    if (normalized(record.displayName) && phoneNumbers.length > 0) {
+      keys.add(`${normalized(record.type)}|${normalized(record.displayName)}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    return [...keys];
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {

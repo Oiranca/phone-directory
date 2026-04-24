@@ -1,0 +1,16 @@
+{
+  "id": "packaging-setup",
+  "name": "Packaging Setup",
+  "description": "Configura electron-builder y valida el primer build distribuible para macOS",
+  "entryPointAgentId": "packager",
+  "connections": [
+    {
+      "from": "packager",
+      "to": "qa-engineer"
+    },
+    {
+      "from": "qa-engineer",
+      "to": "security-reviewer"
+    }
+  ]
+}

@@ -68,11 +68,16 @@ describe("ImportExportPage", () => {
           importToken: "csv-token-1",
           sourceFilePath: "/tmp/incoming/directory.csv",
           fileName: "directory.csv",
+          detectedFormat: "exportación cruda de hoja de servicios",
+          detectionConfidence: "medium",
           totalRowCount: 2,
           validRowCount: 2,
           invalidRowCount: 0,
           warningCount: 1,
           recordCount: 2,
+          mergedRecordCount: defaultContacts.records.length + 1,
+          createdCount: 1,
+          updatedCount: 1,
           typeCounts: {
             person: 1,
             service: 1
@@ -103,9 +108,11 @@ describe("ImportExportPage", () => {
           settings: editableSettings,
           backupPath: "/tmp/backups/contacts-csv-auto.json",
           importedFilePath: "/tmp/incoming/directory.csv",
-          recordCount: 1,
+          recordCount: defaultContacts.records.length + 1,
           warningCount: 1,
-          invalidRowCount: 0
+          invalidRowCount: 0,
+          createdCount: 1,
+          updatedCount: 1
         }),
         importDataset: vi.fn().mockResolvedValue({
           contacts: {
@@ -245,26 +252,28 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Fecha no válida")).toBeInTheDocument();
   });
 
-  it("previews a CSV file and imports it after confirmation", async () => {
+  it("previews a spreadsheet file and imports it after confirmation", async () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    expect(await screen.findByText("Vista previa CSV")).toBeInTheDocument();
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
+    expect(screen.getAllByText(/Formato detectado: exportación cruda de hoja de servicios/)).toHaveLength(2);
+    expect(screen.getByText(/La detección del formato tiene confianza media/)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
-    expect(await screen.findByText(/Importación CSV completada desde/)).toBeInTheDocument();
+    expect(await screen.findByText(/Importación completada desde/)).toBeInTheDocument();
   });
 
-  it("blocks CSV confirmation when the preview contains invalid rows", async () => {
+  it("blocks import confirmation when the preview contains invalid rows", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-invalid",
       sourceFilePath: "/tmp/incoming/broken.csv",
@@ -274,6 +283,9 @@ describe("ImportExportPage", () => {
       invalidRowCount: 1,
       warningCount: 0,
       recordCount: 1,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 1,
       typeCounts: {
         person: 1
       },
@@ -291,10 +303,10 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    expect(await screen.findByText("El CSV tiene filas inválidas. Corrige el archivo antes de reemplazar el directorio.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Confirmar importación CSV/ })).toBeDisabled();
+    expect(await screen.findByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
@@ -310,6 +322,9 @@ describe("ImportExportPage", () => {
         invalidRowCount: 0,
         warningCount: 0,
         recordCount: 2,
+        mergedRecordCount: defaultContacts.records.length + 2,
+        createdCount: 2,
+        updatedCount: 0,
         typeCounts: {
           person: 2
         },
@@ -322,18 +337,18 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
-    expect(await screen.findByText("Vista previa CSV")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Vista previa CSV")).not.toBeInTheDocument();
+      expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
-    expect(await screen.findByText("Selección de CSV cancelada.")).toBeInTheDocument();
+    expect(await screen.findByText("Selección de archivo cancelada.")).toBeInTheDocument();
   });
 
-  it("shows the CSV template validation error when preview preparation fails before row parsing", async () => {
+  it("shows the import error when preview preparation fails before row parsing", async () => {
     window.hospitalDirectory.previewCsvImport = vi
       .fn()
       .mockRejectedValue(
@@ -345,13 +360,13 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
     expect(
       await screen.findByText(
         "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
       )
     ).toBeInTheDocument();
-    expect(screen.queryByText("Vista previa CSV")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
   });
 });
