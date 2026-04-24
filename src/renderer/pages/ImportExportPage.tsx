@@ -29,6 +29,14 @@ const formatSize = (sizeBytes: number) => {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const toUserFacingError = (error: unknown, fallback: string) => {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  return error.message.replace(/^Error invoking remote method '[^']+': Error: /, "");
+};
+
 export const ImportExportPage = () => {
   const { contacts, settings, initialize } = useAppStore();
   const { pushToast } = useToast();
@@ -216,9 +224,7 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo preparar la vista previa del archivo."
+        message: toUserFacingError(error, "No se pudo preparar la vista previa del archivo.")
       });
     } finally {
       setIsPreparingCsvPreview(false);
@@ -263,9 +269,7 @@ export const ImportExportPage = () => {
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo importar el archivo seleccionado."
+        message: toUserFacingError(error, "No se pudo importar el archivo seleccionado.")
       });
     } finally {
       setIsImportingCsv(false);

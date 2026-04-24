@@ -365,6 +365,25 @@ const buildCenterPhones = (longNumber: string, shortNumber: string) => {
   }));
 };
 
+const stripBom = (value: string) => value.replace(/^\uFEFF/, "");
+const hasLetters = (value: string) => /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(value);
+
+const resolveServiceRowLabel = (cells: string[]) => {
+  const firstCell = cells[0] ?? "";
+
+  if (firstCell && !isExcludedLabel(firstCell)) {
+    return firstCell;
+  }
+
+  return cells.find((cell, index) =>
+    index > 0 &&
+    cell &&
+    hasLetters(cell) &&
+    !isExcludedLabel(cell) &&
+    extractNumbers(cell).length === 0
+  ) ?? "";
+};
+
 const normalizeServiceSheet = (sheet: SheetData) => {
   const metadata = SERVICE_SHEETS[sheet.slug];
   const data = sheet.rows.slice(1);
@@ -373,15 +392,25 @@ const normalizeServiceSheet = (sheet: SheetData) => {
 
   data.forEach((row, rowIndex) => {
     const cells = row.map((value) => clean(value));
-    const label = cells[0] ?? "";
+    const firstCell = cells[0] ?? "";
+    const nonEmpty = cells.filter(Boolean);
 
-    if (isExcludedLabel(label)) {
+    if (
+      nonEmpty.length === 1 &&
+      firstCell &&
+      !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
+    ) {
+      currentSection = firstCell;
       return;
     }
 
-    const nonEmpty = cells.filter(Boolean);
+    const label = resolveServiceRowLabel(cells);
 
-    if (nonEmpty.length === 1 && label) {
+    if (label && isExcludedLabel(label)) {
+      return;
+    }
+
+    if (nonEmpty.length === 1 && label && cells[0] === label) {
       currentSection = label;
       return;
     }
@@ -391,11 +420,16 @@ const normalizeServiceSheet = (sheet: SheetData) => {
     }
 
     if (
+      cells[0] === label &&
       nonEmpty.length > 1 &&
       nonEmpty.every((value, index) => index === 0 || isExcludedLabel(value) || extractNumbers(value).length === 0) &&
       extractNumbers(label).length === 0
     ) {
       currentSection = label;
+      return;
+    }
+
+    if (!label) {
       return;
     }
 
@@ -413,7 +447,7 @@ const normalizeServiceSheet = (sheet: SheetData) => {
         phoneNumbers.push(...extracted);
       }
 
-      if (/[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(cell)) {
+      if (hasLetters(cell) && cell !== label) {
         noteFragments.push(...cleanNoteFragments([cell]));
       }
     }
@@ -564,7 +598,7 @@ const normalizeCentersSheet = (sheet: SheetData) => {
     const third = cells[2] ?? "";
     const fourth = cells[3] ?? "";
 
-    if (isExcludedLabel(first)) {
+    if (first && isExcludedLabel(first)) {
       return;
     }
 
@@ -584,9 +618,9 @@ const normalizeCentersSheet = (sheet: SheetData) => {
         return;
       }
 
-      service = normalizeCenterService(first);
-      longNumber = second;
-      shortNumber = third;
+      service = normalizeCenterService(second);
+      longNumber = third;
+      shortNumber = fourth;
     }
 
     if (!service) {
@@ -672,9 +706,9 @@ const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
   const headerResult = Papa.parse<string[]>(rawSource, {
     preview: 1,
     skipEmptyLines: "greedy",
-    transform: (value: string) => value.trim()
+    transform: (value: string) => stripBom(value).trim()
   });
-  const headers = headerResult.data[0] ?? [];
+  const headers = (headerResult.data[0] ?? []).map((header) => stripBom(header).trim());
 
   if (headers.length === 0) {
     return false;

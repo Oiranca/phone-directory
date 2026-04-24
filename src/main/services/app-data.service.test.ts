@@ -713,6 +713,87 @@ describe("AppDataService", () => {
     expect(imported?.contactMethods.phones[0]?.extension).toBe("84114");
   });
 
+  it("imports continuation rows from health centers when the first column is empty", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Centro", "Servicio", "Largo", "Corto"],
+        ["INGENIO c/ Principal", "Adm.", "928 30 41 14", "84114"],
+        ["", "Adm. 2", "928 30 41 15", "84115"]
+      ]),
+      "Centros de salud"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "center-children.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const ingenioRecords = result.contacts.records.filter((record) => record.displayName.startsWith("Ingenio -"));
+
+    expect(ingenioRecords).toHaveLength(2);
+    expect(ingenioRecords.some((record) => record.displayName === "Ingenio - Administración")).toBe(true);
+    expect(ingenioRecords.some((record) => record.displayName === "Ingenio - Adm. 2")).toBe(true);
+  });
+
+  it("accepts normalized CSV files saved with UTF-8 BOM", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "bom-template.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      "\uFEFFexternalId,type,displayName,department,phone1Number,phone1Extension,phone1Kind,status\n" +
+      "row-1,service,Mostrador,Recepción,928304114,84114,external,active\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.invalidRowCount).toBe(0);
+  });
+
+  it("imports continuation rows in service sheets when the label lives in a later column", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["col1", "col2", "col3", "col4"],
+        ["HOSPITAL DE DÍA RADIOTERÁPIA", "", "", ""],
+        ["Citas 08:00 – 14:00", "79530", "Mostrador (Auxiliar Adm)", "79246"],
+        ["", "79145", "Auxiliar Enfermería", "79230"]
+      ]),
+      "Hospitales_de_día"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "service-continuation.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const imported = result.contacts.records.find((record) => record.displayName === "Auxiliar Enfermería");
+
+    expect(imported).toBeDefined();
+    expect(imported?.organization.department).toBe("Hospitales de día");
+    expect(imported?.organization.service).toBe("HOSPITAL DE DÍA RADIOTERÁPIA");
+    expect(imported?.contactMethods.phones.map((phone) => phone.number)).toEqual(["79145", "79230"]);
+  });
+
   it("imports a valid dataset even when the current dataset is corrupt", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
