@@ -68,6 +68,8 @@ describe("ImportExportPage", () => {
           importToken: "csv-token-1",
           sourceFilePath: "/tmp/incoming/directory.csv",
           fileName: "directory.csv",
+          detectedFormat: "exportación cruda de hoja de servicios",
+          detectionConfidence: "medium",
           totalRowCount: 2,
           validRowCount: 2,
           invalidRowCount: 0,
@@ -258,6 +260,8 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
+    expect(screen.getAllByText(/Formato detectado: exportación cruda de hoja de servicios/)).toHaveLength(2);
+    expect(screen.getByText(/La detección del formato tiene confianza media/)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));

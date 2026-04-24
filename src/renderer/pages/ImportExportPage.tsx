@@ -37,6 +37,22 @@ const toUserFacingError = (error: unknown, fallback: string) => {
   return error.message.replace(/^Error invoking remote method '[^']+': Error: /, "");
 };
 
+const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"]) => {
+  if (value === "high") {
+    return "alta";
+  }
+
+  if (value === "medium") {
+    return "media";
+  }
+
+  if (value === "low") {
+    return "baja";
+  }
+
+  return "";
+};
+
 export const ImportExportPage = () => {
   const { contacts, settings, initialize } = useAppStore();
   const { pushToast } = useToast();
@@ -217,9 +233,16 @@ export const ImportExportPage = () => {
       pushToast({
         type: preview.warningCount > 0 ? "warning" : "success",
         message: preview.warningCount > 0
-          ? `Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-          : `Importación lista: ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+          ? `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+          : `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista: ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
       });
+
+      if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
+        pushToast({
+          type: "warning",
+          message: `La detección del formato tiene confianza ${formatDetectionConfidence(preview.detectionConfidence)}. Revisa la vista previa antes de importar.`
+        });
+      }
     } catch (error) {
       setCsvPreview(null);
       pushToast({
@@ -245,7 +268,11 @@ export const ImportExportPage = () => {
     }
 
     const confirmed = window.confirm(
-      `Se importarán ${csvPreview.validRowCount} registros válidos desde ${csvPreview.fileName}. ${csvPreview.createdCount} se crearán y ${csvPreview.updatedCount} se actualizarán. Se creará un backup automático. ¿Quieres continuar?`
+      `Se importarán ${csvPreview.validRowCount} registros válidos desde ${csvPreview.fileName}. ${csvPreview.createdCount} se crearán y ${csvPreview.updatedCount} se actualizarán. ${
+        csvPreview.detectionConfidence === "medium" || csvPreview.detectionConfidence === "low"
+          ? `La detección del formato tiene confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)} y debe revisarse con atención. `
+          : ""
+      }Se creará un backup automático. ¿Quieres continuar?`
     );
 
     if (!confirmed) {
@@ -392,6 +419,14 @@ export const ImportExportPage = () => {
                 <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Vista previa importación</p>
                 <h3 className="mt-2 text-xl font-semibold text-emerald-950">{csvPreview.fileName}</h3>
                 <p className="mt-1 text-sm text-emerald-900/80">{csvPreview.sourceFilePath}</p>
+                {csvPreview.detectedFormat && (
+                  <p className="mt-2 text-sm text-emerald-900/80">
+                    Formato detectado: {csvPreview.detectedFormat}
+                    {csvPreview.detectionConfidence
+                      ? ` (confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)})`
+                      : ""}
+                  </p>
+                )}
               </div>
               <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                 <button
