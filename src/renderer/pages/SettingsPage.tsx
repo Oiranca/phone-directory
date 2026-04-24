@@ -1,14 +1,14 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
+import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
+  const { pushToast } = useToast();
   const [editorName, setEditorName] = useState("");
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
@@ -70,21 +70,15 @@ export const SettingsPage = () => {
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
-    setSaveError("");
-    setSaveSuccess("");
   };
 
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
     setShowInactiveByDefault(event.target.checked);
-    setSaveError("");
-    setSaveSuccess("");
   };
 
   const handleReset = () => {
     setEditorName(settings.editorName);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
-    setSaveError("");
-    setSaveSuccess("");
   };
 
   const handleSave = async () => {
@@ -93,8 +87,6 @@ export const SettingsPage = () => {
     }
 
     setIsSaving(true);
-    setSaveError("");
-    setSaveSuccess("");
 
     try {
       const saved = await window.hospitalDirectory.saveSettings({
@@ -104,9 +96,15 @@ export const SettingsPage = () => {
         }
       });
       setSettings(saved);
-      setSaveSuccess("Configuración guardada. El filtro por defecto se aplicará en la próxima carga.");
+      pushToast({
+        type: "success",
+        message: "Configuración guardada. El filtro por defecto se aplicará en la próxima carga."
+      });
     } catch {
-      setSaveError("No se pudo guardar la configuración. Inténtalo de nuevo.");
+      pushToast({
+        type: "error",
+        message: "No se pudo guardar la configuración. Inténtalo de nuevo."
+      });
     } finally {
       setIsSaving(false);
     }
@@ -182,9 +180,6 @@ export const SettingsPage = () => {
               Descartar cambios
             </button>
           </div>
-
-          {saveSuccess && <p className="mt-4 text-sm font-medium text-emerald-700">{saveSuccess}</p>}
-          {saveError && <p className="mt-4 text-sm font-medium text-red-700">{saveError}</p>}
         </div>
         </section>
 

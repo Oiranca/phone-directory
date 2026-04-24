@@ -6,6 +6,7 @@ import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
+import { useToast } from "../components/feedback/ToastRegion";
 import { SelectField } from "../components/inputs/SelectField";
 import { useAppStore } from "../store/useAppStore";
 
@@ -193,9 +194,9 @@ export const ContactFormPage = () => {
     setSettings,
     setSelectedRecordId
   } = useAppStore();
+  const { pushToast } = useToast();
   const [formState, setFormState] = useState<ContactFormState>(() => createEmptyFormState());
   const [bootstrapError, setBootstrapError] = useState("");
-  const [submitError, setSubmitError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -230,14 +231,12 @@ export const ContactFormPage = () => {
     if (isEditing && existingRecord) {
       setFormState(toFormState(existingRecord));
       setFieldErrors({});
-      setSubmitError("");
       return;
     }
 
     if (!isEditing) {
       setFormState(createEmptyFormState());
       setFieldErrors({});
-      setSubmitError("");
     }
   }, [existingRecord, isEditing]);
 
@@ -330,14 +329,16 @@ export const ContactFormPage = () => {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSubmitError("");
 
     const payload = buildPayload(formState);
     const parsed = editableContactRecordSchema.safeParse(payload);
 
     if (!parsed.success) {
       setFieldErrors(buildErrorMap(parsed.error));
-      setSubmitError("Revisa los campos marcados antes de guardar.");
+      pushToast({
+        type: "error",
+        message: "Revisa los campos marcados antes de guardar."
+      });
       return;
     }
 
@@ -353,11 +354,12 @@ export const ContactFormPage = () => {
       setSelectedRecordId(result.savedRecordId);
       navigate("/");
     } catch (error) {
-      setSubmitError(
-        error instanceof Error
+      pushToast({
+        type: "error",
+        message: error instanceof Error
           ? error.message
           : "No se pudo guardar el registro. Inténtalo de nuevo."
-      );
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -953,12 +955,6 @@ export const ContactFormPage = () => {
             />
           </section>
         </div>
-
-        {submitError && (
-          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {submitError}
-          </div>
-        )}
 
         <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
           <button

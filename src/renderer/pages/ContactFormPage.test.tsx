@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { ContactFormPage } from "./ContactFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 const resetStore = () => {
@@ -36,7 +37,11 @@ const renderWithRoute = (initialEntry: string) => {
     { initialEntries: [initialEntry] }
   );
 
-  render(<RouterProvider router={router} />);
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  );
   return router;
 };
 
