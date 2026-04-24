@@ -437,7 +437,7 @@ export const ContactFormPage = () => {
             Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
           </p>
         </div>
-        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
           Cancelar
         </Link>
       </div>
@@ -454,9 +454,15 @@ export const ContactFormPage = () => {
                 id="displayName"
                 value={formState.displayName}
                 onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
+                aria-invalid={!!fieldErrors.displayName}
+                aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
               />
-              {fieldErrors.displayName && <p className="mt-2 text-sm text-red-600">{fieldErrors.displayName}</p>}
+              {fieldErrors.displayName && (
+                <p id="displayName-error" role="alert" className="mt-2 text-sm text-red-600">
+                  {fieldErrors.displayName}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -715,7 +721,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir teléfono
             </button>
@@ -729,7 +735,7 @@ export const ContactFormPage = () => {
                   <button
                     type="button"
                     onClick={() => removePhone(phone.id)}
-                    className="text-sm font-semibold text-slate-500 hover:text-red-600"
+                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
@@ -751,10 +757,14 @@ export const ContactFormPage = () => {
                       id={`phone-number-${phone.id}`}
                       value={phone.number}
                       onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
+                      aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
+                      aria-describedby={fieldErrors[`contactMethods.phones.${index}.number`] ? `phone-number-${phone.id}-error` : undefined}
                       className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
                     />
                     {fieldErrors[`contactMethods.phones.${index}.number`] && (
-                      <p className="mt-2 text-sm text-red-600">{fieldErrors[`contactMethods.phones.${index}.number`]}</p>
+                      <p id={`phone-number-${phone.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
+                        {fieldErrors[`contactMethods.phones.${index}.number`]}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -840,7 +850,7 @@ export const ContactFormPage = () => {
                   }
                 }))
               }
-              className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir correo
             </button>
@@ -854,7 +864,7 @@ export const ContactFormPage = () => {
                   <button
                     type="button"
                     onClick={() => removeEmail(email.id)}
-                    className="text-sm font-semibold text-slate-500 hover:text-red-600"
+                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
@@ -876,10 +886,14 @@ export const ContactFormPage = () => {
                       id={`email-address-${email.id}`}
                       value={email.address}
                       onChange={(event) => updateEmail(email.id, { address: event.target.value })}
+                      aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}
+                      aria-describedby={fieldErrors[`contactMethods.emails.${index}.address`] ? `email-address-${email.id}-error` : undefined}
                       className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
                     />
                     {fieldErrors[`contactMethods.emails.${index}.address`] && (
-                      <p className="mt-2 text-sm text-red-600">{fieldErrors[`contactMethods.emails.${index}.address`]}</p>
+                      <p id={`email-address-${email.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
+                        {fieldErrors[`contactMethods.emails.${index}.address`]}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -941,12 +955,12 @@ export const ContactFormPage = () => {
         </div>
 
         {submitError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {submitError}
           </div>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
           <button
             type="submit"
             disabled={isSubmitting}

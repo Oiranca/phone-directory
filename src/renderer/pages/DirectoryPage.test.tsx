@@ -78,8 +78,8 @@ describe("DirectoryPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("Búsqueda principal")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
     });
   });
 
@@ -105,16 +105,16 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();
 
     await chooseOption("Tipo", "Control");
-    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar registros inactivos/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
 
     expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
   });
 
-  it("shows inline risk text and a detail warning block for sensitive phones", async () => {
+  it("shows a privacy indicator and a detail warning block for sensitive phones", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
 
@@ -130,10 +130,8 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
-    expect(screen.getByText("Número interno confidencial.")).toBeInTheDocument();
-    expect(screen.getByText("No compartir con pacientes.")).toBeInTheDocument();
-    expect(screen.getByText("Atención de privacidad")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(screen.getAllByText("Atención de privacidad").length).toBeGreaterThan(0);
     expect(screen.getByText("Contiene números internos confidenciales.")).toBeInTheDocument();
     expect(screen.getByText("Incluye teléfonos que no deben compartirse con pacientes.")).toBeInTheDocument();
   });
@@ -173,9 +171,28 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Búsqueda principal")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.queryByText("Número interno confidencial.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartir con pacientes.")).not.toBeInTheDocument();
     expect(screen.getByText("Atención de privacidad")).toBeInTheDocument();
+  });
+
+  it("exposes selected result state programmatically", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+
+    const selectedButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 });
