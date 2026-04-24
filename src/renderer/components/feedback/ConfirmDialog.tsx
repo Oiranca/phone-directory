@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -15,13 +15,15 @@ export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel = 'Confirmar',
+  cancelLabel = 'Cancelar',
   onConfirm,
   onCancel,
   isDestructive = false
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const messageId = useId();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -37,13 +39,16 @@ export function ConfirmDialog({
   return (
     <dialog
       ref={dialogRef}
-      onCancel={onCancel}
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
       className="backdrop:bg-gray-900/50 p-6 rounded-lg shadow-xl max-w-md w-full border-0 focus:outline-none"
-      aria-labelledby="dialog-title"
-      aria-describedby="dialog-message"
+      aria-labelledby={titleId}
+      aria-describedby={messageId}
     >
-      <h2 id="dialog-title" className="text-xl font-semibold mb-4 text-scs-ink">{title}</h2>
-      <p id="dialog-message" className="text-gray-600 mb-8 leading-relaxed">{message}</p>
+      <h2 id={titleId} className="text-xl font-semibold mb-4 text-scs-ink">{title}</h2>
+      <p id={messageId} className="text-gray-600 mb-8 leading-relaxed">{message}</p>
       <div className="flex justify-end gap-3">
         <button
           type="button"

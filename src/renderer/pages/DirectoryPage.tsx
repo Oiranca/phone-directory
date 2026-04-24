@@ -199,12 +199,6 @@ export const DirectoryPage = () => {
                 ]}
               />
             </div>
-            <button
-              type="button"
-              className="inline-flex min-h-[46px] shrink-0 items-center justify-center rounded-2xl bg-scs-blue px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-scs-blueDark"
-            >
-              Buscar
-            </button>
           </div>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -238,6 +232,7 @@ export const DirectoryPage = () => {
                 key={record.id}
                 type="button"
                 onClick={() => setSelectedRecordId(record.id)}
+                aria-pressed={isSelected}
                 className={[
                   "w-full rounded-2xl border p-4 text-left transition",
                   isSelected
@@ -256,7 +251,10 @@ export const DirectoryPage = () => {
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
                   {privacyFlags.length > 0 && (
-                    <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" title="Atención de privacidad"></span>
+                    <span className="inline-flex items-center gap-2" title="Atención de privacidad">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
+                      <span className="sr-only">Atención de privacidad</span>
+                    </span>
                   )}
                 </div>
               </button>

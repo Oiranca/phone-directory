@@ -41,4 +41,9 @@ describe('StatePanel', () => {
     expect(panel).toHaveAttribute('role', 'status');
     expect(panel).toHaveAttribute('aria-live', 'polite');
   });
+
+  it('renders the title with the requested tag', () => {
+    render(<StatePanel title="Warning" message="Check this state." titleAs="h2" />);
+    expect(screen.getByRole('heading', { level: 2, name: 'Warning' })).toBeInTheDocument();
+  });
 });

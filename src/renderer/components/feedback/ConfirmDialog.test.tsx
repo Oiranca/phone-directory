@@ -4,10 +4,23 @@ import { ConfirmDialog } from './ConfirmDialog';
 
 // Mocking showModal and close for HTMLDialogElement as they are not implemented in JSDOM
 beforeAll(() => {
-  HTMLDialogElement.prototype.showModal = vi.fn(function(this: HTMLDialogElement) {
+  if (typeof globalThis.HTMLDialogElement === 'undefined') {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+
+    vi.stubGlobal('HTMLDialogElement', HTMLDialogElementStub);
+  }
+
+  const dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== 'undefined'
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
     this.open = true;
   });
-  HTMLDialogElement.prototype.close = vi.fn(function(this: HTMLDialogElement) {
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
     this.open = false;
   });
 });
@@ -29,8 +42,8 @@ describe('ConfirmDialog', () => {
     render(<ConfirmDialog {...defaultProps} />);
     expect(screen.getByText('Confirm Delete')).toBeInTheDocument();
     expect(screen.getByText('Are you sure you want to delete this?')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
   });
 
   it('renders nothing when closed', () => {
@@ -40,14 +53,45 @@ describe('ConfirmDialog', () => {
 
   it('calls onConfirm when confirm button is clicked', () => {
     render(<ConfirmDialog {...defaultProps} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
     expect(defaultProps.onConfirm).toHaveBeenCalled();
   });
 
   it('calls onCancel when cancel button is clicked', () => {
     render(<ConfirmDialog {...defaultProps} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(defaultProps.onCancel).toHaveBeenCalled();
+  });
+
+  it('prevents native cancel desync and delegates closing through onCancel', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    const dialog = screen.getByRole('dialog');
+    const cancelEvent = new Event('cancel', { cancelable: true });
+
+    fireEvent(dialog, cancelEvent);
+
+    expect(cancelEvent.defaultPrevented).toBe(true);
+    expect(defaultProps.onCancel).toHaveBeenCalled();
+  });
+
+  it('wires unique accessible ids for title and message', () => {
+    const { rerender } = render(<ConfirmDialog {...defaultProps} />);
+    const firstDialog = screen.getByRole('dialog');
+    const firstTitleId = firstDialog.getAttribute('aria-labelledby');
+    const firstMessageId = firstDialog.getAttribute('aria-describedby');
+
+    rerender(
+      <div>
+        <ConfirmDialog {...defaultProps} />
+        <ConfirmDialog {...defaultProps} title="Otro diálogo" />
+      </div>
+    );
+
+    const dialogs = screen.getAllByRole('dialog');
+    expect(dialogs[0]?.getAttribute('aria-labelledby')).not.toBe(dialogs[1]?.getAttribute('aria-labelledby'));
+    expect(dialogs[0]?.getAttribute('aria-describedby')).not.toBe(dialogs[1]?.getAttribute('aria-describedby'));
+    expect(firstTitleId).toBeTruthy();
+    expect(firstMessageId).toBeTruthy();
   });
 
   it('uses custom labels', () => {
@@ -64,7 +108,7 @@ describe('ConfirmDialog', () => {
 
   it('applies destructive styling when isDestructive is true', () => {
     render(<ConfirmDialog {...defaultProps} isDestructive={true} />);
-    const confirmButton = screen.getByRole('button', { name: 'Confirm' });
+    const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
     expect(confirmButton).toHaveClass('state-destructive');
   });
 });

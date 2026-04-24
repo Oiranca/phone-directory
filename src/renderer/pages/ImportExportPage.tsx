@@ -360,7 +360,7 @@ export const ImportExportPage = () => {
         {(statusMessage || actionError) && (
           <div
             role={actionError ? "alert" : "status"}
-            aria-live="polite"
+            aria-live={actionError ? "assertive" : "polite"}
             className={[
               "mt-6 rounded-2xl px-4 py-3 text-sm font-medium",
               actionError
