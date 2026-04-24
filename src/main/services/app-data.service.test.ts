@@ -794,6 +794,300 @@ describe("AppDataService", () => {
     expect(ingenioUrg?.contactMethods.phones[0]?.extension).toBe("84121");
   });
 
+  it("does not misclassify partial-overlap CSV headers as the normalized template", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "partial-overlap.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "status,legacyDesk,name",
+        "active,desk-1,Mostrador"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("imports service-sheet XLSX files with arbitrary sheet names by row profile", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Sheet1"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "custom-export.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath);
+    const controlRecord = result.contacts.records.find((record) => record.displayName === "Control boxes");
+
+    expect(preview.detectedFormat).toBe("exportación cruda de hoja de servicios");
+    expect(preview.detectionConfidence).toBe("high");
+    expect(preview.validRowCount).toBe(2);
+    expect(controlRecord?.organization.department).toBe("Urgencias");
+    expect(controlRecord?.contactMethods.phones[0]?.noPatientSharing).toBe(true);
+  });
+
+  it("accepts canonical one-row service sheets with a detected service header", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-single-row.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.createdCount).toBe(1);
+    expect(preview.detectedFormat).toBe("exportación cruda de hoja de servicios");
+  });
+
+  it("rejects alias-matched sheets when they do not carry service-sheet structure", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Fecha", "ID", "Valor"],
+        ["2026-04-24", "1234", "55"],
+        ["2026-04-25", "4567", "89"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "bad-urgencias.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects alias-matched sheets with service-like headers but date-shaped junk rows", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Valor"],
+        ["Mostrador", "2026-04-24", "55"],
+        ["Control", "2026-04-25", "89"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "alias-header-junk.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects generic service-like sheets with a single numeric row and no structural evidence", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Agenda abril"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "generic-single-row.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects two-row numeric tables that only mimic service headers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Valor"],
+        ["Mostrador", "55555", "12"],
+        ["Control", "55556", "18"]
+      ]),
+      "Agenda abril"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "generic-two-row-junk.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("keeps service-sheet merge ids stable when the same export uses a custom sheet title", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const canonicalWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      canonicalWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Sheet1"
+    );
+
+    const canonicalPath = path.join(testRoot, "incoming", "service-canonical.xlsx");
+    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
+    XLSX.writeFile(canonicalWorkbook, canonicalPath);
+    await service.importCsvDataset(canonicalPath);
+
+    const customWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      customWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Urgencias", "", ""],
+        ["Mostrador", "55555", ""],
+        ["Control boxes", "55556", "No pasar llamadas externas"]
+      ]),
+      "Agenda abril"
+    );
+
+    const customPath = path.join(testRoot, "incoming", "service-custom-title.xlsx");
+    XLSX.writeFile(customWorkbook, customPath);
+
+    const preview = await service.previewCsvImport(customPath);
+
+    expect(preview.createdCount).toBe(0);
+    expect(preview.updatedCount).toBe(2);
+  });
+
+  it("keeps health-center merge ids stable when the sheet title is arbitrary", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const canonicalWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      canonicalWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+        ["", "Urgencias", "928 30 41 21", "(84121)"]
+      ]),
+      "Centros de salud"
+    );
+
+    const canonicalPath = path.join(testRoot, "incoming", "centers-canonical.xlsx");
+    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
+    XLSX.writeFile(canonicalWorkbook, canonicalPath);
+    await service.importCsvDataset(canonicalPath);
+
+    const customWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      customWorkbook,
+      XLSX.utils.aoa_to_sheet([
+        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+        ["", "Urgencias", "928 30 41 21", "(84121)"]
+      ]),
+      "Agenda abril"
+    );
+
+    const customPath = path.join(testRoot, "incoming", "centers-custom-title.xlsx");
+    XLSX.writeFile(customWorkbook, customPath);
+
+    const preview = await service.previewCsvImport(customPath);
+
+    expect(preview.createdCount).toBe(0);
+    expect(preview.updatedCount).toBe(2);
+  });
+
+  it("labels normalized template previews with detected format metadata", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "normalized-template.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,phone1Number",
+        "service,Mostrador,Recepción,55555"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.detectedFormat).toBe("plantilla normalizada");
+    expect(preview.detectionConfidence).toBe("high");
+  });
+
   it("imports continuation rows in service sheets when the label lives in a later column", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

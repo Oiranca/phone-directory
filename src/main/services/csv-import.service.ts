@@ -341,6 +341,8 @@ export const buildImportPreviewFromRows = async (
     sourceFilePath: string;
     fileName: string;
     editorName: string;
+    detectedFormat?: string;
+    detectionConfidence?: "high" | "medium" | "low";
   }
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
   const records: ContactRecord[] = [];
@@ -486,6 +488,8 @@ export const buildImportPreviewFromRows = async (
       importToken: "",
       sourceFilePath: options.sourceFilePath,
       fileName: options.fileName,
+      detectedFormat: options.detectedFormat,
+      detectionConfidence: options.detectionConfidence,
       totalRowCount: rows.length,
       validRowCount: records.length,
       invalidRowCount: rowIssues.length,

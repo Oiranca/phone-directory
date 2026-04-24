@@ -208,6 +208,8 @@ export interface CsvImportPreview {
   importToken: string;
   sourceFilePath: string;
   fileName: string;
+  detectedFormat?: string;
+  detectionConfidence?: "high" | "medium" | "low";
   totalRowCount: number;
   validRowCount: number;
   invalidRowCount: number;

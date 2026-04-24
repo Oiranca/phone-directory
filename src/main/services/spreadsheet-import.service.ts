@@ -3,6 +3,7 @@ import path from "node:path";
 import Papa from "papaparse";
 import XLSX from "xlsx";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImportRow } from "./csv-import.service.js";
+import type { CsvImportPreview, DirectoryDataset } from "../../shared/types/contact.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const NORMALIZED_TEMPLATE_HEADERS = new Set([
@@ -90,6 +91,18 @@ type SheetData = {
   name: string;
   slug: string;
   rows: string[][];
+};
+
+type DetectionConfidence = "high" | "medium" | "low";
+
+type SheetProfile = {
+  parser: "centers" | "service";
+  canonicalSlug: string;
+  department: string;
+  area?: string;
+  rowsToSkip: number;
+  detectedFormat: string;
+  detectionConfidence: DetectionConfidence;
 };
 
 const clean = (value: string) => value.replace(/\u00a0/g, " ").split(/\s+/).filter(Boolean).join(" ").trim();
@@ -367,6 +380,71 @@ const buildCenterPhones = (longNumber: string, shortNumber: string) => {
 
 const stripBom = (value: string) => value.replace(/^\uFEFF/, "");
 const hasLetters = (value: string) => /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(value);
+const looksLikeDateValue = (value: string) => {
+  const normalized = clean(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return /^(\d{1,4})[\/.-](\d{1,2})[\/.-](\d{1,4})$/.test(normalized);
+};
+
+const hasPhoneLikeNumber = (value: string) =>
+  !looksLikeDateValue(value) && extractNumbers(value).some((number) => number.length >= 4 && number.length <= 9);
+
+const isMeaningfulServiceLabel = (value: string) => {
+  const normalized = clean(value);
+
+  if (!normalized || !hasLetters(normalized) || isExcludedLabel(normalized) || looksLikeDateValue(normalized)) {
+    return false;
+  }
+
+  return !/^\d/.test(normalized);
+};
+
+const prettifyLabel = (value: string) =>
+  clean(
+    value
+      .replace(/[_-]+/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (match) => match.toUpperCase())
+  );
+
+const inferAreaFromLabel = (value: string) => {
+  const normalized = normalizeAscii(value);
+
+  if (/(urgencias|hospitales-de-dia|hospitalizacion|planta|umi|quirofanos|quirofanos|criticos|uci)/.test(normalized)) {
+    return "sanitaria-asistencial";
+  }
+
+  if (/(admision|secretarias|secretaria|citas|usuario|almacenes|telecomunicaciones)/.test(normalized)) {
+    return "gestion-administracion";
+  }
+
+  if (/(rayos|cc-ee|consulta|consulta|especialidades)/.test(normalized)) {
+    return "especialidades";
+  }
+
+  return undefined;
+};
+
+const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
+
+const SERVICE_PROFILE_ALIASES: Record<string, string> = {
+  ...Object.fromEntries([...SAME_AS_CANONICAL].map((slug) => [slug, slug])),
+  urgencias: "urgencias",
+  rayos: "rayos",
+  secretarias: "secretarias",
+  "secretarias-medicas": "secretarias",
+  "admision-central": "admision-central",
+  "admision central": "admision-central",
+  "admisión central": "admision-central",
+  "hospitales-de-dia": "hospitales-de-dia",
+  "hospitales de dia": "hospitales-de-dia",
+  "hospitales de día": "hospitales-de-dia",
+  umi: "umi"
+};
 
 const resolveServiceRowLabel = (cells: string[]) => {
   const firstCell = cells[0] ?? "";
@@ -384,9 +462,13 @@ const resolveServiceRowLabel = (cells: string[]) => {
   ) ?? "";
 };
 
-const normalizeServiceSheet = (sheet: SheetData) => {
-  const metadata = SERVICE_SHEETS[sheet.slug];
-  const data = sheet.rows.slice(1);
+const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
+  const metadata = {
+    area: profile.area ?? "otros",
+    department: profile.department,
+    slug: profile.canonicalSlug
+  };
+  const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
   let currentSection = "";
 
@@ -474,13 +556,13 @@ const normalizeServiceSheet = (sheet: SheetData) => {
     const record = blankRecord();
     const rowNumber = rowIndex + 1;
 
-    record.externalId = `${sheet.slug}-${buildStableExternalId([
+    record.externalId = `${metadata.slug}-${buildStableExternalId([
       metadata.department,
       currentSection && currentSection !== metadata.department ? currentSection : label,
       dedupedPhoneNumbers[0],
       dedupedPhoneNumbers[1]
     ])}`;
-    record.type = classifyType(label, sheet.slug);
+    record.type = classifyType(label, metadata.slug);
     record.displayName = label;
     record.area = metadata.area;
     record.department = metadata.department;
@@ -585,8 +667,8 @@ const looksLikeCenterHeader = (first: string, second: string) => {
     .some((marker) => firstClean.toLowerCase().includes(marker));
 };
 
-const normalizeCentersSheet = (sheet: SheetData) => {
-  const data = sheet.rows.slice(1);
+const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) => {
+  const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
   let currentCenter = "";
   let currentAddress = "";
@@ -629,7 +711,7 @@ const normalizeCentersSheet = (sheet: SheetData) => {
 
     const phones = buildCenterPhones(longNumber, shortNumber);
     const record = blankRecord();
-    record.externalId = `${sheet.slug}-${buildStableExternalId([
+    record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([
       currentCenter,
       service,
       phones[0]?.number,
@@ -680,21 +762,6 @@ const readSheetRows = (sheet: XLSX.WorkSheet) =>
     .map((row) => row.map((value) => clean(String(value ?? ""))))
     .filter((row) => row.some((value) => value));
 
-const RAW_HEADER_SLUGS: Record<string, string> = {
-  CENTROSDESALUD: "centros-de-salud",
-  URGENCIAS: "urgencias",
-  ADMISIONCENTRAL: "admision-central",
-  RAYOS: "rayos",
-  SECRETARIAS: "secretarias",
-  HOSPITALESDEDIA: "hospitales-de-dia",
-  UMI: "umi"
-};
-
-const detectRawSheetSlugFromRows = (rows: string[][], fallbackSlug: string) => {
-  const firstHeader = normalizeMarker(rows[0]?.[0] ?? "");
-  return RAW_HEADER_SLUGS[firstHeader] ?? fallbackSlug;
-};
-
 const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   const workbook = XLSX.readFile(sourceFilePath, {
     dense: true,
@@ -706,8 +773,7 @@ const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   return workbook.SheetNames.map((sheetName) => {
     const rows = readSheetRows(workbook.Sheets[sheetName]!);
     const normalizedName = normalizeAscii(sheetName);
-    const baseSlug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
-    const slug = detectRawSheetSlugFromRows(rows, baseSlug);
+    const slug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
 
     return {
       name: sheetName,
@@ -717,23 +783,257 @@ const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   });
 };
 
-const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
+const readCsvHeaders = async (sourceFilePath: string) => {
   const rawSource = await fs.readFile(sourceFilePath, "utf-8");
   const headerResult = Papa.parse<string[]>(rawSource, {
     preview: 1,
     skipEmptyLines: "greedy",
     transform: (value: string) => stripBom(value).trim()
   });
-  const headers = (headerResult.data[0] ?? []).map((header) => stripBom(header).trim());
+
+  return (headerResult.data[0] ?? []).map((header) => stripBom(header).trim());
+};
+
+const isNormalizedTemplateHeaders = (headers: string[]) => {
+  if (headers.length === 0) {
+    return false;
+  }
+
+  if (headers.some((header) => header.length === 0)) {
+    return false;
+  }
+
+  const headerSet = new Set(headers);
+
+  return headerSet.has("type") && headerSet.has("displayName");
+};
+
+const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
+  const headers = await readCsvHeaders(sourceFilePath);
 
   if (headers.length === 0) {
     return false;
   }
 
-  return headers.some((header) => NORMALIZED_TEMPLATE_HEADERS.has(header));
+  return isNormalizedTemplateHeaders(headers);
 };
 
-const normalizeWorkbookRows = (sourceFilePath: string): NormalizedImportRow[] => {
+const centersHeaderAliases = {
+  center: new Set(["CENTROSDESALUD", "CENTRO", "CENTRODESALUD", "CENTROYDIRECCION"]),
+  service: new Set(["SERVICIO", "UNIDAD", "AREA", "TIPO"]),
+  longNumber: new Set(["NUMEROLARGO", "TELEFONOLARGO", "TLFLARGO", "LARGO", "TELEFONO"]),
+  shortNumber: new Set(["NUMEROCORTO", "NUMEROINTERNO", "EXTENSION", "CORTO", "TLFCORTO"])
+};
+
+const serviceHeaderAliases = {
+  label: new Set(["SERVICIO", "NOMBRE", "NOMBREVISIBLE", "CONTACTO", "UNIDAD"]),
+  phone: new Set(["NUMERO", "NUMEROLARGO", "TELEFONO", "TELEFONO", "TLF", "EXTENSION"])
+};
+
+const detectHeaderRowIndex = (
+  rows: string[][],
+  scorer: (row: string[]) => number
+) => {
+  let bestIndex = -1;
+  let bestScore = -1;
+
+  rows.slice(0, 5).forEach((row, index) => {
+    const score = scorer(row);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return { index: bestIndex, score: bestScore };
+};
+
+const scoreCentersHeader = (row: string[]) => {
+  const normalized = row.slice(0, 4).map((cell) => normalizeMarker(cell));
+  let score = 0;
+
+  if (centersHeaderAliases.center.has(normalized[0] ?? "")) score += 3;
+  if (centersHeaderAliases.service.has(normalized[1] ?? "")) score += 2;
+  if (centersHeaderAliases.longNumber.has(normalized[2] ?? "")) score += 2;
+  if (centersHeaderAliases.shortNumber.has(normalized[3] ?? "")) score += 2;
+
+  return score;
+};
+
+const scoreServiceHeader = (row: string[]) => {
+  const normalized = row.slice(0, 4).map((cell) => normalizeMarker(cell));
+  let score = 0;
+
+  if (serviceHeaderAliases.label.has(normalized[0] ?? "")) score += 2;
+  if (normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell))) score += 2;
+
+  return score;
+};
+
+const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
+  let score = 0;
+  let phoneBearingRows = 0;
+  let continuationRows = 0;
+  let sectionRows = 0;
+  let meaningfulLabelRows = 0;
+  const uniqueLabels = new Set<string>();
+
+  rows.slice(startIndex, startIndex + 8).forEach((row) => {
+    const cells = row.map((cell) => clean(cell));
+    const label = resolveServiceRowLabel(cells);
+    const labelLooksMeaningful = isMeaningfulServiceLabel(label);
+    const phoneLikeCells = cells.filter((cell, index) => index > 0 && hasPhoneLikeNumber(cell)).length;
+    const nonEmpty = cells.filter(Boolean);
+
+    if (labelLooksMeaningful) {
+      meaningfulLabelRows += 1;
+      uniqueLabels.add(normalizeAscii(label));
+    }
+
+    if (labelLooksMeaningful && phoneLikeCells > 0) {
+      score += 2;
+      phoneBearingRows += 1;
+    }
+
+    if ((cells[0] ?? "") === "" && phoneLikeCells > 0) {
+      score += 1;
+      continuationRows += 1;
+    }
+
+    if (
+      nonEmpty.length === 1 &&
+      (cells[0] ?? "") &&
+      isMeaningfulServiceLabel(cells[0] ?? "") &&
+      !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(cells[0] ?? ""))
+    ) {
+      sectionRows += 1;
+    }
+  });
+
+  return {
+    score,
+    phoneBearingRows,
+    continuationRows,
+    sectionRows,
+    meaningfulLabelRows,
+    uniqueLabelCount: uniqueLabels.size
+  };
+};
+
+const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
+  if (sheet.rows.length === 0) {
+    return null;
+  }
+
+  const normalizedSheetName = normalizeAscii(sheet.name);
+  const canonicalFromName = SERVICE_PROFILE_ALIASES[normalizedSheetName] ?? SERVICE_PROFILE_ALIASES[sheet.slug];
+
+  const centersHeader = detectHeaderRowIndex(sheet.rows, scoreCentersHeader);
+
+  if (centersHeader.score >= 7) {
+    return {
+      parser: "centers",
+      canonicalSlug: "centros-de-salud",
+      department: "Centros de salud",
+      area: "otros",
+      rowsToSkip: centersHeader.index + 1,
+      detectedFormat: "exportación cruda de centros de salud",
+      detectionConfidence: "high"
+    };
+  }
+
+  const serviceHeader = detectHeaderRowIndex(sheet.rows, scoreServiceHeader);
+  const serviceRowsStartIndex = serviceHeader.score >= 3 ? serviceHeader.index + 1 : Math.max(serviceHeader.index, 0);
+  const rawServiceSignals = analyzeRawServiceRows(sheet.rows, serviceRowsStartIndex);
+  const hasReliableHeaderBackedServiceEvidence =
+    serviceHeader.score >= 3 &&
+    rawServiceSignals.phoneBearingRows >= 1 &&
+    (rawServiceSignals.sectionRows >= 1 || rawServiceSignals.continuationRows >= 1);
+  const hasMinimalCanonicalServiceEvidence =
+    Boolean(canonicalFromName) &&
+    serviceHeader.score >= 3 &&
+    rawServiceSignals.phoneBearingRows >= 1 &&
+    rawServiceSignals.meaningfulLabelRows >= 1;
+  const hasReliableRawServiceEvidence =
+    rawServiceSignals.score >= 5 &&
+    rawServiceSignals.phoneBearingRows >= 2 &&
+    rawServiceSignals.meaningfulLabelRows >= 2 &&
+    (rawServiceSignals.sectionRows >= 1 || rawServiceSignals.continuationRows >= 1);
+  const hasStructuredServiceEvidence =
+    hasReliableHeaderBackedServiceEvidence ||
+    hasMinimalCanonicalServiceEvidence ||
+    hasReliableRawServiceEvidence;
+
+  if (canonicalFromName && hasStructuredServiceEvidence) {
+    const metadata = SERVICE_SHEETS[canonicalFromName];
+
+    return {
+      parser: "service",
+      canonicalSlug: canonicalFromName,
+      department: metadata.department,
+      area: metadata.area,
+      rowsToSkip: serviceHeader.score >= 3 ? serviceHeader.index + 1 : 1,
+      detectedFormat: "exportación cruda de hoja de servicios",
+      detectionConfidence: serviceHeader.score >= 3 ? "high" : "medium"
+    };
+  }
+
+  const derivedDepartment = (() => {
+    const firstMeaningfulLabel = sheet.rows
+      .slice(serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0, 8)
+      .map((row) => resolveServiceRowLabel(row.map((cell) => clean(cell))))
+      .find(Boolean);
+
+    if (firstMeaningfulLabel) {
+      return prettifyLabel(firstMeaningfulLabel);
+    }
+
+    return prettifyLabel(sheet.name);
+  })();
+
+  if (
+    hasReliableHeaderBackedServiceEvidence ||
+    (
+      rawServiceSignals.score >= 8 &&
+      rawServiceSignals.phoneBearingRows >= 3 &&
+      rawServiceSignals.meaningfulLabelRows >= 2 &&
+      rawServiceSignals.sectionRows >= 1 &&
+      rawServiceSignals.continuationRows >= 1
+    )
+  ) {
+
+    return {
+      parser: "service",
+      canonicalSlug: normalizeAscii(derivedDepartment),
+      department: derivedDepartment,
+      area: inferAreaFromLabel(derivedDepartment),
+      rowsToSkip: serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0,
+      detectedFormat: "exportación cruda de hoja de servicios",
+      detectionConfidence: serviceHeader.score >= 3 ? "high" : "medium"
+    };
+  }
+
+  return null;
+};
+
+const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
+  const kinds = new Set(profiles.map((profile) => profile.detectedFormat));
+  const confidence: DetectionConfidence = profiles.some((profile) => profile.detectionConfidence === "low")
+    ? "low"
+    : profiles.some((profile) => profile.detectionConfidence === "medium")
+      ? "medium"
+      : "high";
+
+  return {
+    detectedFormat: kinds.size === 1 ? [...kinds][0]! : "hoja de cálculo cruda mixta",
+    detectionConfidence: confidence
+  };
+};
+
+const normalizeWorkbookRows = (
+  sourceFilePath: string
+): { rows: NormalizedImportRow[]; detectedFormat: string; detectionConfidence: DetectionConfidence } => {
   let sheets: SheetData[];
 
   try {
@@ -747,20 +1047,27 @@ const normalizeWorkbookRows = (sourceFilePath: string): NormalizedImportRow[] =>
   }
 
   const records: NormalizedImportRow[] = [];
+  const profiles: SheetProfile[] = [];
 
   for (const sheet of sheets) {
     if (sheet.rows.length === 0) {
       continue;
     }
 
-    if (sheet.slug === "centros-de-salud") {
-      records.push(...normalizeCentersSheet(sheet));
+    const profile = detectSheetProfile(sheet);
+
+    if (!profile) {
       continue;
     }
 
-    if (sheet.slug in SERVICE_SHEETS) {
-      records.push(...normalizeServiceSheet(sheet));
+    profiles.push(profile);
+
+    if (profile.parser === "centers") {
+      records.push(...normalizeCentersSheet(sheet, profile));
+      continue;
     }
+
+    records.push(...normalizeServiceSheet(sheet, profile));
   }
 
   if (records.length === 0) {
@@ -769,10 +1076,16 @@ const normalizeWorkbookRows = (sourceFilePath: string): NormalizedImportRow[] =>
     );
   }
 
-  return records;
+  return {
+    rows: records,
+    ...summarizeDetectedFormat(profiles)
+  };
 };
 
-export const buildSpreadsheetImportPreview = async (sourceFilePath: string, editorName: string) => {
+export const buildSpreadsheetImportPreview = async (
+  sourceFilePath: string,
+  editorName: string
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
   const extension = path.extname(sourceFilePath).toLowerCase();
   const sourceStats = await fs.stat(sourceFilePath);
 
@@ -785,18 +1098,29 @@ export const buildSpreadsheetImportPreview = async (sourceFilePath: string, edit
   }
 
   if (extension === ".csv" && await isNormalizedTemplateCsv(sourceFilePath)) {
-    return buildCsvImportPreview(sourceFilePath, editorName);
+    const result = await buildCsvImportPreview(sourceFilePath, editorName);
+
+    return {
+      ...result,
+      preview: {
+        ...result.preview,
+        detectedFormat: "plantilla normalizada",
+        detectionConfidence: "high"
+      }
+    };
   }
 
   if (![".csv", ".ods", ".xlsx", ".xls"].includes(extension)) {
     throw new Error("Formato no soportado. Usa CSV, ODS, XLSX o XLS.");
   }
 
-  const rows = normalizeWorkbookRows(sourceFilePath);
+  const normalized = normalizeWorkbookRows(sourceFilePath);
 
-  return buildImportPreviewFromRows(rows, {
+  return buildImportPreviewFromRows(normalized.rows, {
     sourceFilePath,
     fileName: path.basename(sourceFilePath),
-    editorName
+    editorName,
+    detectedFormat: normalized.detectedFormat,
+    detectionConfidence: normalized.detectionConfidence
   });
 };
