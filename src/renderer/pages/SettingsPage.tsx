@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
@@ -7,9 +7,11 @@ export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
   const { pushToast } = useToast();
   const [editorName, setEditorName] = useState("");
+  const [hasEditorDraft, setHasEditorDraft] = useState(false);
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [bootstrapError, setBootstrapError] = useState("");
+  const clearEditorAfterSaveRef = useRef(false);
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
   // This local loader is retained only for page-level retry and test isolation.
@@ -40,8 +42,10 @@ export const SettingsPage = () => {
       return;
     }
 
-    setEditorName(settings.editorName);
+    setEditorName(clearEditorAfterSaveRef.current ? "" : settings.editorName);
+    setHasEditorDraft(false);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
+    clearEditorAfterSaveRef.current = false;
   }, [settings]);
 
   if (bootstrapError) {
@@ -65,11 +69,12 @@ export const SettingsPage = () => {
   }
 
   const isDirty =
-    editorName !== settings.editorName ||
+    (hasEditorDraft && editorName !== settings.editorName) ||
     showInactiveByDefault !== settings.ui.showInactiveByDefault;
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
+    setHasEditorDraft(true);
   };
 
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -78,6 +83,7 @@ export const SettingsPage = () => {
 
   const handleReset = () => {
     setEditorName(settings.editorName);
+    setHasEditorDraft(false);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
   };
 
@@ -95,6 +101,7 @@ export const SettingsPage = () => {
           showInactiveByDefault
         }
       });
+      clearEditorAfterSaveRef.current = true;
       setSettings(saved);
       pushToast({
         type: "success",

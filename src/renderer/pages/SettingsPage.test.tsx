@@ -103,6 +103,7 @@ describe("SettingsPage", () => {
         showInactiveByDefault: true
       }
     });
+    expect(screen.getByLabelText("Nombre del editor")).toHaveValue("");
   });
 
   it("restores the last persisted values when discarding changes", async () => {
