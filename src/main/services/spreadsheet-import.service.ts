@@ -871,6 +871,12 @@ const scoreServiceHeader = (row: string[]) => {
   return score;
 };
 
+const hasStrictServiceHeader = (row: string[]) => {
+  const normalized = row.slice(0, 4).map((cell) => normalizeMarker(cell));
+  return ["SERVICIO", "UNIDAD"].includes(normalized[0] ?? "") &&
+    normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell));
+};
+
 const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
   let score = 0;
   let phoneBearingRows = 0;
@@ -946,12 +952,14 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   const serviceHeader = detectHeaderRowIndex(sheet.rows, scoreServiceHeader);
   const serviceRowsStartIndex = serviceHeader.score >= 3 ? serviceHeader.index + 1 : Math.max(serviceHeader.index, 0);
   const rawServiceSignals = analyzeRawServiceRows(sheet.rows, serviceRowsStartIndex);
+  const strictServiceHeader = hasStrictServiceHeader(sheet.rows[serviceHeader.index] ?? []);
   const hasReliableHeaderBackedServiceEvidence =
     serviceHeader.score >= 3 &&
     rawServiceSignals.phoneBearingRows >= 1 &&
     (rawServiceSignals.sectionRows >= 1 || rawServiceSignals.continuationRows >= 1);
   const hasMinimalCanonicalServiceEvidence =
     Boolean(canonicalFromName) &&
+    strictServiceHeader &&
     serviceHeader.score >= 3 &&
     rawServiceSignals.phoneBearingRows >= 1 &&
     rawServiceSignals.meaningfulLabelRows >= 1;
@@ -967,6 +975,8 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
 
   if (canonicalFromName && hasStructuredServiceEvidence) {
     const metadata = SERVICE_SHEETS[canonicalFromName];
+    const detectionConfidence: DetectionConfidence =
+      hasReliableHeaderBackedServiceEvidence || hasReliableRawServiceEvidence ? "high" : "medium";
 
     return {
       parser: "service",
@@ -975,7 +985,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
       area: metadata.area,
       rowsToSkip: serviceHeader.score >= 3 ? serviceHeader.index + 1 : 1,
       detectedFormat: "exportación cruda de hoja de servicios",
-      detectionConfidence: serviceHeader.score >= 3 ? "high" : "medium"
+      detectionConfidence
     };
   }
 

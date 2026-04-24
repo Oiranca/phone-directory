@@ -874,6 +874,7 @@ describe("AppDataService", () => {
     expect(preview.validRowCount).toBe(1);
     expect(preview.createdCount).toBe(1);
     expect(preview.detectedFormat).toBe("exportación cruda de hoja de servicios");
+    expect(preview.detectionConfidence).toBe("medium");
   });
 
   it("rejects alias-matched sheets when they do not carry service-sheet structure", async () => {
@@ -920,6 +921,31 @@ describe("AppDataService", () => {
     );
 
     const sourceFilePath = path.join(testRoot, "incoming", "alias-header-junk.xlsx");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
+      "No se encontraron hojas soportadas para importar."
+    );
+  });
+
+  it("rejects canonical sheets that only match generic name-extension headers", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Nombre", "Extensión", "Valor"],
+        ["Mostrador", "55555", "12"]
+      ]),
+      "Urgencias"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-name-extension.xlsx");
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     XLSX.writeFile(workbook, sourceFilePath);
 
