@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 
@@ -515,7 +516,53 @@ describe("AppDataService", () => {
     );
   });
 
-  it("imports a normalized CSV and replaces the dataset after backup", async () => {
+  it("imports a normalized CSV and merges records by externalId after backup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Samuel",
+      ui: {
+        showInactiveByDefault: false
+      }
+    });
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "directory.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,area,phone1Number,phone1Kind,aliases,tags,status",
+        `${existing.externalId},service,${existing.displayName} Actualizada,${existing.organization.department},especialidades,12345,internal,ana|ana,front|front,active`,
+        "legacy-2,service,Mostrador,Recepción,especialidades,55555,desk,,,inactive"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
+
+    expect(result.recordCount).toBe(initial.contacts.records.length + 1);
+    expect(result.warningCount).toBe(3);
+    expect(result.invalidRowCount).toBe(0);
+    expect(result.createdCount).toBe(1);
+    expect(result.updatedCount).toBe(1);
+    const updated = result.contacts.records.find((record) => record.id === existing.id);
+    const created = result.contacts.records.find((record) => record.externalId === "legacy-2");
+    expect(updated?.displayName).toBe(`${existing.displayName} Actualizada`);
+    expect(updated?.aliases).toEqual(["ana"]);
+    expect(updated?.tags).toEqual(["front"]);
+    expect(created?.contactMethods.phones[0]?.kind).toBe("other");
+    expect(result.backupPath).toContain(path.join(testRoot, "backups"));
+    expect(persisted.records.some((record) => record.status === "inactive")).toBe(true);
+  });
+
+  it("previews and imports an ODS workbook through the spreadsheet pipeline", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -527,32 +574,33 @@ describe("AppDataService", () => {
       }
     });
 
-    const sourceFilePath = path.join(testRoot, "incoming", "directory.csv");
+    const workbook = XLSX.utils.book_new();
+    const urgenciasSheet = XLSX.utils.aoa_to_sheet([
+      ["Servicio", "Número", "Notas"],
+      ["Urgencias", "", ""],
+      ["Mostrador", "55555", ""],
+      ["Control boxes", "55556", "No pasar llamadas externas"]
+    ]);
+    XLSX.utils.book_append_sheet(workbook, urgenciasSheet, "Urgencias");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    await fs.writeFile(
-      sourceFilePath,
-      [
-        "type,displayName,department,area,phone1Number,phone1Kind,aliases,tags,status",
-        "person,Ana Pérez,Admisión,otros,12345,internal,ana|ana,front|front,active",
-        "service,Mostrador,Recepción,especialidades,55555,desk,,,inactive"
-      ].join("\n") + "\n",
-      "utf-8"
-    );
+    XLSX.writeFile(workbook, sourceFilePath);
 
+    const preview = await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(sourceFilePath);
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
-    ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
 
-    expect(result.recordCount).toBe(2);
-    expect(result.warningCount).toBe(3);
-    expect(result.invalidRowCount).toBe(0);
-    expect(result.contacts.records[0]?.displayName).toBe("Ana Pérez");
-    expect(result.contacts.records[0]?.aliases).toEqual(["ana"]);
-    expect(result.contacts.records[0]?.tags).toEqual(["front"]);
-    expect(result.contacts.records[1]?.contactMethods.phones[0]?.kind).toBe("other");
-    expect(result.backupPath).toContain(path.join(testRoot, "backups"));
-    expect(persisted.records[1]?.status).toBe("inactive");
+    expect(preview.validRowCount).toBe(2);
+    expect(preview.createdCount).toBe(2);
+    expect(preview.updatedCount).toBe(0);
+    expect(result.createdCount).toBe(2);
+    expect(result.updatedCount).toBe(0);
+    expect(result.contacts.records.some((record) => record.displayName === "Mostrador")).toBe(true);
+    expect(
+      result.contacts.records.some((record) =>
+        record.contactMethods.phones.some((phone) => phone.noPatientSharing)
+      )
+    ).toBe(true);
   });
 
   it("imports a valid dataset even when the current dataset is corrupt", async () => {

@@ -1,0 +1,10 @@
+{
+  "id": "packager-2",
+  "name": "Packager",
+  "card": "Configura electron-builder y genera instaladores distribuibles para macOS",
+  "behaviorPrompt": "Eres el agente de packaging para el directorio telefónico hospitalario. Añade electron-builder con configuración mínima para macOS.\n\nPasos:\n1. `npm install --save-dev electron-builder`\n2. Añade sección `build` en package.json (appId, productName, mac target: dmg, files, directories)\n3. Scripts: `package` (build + installer) y `package:dir` (build + dir, sin installer, para validación)\n4. Verifica `npm run build` limpio antes de empaquetar\n5. Ejecuta `npm run package:dir` para validar\n6. Añade `release/` y `out/` a .gitignore\n\nNo toques configuración de seguridad Electron. No modifiques el preload.",
+  "blacklist": [],
+  "maxParallelSessions": 1,
+  "maxRetries": 2,
+  "model": "claude-sonnet-4-6"
+}

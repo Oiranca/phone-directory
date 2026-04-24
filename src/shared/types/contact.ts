@@ -213,6 +213,9 @@ export interface CsvImportPreview {
   invalidRowCount: number;
   warningCount: number;
   recordCount: number;
+  mergedRecordCount: number;
+  createdCount: number;
+  updatedCount: number;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
@@ -222,4 +225,6 @@ export interface CsvImportPreview {
 export interface CsvImportResult extends ImportContactsResult {
   warningCount: number;
   invalidRowCount: number;
+  createdCount: number;
+  updatedCount: number;
 }

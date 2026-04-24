@@ -87,8 +87,8 @@ export const registerContactsIpc = (service: AppDataService) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const senderId = event.sender.id;
     const openOptions = {
-      title: "Preparar importación CSV",
-      filters: [{ name: "CSV", extensions: ["csv"] }],
+      title: "Preparar importación de agenda",
+      filters: [{ name: "Hojas de cálculo", extensions: ["csv", "ods", "xlsx", "xls"] }],
       properties: ["openFile"]
     } satisfies Electron.OpenDialogOptions;
     const { canceled, filePaths } = browserWindow

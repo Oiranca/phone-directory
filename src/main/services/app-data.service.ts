@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
-import { buildCsvImportPreview } from "./csv-import.service.js";
+import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 import type {
   AppSettings,
   BackupListItem,
@@ -194,18 +194,27 @@ export class AppDataService {
 
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
     const settings = await this.readSettings();
-    const { preview } = await buildCsvImportPreview(
+    const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       this.getEditorName(settings)
     );
-    return preview;
+    const currentContacts = await this.readContacts();
+    const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
+
+    return {
+      ...preview,
+      mergedRecordCount: mergeSummary.contacts.records.length,
+      createdCount: mergeSummary.createdCount,
+      updatedCount: mergeSummary.updatedCount
+    };
   }
 
   async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
     const settings = await this.readSettings();
-    const { dataset, preview } = await buildCsvImportPreview(
+    const editorName = this.getEditorName(settings);
+    const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
-      this.getEditorName(settings)
+      editorName
     );
 
     if (preview.invalidRowCount > 0) {
@@ -216,17 +225,21 @@ export class AppDataService {
       throw new Error("El CSV no contiene filas válidas para importar.");
     }
 
+    const currentContacts = await this.readContacts();
+    const merged = this.mergeImportedDataset(currentContacts, dataset, editorName);
     const backupPath = await this.createBackup();
-    await writeJsonFile(getContactsFilePath(), dataset);
+    await writeJsonFile(getContactsFilePath(), merged.contacts);
 
     return {
-      contacts: dataset,
+      contacts: merged.contacts,
       settings: this.toEditableSettings(settings),
       backupPath,
       importedFilePath: sourceFilePath,
-      recordCount: dataset.records.length,
+      recordCount: merged.contacts.records.length,
       warningCount: preview.warningCount,
-      invalidRowCount: preview.invalidRowCount
+      invalidRowCount: preview.invalidRowCount,
+      createdCount: merged.createdCount,
+      updatedCount: merged.updatedCount
     };
   }
 
@@ -375,6 +388,65 @@ export class AppDataService {
       },
       records
     });
+  }
+
+  private mergeImportedDataset(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset,
+    editorName: string
+  ) {
+    const exportedAt = new Date().toISOString();
+    const currentRecords = [...currentDataset.records];
+    const createdRecords: ContactRecord[] = [];
+    const currentIndexesByExternalId = new Map<string, number>();
+
+    currentRecords.forEach((record, index) => {
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, index);
+      }
+    });
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const importedRecord of importedDataset.records) {
+      const matchIndex = importedRecord.externalId
+        ? currentIndexesByExternalId.get(importedRecord.externalId)
+        : undefined;
+
+      if (matchIndex !== undefined) {
+        const currentRecord = currentRecords[matchIndex]!;
+        currentRecords[matchIndex] = contactRecordSchema.parse({
+          ...importedRecord,
+          id: currentRecord.id,
+          audit: {
+            ...currentRecord.audit,
+            updatedAt: exportedAt,
+            updatedBy: editorName
+          }
+        });
+        updatedCount += 1;
+        continue;
+      }
+
+      createdRecords.push(contactRecordSchema.parse({
+        ...importedRecord,
+        id: this.createUniqueRecordId([...createdRecords, ...currentRecords]),
+        audit: {
+          createdAt: exportedAt,
+          updatedAt: exportedAt,
+          createdBy: editorName,
+          updatedBy: editorName
+        }
+      }));
+      createdCount += 1;
+    }
+
+    return {
+      contacts: this.buildNextDataset([...createdRecords, ...currentRecords], currentDataset, editorName, exportedAt),
+      createdCount,
+      updatedCount
+    };
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {
