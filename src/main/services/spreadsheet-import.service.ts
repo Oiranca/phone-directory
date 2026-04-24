@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImportRow } from "./csv-import.service.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
@@ -633,7 +633,18 @@ const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
 };
 
 const normalizeWorkbookRows = (sourceFilePath: string): NormalizedImportRow[] => {
-  const sheets = readWorkbookSheets(sourceFilePath);
+  let sheets: SheetData[];
+
+  try {
+    sheets = readWorkbookSheets(sourceFilePath);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && error.message
+        ? `No se pudo leer la hoja de cálculo seleccionada. ${error.message}`
+        : "No se pudo leer la hoja de cálculo seleccionada."
+    );
+  }
+
   const records: NormalizedImportRow[] = [];
 
   for (const sheet of sheets) {
