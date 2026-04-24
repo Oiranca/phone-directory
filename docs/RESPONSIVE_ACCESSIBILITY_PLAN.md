@@ -1,5 +1,21 @@
 # Responsive and Accessibility Improvement Plan
 
+## Current Status
+
+As of April 24, 2026, the main OIR-31 responsive and accessibility pass has been merged to `main`.
+
+Implemented in the merged work:
+
+- shared feedback and field-state primitives
+- `SelectField` accessibility hardening and expanded tests
+- `ContactFormPage` validation wiring and touch-target improvements
+- `DirectoryPage` master-detail redesign with header filters and selected-state semantics
+- `ImportExportPage` live-region severity fixes
+- `AppShell` landmark labelling improvements
+- responsive layout updates across the core renderer routes
+
+Remaining work from this document should now be treated as follow-up polish or future backlog, not as the active implementation baseline for `main`.
+
 ## Scope
 
 This plan covers all current renderer surfaces:
@@ -161,7 +177,15 @@ The goal is to make every view, button, select, and form control consistently re
 
 ## Work Plan
 
-### Phase 1. Establish shared UI foundations
+Status summary:
+
+- Phase 1: complete
+- Phase 2: complete
+- Phase 3: complete for the merged OIR-31 scope
+- Phase 4: partial, component groundwork merged but full destructive-flow migration still remains future work
+- Phase 5: baseline validation complete for the merged scope, with additional cross-device QA still valuable as follow-up
+
+### ✅ Phase 1. Establish shared UI foundations
 
 Goal: remove repeated accessibility and responsive debt from the component layer.
 
@@ -218,7 +242,7 @@ Definition of done:
 - Every invalid field is announced and linked to its error message.
 - The repeated phone/email sections are usable without precision tapping.
 
-### Phase 3. Harden directory browsing and selection behavior
+### ✅ Phase 3. Harden directory browsing and selection behavior
 
 Goal: improve browsing, filter control semantics, and detail-state clarity.
 
@@ -251,6 +275,11 @@ Definition of done:
 
 - All destructive flows use the same dialog pattern with predictable focus behavior.
 
+Current state:
+
+- `ConfirmDialog` and supporting tests are merged
+- full replacement of all destructive browser dialogs across the app is still pending follow-up work
+
 ### Phase 5. Final responsive and accessibility sweep
 
 Goal: close remaining cross-page gaps and leave regression coverage behind.
@@ -273,6 +302,11 @@ Tasks:
 Definition of done:
 
 - No critical or major responsive/a11y gaps remain in the current renderer routes.
+
+Current state:
+
+- merged branch verification completed with `npm run typecheck`, `npm test`, and `npm run build`
+- additional manual QA at 200% zoom, 320px width, and wider device coverage remains a recommended follow-up
 
 ## Recommended Execution Order
 
@@ -367,9 +401,9 @@ Recommended new checks:
 
 ## Validation Baseline
 
-Current baseline observed during this review:
+Current baseline on the merged OIR-31 line:
 
-- `npm test`: PASS, 111 tests passed
+- `npm test`: PASS, 141 tests passed
 - `npm run typecheck`: PASS
 - `npm run build`: PASS
 

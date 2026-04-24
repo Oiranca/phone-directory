@@ -1295,6 +1295,11 @@ When a user saves custom data or backup paths in Settings, the application must 
 
 Implement a master-detail layout for the directory page to improve scanability. Move the quick filters (type, area, inactive status) into the top search header to consolidate all discovery controls in one place.
 
+Status note:
+
+- implemented and merged to `main` on April 24, 2026 via PR #13, with stacked follow-up fixes from PR #14 included before final merge
+- delivered responsive directory master-detail layout, header-level quick filters, shared feedback/form primitives, and the associated accessibility hardening for the current renderer pass
+
 **OIR-23 — Replace inline status messages with a global toast notification system**
 
 The current implementation surfaces feedback through inline status strings scattered across pages. This issue replaces that pattern with a centralized toast notification region (`ToastRegion` component, already in the component list at section 17). Toasts must support success, warning, and error variants and must auto-dismiss after a reasonable timeout.
