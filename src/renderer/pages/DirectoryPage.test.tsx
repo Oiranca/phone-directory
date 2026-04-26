@@ -69,6 +69,8 @@ describe("DirectoryPage", () => {
       contacts: defaultContacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -97,6 +99,8 @@ describe("DirectoryPage", () => {
       contacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -114,7 +118,7 @@ describe("DirectoryPage", () => {
     expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
   });
 
-  it("shows a privacy indicator and a detail warning block for sensitive phones", async () => {
+  it("shows privacy-only pills in the detail header for sensitive phones", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
 
@@ -122,6 +126,8 @@ describe("DirectoryPage", () => {
       contacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -131,9 +137,10 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
-    expect(screen.getByText("Privacidad sensible")).toBeInTheDocument();
-    expect(screen.getByText("Contiene números internos confidenciales.")).toBeInTheDocument();
-    expect(screen.getByText("Incluye teléfonos que no deben compartirse con pacientes.")).toBeInTheDocument();
+    expect(screen.getAllByText("Confidencial").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
   });
 
   it("limits result-card risk text to the visible phone while keeping detail warnings", async () => {
@@ -163,6 +170,8 @@ describe("DirectoryPage", () => {
       contacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -174,7 +183,7 @@ describe("DirectoryPage", () => {
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.queryByText("Número interno confidencial.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartir con pacientes.")).not.toBeInTheDocument();
-    expect(screen.queryByText("Privacidad sensible")).not.toBeInTheDocument();
+    expect(screen.queryByText("No compartas este contacto con pacientes ni acompañantes.")).not.toBeInTheDocument();
   });
 
   it("exposes selected result state programmatically", async () => {
@@ -182,6 +191,8 @@ describe("DirectoryPage", () => {
       contacts: defaultContacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -211,6 +222,8 @@ describe("DirectoryPage", () => {
       contacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -239,6 +252,8 @@ describe("DirectoryPage", () => {
       contacts,
       settings: {
         editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false
         }
@@ -253,5 +268,39 @@ describe("DirectoryPage", () => {
 
     const selectedOption = screen.getByRole("button", { name: /paginado 4/i });
     expect(selectedOption).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders email details and wraps long notes safely", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.emails = [
+      {
+        id: "email-primary",
+        address: "registro.largo@hospital-canarias.local",
+        label: "Laboral",
+        isPrimary: true
+      }
+    ];
+    contacts.records[0]!.notes = "nota-super-larga-sin-espacios-que-debe-romperse-correctamente-en-la-caja-del-detalle";
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(screen.getByText("Correos electrónicos")).toBeInTheDocument();
+    expect(screen.getByText("registro.largo@hospital-canarias.local")).toBeInTheDocument();
+    expect(screen.getByText("Laboral")).toBeInTheDocument();
+    expect(screen.getAllByText("Principal").length).toBeGreaterThan(0);
+    expect(screen.getByText(/nota-super-larga/)).toHaveClass("break-words");
   });
 });
