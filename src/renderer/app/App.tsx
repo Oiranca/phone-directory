@@ -7,9 +7,10 @@ import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
 const RecoveryPanel = () => {
-  const { recovery, initialize } = useAppStore();
+  const { recovery, settings, initialize, initializeRecovery } = useAppStore();
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isRestoringPaths, setIsRestoringPaths] = useState(false);
   const { pushToast } = useToast();
 
   if (!recovery) {
@@ -70,6 +71,37 @@ const RecoveryPanel = () => {
     }
   };
 
+  const handleRestoreManagedPaths = async () => {
+    try {
+      setIsRestoringPaths(true);
+      const defaults = await window.hospitalDirectory.getSettingsDefaults();
+      await window.hospitalDirectory.saveSettings({
+        editorName: settings?.editorName ?? defaults.editorName,
+        dataFilePath: defaults.dataFilePath,
+        backupDirectoryPath: defaults.backupDirectoryPath,
+        ui: settings?.ui ?? defaults.ui
+      });
+
+      const payload = await window.hospitalDirectory.getBootstrapData();
+
+      if (isRecoveryBootstrap(payload)) {
+        initializeRecovery(payload.recovery, payload.settings);
+        return;
+      }
+
+      initialize(payload);
+    } catch (error) {
+      pushToast({
+        type: "error",
+        message: error instanceof Error
+          ? error.message
+          : "No se pudieron restaurar las rutas gestionadas."
+      });
+    } finally {
+      setIsRestoringPaths(false);
+    }
+  };
+
   return (
     <section className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 shadow-panel">
       <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">Recuperación obligatoria</p>
@@ -81,11 +113,11 @@ const RecoveryPanel = () => {
         <p className="mt-1 break-all">{recovery.contactsFilePath}</p>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <button
           type="button"
           onClick={() => void handleImportJson()}
-          disabled={isImporting || isResetting}
+          disabled={isImporting || isResetting || isRestoringPaths}
           className="rounded-2xl bg-scs-blue px-5 py-4 text-sm font-semibold text-white disabled:opacity-60"
         >
           {isImporting ? "Importando JSON…" : "Importar JSON válido"}
@@ -93,10 +125,18 @@ const RecoveryPanel = () => {
         <button
           type="button"
           onClick={() => void handleResetDataset()}
-          disabled={isImporting || isResetting}
+          disabled={isImporting || isResetting || isRestoringPaths}
           className="rounded-2xl border border-slate-300 px-5 py-4 text-sm font-semibold text-slate-800 disabled:opacity-60"
         >
           {isResetting ? "Restableciendo…" : "Restablecer directorio vacío"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleRestoreManagedPaths()}
+          disabled={isImporting || isResetting || isRestoringPaths}
+          className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900 disabled:opacity-60"
+        >
+          {isRestoringPaths ? "Restaurando rutas…" : "Usar rutas gestionadas"}
         </button>
       </div>
     </section>

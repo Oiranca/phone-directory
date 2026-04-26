@@ -4,6 +4,7 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
+import type { EditableAppSettings } from "../../shared/types/contact.js";
 
 const getPathMock = vi.fn();
 
@@ -15,6 +16,16 @@ vi.mock("electron", () => ({
 
 describe("AppDataService", () => {
   let testRoot: string;
+  const buildEditableSettings = (overrides: Partial<EditableAppSettings> = {}): EditableAppSettings => ({
+    editorName: "Samuel",
+    dataFilePath: path.join(testRoot, "data", "contacts.json"),
+    backupDirectoryPath: path.join(testRoot, "backups"),
+    ui: {
+      showInactiveByDefault: false,
+      ...(overrides.ui ?? {})
+    },
+    ...overrides
+  });
 
   beforeEach(async () => {
     testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-"));
@@ -27,28 +38,234 @@ describe("AppDataService", () => {
     getPathMock.mockReset();
   });
 
-  it("preserves managed filesystem paths when saving editable settings", async () => {
+  it("persists validated custom filesystem paths when saving editable settings", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    const customBackupDirectory = path.join(testRoot, "custom-backups");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    await fs.mkdir(customBackupDirectory, { recursive: true });
+    const customDataFilePath = path.join(customDataDirectory, "contacts-custom.json");
+
+    const saved = await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath,
+        backupDirectoryPath: customBackupDirectory,
+        ui: {
+          showInactiveByDefault: true
+        }
+      })
+    );
+
+    expect(saved.editorName).toBe("Samuel");
+    expect(saved.ui.showInactiveByDefault).toBe(true);
+    expect(saved.dataFilePath).toBe(customDataFilePath);
+    expect(saved.backupDirectoryPath).toBe(customBackupDirectory);
+
+    const settingsFile = path.join(testRoot, "data", "settings.json");
+    const persisted = JSON.parse(await fs.readFile(settingsFile, "utf-8")) as typeof saved;
+    const copiedDataset = JSON.parse(await fs.readFile(customDataFilePath, "utf-8")) as { records: unknown[] };
+
+    expect(persisted).toEqual(saved);
+    expect(copiedDataset.records).toHaveLength(defaultContacts.records.length);
+  });
+
+  it("rejects a custom backup directory that does not exist", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const saved = await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: true
-      }
-    });
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          backupDirectoryPath: path.join(testRoot, "missing-backups")
+        })
+      )
+    ).rejects.toThrow(
+      new RegExp(`No se pudo validar la carpeta de backups\\. Ruta afectada: ${path.join(testRoot, "missing-backups").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+    );
+  });
 
-    expect(saved.editorName).toBe("Samuel");
+  it("rejects custom backup directories that resolve through symlinks", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const realBackupDirectory = path.join(testRoot, "real-backups");
+    const symlinkBackupDirectory = path.join(testRoot, "linked-backups");
+    await fs.mkdir(realBackupDirectory, { recursive: true });
+    await fs.symlink(realBackupDirectory, symlinkBackupDirectory);
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          backupDirectoryPath: symlinkBackupDirectory
+        })
+      )
+    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+  });
+
+  it("rejects relative custom data paths", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: "relative/contacts.json"
+        })
+      )
+    ).rejects.toThrow("La ruta del archivo de datos debe ser absoluta.");
+  });
+
+  it("rejects relative custom backup paths", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          backupDirectoryPath: "relative/backups"
+        })
+      )
+    ).rejects.toThrow("La ruta de la carpeta de backups debe ser absoluta.");
+  });
+
+  it("rejects custom data paths with symlinked ancestor directories", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const realDirectory = path.join(testRoot, "real-data");
+    const linkedRoot = path.join(testRoot, "linked-root");
+    const symlinkedChildDirectory = path.join(linkedRoot, "nested");
+    await fs.mkdir(realDirectory, { recursive: true });
+    await fs.symlink(realDirectory, linkedRoot);
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: path.join(symlinkedChildDirectory, "contacts-custom.json")
+        })
+      )
+    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+  });
+
+  it("rejects persisted relative data paths during bootstrap", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.writeFile(
+      path.join(testRoot, "data", "settings.json"),
+      JSON.stringify({
+        editorName: "Samuel",
+        dataFilePath: "relative/contacts.json",
+        backupDirectoryPath: path.join(testRoot, "backups"),
+        ui: {
+          showInactiveByDefault: false
+        }
+      })
+    );
+
+    await expect(service.getBootstrapData()).rejects.toThrow(
+      "La ruta del archivo de datos configurada debe ser absoluta."
+    );
+  });
+
+  it("rejects data paths that match settings.json with case-only differences", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const settingsFilePath = path.join(testRoot, "data", "settings.json");
+    const caseVariantSettingsPath = process.platform === "win32" || process.platform === "darwin"
+      ? settingsFilePath.toUpperCase()
+      : settingsFilePath;
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: caseVariantSettingsPath
+        })
+      )
+    ).rejects.toThrow(/La ruta de datos no puede apuntar al archivo de configuración/);
+  });
+
+  it("rejects persisted symlinked backup directories when listing backups", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const realBackupDirectory = path.join(testRoot, "real-backups");
+    const symlinkBackupDirectory = path.join(testRoot, "linked-backups");
+    await fs.mkdir(realBackupDirectory, { recursive: true });
+    await fs.symlink(realBackupDirectory, symlinkBackupDirectory);
+    await fs.writeFile(
+      path.join(testRoot, "data", "settings.json"),
+      JSON.stringify({
+        editorName: "Samuel",
+        dataFilePath: path.join(testRoot, "data", "contacts.json"),
+        backupDirectoryPath: symlinkBackupDirectory,
+        ui: {
+          showInactiveByDefault: false
+        }
+      })
+    );
+
+    await expect(service.listBackups()).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+  });
+
+  it("allows saving non-path settings even when the current data file is missing", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.rm(path.join(testRoot, "data", "contacts.json"));
+
+    const saved = await service.saveSettings(
+      buildEditableSettings({
+        editorName: "Guardia noche",
+        ui: {
+          showInactiveByDefault: true
+        }
+      })
+    );
+
+    expect(saved.editorName).toBe("Guardia noche");
     expect(saved.ui.showInactiveByDefault).toBe(true);
-    expect(saved.dataFilePath).toBe(path.join(testRoot, "data", "contacts.json"));
-    expect(saved.backupDirectoryPath).toBe(path.join(testRoot, "backups"));
+  });
 
-    const settingsFile = path.join(testRoot, "data", "settings.json");
-    const persisted = JSON.parse(await fs.readFile(settingsFile, "utf-8")) as typeof saved;
+  it("restores the managed default data path when the current custom file is missing", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
 
-    expect(persisted).toEqual(saved);
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    const customBackupDirectory = path.join(testRoot, "custom-backups");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    await fs.mkdir(customBackupDirectory, { recursive: true });
+    const customDataFilePath = path.join(customDataDirectory, "contacts-custom.json");
+
+    await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath,
+        backupDirectoryPath: customBackupDirectory
+      })
+    );
+    await fs.rm(customDataFilePath);
+
+    const restored = await service.saveSettings(buildEditableSettings());
+
+    expect(restored.dataFilePath).toBe(path.join(testRoot, "data", "contacts.json"));
+    expect(restored.backupDirectoryPath).toBe(path.join(testRoot, "backups"));
   });
 
   it("creates a new record and refreshes dataset metadata", async () => {
@@ -56,12 +273,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
       type: "person",
@@ -113,12 +325,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
       id: "cnt_0001",
@@ -164,12 +371,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const initial = await service.getBootstrapData();
     const existing = initial.contacts.records[0];
@@ -356,7 +558,7 @@ describe("AppDataService", () => {
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
       new RegExp(
-        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
+        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: (?:\\/private)?${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
       )
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
@@ -521,12 +723,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
     const initial = await service.getBootstrapData();
     const existing = initial.contacts.records[0]!;
 
@@ -567,12 +764,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const workbook = XLSX.utils.book_new();
     const urgenciasSheet = XLSX.utils.aoa_to_sheet([
@@ -608,12 +800,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const firstWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(
@@ -1207,17 +1394,73 @@ describe("AppDataService", () => {
     }
   });
 
+  it("returns a recovery payload when the configured custom data file is missing", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    const customBackupDirectory = path.join(testRoot, "custom-backups");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    await fs.mkdir(customBackupDirectory, { recursive: true });
+    const customDataFilePath = path.join(customDataDirectory, "contacts-custom.json");
+
+    await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath,
+        backupDirectoryPath: customBackupDirectory
+      })
+    );
+    await fs.rm(customDataFilePath);
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.reason).toBe("invalid-contacts-json");
+      expect(result.recovery.contactsFilePath).toBe(customDataFilePath);
+      expect(result.recovery.message).toBe("El archivo de datos configurado no existe o ya no está disponible.");
+    }
+  });
+
+  it("returns a recovery payload when the configured data path points to a directory", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const invalidDataDirectory = path.join(testRoot, "broken-data-path");
+    await fs.mkdir(invalidDataDirectory, { recursive: true });
+    const settingsFilePath = path.join(testRoot, "data", "settings.json");
+    const currentSettings = JSON.parse(await fs.readFile(settingsFilePath, "utf-8")) as {
+      editorName: string;
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      ui: { showInactiveByDefault: boolean };
+    };
+    currentSettings.dataFilePath = invalidDataDirectory;
+    await fs.writeFile(settingsFilePath, JSON.stringify(currentSettings, null, 2) + "\n", "utf-8");
+
+    const result = await service.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.contactsFilePath).toBe(invalidDataDirectory);
+      expect(result.recovery.message).toBe("La ruta de datos configurada no apunta a un archivo utilizable.");
+    }
+  });
+
   it("resets the dataset to empty and preserves a backup of the corrupted file", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: true
-      }
-    });
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: true
+        }
+      })
+    );
 
     const corruptedCurrentDataset = "{ invalid-json }\n";
     await fs.writeFile(path.join(testRoot, "data", "contacts.json"), corruptedCurrentDataset, "utf-8");
@@ -1263,12 +1506,7 @@ describe("AppDataService", () => {
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
-    await service.saveSettings({
-      editorName: "Samuel",
-      ui: {
-        showInactiveByDefault: false
-      }
-    });
+    await service.saveSettings(buildEditableSettings());
 
     const sourceFilePath = path.join(testRoot, "incoming", "same-import-merge.csv");
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
@@ -1442,6 +1680,26 @@ describe("AppDataService", () => {
     ) as { records: unknown[]; metadata: { recordCount: number } };
     expect(persisted.records).toHaveLength(0);
     expect(persisted.metadata.recordCount).toBe(0);
+  });
+
+  it("wraps data-file write failures with localized filesystem context", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const writeFileSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+          path: path.join(testRoot, "data", "contacts.json.tmp")
+        })
+      );
+
+    await expect(service.resetDataset()).rejects.toThrow(
+      /No se pudo escribir el archivo de datos configurado\..*No tienes permisos suficientes para acceder al archivo o directorio\./
+    );
+    expect(writeFileSpy).toHaveBeenCalled();
   });
 
   it("returns Zod issue messages in recovery details when contacts.json has valid JSON but invalid schema", async () => {

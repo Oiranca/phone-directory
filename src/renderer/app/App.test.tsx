@@ -8,6 +8,8 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 
 const editableSettings = {
   editorName: "Samuel",
+  dataFilePath: "/tmp/data/contacts.json",
+  backupDirectoryPath: "/tmp/backups",
   ui: {
     showInactiveByDefault: false
   }
@@ -60,6 +62,14 @@ describe("App recovery flow", () => {
       configurable: true,
       value: {
         getBootstrapData: vi.fn(),
+        getSettingsDefaults: vi.fn().mockResolvedValue({
+          editorName: "",
+          dataFilePath: "/tmp/default-data/contacts.json",
+          backupDirectoryPath: "/tmp/default-backups",
+          ui: {
+            showInactiveByDefault: false
+          }
+        }),
         saveSettings: vi.fn(),
         createBackup: vi.fn(),
         createRecord: vi.fn(),
@@ -205,6 +215,51 @@ describe("App recovery flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
 
     expect(await screen.findByText("No se pudo restablecer el directorio vacío.")).toBeInTheDocument();
+  });
+
+  it("restores managed paths from recovery mode and exits the blocked state", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn()
+      .mockResolvedValueOnce({
+        recovery: {
+          reason: "invalid-contacts-json",
+          contactsFilePath: "/tmp/custom-data/contacts.json",
+          message: "El archivo configurado no existe."
+        },
+        settings: editableSettings
+      })
+      .mockResolvedValueOnce({
+        contacts: defaultContacts,
+        settings: {
+          ...editableSettings,
+          dataFilePath: "/tmp/default-data/contacts.json",
+          backupDirectoryPath: "/tmp/default-backups"
+        }
+      });
+    window.hospitalDirectory.saveSettings = vi.fn().mockResolvedValue({
+      ...editableSettings,
+      dataFilePath: "/tmp/default-data/contacts.json",
+      backupDirectoryPath: "/tmp/default-backups"
+    });
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usar rutas gestionadas" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.getSettingsDefaults).toHaveBeenCalledTimes(1);
+      expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledWith({
+        editorName: "Samuel",
+        dataFilePath: "/tmp/default-data/contacts.json",
+        backupDirectoryPath: "/tmp/default-backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      });
+      expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+    });
+
+    expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
   });
 
   it("importDataset throws with a custom message → custom message appears (not the hardcoded fallback)", async () => {

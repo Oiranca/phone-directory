@@ -34,11 +34,6 @@ const privacyInlineRiskText = {
   "No facilitar a pacientes": "No compartir con pacientes."
 } as const;
 
-const privacyDetailWarningText = {
-  Confidencial: "Contiene números internos confidenciales.",
-  "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
-} as const satisfies Record<PrivacyFlag, string>;
-
 const RESULTS_PER_PAGE = 5;
 const PAGINATION_WINDOW = 3;
 
@@ -447,23 +442,20 @@ export const DirectoryPage = () => {
                             Inactivo
                           </span>
                         ) : null}
+                        {selectedRecordPrivacyFlags.map((flag) => (
+                          <span
+                            key={flag}
+                            className={flag === "Confidencial"
+                              ? "rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                              : "rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"}
+                          >
+                            {flag}
+                          </span>
+                        ))}
                       </div>
                       <p className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
                         {selectedRecord.displayName}
                       </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
-                          {selectedRecord.organization.department ?? "Sin departamento"}
-                        </span>
-                        <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
-                          {areaLabels[selectedRecord.organization.area ?? "none"]}
-                        </span>
-                        {selectedRecord.location ? (
-                          <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
-                            Ubicación disponible
-                          </span>
-                        ) : null}
-                      </div>
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
@@ -476,22 +468,32 @@ export const DirectoryPage = () => {
 
                 <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</p>
-                    <p className="mt-3 text-lg font-semibold text-slate-900">{selectedRecord.organization.department ?? "Sin departamento"}</p>
-                    {selectedRecord.organization.service ? (
-                      <>
-                        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</p>
-                        <p className="mt-2 text-sm font-medium text-slate-700">{selectedRecord.organization.service}</p>
-                      </>
-                    ) : null}
-                    <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</p>
-                    <p className="mt-2 text-sm font-medium text-slate-700">{areaLabels[selectedRecord.organization.area ?? "none"]}</p>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</p>
+                        <p className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
+                          {selectedRecord.organization.department ?? "Sin departamento"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</p>
+                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                          {selectedRecord.organization.service ?? "Sin servicio"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</p>
+                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                          {areaLabels[selectedRecord.organization.area ?? "none"]}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   {selectedRecord.location && (
                     <div className="rounded-2xl border border-slate-200 bg-white p-5">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
-                      <p className="mt-3 text-sm font-medium leading-6 text-slate-800">
+                      <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
                         {[
                           selectedRecord.location.building,
                           selectedRecord.location.floor,
@@ -505,28 +507,6 @@ export const DirectoryPage = () => {
                   )}
                 </div>
 
-                {selectedRecordPrivacyFlags.length > 0 && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
-                    <div className="flex items-center gap-2">
-                      <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <p className="font-semibold text-amber-800">Atención de privacidad</p>
-                    </div>
-                    <p className="mt-2 text-sm">
-                      Este registro contiene teléfonos sensibles. Confirma el contexto antes de compartir.
-                    </p>
-                    <ul className="mt-3 space-y-2 text-sm">
-                      {selectedRecordPrivacyFlags.map((flag) => (
-                        <li key={flag} className="flex gap-2">
-                          <span className="font-semibold shrink-0">{flag}:</span>
-                          <span>{privacyDetailWarningText[flag]}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
@@ -534,46 +514,83 @@ export const DirectoryPage = () => {
                       {selectedRecord.contactMethods.phones.length} disponibles
                     </p>
                   </div>
-                  {selectedRecord.contactMethods.phones.map((phone) => (
-                    <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {selectedRecord.contactMethods.phones.map((phone) => (
+                      <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
                           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
                           <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
                           {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
-                          {phone.notes && <p className="mt-1 text-sm text-slate-500">{phone.notes}</p>}
+                          {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
                         </div>
-                        <div className="flex flex-wrap gap-2 shrink-0">
-                          {phone.isPrimary && (
-                            <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
-                              Principal
+                          <div className="flex flex-wrap gap-2 shrink-0">
+                            {phone.isPrimary && (
+                              <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                Principal
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {phone.confidential && (
+                            <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
+                              Confidencial
+                            </span>
+                          )}
+                          {phone.noPatientSharing && (
+                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
+                              No pacientes
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {phone.confidential && (
-                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
-                            Confidencial
-                          </span>
-                        )}
-                        {phone.noPatientSharing && (
-                          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                            No pacientes
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                   {selectedRecord.contactMethods.phones.length === 0 && (
                     <p className="text-sm text-slate-500 italic">No hay teléfonos registrados.</p>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
+                    <p className="text-xs font-medium text-slate-400">
+                      {selectedRecord.contactMethods.emails.length} disponibles
+                    </p>
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {selectedRecord.contactMethods.emails.map((email) => (
+                      <div key={email.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{email.label ?? "Correo electrónico"}</p>
+                            <p className="mt-2 break-words text-lg font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
+                              {email.address}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 shrink-0">
+                            {email.isPrimary ? (
+                              <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                Principal
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedRecord.contactMethods.emails.length === 0 && (
+                    <p className="text-sm text-slate-500 italic">No hay correos registrados.</p>
                   )}
                 </div>
 
                 {selectedRecord.notes && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notas</p>
-                    <p className="mt-3 text-sm font-medium leading-6 text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
+                    <p className="mt-3 break-words whitespace-pre-wrap text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                      {selectedRecord.notes}
+                    </p>
                   </div>
                 )}
               </div>
