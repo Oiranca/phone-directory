@@ -192,8 +192,8 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
 
-    const selectedButton = screen.getByRole("option", { name: /admisión general/i });
-    expect(selectedButton).toHaveAttribute("aria-selected", "true");
+    const selectedButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 
   it("caps visible results to five per page and exposes pagination", async () => {
@@ -251,7 +251,7 @@ describe("DirectoryPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ir a la página 2" }));
 
-    const selectedOption = screen.getByRole("option", { name: /paginado 4/i });
-    expect(selectedOption).toHaveAttribute("aria-selected", "true");
+    const selectedOption = screen.getByRole("button", { name: /paginado 4/i });
+    expect(selectedOption).toHaveAttribute("aria-pressed", "true");
   });
 });

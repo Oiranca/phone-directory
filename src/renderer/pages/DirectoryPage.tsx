@@ -42,20 +42,25 @@ const privacyDetailWarningText = {
 const RESULTS_PER_PAGE = 5;
 const PAGINATION_WINDOW = 3;
 
+const getPageRange = (startPage: number, length: number): number[] =>
+  Array.from({ length }, (_, index) => startPage + index);
+
 const getPaginationItems = (currentPage: number, totalPages: number): Array<number | "ellipsis-left" | "ellipsis-right"> => {
   if (totalPages <= PAGINATION_WINDOW + 2) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
+    return getPageRange(1, totalPages);
   }
 
   if (currentPage <= PAGINATION_WINDOW) {
-    return [1, 2, 3, "ellipsis-right", totalPages];
+    return [...getPageRange(1, PAGINATION_WINDOW), "ellipsis-right", totalPages];
   }
 
-  if (currentPage >= totalPages - 2) {
-    return [1, "ellipsis-left", totalPages - 2, totalPages - 1, totalPages];
+  const trailingWindowStart = totalPages - (PAGINATION_WINDOW - 1);
+  if (currentPage >= trailingWindowStart) {
+    return [1, "ellipsis-left", ...getPageRange(trailingWindowStart, PAGINATION_WINDOW)];
   }
 
-  return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages];
+  const middleWindowStart = currentPage - Math.floor(PAGINATION_WINDOW / 2);
+  return [1, "ellipsis-left", ...getPageRange(middleWindowStart, PAGINATION_WINDOW), "ellipsis-right", totalPages];
 };
 
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
@@ -109,7 +114,10 @@ export const DirectoryPage = () => {
   );
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
-  const currentPageRecords = visibleRecords.slice(pageStart, pageStart + RESULTS_PER_PAGE);
+  const currentPageRecords = useMemo(
+    () => visibleRecords.slice(pageStart, pageStart + RESULTS_PER_PAGE),
+    [visibleRecords, pageStart]
+  );
   const paginationItems = getPaginationItems(currentPage, totalPages);
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
@@ -306,57 +314,57 @@ export const DirectoryPage = () => {
         
         {/* Left Column: Results List */}
         <div className="flex flex-col gap-3">
-          <div role="listbox" aria-label="Resultados del directorio" className="flex flex-col gap-3">
+          <ul aria-label="Resultados del directorio" className="flex flex-col gap-3">
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(primaryPhone);
 
             return (
-              <button
-                key={record.id}
-                type="button"
-                onClick={() => setSelectedRecordId(record.id)}
-                role="option"
-                aria-selected={isSelected}
-                className={[
-                  "w-full rounded-2xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
-                  isSelected
-                    ? "border-scs-blue bg-scs-mist shadow-sm ring-1 ring-scs-blue"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
-                ].join(" ")}
+              <li key={record.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecordId(record.id)}
+                  aria-pressed={isSelected}
+                  className={[
+                    "w-full rounded-2xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
+                    isSelected
+                      ? "border-scs-blue bg-scs-mist shadow-sm ring-1 ring-scs-blue"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
+                  ].join(" ")}
                 >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
-                    <p className="truncate text-xs text-slate-500">
-                      {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
-                    </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {record.status === "inactive" ? (
+                        <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          Inactivo
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    {record.status === "inactive" ? (
-                      <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        Inactivo
+                  <p className="mt-2 truncate text-sm text-slate-600">
+                    {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
+                    {privacyFlags.length > 0 && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900" title="Atención de privacidad">
+                        <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
+                        <span>Privacidad sensible</span>
                       </span>
-                    ) : null}
+                    )}
                   </div>
-                </div>
-                <p className="mt-2 truncate text-sm text-slate-600">
-                  {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
-                  {privacyFlags.length > 0 && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900" title="Atención de privacidad">
-                      <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
-                      <span>Privacidad sensible</span>
-                    </span>
-                  )}
-                </div>
-              </button>
+                </button>
+              </li>
             );
           })}
-          </div>
+          </ul>
           {visibleRecords.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               No hay resultados para la búsqueda y filtros actuales.
