@@ -54,9 +54,7 @@ export class AppDataService {
     const contactsFilePath = settings.dataFilePath;
 
     try {
-      const contacts = directoryDatasetSchema.parse(
-        await readJsonFile<DirectoryDataset>(contactsFilePath)
-      );
+      const contacts = await this.readContacts(settings);
 
       return { contacts, settings: this.toEditableSettings(settings) };
     } catch (error) {
@@ -124,7 +122,10 @@ export class AppDataService {
 
   async listBackups(): Promise<BackupListItem[]> {
     const settings = await this.readSettings(true);
-    const backupDirectory = settings.backupDirectoryPath;
+    const backupDirectory = await this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      "No se pudo leer la carpeta de backups."
+    );
     try {
       await ensureDirectory(backupDirectory);
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
@@ -367,24 +368,24 @@ export class AppDataService {
   }
 
   private async readContacts(settings: AppSettings) {
-    await this.assertDataFilePathSafe(
+    const canonicalFilePath = await this.resolveCanonicalDataFilePath(
       settings.dataFilePath,
       "No se pudo leer el archivo de datos configurado.",
       false
     );
+
     return directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(settings.dataFilePath)
+      await readJsonFile<DirectoryDataset>(canonicalFilePath)
     );
   }
 
   private async createBackupFilePath(settings: AppSettings) {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupDirectory = settings.backupDirectoryPath;
+    const backupDirectory = await this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      "No se pudo preparar la carpeta de backups del directorio."
+    );
     try {
-      await this.assertBackupDirectorySafe(
-        backupDirectory,
-        "No se pudo preparar la carpeta de backups del directorio."
-      );
       await ensureDirectory(backupDirectory);
     } catch (error) {
       throw this.toFilesystemError(
@@ -589,12 +590,46 @@ export class AppDataService {
   }
 
   private async writeDatasetToPath(filePath: string, dataset: DirectoryDataset) {
-    await this.assertDataFilePathSafe(
+    const canonicalFilePath = await this.resolveCanonicalDataFilePath(
       filePath,
       "No se pudo escribir el archivo de datos configurado.",
       true
     );
-    await writeJsonFile(filePath, dataset);
+    await writeJsonFile(canonicalFilePath, dataset);
+  }
+
+  private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {
+    await this.assertPathChainIsNotSymlink(filePath, message, true);
+
+    const canonicalParentPath = await this.resolveCanonicalDirectoryPath(path.dirname(filePath), message);
+
+    if (!(await this.fileExists(filePath))) {
+      if (allowMissing) {
+        return path.join(canonicalParentPath, path.basename(filePath));
+      }
+
+      throw this.toFilesystemError(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT", path: filePath }),
+        message,
+        { filePath }
+      );
+    }
+
+    try {
+      return await fs.realpath(filePath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath });
+    }
+  }
+
+  private async resolveCanonicalDirectoryPath(directoryPath: string, message: string) {
+    await this.assertBackupDirectorySafe(directoryPath, message);
+
+    try {
+      return await fs.realpath(directoryPath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath: directoryPath });
+    }
   }
 
   private async assertDataFilePathAvailable(filePath: string, message: string, allowExisting: boolean) {
@@ -838,7 +873,13 @@ export class AppDataService {
 
   private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
     try {
-      await fs.copyFile(sourceFilePath, targetFilePath);
+      const canonicalSourceFilePath = await this.resolveCanonicalDataFilePath(sourceFilePath, message, false);
+      const canonicalTargetFilePath = path.join(
+        await this.resolveCanonicalDirectoryPath(path.dirname(targetFilePath), message),
+        path.basename(targetFilePath)
+      );
+
+      await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
     } catch (error) {
       throw this.toFilesystemError(error, message, {
         sourceFilePath,
@@ -883,7 +924,14 @@ export class AppDataService {
       routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
     const detail = this.getFilesystemErrorDetail(filesystemError ?? undefined);
 
-    return new Error(`${message}${routeContext} ${detail}`.trim());
+    return Object.assign(
+      new Error(`${message}${routeContext} ${detail}`.trim()),
+      {
+        code: filesystemError?.code,
+        path: filesystemError?.path ?? context.filePath,
+        dest: filesystemError?.dest ?? context.targetFilePath
+      }
+    );
   }
 
   private getErrnoException(error: unknown): (NodeJS.ErrnoException & { dest?: string }) | null {
