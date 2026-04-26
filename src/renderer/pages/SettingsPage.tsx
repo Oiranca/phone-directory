@@ -50,7 +50,7 @@ export const SettingsPage = () => {
     return (
       <section className="rounded-3xl bg-white p-6 shadow-panel">
         <h2 className="text-2xl font-semibold text-scs-blueDark">Configuración no disponible</h2>
-        <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
+        <p role="alert" className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
         <button
           type="button"
           onClick={() => void loadBootstrapData()}
@@ -63,7 +63,7 @@ export const SettingsPage = () => {
   }
 
   if (!settings) {
-    return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;
+    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;
   }
 
   const isDirty =

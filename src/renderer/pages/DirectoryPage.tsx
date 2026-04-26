@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
@@ -39,6 +39,30 @@ const privacyDetailWarningText = {
   "No facilitar a pacientes": "Incluye teléfonos que no deben compartirse con pacientes."
 } as const satisfies Record<PrivacyFlag, string>;
 
+const RESULTS_PER_PAGE = 5;
+const PAGINATION_WINDOW = 3;
+
+const getPageRange = (startPage: number, length: number): number[] =>
+  Array.from({ length }, (_, index) => startPage + index);
+
+const getPaginationItems = (currentPage: number, totalPages: number): Array<number | "ellipsis-left" | "ellipsis-right"> => {
+  if (totalPages <= PAGINATION_WINDOW + 2) {
+    return getPageRange(1, totalPages);
+  }
+
+  if (currentPage <= PAGINATION_WINDOW) {
+    return [...getPageRange(1, PAGINATION_WINDOW), "ellipsis-right", totalPages];
+  }
+
+  const trailingWindowStart = totalPages - (PAGINATION_WINDOW - 1);
+  if (currentPage >= trailingWindowStart) {
+    return [1, "ellipsis-left", ...getPageRange(trailingWindowStart, PAGINATION_WINDOW)];
+  }
+
+  const middleWindowStart = currentPage - Math.floor(PAGINATION_WINDOW / 2);
+  return [1, "ellipsis-left", ...getPageRange(middleWindowStart, PAGINATION_WINDOW), "ellipsis-right", totalPages];
+};
+
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
   if (!phone) {
     return [];
@@ -75,17 +99,26 @@ export const DirectoryPage = () => {
     isLoading
   } = useAppStore();
   const [bootstrapError, setBootstrapError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
   const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
+  const deferredQuery = useDeferredValue(query);
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
         contacts?.records ?? [],
-        query,
+        deferredQuery,
         { selectedType, selectedArea, showInactive }
       ),
-    [contacts, query, selectedType, selectedArea, showInactive]
+    [contacts, deferredQuery, selectedType, selectedArea, showInactive]
   );
+  const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
+  const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
+  const currentPageRecords = useMemo(
+    () => visibleRecords.slice(pageStart, pageStart + RESULTS_PER_PAGE),
+    [visibleRecords, pageStart]
+  );
+  const paginationItems = getPaginationItems(currentPage, totalPages);
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
   // This local loader is retained only for page-level retry and test isolation.
@@ -109,11 +142,34 @@ export const DirectoryPage = () => {
     }
   }, [contacts]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredQuery, selectedType, selectedArea, showInactive]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (currentPageRecords.length === 0) {
+      if (selectedRecordId !== null) {
+        setSelectedRecordId(null);
+      }
+      return;
+    }
+
+    const hasSelectedRecordOnPage = currentPageRecords.some((record) => record.id === selectedRecordId);
+
+    if (!hasSelectedRecordOnPage) {
+      setSelectedRecordId(currentPageRecords[0]!.id);
+    }
+  }, [currentPageRecords, selectedRecordId, setSelectedRecordId]);
+
   if (bootstrapError) {
     return (
       <section className="rounded-3xl bg-white p-8 shadow-panel">
         <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
-        <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
+        <p role="alert" className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
         <button
           type="button"
           onClick={() => void loadBootstrapData()}
@@ -126,7 +182,7 @@ export const DirectoryPage = () => {
   }
 
   if (isLoading || !contacts || !settings) {
-    return <section className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
+    return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
   }
 
   const handleTypeChange = (value: string) => {
@@ -147,8 +203,15 @@ export const DirectoryPage = () => {
     setSelectedArea("all");
   };
 
+  const handleClearFilters = () => {
+    setQuery("");
+    setSelectedType("all");
+    setSelectedArea("all");
+    setShowInactive(false);
+  };
+
   const selectedRecord =
-    visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0] ?? null;
+    currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
@@ -158,9 +221,6 @@ export const DirectoryPage = () => {
         <div className="flex flex-col gap-5">
           <div>
             <h2 id="directory-page-title" className="text-2xl font-semibold text-scs-blueDark sm:text-3xl">Directorio</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Busca, filtra y revisa el detalle operativo.
-            </p>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
@@ -171,7 +231,8 @@ export const DirectoryPage = () => {
                 id="directory-search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por nombre, servicio, alias..."
+                placeholder="Buscar contacto o servicio"
+                type="search"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
               />
             </div>
@@ -210,10 +271,41 @@ export const DirectoryPage = () => {
               />
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            <p aria-live="polite" className="text-xs font-medium text-slate-500">
               {visibleRecords.length} resultados
-            </span>
+            </p>
           </div>
+          {(query || selectedType !== "all" || selectedArea !== "all" || showInactive) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {query ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                  {query}
+                </span>
+              ) : null}
+              {selectedType !== "all" ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                  {typeLabels[selectedType]}
+                </span>
+              ) : null}
+              {selectedArea !== "all" ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                  {areaLabels[selectedArea]}
+                </span>
+              ) : null}
+              {showInactive ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                  Inactivos
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="px-1 py-1 font-semibold text-scs-blue transition hover:text-scs-blueDark"
+              >
+                Limpiar
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -222,76 +314,184 @@ export const DirectoryPage = () => {
         
         {/* Left Column: Results List */}
         <div className="flex flex-col gap-3">
-          {visibleRecords.map((record) => {
+          <ul aria-label="Resultados del directorio" className="flex flex-col gap-3">
+          {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(primaryPhone);
 
             return (
-              <button
-                key={record.id}
-                type="button"
-                onClick={() => setSelectedRecordId(record.id)}
-                aria-pressed={isSelected}
-                className={[
-                  "w-full rounded-2xl border p-4 text-left transition",
-                  isSelected
-                    ? "border-scs-blue bg-scs-mist shadow-sm ring-1 ring-scs-blue"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
-                ].join(" ")}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
-                    <p className="truncate text-xs text-slate-500">
-                      {record.type} · {record.organization.department ?? "Sin unidad"}
-                    </p>
+              <li key={record.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecordId(record.id)}
+                  aria-pressed={isSelected}
+                  className={[
+                    "w-full rounded-2xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
+                    isSelected
+                      ? "border-scs-blue bg-scs-mist shadow-sm ring-1 ring-scs-blue"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {record.status === "inactive" ? (
+                        <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          Inactivo
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
-                  {privacyFlags.length > 0 && (
-                    <span className="inline-flex items-center gap-2" title="Atención de privacidad">
-                      <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
-                      <span className="sr-only">Atención de privacidad</span>
-                    </span>
-                  )}
-                </div>
-              </button>
+                  <p className="mt-2 truncate text-sm text-slate-600">
+                    {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
+                    {privacyFlags.length > 0 && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900" title="Atención de privacidad">
+                        <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
+                        <span>Privacidad sensible</span>
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </li>
             );
           })}
+          </ul>
           {visibleRecords.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               No hay resultados para la búsqueda y filtros actuales.
             </div>
+          )}
+          {visibleRecords.length > RESULTS_PER_PAGE && (
+            <nav aria-label="Paginación de resultados" className="rounded-2xl border border-slate-200 bg-white p-2">
+              <div className="flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  aria-label="Página anterior"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  {paginationItems.map((item) => {
+                    if (typeof item !== "number") {
+                      return (
+                        <span key={item} aria-hidden="true" className="px-1 text-sm font-semibold text-slate-400">
+                          ...
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                      onClick={() => setCurrentPage(item)}
+                      aria-current={item === currentPage ? "page" : undefined}
+                      aria-label={`Ir a la página ${item}`}
+                      className={[
+                          "flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-semibold transition",
+                          item === currentPage
+                            ? "bg-scs-blue text-white shadow-sm"
+                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                      ].join(" ")}
+                    >
+                      {item}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                  aria-label="Página siguiente"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+              </div>
+            </nav>
           )}
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
         <div className="lg:sticky lg:top-6">
           <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
-            <h3 className="text-xs font-semibold text-slate-400 mb-6 uppercase tracking-wider">Detalle del Registro</h3>
+            <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Detalle del registro</h3>
             {selectedRecord ? (
               <div className="space-y-6">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wide text-scs-blue">{selectedRecord.type}</p>
-                  <p className="mt-1 text-3xl font-semibold text-scs-blueDark">{selectedRecord.displayName}</p>
+                <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-scs-blue ring-1 ring-slate-200">
+                          {typeLabels[selectedRecord.type]}
+                        </span>
+                        {selectedRecord.status === "inactive" ? (
+                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+                            Inactivo
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
+                        {selectedRecord.displayName}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+                          {selectedRecord.organization.department ?? "Sin departamento"}
+                        </span>
+                        <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+                          {areaLabels[selectedRecord.organization.area ?? "none"]}
+                        </span>
+                        {selectedRecord.location ? (
+                          <span className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+                            Ubicación disponible
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <Link
+                      to={`/contacts/${selectedRecord.id}/edit`}
+                      className="inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Editar registro
+                    </Link>
+                  </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Unidad y Servicio</p>
-                    <p className="mt-2 font-medium text-slate-800">{selectedRecord.organization.department ?? "Sin departamento"}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {selectedRecord.organization.service ?? "Sin servicio"}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">{areaLabels[selectedRecord.organization.area ?? "none"]}</p>
+                <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</p>
+                    <p className="mt-3 text-lg font-semibold text-slate-900">{selectedRecord.organization.department ?? "Sin departamento"}</p>
+                    {selectedRecord.organization.service ? (
+                      <>
+                        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</p>
+                        <p className="mt-2 text-sm font-medium text-slate-700">{selectedRecord.organization.service}</p>
+                      </>
+                    ) : null}
+                    <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">{areaLabels[selectedRecord.organization.area ?? "none"]}</p>
                   </div>
-                  
+
                   {selectedRecord.location && (
-                    <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Ubicación</p>
-                      <p className="mt-2 text-sm font-medium text-slate-800">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
+                      <p className="mt-3 text-sm font-medium leading-6 text-slate-800">
                         {[
                           selectedRecord.location.building,
                           selectedRecord.location.floor,
@@ -328,16 +528,30 @@ export const DirectoryPage = () => {
                 )}
 
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Teléfonos</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
+                    <p className="text-xs font-medium text-slate-400">
+                      {selectedRecord.contactMethods.phones.length} disponibles
+                    </p>
+                  </div>
                   {selectedRecord.contactMethods.phones.map((phone) => (
-                    <div key={phone.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4 transition hover:bg-slate-50">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{phone.label ?? "Teléfono"}</p>
-                        <p className="mt-1 text-xl font-semibold text-scs-blueDark">{phone.number}</p>
-                        {phone.extension && <p className="mt-1 text-sm font-medium text-slate-600">Ext: {phone.extension}</p>}
-                        {phone.notes && <p className="mt-1 text-xs text-slate-500">{phone.notes}</p>}
+                    <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
+                          <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
+                          {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
+                          {phone.notes && <p className="mt-1 text-sm text-slate-500">{phone.notes}</p>}
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          {phone.isPrimary && (
+                            <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                              Principal
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0">
+                      <div className="mt-4 flex flex-wrap gap-2">
                         {phone.confidential && (
                           <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
                             Confidencial
@@ -357,20 +571,11 @@ export const DirectoryPage = () => {
                 </div>
 
                 {selectedRecord.notes && (
-                  <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Notas</p>
-                    <p className="mt-2 text-sm font-medium text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notas</p>
+                    <p className="mt-3 text-sm font-medium leading-6 text-slate-800 whitespace-pre-wrap">{selectedRecord.notes}</p>
                   </div>
                 )}
-
-                <div className="pt-4 border-t border-slate-100">
-                  <Link
-                    to={`/contacts/${selectedRecord.id}/edit`}
-                    className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-slate-800 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Editar registro
-                  </Link>
-                </div>
               </div>
             ) : (
               <div className="flex h-64 flex-col items-center justify-center text-center">

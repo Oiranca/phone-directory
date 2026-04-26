@@ -131,7 +131,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
-    expect(screen.getAllByText("Atención de privacidad").length).toBeGreaterThan(0);
+    expect(screen.getByText("Privacidad sensible")).toBeInTheDocument();
     expect(screen.getByText("Contiene números internos confidenciales.")).toBeInTheDocument();
     expect(screen.getByText("Incluye teléfonos que no deben compartirse con pacientes.")).toBeInTheDocument();
   });
@@ -174,7 +174,7 @@ describe("DirectoryPage", () => {
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.queryByText("Número interno confidencial.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartir con pacientes.")).not.toBeInTheDocument();
-    expect(screen.getByText("Atención de privacidad")).toBeInTheDocument();
+    expect(screen.queryByText("Privacidad sensible")).not.toBeInTheDocument();
   });
 
   it("exposes selected result state programmatically", async () => {
@@ -194,5 +194,64 @@ describe("DirectoryPage", () => {
 
     const selectedButton = screen.getByRole("button", { name: /admisión general/i });
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("caps visible results to five per page and exposes pagination", async () => {
+    const contacts = structuredClone(defaultContacts);
+
+    for (let index = 0; index < 6; index += 1) {
+      contacts.records.push({
+        ...structuredClone(defaultContacts.records[0]),
+        id: `extra-record-${index}`,
+        displayName: `Registro extra ${index + 1}`
+      });
+    }
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ir a la página 2" })).toBeInTheDocument();
+    expect(screen.queryByText("Registro extra 6")).not.toBeInTheDocument();
+  });
+
+  it("moves selection to the new page when pagination changes", async () => {
+    const contacts = structuredClone(defaultContacts);
+
+    for (let index = 0; index < 6; index += 1) {
+      contacts.records.push({
+        ...structuredClone(defaultContacts.records[0]),
+        id: `paged-record-${index}`,
+        displayName: `Paginado ${index + 1}`
+      });
+    }
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ir a la página 2" }));
+
+    const selectedOption = screen.getByRole("button", { name: /paginado 4/i });
+    expect(selectedOption).toHaveAttribute("aria-pressed", "true");
   });
 });
