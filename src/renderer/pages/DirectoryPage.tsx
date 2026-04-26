@@ -559,25 +559,27 @@ export const DirectoryPage = () => {
                       {selectedRecord.contactMethods.emails.length} disponibles
                     </p>
                   </div>
-                  {selectedRecord.contactMethods.emails.map((email) => (
-                    <div key={email.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{email.label ?? "Correo electrónico"}</p>
-                          <p className="mt-2 break-words text-lg font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
-                            {email.address}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 shrink-0">
-                          {email.isPrimary ? (
-                            <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
-                              Principal
-                            </span>
-                          ) : null}
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {selectedRecord.contactMethods.emails.map((email) => (
+                      <div key={email.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{email.label ?? "Correo electrónico"}</p>
+                            <p className="mt-2 break-words text-lg font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
+                              {email.address}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 shrink-0">
+                            {email.isPrimary ? (
+                              <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                Principal
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                   {selectedRecord.contactMethods.emails.length === 0 && (
                     <p className="text-sm text-slate-500 italic">No hay correos registrados.</p>
                   )}
