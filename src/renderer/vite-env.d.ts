@@ -17,6 +17,7 @@ declare global {
   interface Window {
     hospitalDirectory: {
       getBootstrapData: () => Promise<BootstrapResult>;
+      getSettingsDefaults: () => Promise<EditableAppSettings>;
       saveSettings: (settings: EditableAppSettings) => Promise<EditableAppSettings>;
       createBackup: () => Promise<string>;
       createRecord: (record: EditableContactRecord) => Promise<SaveContactResult>;

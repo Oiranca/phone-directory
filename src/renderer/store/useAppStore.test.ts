@@ -96,6 +96,8 @@ describe("search service helpers", () => {
 
 const defaultSettings: EditableAppSettings = {
   editorName: "Test Editor",
+  dataFilePath: "/data/contacts.json",
+  backupDirectoryPath: "/data/backups",
   ui: { showInactiveByDefault: false }
 };
 
@@ -144,7 +146,12 @@ describe("useAppStore actions", () => {
     });
 
     it("respects showInactiveByDefault from settings", () => {
-      const settings: EditableAppSettings = { editorName: "T", ui: { showInactiveByDefault: true } };
+      const settings: EditableAppSettings = {
+        editorName: "T",
+        dataFilePath: "/data/contacts.json",
+        backupDirectoryPath: "/data/backups",
+        ui: { showInactiveByDefault: true }
+      };
       useAppStore.getState().initialize({ contacts: defaultContacts, settings });
       expect(useAppStore.getState().showInactive).toBe(true);
     });
@@ -176,7 +183,12 @@ describe("useAppStore actions", () => {
     });
 
     it("respects showInactiveByDefault in recovery mode", () => {
-      const settings: EditableAppSettings = { editorName: "T", ui: { showInactiveByDefault: true } };
+      const settings: EditableAppSettings = {
+        editorName: "T",
+        dataFilePath: "/data/contacts.json",
+        backupDirectoryPath: "/data/backups",
+        ui: { showInactiveByDefault: true }
+      };
       useAppStore.getState().initializeRecovery(recoveryState, settings);
       expect(useAppStore.getState().showInactive).toBe(true);
     });
@@ -270,7 +282,12 @@ describe("useAppStore actions", () => {
 
   describe("setSettings", () => {
     it("updates settings", () => {
-      const newSettings: EditableAppSettings = { editorName: "Dr. García", ui: { showInactiveByDefault: true } };
+      const newSettings: EditableAppSettings = {
+        editorName: "Dr. García",
+        dataFilePath: "/data/contacts.json",
+        backupDirectoryPath: "/data/backups",
+        ui: { showInactiveByDefault: true }
+      };
       useAppStore.getState().setSettings(newSettings);
       expect(useAppStore.getState().settings).toBe(newSettings);
     });

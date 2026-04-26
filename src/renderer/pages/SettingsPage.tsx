@@ -8,9 +8,17 @@ export const SettingsPage = () => {
   const { pushToast } = useToast();
   const [editorName, setEditorName] = useState("");
   const [hasEditorDraft, setHasEditorDraft] = useState(false);
+  const [dataFilePath, setDataFilePath] = useState("");
+  const [backupDirectoryPath, setBackupDirectoryPath] = useState("");
+  const [managedDefaults, setManagedDefaults] = useState<null | {
+    dataFilePath: string;
+    backupDirectoryPath: string;
+  }>(null);
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isResettingPaths, setIsResettingPaths] = useState(false);
   const [bootstrapError, setBootstrapError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
   // This local loader is retained only for page-level retry and test isolation.
@@ -18,6 +26,16 @@ export const SettingsPage = () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
+      void window.hospitalDirectory.getSettingsDefaults()
+        .then((defaults) => {
+          setManagedDefaults({
+            dataFilePath: defaults.dataFilePath,
+            backupDirectoryPath: defaults.backupDirectoryPath
+          });
+        })
+        .catch(() => {
+          // Keep settings usable even if managed defaults fail to hydrate during bootstrap.
+        });
       if (isRecoveryBootstrap(payload)) {
         setBootstrapError(payload.recovery.message);
         return;
@@ -43,8 +61,38 @@ export const SettingsPage = () => {
 
     setEditorName(settings.editorName);
     setHasEditorDraft(false);
+    setDataFilePath(settings.dataFilePath);
+    setBackupDirectoryPath(settings.backupDirectoryPath);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
+    setSaveError("");
   }, [settings]);
+
+  useEffect(() => {
+    if (!settings || managedDefaults) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    void window.hospitalDirectory.getSettingsDefaults()
+      .then((defaults) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setManagedDefaults({
+          dataFilePath: defaults.dataFilePath,
+          backupDirectoryPath: defaults.backupDirectoryPath
+        });
+      })
+      .catch(() => {
+        // Keep the form usable even if managed defaults cannot be hydrated in the background.
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [managedDefaults, settings]);
 
   if (bootstrapError) {
     return (
@@ -68,21 +116,68 @@ export const SettingsPage = () => {
 
   const isDirty =
     (hasEditorDraft && editorName !== settings.editorName) ||
+    dataFilePath !== settings.dataFilePath ||
+    backupDirectoryPath !== settings.backupDirectoryPath ||
     showInactiveByDefault !== settings.ui.showInactiveByDefault;
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
     setHasEditorDraft(true);
+    setSaveError("");
+  };
+
+  const handleDataFilePathChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setDataFilePath(event.target.value);
+    setSaveError("");
+  };
+
+  const handleBackupDirectoryPathChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setBackupDirectoryPath(event.target.value);
+    setSaveError("");
   };
 
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
     setShowInactiveByDefault(event.target.checked);
+    setSaveError("");
   };
 
   const handleReset = () => {
     setEditorName(settings.editorName);
     setHasEditorDraft(false);
+    setDataFilePath(settings.dataFilePath);
+    setBackupDirectoryPath(settings.backupDirectoryPath);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
+    setSaveError("");
+  };
+
+  const handleResetPathsToDefaults = async () => {
+    setIsResettingPaths(true);
+
+    try {
+      const defaults = managedDefaults ?? await window.hospitalDirectory.getSettingsDefaults();
+      setManagedDefaults({
+        dataFilePath: defaults.dataFilePath,
+        backupDirectoryPath: defaults.backupDirectoryPath
+      });
+      setSaveError("");
+      setDataFilePath(defaults.dataFilePath);
+      setBackupDirectoryPath(defaults.backupDirectoryPath);
+      pushToast({
+        type: "success",
+        message: "Rutas gestionadas cargadas. Guarda para aplicarlas."
+      });
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : "No se pudieron cargar las rutas gestionadas.";
+      setSaveError(message);
+      pushToast({
+        type: "error",
+        message
+      });
+    } finally {
+      setIsResettingPaths(false);
+    }
   };
 
   const handleSave = async () => {
@@ -91,10 +186,13 @@ export const SettingsPage = () => {
     }
 
     setIsSaving(true);
+    setSaveError("");
 
     try {
       const saved = await window.hospitalDirectory.saveSettings({
         editorName,
+        dataFilePath,
+        backupDirectoryPath,
         ui: {
           showInactiveByDefault
         }
@@ -104,15 +202,29 @@ export const SettingsPage = () => {
         type: "success",
         message: "Configuración guardada. El filtro por defecto se aplicará en la próxima carga."
       });
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : "No se pudo guardar la configuración. Inténtalo de nuevo.";
+      setSaveError(message);
       pushToast({
         type: "error",
-        message: "No se pudo guardar la configuración. Inténtalo de nuevo."
+        message
       });
     } finally {
       setIsSaving(false);
     }
   };
+
+  const canOfferManagedReset = Boolean(
+    saveError &&
+    managedDefaults &&
+    /ruta|carpeta|archivo|backups/i.test(saveError) &&
+    (
+      dataFilePath !== managedDefaults.dataFilePath ||
+      backupDirectoryPath !== managedDefaults.backupDirectoryPath
+    )
+  );
 
   return (
     <section className="space-y-6">
@@ -149,6 +261,38 @@ export const SettingsPage = () => {
               </span>
             </label>
 
+            <label htmlFor="settings-data-file-path" className="block">
+              <span className="text-sm font-semibold text-slate-700">Ruta del archivo de datos</span>
+              <input
+                id="settings-data-file-path"
+                aria-label="Ruta del archivo de datos"
+                type="text"
+                value={dataFilePath}
+                onChange={handleDataFilePathChange}
+                placeholder="/ruta/al/directorio/contacts.json"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+              />
+              <span className="mt-2 block text-xs text-slate-500">
+                Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura.
+              </span>
+            </label>
+
+            <label htmlFor="settings-backup-directory-path" className="block">
+              <span className="text-sm font-semibold text-slate-700">Ruta de la carpeta de backups</span>
+              <input
+                id="settings-backup-directory-path"
+                aria-label="Ruta de la carpeta de backups"
+                type="text"
+                value={backupDirectoryPath}
+                onChange={handleBackupDirectoryPathChange}
+                placeholder="/ruta/a/la/carpeta/backups"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+              />
+              <span className="mt-2 block text-xs text-slate-500">
+                Debe ser una ruta absoluta. La carpeta debe existir y permitir lectura y escritura para crear copias de seguridad.
+              </span>
+            </label>
+
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <input
                 aria-label="Mostrar inactivos al iniciar"
@@ -166,11 +310,28 @@ export const SettingsPage = () => {
             </label>
           </div>
 
+          {saveError ? (
+            <div role="alert" className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+              <p className="font-semibold">No se pudo guardar la configuración</p>
+              <p className="mt-2">{saveError}</p>
+              {canOfferManagedReset ? (
+                <button
+                  type="button"
+                  onClick={() => void handleResetPathsToDefaults()}
+                  disabled={isSaving || isResettingPaths}
+                  className="mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isResettingPaths ? "Cargando rutas…" : "Cargar rutas gestionadas"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={isSaving || !isDirty}
+              disabled={isSaving || isResettingPaths || !isDirty}
               className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
@@ -178,7 +339,7 @@ export const SettingsPage = () => {
             <button
               type="button"
               onClick={handleReset}
-              disabled={isSaving || !isDirty}
+              disabled={isSaving || isResettingPaths || !isDirty}
               className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               Descartar cambios
@@ -196,6 +357,14 @@ export const SettingsPage = () => {
                 <dd className="mt-1">{settings.editorName || "Sin configurar"}</dd>
               </div>
               <div>
+                <dt className="font-medium text-slate-500">Archivo de datos</dt>
+                <dd className="mt-1 break-all">{settings.dataFilePath}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-slate-500">Carpeta de backups</dt>
+                <dd className="mt-1 break-all">{settings.backupDirectoryPath}</dd>
+              </div>
+              <div>
                 <dt className="font-medium text-slate-500">Inactivos al iniciar</dt>
                 <dd className="mt-1">{settings.ui.showInactiveByDefault ? "Sí" : "No"}</dd>
               </div>
@@ -206,8 +375,10 @@ export const SettingsPage = () => {
             <h3 className="text-sm font-semibold text-scs-blueDark">Qué cambia al guardar</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
               <li>El nombre del editor se aplicará a nuevas altas y futuras importaciones.</li>
+              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el dataset actual.</li>
+              <li>La carpeta de backups debe existir y ser accesible antes de guardarla aquí.</li>
               <li>La preferencia de inactivos se usará como comportamiento inicial del directorio.</li>
-              <li>No se modifica el dataset actual hasta que edites, importes o exportes datos.</li>
+              <li>Si una ruta falla, puedes cargar las rutas gestionadas y guardarlas cuando lo revises.</li>
             </ul>
           </div>
         </aside>

@@ -1,3 +1,4 @@
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
@@ -29,9 +30,10 @@ import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   async ensureInitialFiles() {
-    const dataDirectory = getManagedDataDirectory();
-    const backupDirectory = getManagedBackupDirectory();
-    const contactsFilePath = getContactsFilePath();
+    const managedDefaults = this.getManagedSettingsDefaults();
+    const dataDirectory = path.dirname(managedDefaults.dataFilePath);
+    const backupDirectory = managedDefaults.backupDirectoryPath;
+    const contactsFilePath = managedDefaults.dataFilePath;
     const settingsFilePath = getSettingsFilePath();
 
     await ensureDirectory(dataDirectory);
@@ -42,14 +44,14 @@ export class AppDataService {
     }
 
     if (!(await this.fileExists(settingsFilePath))) {
-      await writeJsonFile(settingsFilePath, defaultSettings(contactsFilePath, backupDirectory));
+      await writeJsonFile(settingsFilePath, managedDefaults);
     }
   }
 
   async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
-    const settings = await this.readSettings();
-    const contactsFilePath = getContactsFilePath();
+    const settings = await this.readSettings(true);
+    const contactsFilePath = settings.dataFilePath;
 
     try {
       const contacts = directoryDatasetSchema.parse(
@@ -71,21 +73,49 @@ export class AppDataService {
 
   async saveSettings(settings: EditableAppSettings) {
     const parsed = editableAppSettingsSchema.parse(settings);
+    const normalizedDataFilePath = parsed.dataFilePath.trim();
+    const normalizedBackupDirectoryPath = parsed.backupDirectoryPath.trim();
+
+    if (!path.isAbsolute(normalizedDataFilePath)) {
+      throw new Error("La ruta del archivo de datos debe ser absoluta.");
+    }
+
+    if (!path.isAbsolute(normalizedBackupDirectoryPath)) {
+      throw new Error("La ruta de la carpeta de backups debe ser absoluta.");
+    }
+
     const currentSettings = await this.readSettings();
     const nextSettings = {
       ...currentSettings,
       editorName: parsed.editorName,
+      dataFilePath: path.normalize(normalizedDataFilePath),
+      backupDirectoryPath: path.normalize(normalizedBackupDirectoryPath),
       ui: parsed.ui
     };
+
+    await this.validateEditableSettings(nextSettings, currentSettings);
+
+    if (
+      nextSettings.dataFilePath !== currentSettings.dataFilePath &&
+      !(await this.fileExists(nextSettings.dataFilePath))
+    ) {
+      const currentContacts = await this.readContacts(currentSettings);
+      await this.writeDatasetToPath(nextSettings.dataFilePath, currentContacts);
+    }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
     return nextSettings;
   }
 
+  getEditableSettingsDefaults(): EditableAppSettings {
+    return this.toEditableSettings(this.getManagedSettingsDefaults());
+  }
+
   async createBackup() {
-    const backupFilePath = await this.createBackupFilePath();
+    const settings = await this.readSettings(true);
+    const backupFilePath = await this.createBackupFilePath(settings);
     await this.copyFileWithContext(
-      getContactsFilePath(),
+      settings.dataFilePath,
       backupFilePath,
       "No se pudo crear el backup del directorio."
     );
@@ -93,7 +123,8 @@ export class AppDataService {
   }
 
   async listBackups(): Promise<BackupListItem[]> {
-    const backupDirectory = getManagedBackupDirectory();
+    const settings = await this.readSettings(true);
+    const backupDirectory = settings.backupDirectoryPath;
     try {
       await ensureDirectory(backupDirectory);
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
@@ -136,7 +167,8 @@ export class AppDataService {
   }
 
   async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
-    const contacts = await this.readContacts();
+    const settings = await this.readSettings(true);
+    const contacts = await this.readContacts(settings);
     const directory = path.dirname(targetFilePath);
 
     try {
@@ -162,9 +194,9 @@ export class AppDataService {
       await readJsonFile<DirectoryDataset>(sourceFilePath)
     );
     const backupPath = await this.createBackup();
-    const settings = await this.readSettings();
+    const settings = await this.readSettings(true);
 
-    await writeJsonFile(getContactsFilePath(), importedContacts);
+    await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
 
     return {
       contacts: importedContacts,
@@ -176,14 +208,14 @@ export class AppDataService {
   }
 
   async resetDataset(): Promise<ResetContactsResult> {
-    const settings = await this.readSettings();
-    const contactsFilePath = getContactsFilePath();
+    const settings = await this.readSettings(true);
+    const contactsFilePath = settings.dataFilePath;
     const backupPath = (await this.fileExists(contactsFilePath))
       ? await this.createBackup()
       : null;
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
-    await writeJsonFile(getContactsFilePath(), contacts);
+    await this.writeDatasetToPath(settings.dataFilePath, contacts);
 
     return {
       contacts,
@@ -193,12 +225,12 @@ export class AppDataService {
   }
 
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
-    const settings = await this.readSettings();
+    const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       this.getEditorName(settings)
     );
-    const currentContacts = await this.readContacts();
+    const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
 
     return {
@@ -210,7 +242,7 @@ export class AppDataService {
   }
 
   async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
-    const settings = await this.readSettings();
+    const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
@@ -225,10 +257,10 @@ export class AppDataService {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
-    const currentContacts = await this.readContacts();
+    const currentContacts = await this.readContacts(settings);
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName);
     const backupPath = await this.createBackup();
-    await writeJsonFile(getContactsFilePath(), merged.contacts);
+    await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
 
     return {
       contacts: merged.contacts,
@@ -245,8 +277,8 @@ export class AppDataService {
 
   async createRecord(payload: EditableContactRecord): Promise<SaveContactResult> {
     const parsed = editableContactRecordSchema.parse(payload);
-    const contacts = await this.readContacts();
-    const settings = await this.readSettings();
+    const settings = await this.readSettings(true);
+    const contacts = await this.readContacts(settings);
     const now = new Date().toISOString();
     const editorName = this.getEditorName(settings);
     const savedRecordId = this.createUniqueRecordId(contacts.records);
@@ -267,7 +299,7 @@ export class AppDataService {
     });
 
     const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
-    await writeJsonFile(getContactsFilePath(), nextContacts);
+    await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -277,8 +309,8 @@ export class AppDataService {
 
   async updateRecord(recordId: string, payload: EditableContactRecord): Promise<SaveContactResult> {
     const parsed = editableContactRecordSchema.parse(payload);
-    const contacts = await this.readContacts();
-    const settings = await this.readSettings();
+    const settings = await this.readSettings(true);
+    const contacts = await this.readContacts(settings);
     const now = new Date().toISOString();
     const editorName = this.getEditorName(settings);
     const recordIndex = contacts.records.findIndex((record) => record.id === recordId);
@@ -307,7 +339,7 @@ export class AppDataService {
       index === recordIndex ? updatedRecord : record
     );
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
-    await writeJsonFile(getContactsFilePath(), nextContacts);
+    await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -328,20 +360,31 @@ export class AppDataService {
   toEditableSettings(settings: AppSettings): EditableAppSettings {
     return {
       editorName: settings.editorName,
+      dataFilePath: settings.dataFilePath,
+      backupDirectoryPath: settings.backupDirectoryPath,
       ui: settings.ui
     };
   }
 
-  private async readContacts() {
+  private async readContacts(settings: AppSettings) {
+    await this.assertDataFilePathSafe(
+      settings.dataFilePath,
+      "No se pudo leer el archivo de datos configurado.",
+      false
+    );
     return directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(getContactsFilePath())
+      await readJsonFile<DirectoryDataset>(settings.dataFilePath)
     );
   }
 
-  private async createBackupFilePath() {
+  private async createBackupFilePath(settings: AppSettings) {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupDirectory = getManagedBackupDirectory();
+    const backupDirectory = settings.backupDirectoryPath;
     try {
+      await this.assertBackupDirectorySafe(
+        backupDirectory,
+        "No se pudo preparar la carpeta de backups del directorio."
+      );
       await ensureDirectory(backupDirectory);
     } catch (error) {
       throw this.toFilesystemError(
@@ -353,10 +396,241 @@ export class AppDataService {
     return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
   }
 
-  private async readSettings() {
-    return appSettingsSchema.parse(
+  private async readSettings(validatePaths = false) {
+    const settings = appSettingsSchema.parse(
       await readJsonFile<AppSettings>(getSettingsFilePath())
     );
+
+    if (validatePaths) {
+      await this.assertPersistedSettingsSafe(settings);
+    }
+
+    return settings;
+  }
+
+  private getManagedSettingsDefaults(): AppSettings {
+    return defaultSettings(getContactsFilePath(), getManagedBackupDirectory());
+  }
+
+  private async assertPersistedSettingsSafe(settings: AppSettings) {
+    if (!path.isAbsolute(settings.dataFilePath)) {
+      throw new Error("La ruta del archivo de datos configurada debe ser absoluta.");
+    }
+
+    if (!path.isAbsolute(settings.backupDirectoryPath)) {
+      throw new Error("La ruta de la carpeta de backups configurada debe ser absoluta.");
+    }
+
+    await this.assertPathChainIsNotSymlink(
+      settings.dataFilePath,
+      "No se pudo validar la ruta del archivo de datos configurada.",
+      true
+    );
+    await this.assertPathChainIsNotSymlink(
+      settings.backupDirectoryPath,
+      "No se pudo validar la carpeta de backups configurada."
+    );
+  }
+
+  private async validateEditableSettings(settings: AppSettings, currentSettings: AppSettings) {
+    const settingsFilePath = getSettingsFilePath();
+
+    await this.assertPathChainIsNotSymlink(
+      settings.dataFilePath,
+      "No se pudo validar la ruta del archivo de datos.",
+      true
+    );
+    await this.assertPathChainIsNotSymlink(
+      settings.backupDirectoryPath,
+      "No se pudo validar la carpeta de backups."
+    );
+
+    if (settings.dataFilePath === settingsFilePath) {
+      throw new Error(
+        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
+      );
+    }
+
+    if (path.extname(settings.dataFilePath).toLowerCase() !== ".json") {
+      throw new Error(
+        `La ruta de datos debe terminar en .json. Ruta afectada: ${settings.dataFilePath}.`
+      );
+    }
+
+    await this.assertParentDirectoryWritable(
+      settings.dataFilePath,
+      "No se pudo validar la ruta del archivo de datos."
+    );
+    await this.assertDataFilePathAvailable(
+      settings.dataFilePath,
+      "No se pudo validar la ruta del archivo de datos.",
+      settings.dataFilePath === currentSettings.dataFilePath ||
+        (
+          settings.dataFilePath === this.getManagedSettingsDefaults().dataFilePath &&
+          await this.fileExists(settings.dataFilePath)
+        )
+    );
+    await this.assertExistingWritableDirectory(
+      settings.backupDirectoryPath,
+      "No se pudo validar la carpeta de backups."
+    );
+    await this.assertDataFilePathSafe(
+      settings.dataFilePath,
+      "No se pudo validar la ruta del archivo de datos.",
+      true
+    );
+  }
+
+  private async assertParentDirectoryWritable(filePath: string, message: string) {
+    const directoryPath = path.dirname(filePath);
+
+    try {
+      const stats = await fs.stat(directoryPath);
+
+      if (!stats.isDirectory()) {
+        throw new Error("not-directory");
+      }
+
+      await fs.access(directoryPath, fsConstants.R_OK | fsConstants.W_OK);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath: directoryPath });
+    }
+  }
+
+  private async assertExistingWritableDirectory(directoryPath: string, message: string) {
+    try {
+      const stats = await fs.stat(directoryPath);
+
+      if (!stats.isDirectory()) {
+        throw new Error("not-directory");
+      }
+
+      await fs.access(directoryPath, fsConstants.R_OK | fsConstants.W_OK);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath: directoryPath });
+    }
+  }
+
+  private async assertPathIsNotSymlink(targetPath: string, message: string) {
+    try {
+      const stats = await fs.lstat(targetPath);
+
+      if (stats.isSymbolicLink()) {
+        throw new Error(
+          `${message} Ruta afectada: ${targetPath}. No se permiten enlaces simbólicos en las rutas configuradas.`
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
+        throw error;
+      }
+
+      throw this.toFilesystemError(error, message, { filePath: targetPath });
+    }
+  }
+
+  private async assertPathChainIsNotSymlink(targetPath: string, message: string, allowMissingLeaf = false) {
+    const resolvedPath = path.resolve(targetPath);
+    const parsedPath = path.parse(resolvedPath);
+    const relativeSegments = resolvedPath.slice(parsedPath.root.length).split(path.sep).filter(Boolean);
+    let currentPath = parsedPath.root;
+
+    for (let index = 0; index < relativeSegments.length; index += 1) {
+      currentPath = path.join(currentPath, relativeSegments[index]!);
+
+      if (index === 0) {
+        continue;
+      }
+
+      try {
+        const stats = await fs.lstat(currentPath);
+
+        if (stats.isSymbolicLink()) {
+          throw new Error(
+            `${message} Ruta afectada: ${currentPath}. No se permiten enlaces simbólicos en las rutas configuradas.`
+          );
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
+          throw error;
+        }
+
+        const filesystemError = this.getErrnoException(error);
+        const isLeaf = index === relativeSegments.length - 1;
+
+        if (allowMissingLeaf && isLeaf && filesystemError?.code === "ENOENT") {
+          return;
+        }
+
+        throw this.toFilesystemError(error, message, { filePath: currentPath });
+      }
+    }
+  }
+
+  private async assertDataFilePathSafe(filePath: string, message: string, allowMissing: boolean) {
+    await this.assertPathChainIsNotSymlink(filePath, message, allowMissing);
+
+    if (!(await this.fileExists(filePath))) {
+      if (allowMissing) {
+        return;
+      }
+
+      throw this.toFilesystemError(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT", path: filePath }),
+        message,
+        { filePath }
+      );
+    }
+
+  }
+
+  private async assertBackupDirectorySafe(directoryPath: string, message: string) {
+    await this.assertPathChainIsNotSymlink(directoryPath, message);
+  }
+
+  private async writeDatasetToPath(filePath: string, dataset: DirectoryDataset) {
+    await this.assertDataFilePathSafe(
+      filePath,
+      "No se pudo escribir el archivo de datos configurado.",
+      true
+    );
+    await writeJsonFile(filePath, dataset);
+  }
+
+  private async assertDataFilePathAvailable(filePath: string, message: string, allowExisting: boolean) {
+    try {
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        throw new Error("is-directory");
+      }
+
+      throw new Error("file-exists");
+    } catch (error) {
+      const filesystemError = this.getErrnoException(error);
+
+      if (filesystemError?.code === "ENOENT") {
+        return;
+      }
+
+      if (error instanceof Error && error.message === "file-exists" && allowExisting) {
+        return;
+      }
+
+      if (error instanceof Error && error.message === "file-exists") {
+        throw new Error(
+          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el dataset actual o restablece las rutas gestionadas.`
+        );
+      }
+
+      if (error instanceof Error && error.message === "is-directory") {
+        throw new Error(
+          `${message} Ruta afectada: ${filePath}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
+        );
+      }
+
+      throw this.toFilesystemError(error, message, { filePath });
+    }
   }
 
   private buildNextDataset(
@@ -629,6 +903,8 @@ export class AppDataService {
         return "No tienes permisos suficientes para acceder al archivo o directorio.";
       case "ENOENT":
         return "El archivo o directorio no existe.";
+      case "ENOTDIR":
+        return "Alguno de los segmentos de la ruta no es una carpeta válida.";
       case "EROFS":
         return "El archivo o directorio está en un sistema de solo lectura.";
       case "ENOSPC":
@@ -639,7 +915,15 @@ export class AppDataService {
   }
 
   private isRecoverableContactsError(error: unknown) {
-    return error instanceof SyntaxError || error instanceof ZodError;
+    const filesystemError = this.getErrnoException(error);
+
+    return (
+      error instanceof SyntaxError ||
+      error instanceof ZodError ||
+      filesystemError?.code === "ENOENT" ||
+      filesystemError?.code === "ENOTDIR" ||
+      filesystemError?.code === "EISDIR"
+    );
   }
 
   private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
@@ -647,6 +931,10 @@ export class AppDataService {
 
     if (error instanceof ZodError) {
       details = "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos.";
+    } else if (this.getErrnoException(error)?.code === "ENOENT") {
+      details = "El archivo configurado no existe. Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
+    } else if (this.getErrnoException(error)?.code === "ENOTDIR" || this.getErrnoException(error)?.code === "EISDIR") {
+      details = "La ruta configurada no apunta a un archivo JSON válido. Corrige la ruta o restablece un directorio vacío para volver a trabajar.";
     } else if (error instanceof Error) {
       details = "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto.";
     } else {
@@ -656,7 +944,11 @@ export class AppDataService {
     return {
       reason: "invalid-contacts-json",
       contactsFilePath,
-      message: "El archivo local contacts.json está dañado o tiene un formato no válido.",
+      message: this.getErrnoException(error)?.code === "ENOENT"
+        ? "El archivo de datos configurado no existe o ya no está disponible."
+        : (this.getErrnoException(error)?.code === "ENOTDIR" || this.getErrnoException(error)?.code === "EISDIR")
+            ? "La ruta de datos configurada no apunta a un archivo utilizable."
+        : "El archivo local contacts.json está dañado o tiene un formato no válido.",
       details
     };
   }

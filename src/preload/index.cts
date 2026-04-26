@@ -14,6 +14,7 @@ import type {
 
 const api = {
   getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
+  getSettingsDefaults: () => ipcRenderer.invoke("settings:defaults") as Promise<EditableAppSettings>,
   saveSettings: (settings: EditableAppSettings) =>
     ipcRenderer.invoke("settings:save", settings) as Promise<EditableAppSettings>,
   createBackup: () => ipcRenderer.invoke("contacts:create-backup") as Promise<string>,

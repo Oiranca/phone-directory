@@ -22,6 +22,8 @@ const resetStore = () => {
 
 const editableSettings = {
   editorName: "Samuel",
+  dataFilePath: "/tmp/data/contacts.json",
+  backupDirectoryPath: "/tmp/backups",
   ui: {
     showInactiveByDefault: false
   }
@@ -46,8 +48,18 @@ describe("SettingsPage", () => {
           contacts: defaultContacts,
           settings: editableSettings
         }),
+        getSettingsDefaults: vi.fn().mockResolvedValue({
+          editorName: "",
+          dataFilePath: "/tmp/default-data/contacts.json",
+          backupDirectoryPath: "/tmp/default-backups",
+          ui: {
+            showInactiveByDefault: false
+          }
+        }),
         saveSettings: vi.fn().mockResolvedValue({
           editorName: "Guardia tarde",
+          dataFilePath: "/tmp/data/contacts.json",
+          backupDirectoryPath: "/tmp/backups",
           ui: {
             showInactiveByDefault: true
           }
@@ -73,6 +85,8 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Samuel");
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
+    expect(screen.getByLabelText("Ruta de la carpeta de backups")).toHaveValue("/tmp/backups");
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 
@@ -90,6 +104,8 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledWith({
         editorName: "Guardia tarde",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: true
         }
@@ -99,6 +115,8 @@ describe("SettingsPage", () => {
     expect(await screen.findByText(/Configuración guardada/)).toBeInTheDocument();
     expect(useAppStore.getState().settings).toEqual({
       editorName: "Guardia tarde",
+      dataFilePath: "/tmp/data/contacts.json",
+      backupDirectoryPath: "/tmp/backups",
       ui: {
         showInactiveByDefault: true
       }
@@ -118,6 +136,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
 
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Samuel");
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
     expect(screen.getByRole("checkbox", { name: /Mostrar inactivos al iniciar/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
@@ -143,7 +162,78 @@ describe("SettingsPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
-    expect(await screen.findByText("No se pudo guardar la configuración. Inténtalo de nuevo.")).toBeInTheDocument();
+    expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
+    expect((await screen.findAllByText("write failed")).length).toBeGreaterThan(0);
     expect(useAppStore.getState().settings).toEqual(editableSettings);
+  });
+
+  it("loads managed paths into the form after a path validation failure", async () => {
+    window.hospitalDirectory.saveSettings = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Ruta inválida"));
+
+    renderPage();
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Ruta del archivo de datos"), {
+      target: { value: "/tmp/data/existente.json" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect((await screen.findAllByText("Ruta inválida")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cargar rutas gestionadas" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.getSettingsDefaults).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/default-data/contacts.json");
+    expect(screen.getByLabelText("Ruta de la carpeta de backups")).toHaveValue("/tmp/default-backups");
+    expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().settings).toEqual(editableSettings);
+  });
+
+  it("does not offer managed path reset for non-path save errors", async () => {
+    window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("write failed"));
+
+    renderPage();
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Nombre del editor"), {
+      target: { value: "Fallo" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cargar rutas gestionadas" })).not.toBeInTheDocument();
+  });
+
+  it("offers managed path reset when the page mounts with existing settings", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      recovery: null,
+      selectedRecordId: null,
+      query: "",
+      selectedType: "all",
+      selectedArea: "all",
+      showInactive: false,
+      isLoading: false
+    });
+    window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("Ruta inválida"));
+
+    renderPage();
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Ruta del archivo de datos"), {
+      target: { value: "/tmp/data/existente.json" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cargar rutas gestionadas" })).toBeInTheDocument();
   });
 });

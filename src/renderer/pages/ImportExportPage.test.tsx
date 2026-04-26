@@ -22,6 +22,8 @@ const resetStore = () => {
 
 const editableSettings = {
   editorName: "Samuel",
+  dataFilePath: "/tmp/data/contacts.json",
+  backupDirectoryPath: "/tmp/backups",
   ui: {
     showInactiveByDefault: false
   }
