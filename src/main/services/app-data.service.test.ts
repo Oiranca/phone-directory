@@ -180,6 +180,25 @@ describe("AppDataService", () => {
     );
   });
 
+  it("rejects data paths that match settings.json with case-only differences", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const settingsFilePath = path.join(testRoot, "data", "settings.json");
+    const caseVariantSettingsPath = process.platform === "win32" || process.platform === "darwin"
+      ? settingsFilePath.toUpperCase()
+      : settingsFilePath;
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: caseVariantSettingsPath
+        })
+      )
+    ).rejects.toThrow(/La ruta de datos no puede apuntar al archivo de configuración/);
+  });
+
   it("rejects persisted symlinked backup directories when listing backups", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -1661,6 +1680,26 @@ describe("AppDataService", () => {
     ) as { records: unknown[]; metadata: { recordCount: number } };
     expect(persisted.records).toHaveLength(0);
     expect(persisted.metadata.recordCount).toBe(0);
+  });
+
+  it("wraps data-file write failures with localized filesystem context", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const writeFileSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+          path: path.join(testRoot, "data", "contacts.json.tmp")
+        })
+      );
+
+    await expect(service.resetDataset()).rejects.toThrow(
+      /No se pudo escribir el archivo de datos configurado\..*No tienes permisos suficientes para acceder al archivo o directorio\./
+    );
+    expect(writeFileSpy).toHaveBeenCalled();
   });
 
   it("returns Zod issue messages in recovery details when contacts.json has valid JSON but invalid schema", async () => {

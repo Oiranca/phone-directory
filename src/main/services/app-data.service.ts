@@ -94,7 +94,7 @@ export class AppDataService {
     await this.validateEditableSettings(nextSettings, currentSettings);
 
     if (
-      nextSettings.dataFilePath !== currentSettings.dataFilePath &&
+      !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) &&
       !(await this.fileExists(nextSettings.dataFilePath))
     ) {
       const currentContacts = await this.readContacts(currentSettings);
@@ -413,6 +413,17 @@ export class AppDataService {
     return defaultSettings(getContactsFilePath(), getManagedBackupDirectory());
   }
 
+  private pathsMatch(leftPath: string, rightPath: string) {
+    const normalizeForComparison = (filePath: string) => {
+      const resolvedPath = path.resolve(filePath);
+      return process.platform === "win32" || process.platform === "darwin"
+        ? resolvedPath.toLowerCase()
+        : resolvedPath;
+    };
+
+    return normalizeForComparison(leftPath) === normalizeForComparison(rightPath);
+  }
+
   private async assertPersistedSettingsSafe(settings: AppSettings) {
     if (!path.isAbsolute(settings.dataFilePath)) {
       throw new Error("La ruta del archivo de datos configurada debe ser absoluta.");
@@ -446,7 +457,7 @@ export class AppDataService {
       "No se pudo validar la carpeta de backups."
     );
 
-    if (settings.dataFilePath === settingsFilePath) {
+    if (this.pathsMatch(settings.dataFilePath, settingsFilePath)) {
       throw new Error(
         `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
       );
@@ -465,9 +476,9 @@ export class AppDataService {
     await this.assertDataFilePathAvailable(
       settings.dataFilePath,
       "No se pudo validar la ruta del archivo de datos.",
-      settings.dataFilePath === currentSettings.dataFilePath ||
+      this.pathsMatch(settings.dataFilePath, currentSettings.dataFilePath) ||
         (
-          settings.dataFilePath === this.getManagedSettingsDefaults().dataFilePath &&
+          this.pathsMatch(settings.dataFilePath, this.getManagedSettingsDefaults().dataFilePath) &&
           await this.fileExists(settings.dataFilePath)
         )
     );
@@ -509,24 +520,6 @@ export class AppDataService {
       await fs.access(directoryPath, fsConstants.R_OK | fsConstants.W_OK);
     } catch (error) {
       throw this.toFilesystemError(error, message, { filePath: directoryPath });
-    }
-  }
-
-  private async assertPathIsNotSymlink(targetPath: string, message: string) {
-    try {
-      const stats = await fs.lstat(targetPath);
-
-      if (stats.isSymbolicLink()) {
-        throw new Error(
-          `${message} Ruta afectada: ${targetPath}. No se permiten enlaces simbólicos en las rutas configuradas.`
-        );
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
-        throw error;
-      }
-
-      throw this.toFilesystemError(error, message, { filePath: targetPath });
     }
   }
 
@@ -595,7 +588,15 @@ export class AppDataService {
       "No se pudo escribir el archivo de datos configurado.",
       true
     );
-    await writeJsonFile(canonicalFilePath, dataset);
+    try {
+      await writeJsonFile(canonicalFilePath, dataset);
+    } catch (error) {
+      throw this.toFilesystemError(
+        error,
+        "No se pudo escribir el archivo de datos configurado.",
+        { filePath: canonicalFilePath }
+      );
+    }
   }
 
   private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {

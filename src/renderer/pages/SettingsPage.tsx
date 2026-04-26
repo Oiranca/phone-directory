@@ -26,16 +26,6 @@ export const SettingsPage = () => {
     try {
       setBootstrapError("");
       const payload = await window.hospitalDirectory.getBootstrapData();
-      void window.hospitalDirectory.getSettingsDefaults()
-        .then((defaults) => {
-          setManagedDefaults({
-            dataFilePath: defaults.dataFilePath,
-            backupDirectoryPath: defaults.backupDirectoryPath
-          });
-        })
-        .catch(() => {
-          // Keep settings usable even if managed defaults fail to hydrate during bootstrap.
-        });
       if (isRecoveryBootstrap(payload)) {
         setBootstrapError(payload.recovery.message);
         return;
