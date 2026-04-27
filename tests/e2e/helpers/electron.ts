@@ -4,28 +4,28 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const rendererUrl = "http://127.0.0.1:4173";
 
 export type E2eWorkspace = {
-  rootDir: string;
+  workspaceRootDir: string;
   userDataPath: string;
   incomingDir: string;
   exportsDir: string;
 };
 
 export const createWorkspace = async (name: string): Promise<E2eWorkspace> => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), `phone-directory-${name}-`));
-  const userDataPath = path.join(rootDir, "user-data");
-  const incomingDir = path.join(rootDir, "incoming");
-  const exportsDir = path.join(rootDir, "exports");
+  const workspaceRootDir = await fs.mkdtemp(path.join(os.tmpdir(), `phone-directory-${name}-`));
+  const userDataPath = path.join(workspaceRootDir, "user-data");
+  const incomingDir = path.join(workspaceRootDir, "incoming");
+  const exportsDir = path.join(workspaceRootDir, "exports");
 
   await fs.mkdir(userDataPath, { recursive: true });
   await fs.mkdir(incomingDir, { recursive: true });
   await fs.mkdir(exportsDir, { recursive: true });
 
   return {
-    rootDir,
+    workspaceRootDir,
     userDataPath,
     incomingDir,
     exportsDir
@@ -33,7 +33,7 @@ export const createWorkspace = async (name: string): Promise<E2eWorkspace> => {
 };
 
 export const removeWorkspace = async (workspace: E2eWorkspace) => {
-  await fs.rm(workspace.rootDir, { recursive: true, force: true });
+  await fs.rm(workspace.workspaceRootDir, { recursive: true, force: true });
 };
 
 export const launchElectronApp = async (options: {
@@ -42,7 +42,7 @@ export const launchElectronApp = async (options: {
   saveDialogPaths?: string[];
 }) => {
   const electronApp = await electron.launch({
-    cwd: rootDir,
+    cwd: repoRootDir,
     args: ["dist-electron/main/index.js"],
     timeout: 60_000,
     env: {

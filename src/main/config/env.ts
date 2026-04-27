@@ -13,7 +13,10 @@ const parseRendererUrl = (value: string | undefined, isE2E: boolean) => {
     return null;
   }
 
-  return value;
+  const parsed = new URL(value);
+  const normalizedPathname = parsed.pathname.replace(/\/+$/, "");
+
+  return `${parsed.origin}${normalizedPathname}`;
 };
 
 const parseUserDataPath = (value: string | undefined, isE2E: boolean) => {
