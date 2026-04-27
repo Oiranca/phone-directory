@@ -223,9 +223,34 @@ export class AppDataService {
 
     this.assertPathWithinDirectory(canonicalSourceFilePath, canonicalBackupDirectory, message);
 
-    const importedContacts = directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(canonicalSourceFilePath)
-    );
+    const backupHandle = await fs.open(canonicalSourceFilePath, fsConstants.O_RDONLY);
+    let importedContacts: DirectoryDataset;
+
+    try {
+      const [handleStats, pathLstat, pathStats, rawContents] = await Promise.all([
+        backupHandle.stat(),
+        fs.lstat(canonicalSourceFilePath),
+        fs.stat(canonicalSourceFilePath),
+        backupHandle.readFile({ encoding: "utf-8" })
+      ]);
+
+      if (pathLstat.isSymbolicLink()) {
+        throw new Error(
+          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+        );
+      }
+
+      if (handleStats.dev !== pathStats.dev || handleStats.ino !== pathStats.ino) {
+        throw new Error(
+          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+        );
+      }
+
+      importedContacts = directoryDatasetSchema.parse(JSON.parse(rawContents) as DirectoryDataset);
+    } finally {
+      await backupHandle.close();
+    }
+
     const backupPath = await this.createBackup();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
