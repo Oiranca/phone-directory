@@ -224,6 +224,7 @@ export const ImportExportPage = () => {
         contacts: result.contacts,
         settings: result.settings
       });
+      setCsvPreview(null);
       await refreshBackups();
       pushToast({
         type: "success",

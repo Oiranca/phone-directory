@@ -227,11 +227,10 @@ export class AppDataService {
     let importedContacts: DirectoryDataset;
 
     try {
-      const [handleStats, pathLstat, pathStats, rawContents] = await Promise.all([
+      const [handleStats, pathLstat, pathStats] = await Promise.all([
         backupHandle.stat(),
         fs.lstat(canonicalSourceFilePath),
-        fs.stat(canonicalSourceFilePath),
-        backupHandle.readFile({ encoding: "utf-8" })
+        fs.stat(canonicalSourceFilePath)
       ]);
 
       if (pathLstat.isSymbolicLink()) {
@@ -246,6 +245,7 @@ export class AppDataService {
         );
       }
 
+      const rawContents = await backupHandle.readFile({ encoding: "utf-8" });
       importedContacts = directoryDatasetSchema.parse(JSON.parse(rawContents) as DirectoryDataset);
     } finally {
       await backupHandle.close();

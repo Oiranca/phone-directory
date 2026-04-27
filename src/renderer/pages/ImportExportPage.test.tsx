@@ -435,6 +435,9 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
 
@@ -443,6 +446,9 @@ describe("ImportExportPage", () => {
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
     expect(await screen.findByText(/Backup restaurado desde contacts-1\.json/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
+    });
   });
 
   it("shows the restore service error message when backup restore fails", async () => {
