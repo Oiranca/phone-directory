@@ -1,10 +1,53 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { ImportExportPage } from "./ImportExportPage";
 import { useAppStore } from "../store/useAppStore";
+
+const originalHTMLDialogElement = globalThis.HTMLDialogElement;
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+
+  if (originalHTMLDialogElement) {
+    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
+  } else {
+    vi.unstubAllGlobals();
+  }
+});
 
 const resetStore = () => {
   useAppStore.setState({
@@ -41,7 +84,6 @@ const renderPage = () =>
 describe("ImportExportPage", () => {
   beforeEach(() => {
     resetStore();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     Object.defineProperty(window, "hospitalDirectory", {
       configurable: true,
       value: {
@@ -61,6 +103,22 @@ describe("ImportExportPage", () => {
             sizeBytes: 2048
           }
         ]),
+        restoreBackup: vi.fn().mockResolvedValue({
+          contacts: {
+            ...defaultContacts,
+            records: [
+              {
+                ...defaultContacts.records[0]!,
+                id: "cnt_restored",
+                displayName: "Directorio restaurado"
+              }
+            ]
+          },
+          settings: editableSettings,
+          backupPath: "/tmp/backups/contacts-before-restore.json",
+          importedFilePath: "/tmp/backups/contacts-1.json",
+          recordCount: 1
+        }),
         exportDataset: vi.fn().mockResolvedValue({
           filePath: "/tmp/exports/share.json",
           exportedAt: defaultContacts.exportedAt,
@@ -138,7 +196,6 @@ describe("ImportExportPage", () => {
 
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
   });
 
   it("loads backup inventory and current dataset summary", async () => {
@@ -208,6 +265,7 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar JSON/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Importar JSON" })).at(-1)!);
 
     await waitFor(() => {
       expect(window.hospitalDirectory.importDataset).toHaveBeenCalledTimes(1);
@@ -267,6 +325,7 @@ describe("ImportExportPage", () => {
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
     await waitFor(() => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1");
@@ -370,5 +429,109 @@ describe("ImportExportPage", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
+  });
+
+  it("restores a listed backup after dialog confirmation", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
+    });
+    expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
+    expect(await screen.findByText(/Backup restaurado desde contacts-1\.json/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the restore service error message when backup restore fails", async () => {
+    window.hospitalDirectory.restoreBackup = vi
+      .fn()
+      .mockRejectedValue(new Error("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json."));
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+
+    expect(
+      await screen.findByText("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json.")
+    ).toBeInTheDocument();
+  });
+
+  it("disables competing actions while a backup restore is running", async () => {
+    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
+    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRestore = resolve;
+        })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
+    });
+    expect(screen.getByRole("button", { name: /Crear backup/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
+
+    resolveRestore?.({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-before-restore.json",
+      importedFilePath: "/tmp/backups/contacts-1.json",
+      recordCount: defaultContacts.records.length
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Actualizar" })).not.toBeDisabled();
+    });
+  });
+
+  it("submits restore confirmation only once on rapid double click", async () => {
+    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
+    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRestore = resolve;
+        })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+
+    const confirmButton = await screen.findByRole("button", { name: "Restaurar backup" });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledTimes(1);
+    });
+
+    resolveRestore?.({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-before-restore.json",
+      importedFilePath: "/tmp/backups/contacts-1.json",
+      recordCount: defaultContacts.records.length
+    });
   });
 });

@@ -23,6 +23,8 @@ const api = {
   updateRecord: (recordId: string, record: EditableContactRecord) =>
     ipcRenderer.invoke("contacts:update-record", recordId, record) as Promise<SaveContactResult>,
   listBackups: () => ipcRenderer.invoke("contacts:list-backups") as Promise<BackupListItem[]>,
+  restoreBackup: (backupFilePath: string) =>
+    ipcRenderer.invoke("contacts:restore-backup", backupFilePath) as Promise<ImportContactsResult>,
   exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
   importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
   resetDataset: () => ipcRenderer.invoke("contacts:reset-dataset") as Promise<ResetContactsResult>,

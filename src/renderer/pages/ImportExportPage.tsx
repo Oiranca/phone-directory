@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
@@ -53,6 +54,11 @@ const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"
   return "";
 };
 
+type PendingConfirmation =
+  | { kind: "import-json" }
+  | { kind: "import-csv"; preview: CsvImportPreview }
+  | { kind: "restore-backup"; backup: BackupListItem };
+
 export const ImportExportPage = () => {
   const { contacts, settings, initialize } = useAppStore();
   const { pushToast } = useToast();
@@ -64,7 +70,18 @@ export const ImportExportPage = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isPreparingCsvPreview, setIsPreparingCsvPreview] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const confirmationInFlightRef = useRef(false);
+  const isRestoreInProgress = restoringBackupPath !== "";
+  const isMutating =
+    isCreatingBackup ||
+    isExporting ||
+    isImporting ||
+    isPreparingCsvPreview ||
+    isImportingCsv ||
+    isRestoreInProgress;
 
   const loadPageData = async () => {
     try {
@@ -165,14 +182,6 @@ export const ImportExportPage = () => {
   };
 
   const handleImport = async () => {
-    const confirmed = window.confirm(
-      "La importación reemplaza todo el directorio actual y crea un backup automático antes de continuar. ¿Quieres seguir?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setIsImporting(true);
       const result = await window.hospitalDirectory.importDataset();
@@ -203,6 +212,31 @@ export const ImportExportPage = () => {
       });
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backup: BackupListItem) => {
+    try {
+      setRestoringBackupPath(backup.filePath);
+      const result = await window.hospitalDirectory.restoreBackup(backup.filePath);
+
+      initialize({
+        contacts: result.contacts,
+        settings: result.settings
+      });
+      setCsvPreview(null);
+      await refreshBackups();
+      pushToast({
+        type: "success",
+        message: `Backup restaurado desde ${backup.fileName}. Copia de seguridad previa: ${result.backupPath}.`
+      });
+    } catch (error) {
+      pushToast({
+        type: "error",
+        message: toUserFacingError(error, "No se pudo restaurar el backup seleccionado.")
+      });
+    } finally {
+      setRestoringBackupPath("");
     }
   };
 
@@ -254,34 +288,14 @@ export const ImportExportPage = () => {
     }
   };
 
-  const handleImportCsv = async () => {
-    if (!csvPreview) {
-      return;
-    }
-
-    if (csvPreview.invalidRowCount > 0) {
-      pushToast({
-        type: "error",
-        message: "El archivo tiene filas inválidas. Corrige el origen antes de importarlo."
-      });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Se importarán ${csvPreview.validRowCount} registros válidos desde ${csvPreview.fileName}. ${csvPreview.createdCount} se crearán y ${csvPreview.updatedCount} se actualizarán. ${
-        csvPreview.detectionConfidence === "medium" || csvPreview.detectionConfidence === "low"
-          ? `La detección del formato tiene confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)} y debe revisarse con atención. `
-          : ""
-      }Se creará un backup automático. ¿Quieres continuar?`
-    );
-
-    if (!confirmed) {
+  const handleImportCsv = async (preview: CsvImportPreview) => {
+    if (preview.invalidRowCount > 0) {
       return;
     }
 
     try {
       setIsImportingCsv(true);
-      const result = await window.hospitalDirectory.importCsvDataset(csvPreview.importToken);
+      const result = await window.hospitalDirectory.importCsvDataset(preview.importToken);
 
       initialize({
         contacts: result.contacts,
@@ -302,6 +316,70 @@ export const ImportExportPage = () => {
       setIsImportingCsv(false);
     }
   };
+
+  const handleConfirmAction = async () => {
+    if (confirmationInFlightRef.current) {
+      return;
+    }
+
+    const confirmation = pendingConfirmation;
+
+    if (!confirmation) {
+      return;
+    }
+
+    confirmationInFlightRef.current = true;
+    setPendingConfirmation(null);
+
+    try {
+      if (confirmation.kind === "import-json") {
+        await handleImport();
+        return;
+      }
+
+      if (confirmation.kind === "import-csv") {
+        await handleImportCsv(confirmation.preview);
+        return;
+      }
+
+      await handleRestoreBackup(confirmation.backup);
+    } finally {
+      confirmationInFlightRef.current = false;
+    }
+  };
+
+  const confirmationContent = (() => {
+    if (!pendingConfirmation) {
+      return null;
+    }
+
+    if (pendingConfirmation.kind === "import-json") {
+      return {
+        title: "Confirmar importación JSON",
+        message:
+          "La importación reemplaza todo el directorio actual y crea un backup automático antes de continuar. ¿Quieres seguir?",
+        confirmLabel: "Importar JSON"
+      };
+    }
+
+    if (pendingConfirmation.kind === "import-csv") {
+      const preview = pendingConfirmation.preview;
+
+      return {
+        title: "Confirmar importación de agenda",
+        message: `Se importarán ${preview.validRowCount} registros válidos desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
+          ? ` La detección del formato tiene confianza ${formatDetectionConfidence(preview.detectionConfidence)} y debe revisarse con atención.`
+          : ""} Se creará un backup automático. ¿Quieres continuar?`,
+        confirmLabel: "Confirmar importación"
+      };
+    }
+
+    return {
+      title: "Restaurar backup",
+      message: `Se restaurará ${pendingConfirmation.backup.fileName} como directorio activo y antes se creará una copia de seguridad automática del estado actual. ¿Quieres continuar?`,
+      confirmLabel: "Restaurar backup"
+    };
+  })();
 
   if (bootstrapError) {
     return (
@@ -354,7 +432,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handleCreateBackup()}
-            disabled={isCreatingBackup}
+            disabled={isMutating}
             className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
@@ -369,7 +447,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handleExport()}
-            disabled={isExporting}
+            disabled={isMutating}
             className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
@@ -383,8 +461,8 @@ export const ImportExportPage = () => {
 
           <button
             type="button"
-            onClick={() => void handleImport()}
-            disabled={isImporting}
+            onClick={() => setPendingConfirmation({ kind: "import-json" })}
+            disabled={isMutating}
             className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
@@ -399,7 +477,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handlePreviewCsvImport()}
-            disabled={isPreparingCsvPreview || isImportingCsv}
+            disabled={isMutating}
             className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
@@ -432,14 +510,15 @@ export const ImportExportPage = () => {
                 <button
                   type="button"
                   onClick={() => setCsvPreview(null)}
+                  disabled={isMutating}
                   className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900"
                 >
                   Cerrar vista previa
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleImportCsv()}
-                  disabled={isImportingCsv || csvPreview.invalidRowCount > 0}
+                  onClick={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
+                  disabled={isMutating || csvPreview.invalidRowCount > 0}
                   className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {isImportingCsv ? "Importando…" : "Confirmar importación"}
@@ -565,6 +644,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void refreshBackups()}
+            disabled={isMutating}
             className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
           >
             Actualizar
@@ -585,12 +665,35 @@ export const ImportExportPage = () => {
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatTimestamp(backup.createdAt)}</span>
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatSize(backup.sizeBytes)}</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setPendingConfirmation({ kind: "restore-backup", backup })}
+                  disabled={isMutating}
+                  className="mt-4 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
+                >
+                  {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar este backup"}
+                </button>
               </article>
             ))
           )}
         </div>
         </aside>
       </div>
+
+      {confirmationContent ? (
+        <ConfirmDialog
+          isOpen={true}
+          title={confirmationContent.title}
+          message={confirmationContent.message}
+          confirmLabel={confirmationContent.confirmLabel}
+          cancelLabel="Cancelar"
+          isDestructive={true}
+          onConfirm={() => {
+            void handleConfirmAction();
+          }}
+          onCancel={() => setPendingConfirmation(null)}
+        />
+      ) : null}
     </section>
   );
 };

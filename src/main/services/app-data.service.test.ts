@@ -665,6 +665,72 @@ describe("AppDataService", () => {
     expect(persisted.records[0]?.displayName).toBe("Importado");
   });
 
+  it("restores a selected backup and creates a safety backup first", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupFilePath = path.join(testRoot, "backups", "contacts-restore.json");
+    await fs.writeFile(
+      backupFilePath,
+      JSON.stringify(
+        {
+          ...defaultContacts,
+          exportedAt: "2026-04-21T09:00:00.000Z",
+          records: [
+            {
+              ...defaultContacts.records[0]!,
+              id: "cnt_restored_1",
+              displayName: "Restored backup"
+            }
+          ]
+        },
+        null,
+        2
+      ) + "\n",
+      "utf-8"
+    );
+
+    const result = await service.restoreBackup(backupFilePath);
+
+    expect(result.importedFilePath).toMatch(
+      new RegExp(
+        `^(?:\\/private)?${backupFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}$`
+      )
+    );
+    expect(result.recordCount).toBe(1);
+    expect(result.contacts.records[0]?.displayName).toBe("Restored backup");
+    expect(result.backupPath).not.toBe(backupFilePath);
+
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+    expect(persisted.records[0]?.displayName).toBe("Restored backup");
+
+    const safetyBackup = JSON.parse(
+      await fs.readFile(result.backupPath, "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+    expect(safetyBackup.records[0]?.displayName).toBe(defaultContacts.records[0]?.displayName);
+  });
+
+  it("rejects restore files outside the configured backup directory", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    await expect(service.restoreBackup(sourceFilePath)).rejects.toThrow(
+      new RegExp(
+        `No se pudo restaurar el backup seleccionado\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de backups configurada\\.`
+      )
+    );
+  });
+
   it("previews a normalized CSV with counts, warnings, and row issues", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
