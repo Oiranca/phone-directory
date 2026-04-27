@@ -16,6 +16,7 @@ Completed work is intentionally omitted unless it changes the order or scope of 
 Latest delivered planning note:
 
 - `OIR-25` restore-from-backup UI was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
+- destructive recovery dialog migration was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -50,8 +51,7 @@ Known test note:
 
 These items have the highest product value because they reduce data-loss risk, unblock non-technical staff, and close core workflow gaps.
 
-1. remaining destructive-flow dialog migration from browser confirms to app dialogs
-2. responsive and accessibility follow-up QA at `200%` zoom, `320px` width, keyboard-only navigation, and screen-reader status announcement checks
+1. responsive and accessibility follow-up QA at `200%` zoom, `320px` width, keyboard-only navigation, and screen-reader status announcement checks
 
 ### Priority 2 — Add critical regression coverage
 
@@ -80,24 +80,7 @@ These items are important for distribution but should start after the core MVP w
 
 ## 4. Remaining Work Details
 
-### 4.1 Destructive dialog migration follow-up
-
-Goal:
-
-- replace remaining `window.confirm` destructive flows with the reusable app dialog pattern
-
-Why it matters:
-
-- consistent focus handling
-- better accessibility
-- better Electron cross-platform behavior
-
-Definition of done:
-
-- all destructive flows use the same dialog system
-- focus trap, initial focus, Escape close, and focus return are verified
-
-### 4.2 Responsive and accessibility follow-up QA
+### 4.1 Responsive and accessibility follow-up QA
 
 Goal:
 
@@ -116,7 +99,7 @@ Definition of done:
 - no critical or major responsive/accessibility gaps remain in current renderer routes
 - follow-up defects found in the sweep are either fixed or recorded as explicit backlog items
 
-### 4.3 `OIR-22` — Playwright critical flows
+### 4.2 `OIR-22` — Playwright critical flows
 
 Goal:
 
@@ -138,7 +121,7 @@ Definition of done:
 - the critical flows above pass consistently
 - failures are actionable and stable enough for CI use later
 
-### 4.4 Targeted UI regression coverage follow-up
+### 4.3 Targeted UI regression coverage follow-up
 
 Goal:
 
@@ -156,7 +139,7 @@ Definition of done:
 - targeted tests exist for the identified gaps
 - no uncovered critical regression surface remains in the current UI routes
 
-### 4.5 `OIR-26` — Tag-based filtering
+### 4.4 `OIR-26` — Tag-based filtering
 
 Goal:
 
@@ -173,7 +156,7 @@ Definition of done:
 - filter state is clear, reversible, and test-covered
 - the interaction remains accessible and responsive
 
-### 4.6 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
+### 4.5 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
 
 Goal:
 
@@ -193,24 +176,23 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. destructive dialog migration follow-up
-2. responsive/accessibility QA sweep and targeted fixes
-3. `OIR-22`
-4. targeted UI regression coverage follow-up
-5. `OIR-26`
-6. `OIR-21`
-7. `OIR-28`
-8. `OIR-29`
+1. responsive/accessibility QA sweep and targeted fixes
+2. `OIR-22`
+3. targeted UI regression coverage follow-up
+4. `OIR-26`
+5. `OIR-21`
+6. `OIR-28`
+7. `OIR-29`
 
 ## 6. Recommended Starting Point
 
-Start with destructive dialog migration follow-up.
+Start with responsive and accessibility follow-up QA.
 
 Reason:
 
-- it is now the highest remaining operator-safety consistency gap after `OIR-25` merged
-- it removes remaining browser-native destructive confirms in favor of the shared app dialog system
-- it is smaller and faster to validate than the broader QA sweep or Playwright track
+- it is now the highest remaining validation gap after the destructive dialog migration landed
+- it can uncover real operator-facing defects before the Playwright and regression coverage tracks expand
+- it gives the clearest signal on whether more targeted fixes or backlog follow-ups are still needed
 
 ## 7. Explicit Exclusions
 
@@ -219,4 +201,5 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-23` global toast system: already implemented in the current codebase
 - `OIR-24` settings path validation and managed recovery: implemented on the current line
 - `OIR-25` restore-from-backup UI: merged to `develop` on 2026-04-27
+- destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line
