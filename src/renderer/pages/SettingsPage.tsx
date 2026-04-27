@@ -2,6 +2,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
+import { toCompactToastMessage } from "../utils/toastMessage";
 
 export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
@@ -154,12 +155,10 @@ export const SettingsPage = () => {
       setBackupDirectoryPath(defaults.backupDirectoryPath);
       pushToast({
         type: "success",
-        message: "Rutas gestionadas cargadas. Guarda para aplicarlas."
+        message: "Rutas gestionadas listas para guardar."
       });
     } catch (error) {
-      const message = error instanceof Error
-        ? error.message
-        : "No se pudieron cargar las rutas gestionadas.";
+      const message = toCompactToastMessage(error, "No se pudieron cargar las rutas gestionadas.");
       setSaveError(message);
       pushToast({
         type: "error",
@@ -190,12 +189,10 @@ export const SettingsPage = () => {
       setSettings(saved);
       pushToast({
         type: "success",
-        message: "Configuración guardada. El filtro por defecto se aplicará en la próxima carga."
+        message: "Configuración guardada."
       });
     } catch (error) {
-      const message = error instanceof Error
-        ? error.message
-        : "No se pudo guardar la configuración. Inténtalo de nuevo.";
+      const message = toCompactToastMessage(error, "No se pudo guardar la configuración.");
       setSaveError(message);
       pushToast({
         type: "error",
