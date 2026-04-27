@@ -260,6 +260,7 @@ describe("DirectoryPage", () => {
     });
 
     expect(await screen.findByText("No hay resultados para la búsqueda y filtros actuales.")).toHaveAttribute("role", "status");
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it("moves selection to the new page when pagination changes", async () => {

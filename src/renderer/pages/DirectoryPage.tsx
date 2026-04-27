@@ -266,7 +266,12 @@ export const DirectoryPage = () => {
               />
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
-            <p role="status" aria-live="polite" aria-atomic="true" className="text-xs font-medium text-slate-500">
+            <p
+              role={visibleRecords.length > 0 ? "status" : undefined}
+              aria-live={visibleRecords.length > 0 ? "polite" : "off"}
+              aria-atomic={visibleRecords.length > 0 ? "true" : undefined}
+              className="text-xs font-medium text-slate-500"
+            >
               {visibleRecords.length} resultados
             </p>
           </div>

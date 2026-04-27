@@ -23,6 +23,18 @@ type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
   };
 };
 
+type PendingFocusTarget =
+  | {
+    kind: "phone";
+    id?: string;
+    fallback: "add-phone";
+  }
+  | {
+    kind: "email";
+    id?: string;
+    fallback: "add-email";
+  };
+
 const recordTypeOptions: Array<{ value: RecordType; label: string }> = [
   { value: "person", label: "Persona" },
   { value: "service", label: "Servicio" },
@@ -200,11 +212,7 @@ export const ContactFormPage = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
-  const [pendingFocusTarget, setPendingFocusTarget] = useState<null | {
-    kind: "phone" | "email";
-    id?: string;
-    fallback: "add-phone" | "add-email";
-  }>(null);
+  const [pendingFocusTarget, setPendingFocusTarget] = useState<PendingFocusTarget | null>(null);
   const addPhoneButtonRef = useRef<HTMLButtonElement | null>(null);
   const addEmailButtonRef = useRef<HTMLButtonElement | null>(null);
   const phoneNumberInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
