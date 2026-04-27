@@ -18,6 +18,7 @@ Latest delivered planning note:
 - `OIR-25` restore-from-backup UI was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
 - destructive recovery dialog migration was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
 - responsive/accessibility follow-up QA and targeted fixes were merged to `develop` on 2026-04-27 and are no longer part of the active remaining backlog
+- `OIR-22` Playwright critical flows merged to `develop` on 2026-04-27 via PR `#24` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -35,11 +36,13 @@ The current codebase already includes:
 - editable settings path validation with actionable errors
 - managed-path recovery for broken custom data locations
 - compacted record detail cards for phones, emails, and long text
+- Playwright-based Electron end-to-end harness for critical MVP flows
 
 Latest known verified baseline:
 
 - `npm run typecheck`
 - `npm test`
+- `npm run test:e2e`
 - `npm run build`
 
 Known test note:
@@ -50,13 +53,7 @@ Known test note:
 
 ### Priority 1 — Finish MVP reliability and operator safety
 
-These items have the highest product value because they reduce data-loss risk, unblock non-technical staff, and close core workflow gaps.
-
-1. `OIR-22` — add Playwright end-to-end coverage for critical MVP flows
-
-### Priority 2 — Add critical regression coverage
-
-These items protect the MVP flows that already exist in the product.
+These items have the highest remaining value because they harden UI behavior already covered by the new end-to-end baseline.
 
 1. add targeted regression coverage for:
    - status regions
@@ -64,13 +61,13 @@ These items protect the MVP flows that already exist in the product.
    - empty states
    - text reflow and narrow-width behavior
 
-### Priority 3 — Improve search completeness
+### Priority 2 — Improve search completeness
 
 This item improves discoverability but is less urgent than data safety and test coverage.
 
 1. `OIR-26` — add tag-based filtering to the directory search experience
 
-### Priority 4 — Portable USB deployment track
+### Priority 3 — Portable USB deployment track
 
 These items are important for distribution but should start after the core MVP workflow and test gaps are closed.
 
@@ -80,29 +77,7 @@ These items are important for distribution but should start after the core MVP w
 
 ## 4. Remaining Work Details
 
-### 4.1 `OIR-22` — Playwright critical flows
-
-Goal:
-
-- protect the MVP with end-to-end coverage for the main operator journeys
-
-Required flows:
-
-- open app and load sample dataset
-- search and open a contact detail
-- create a contact
-- edit a contact
-- import valid JSON
-- import valid CSV with preview
-- export JSON
-
-Definition of done:
-
-- Playwright is configured and runnable in the repository
-- the critical flows above pass consistently
-- failures are actionable and stable enough for CI use later
-
-### 4.2 Targeted UI regression coverage follow-up
+### 4.1 Targeted UI regression coverage follow-up
 
 Goal:
 
@@ -120,7 +95,7 @@ Definition of done:
 - targeted tests exist for the identified gaps
 - no uncovered critical regression surface remains in the current UI routes
 
-### 4.3 `OIR-26` — Tag-based filtering
+### 4.2 `OIR-26` — Tag-based filtering
 
 Goal:
 
@@ -137,7 +112,7 @@ Definition of done:
 - filter state is clear, reversible, and test-covered
 - the interaction remains accessible and responsive
 
-### 4.4 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
+### 4.3 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
 
 Goal:
 
@@ -157,22 +132,21 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-22`
-2. targeted UI regression coverage follow-up
-3. `OIR-26`
-4. `OIR-21`
-5. `OIR-28`
-6. `OIR-29`
+1. targeted UI regression coverage follow-up
+2. `OIR-26`
+3. `OIR-21`
+4. `OIR-28`
+5. `OIR-29`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-22`.
+Start with targeted UI regression coverage follow-up.
 
 Reason:
 
-- it is now the highest remaining gap after the responsive/accessibility follow-up landed
-- it protects the main operator journeys that were just refined with UI and accessibility fixes
-- it creates a stronger safety net before expanding narrower regression coverage and portable-distribution work
+- it is now the highest remaining quality gap after `OIR-22` landed
+- it complements the new Playwright happy-path coverage with focused assertions on UI semantics and narrow-width behavior
+- it creates a stronger regression net before expanding search scope and portable-distribution work
 
 ## 7. Explicit Exclusions
 
@@ -181,6 +155,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-23` global toast system: already implemented in the current codebase
 - `OIR-24` settings path validation and managed recovery: implemented on the current line
 - `OIR-25` restore-from-backup UI: merged to `develop` on 2026-04-27
+- `OIR-22` Playwright critical flows: merged to `develop` on 2026-04-27 via PR `#24`
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line
