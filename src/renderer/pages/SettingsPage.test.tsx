@@ -150,6 +150,35 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 
+  it("exposes a busy status while settings are still loading", () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    renderPage();
+
+    const loadingState = screen.getByRole("status");
+    expect(loadingState).toHaveAttribute("aria-busy", "true");
+    expect(loadingState).toHaveTextContent("Cargando configuración");
+  });
+
+  it("retries bootstrap loading after an initial failure", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn()
+      .mockRejectedValueOnce(new Error("broken file"))
+      .mockResolvedValueOnce({
+        contacts: defaultContacts,
+        settings: editableSettings
+      });
+
+    renderPage();
+
+    expect(await screen.findByText("Configuración no disponible")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a save error without mutating the store", async () => {
     window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("write failed"));
 

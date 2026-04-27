@@ -86,6 +86,66 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("announces result counts as a polite atomic status update", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[0]),
+      id: "control-record",
+      displayName: "Control de planta",
+      type: "control",
+      status: "active"
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+
+    const resultCount = screen.getByRole("status");
+    expect(resultCount).toHaveAttribute("aria-live", "polite");
+    expect(resultCount).toHaveAttribute("aria-atomic", "true");
+    expect(resultCount).toHaveTextContent("3 resultados");
+
+    await chooseOption("Tipo", "Control");
+
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+  });
+
+  it("retries bootstrap loading after an initial failure", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn()
+      .mockRejectedValueOnce(new Error("broken file"))
+      .mockResolvedValueOnce({
+        contacts: defaultContacts,
+        settings: {
+          editorName: "",
+          dataFilePath: "/tmp/data/contacts.json",
+          backupDirectoryPath: "/tmp/backups",
+          ui: {
+            showInactiveByDefault: false
+          }
+        }
+      });
+
+    renderPage();
+
+    expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+  });
+
   it("filters by type and can reveal inactive records", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
