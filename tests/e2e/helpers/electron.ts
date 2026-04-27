@@ -47,6 +47,7 @@ export const launchElectronApp = async (options: {
     timeout: 60_000,
     env: {
       ...process.env,
+      ELECTRON_E2E: "1",
       ELECTRON_OPEN_DEVTOOLS: "0",
       ELECTRON_RENDERER_URL: rendererUrl,
       ELECTRON_USER_DATA_PATH: options.userDataPath,
