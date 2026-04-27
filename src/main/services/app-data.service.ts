@@ -208,6 +208,24 @@ export class AppDataService {
     };
   }
 
+  async restoreBackup(sourceFilePath: string): Promise<ImportContactsResult> {
+    const settings = await this.readSettings(true);
+    const message = "No se pudo restaurar el backup seleccionado.";
+    const canonicalBackupDirectory = await this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      message
+    );
+    const canonicalSourceFilePath = await this.resolveCanonicalDataFilePath(
+      sourceFilePath,
+      message,
+      false
+    );
+
+    this.assertPathWithinDirectory(canonicalSourceFilePath, canonicalBackupDirectory, message);
+
+    return this.importDataset(canonicalSourceFilePath);
+  }
+
   async resetDataset(): Promise<ResetContactsResult> {
     const settings = await this.readSettings(true);
     const contactsFilePath = settings.dataFilePath;
@@ -630,6 +648,16 @@ export class AppDataService {
       return await fs.realpath(directoryPath);
     } catch (error) {
       throw this.toFilesystemError(error, message, { filePath: directoryPath });
+    }
+  }
+
+  private assertPathWithinDirectory(filePath: string, directoryPath: string, message: string) {
+    const relativePath = path.relative(directoryPath, filePath);
+
+    if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error(
+        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de backups configurada.`
+      );
     }
   }
 

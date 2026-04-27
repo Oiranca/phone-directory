@@ -23,6 +23,7 @@ declare global {
       createRecord: (record: EditableContactRecord) => Promise<SaveContactResult>;
       updateRecord: (recordId: string, record: EditableContactRecord) => Promise<SaveContactResult>;
       listBackups: () => Promise<BackupListItem[]>;
+      restoreBackup: (backupFilePath: string) => Promise<ImportContactsResult>;
       exportDataset: () => Promise<ExportContactsResult | null>;
       importDataset: () => Promise<ImportContactsResult | null>;
       resetDataset: () => Promise<ResetContactsResult>;

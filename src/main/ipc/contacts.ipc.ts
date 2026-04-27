@@ -13,6 +13,7 @@ const CHANNELS = {
   createRecord: "contacts:create-record",
   updateRecord: "contacts:update-record",
   listBackups: "contacts:list-backups",
+  restoreBackup: "contacts:restore-backup",
   exportDataset: "contacts:export-dataset",
   importDataset: "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
@@ -49,6 +50,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     service.updateRecord(recordId, payload)
   );
   ipcMain.handle(CHANNELS.listBackups, () => service.listBackups());
+  ipcMain.handle(CHANNELS.restoreBackup, (_event, backupFilePath: string) => service.restoreBackup(backupFilePath));
   ipcMain.handle(CHANNELS.exportDataset, async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const saveOptions = {
