@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
+import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -24,6 +25,11 @@ export const registerContactsIpc = (service: AppDataService) => {
   const pendingCsvImports = new Map<string, { sourceFilePath: string; senderId: number; timeout: NodeJS.Timeout }>();
   const senderTokens = new Map<number, string>();
   const senderCleanupAttached = new Set<number>();
+  const pendingE2eOpenDialogPaths = [...env.e2eOpenDialogPaths];
+  const pendingE2eSaveDialogPaths = [...env.e2eSaveDialogPaths];
+
+  const consumeE2eOpenDialogPath = () => pendingE2eOpenDialogPaths.shift() ?? null;
+  const consumeE2eSaveDialogPath = () => pendingE2eSaveDialogPaths.shift() ?? null;
 
   const clearPendingCsvImport = (importToken: string) => {
     const pendingImport = pendingCsvImports.get(importToken);
@@ -52,6 +58,12 @@ export const registerContactsIpc = (service: AppDataService) => {
   ipcMain.handle(CHANNELS.listBackups, () => service.listBackups());
   ipcMain.handle(CHANNELS.restoreBackup, (_event, backupFilePath: string) => service.restoreBackup(backupFilePath));
   ipcMain.handle(CHANNELS.exportDataset, async (event) => {
+    const e2eFilePath = consumeE2eSaveDialogPath();
+
+    if (e2eFilePath) {
+      return service.exportDataset(e2eFilePath);
+    }
+
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const saveOptions = {
       title: "Exportar directorio",
@@ -69,6 +81,12 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.exportDataset(filePath);
   });
   ipcMain.handle(CHANNELS.importDataset, async (event) => {
+    const e2eFilePath = consumeE2eOpenDialogPath();
+
+    if (e2eFilePath) {
+      return service.importDataset(e2eFilePath);
+    }
+
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const openOptions = {
       title: "Importar directorio JSON",
@@ -86,6 +104,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.importDataset(filePaths[0]!);
   });
   ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
+    const e2eFilePath = consumeE2eOpenDialogPath();
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const senderId = event.sender.id;
     const openOptions = {
@@ -93,15 +112,23 @@ export const registerContactsIpc = (service: AppDataService) => {
       filters: [{ name: "Hojas de cálculo", extensions: ["csv", "ods", "xlsx", "xls"] }],
       properties: ["openFile"]
     } satisfies Electron.OpenDialogOptions;
-    const { canceled, filePaths } = browserWindow
-      ? await dialog.showOpenDialog(browserWindow, openOptions)
-      : await dialog.showOpenDialog(openOptions);
+    const sourceFilePath = e2eFilePath
+      ? e2eFilePath
+      : await (async () => {
+        const { canceled, filePaths } = browserWindow
+          ? await dialog.showOpenDialog(browserWindow, openOptions)
+          : await dialog.showOpenDialog(openOptions);
 
-    if (canceled || filePaths.length === 0) {
+        if (canceled || filePaths.length === 0) {
+          return null;
+        }
+
+        return filePaths[0]!;
+      })();
+
+    if (!sourceFilePath) {
       return null;
     }
-
-    const sourceFilePath = filePaths[0]!;
     const preview = await service.previewCsvImport(sourceFilePath);
     const importToken = randomUUID();
     const previousImportToken = senderTokens.get(senderId);

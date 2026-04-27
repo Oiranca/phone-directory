@@ -8,7 +8,11 @@ import { AppDataService } from "./services/app-data.service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
-const DEV_SERVER_URL = "http://localhost:5173";
+const DEV_SERVER_URL = env.rendererUrl ?? "http://localhost:5173";
+
+if (env.userDataPath) {
+  app.setPath("userData", path.resolve(env.userDataPath));
+}
 
 const isAllowedNavigationUrl = (targetUrl: string) => {
   if (isDev) {
