@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { AppShell } from "../components/layout/AppShell";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
+import { toCompactToastMessage } from "../utils/toastMessage";
 
 const RecoveryPanel = () => {
   const { recovery, settings, initialize, initializeRecovery } = useAppStore();
@@ -40,9 +41,7 @@ const RecoveryPanel = () => {
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo importar una copia JSON válida."
+        message: toCompactToastMessage(error, "No se pudo importar una copia JSON válida.")
       });
     } finally {
       setIsImporting(false);
@@ -64,9 +63,7 @@ const RecoveryPanel = () => {
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo restablecer el directorio vacío."
+        message: toCompactToastMessage(error, "No se pudo restablecer el directorio vacío.")
       });
     } finally {
       setIsResetting(false);
@@ -96,9 +93,7 @@ const RecoveryPanel = () => {
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudieron restaurar las rutas gestionadas."
+        message: toCompactToastMessage(error, "No se pudieron restaurar las rutas gestionadas.")
       });
     } finally {
       setIsRestoringPaths(false);

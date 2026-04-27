@@ -188,6 +188,60 @@ describe("ContactFormPage", () => {
     expect(primaryCheckboxes[1]).toBeChecked();
   });
 
+  it("announces and focuses the new phone row when adding a phone", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
+
+    const phoneInputs = screen.getAllByLabelText("Número");
+    expect(phoneInputs).toHaveLength(2);
+    expect(screen.getByRole("status")).toHaveTextContent("Teléfono 2 añadido.");
+    expect(document.activeElement).toBe(phoneInputs[1]);
+  });
+
+  it("returns focus to add phone button and announces removal", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
+
+    const removePhoneButtons = screen.getAllByRole("button", { name: "Eliminar" });
+    fireEvent.click(removePhoneButtons[1]!);
+
+    expect(screen.getAllByLabelText("Número")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Teléfono 2 eliminado.");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Añadir teléfono" }));
+  });
+
+  it("announces and focuses the new email row when adding an email", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+
+    const emailInputs = screen.getAllByLabelText("Correo electrónico");
+    expect(emailInputs).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Correo 1 añadido.");
+    expect(document.activeElement).toBe(emailInputs[0]);
+  });
+
+  it("returns focus to add email button and announces removal", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar" }).at(-1)!);
+
+    expect(screen.queryByLabelText("Correo electrónico")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Correo 1 eliminado.");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Añadir correo" }));
+  });
+
   it("shows recovery actions when bootstrap loading fails", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
 

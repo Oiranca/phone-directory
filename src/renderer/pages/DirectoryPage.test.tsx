@@ -83,6 +83,7 @@ describe("DirectoryPage", () => {
       expect(screen.getByRole("heading", { name: "Directorio" })).toBeInTheDocument();
       expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
     });
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
   it("filters by type and can reveal inactive records", async () => {
@@ -234,7 +235,32 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir a la página 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Página anterior" })).toHaveClass("focus-ring");
     expect(screen.queryByText("Registro extra 6")).not.toBeInTheDocument();
+  });
+
+  it("announces the empty result state as a status update", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "sin-coincidencias" }
+    });
+
+    expect(await screen.findByText("No hay resultados para la búsqueda y filtros actuales.")).toHaveAttribute("role", "status");
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it("moves selection to the new page when pagination changes", async () => {

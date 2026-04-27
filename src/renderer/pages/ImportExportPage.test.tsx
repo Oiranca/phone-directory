@@ -215,7 +215,7 @@ describe("ImportExportPage", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.createBackup).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText(/Backup creado en/)).toBeInTheDocument();
+    expect(await screen.findByText("Backup creado.")).toBeInTheDocument();
   });
 
   it("shows the backup service error message when manual backup fails", async () => {
@@ -229,7 +229,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
 
     expect(
-      await screen.findByText("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups.")
+      await screen.findByText("No se pudo crear el backup del directorio.")
     ).toBeInTheDocument();
   });
 
@@ -242,7 +242,7 @@ describe("ImportExportPage", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.exportDataset).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText(/Exportación completada en/)).toBeInTheDocument();
+    expect(await screen.findByText("Exportación completada.")).toBeInTheDocument();
   });
 
   it("shows the export service error message when the target path is not writable", async () => {
@@ -256,7 +256,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
 
     expect(
-      await screen.findByText("No se pudo exportar el directorio al destino seleccionado. Ruta afectada: /tmp/exports/share.json.")
+      await screen.findByText("No se pudo exportar el directorio al destino seleccionado.")
     ).toBeInTheDocument();
   });
 
@@ -271,7 +271,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.importDataset).toHaveBeenCalledTimes(1);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
-    expect(await screen.findByText(/Importación completada desde/)).toBeInTheDocument();
+    expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
   it("shows a recovery state when bootstrap loading fails", async () => {
@@ -320,8 +320,8 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
-    expect(screen.getAllByText(/Formato detectado: exportación cruda de hoja de servicios/)).toHaveLength(2);
-    expect(screen.getByText(/La detección del formato tiene confianza media/)).toBeInTheDocument();
+    expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
+    expect(screen.getByText("Confianza media en la detección del formato. Revisa la vista previa.")).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -331,7 +331,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
-    expect(await screen.findByText(/Importación completada desde/)).toBeInTheDocument();
+    expect(await screen.findByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeInTheDocument();
   });
 
   it("blocks import confirmation when the preview contains invalid rows", async () => {
@@ -406,7 +406,7 @@ describe("ImportExportPage", () => {
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
-    expect(await screen.findByText("Selección de archivo cancelada.")).toBeInTheDocument();
+    expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
   });
 
   it("shows the import error when preview preparation fails before row parsing", async () => {
@@ -445,7 +445,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
-    expect(await screen.findByText(/Backup restaurado desde contacts-1\.json/)).toBeInTheDocument();
+    expect(await screen.findByText("Backup restaurado.")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
@@ -463,7 +463,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
 
     expect(
-      await screen.findByText("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json.")
+      await screen.findByText("No se pudo restaurar el backup seleccionado.")
     ).toBeInTheDocument();
   });
 

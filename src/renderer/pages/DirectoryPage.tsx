@@ -168,7 +168,7 @@ export const DirectoryPage = () => {
         <button
           type="button"
           onClick={() => void loadBootstrapData()}
-          className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+          className="focus-ring mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
         >
           Reintentar
         </button>
@@ -256,7 +256,7 @@ export const DirectoryPage = () => {
               />
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -266,7 +266,12 @@ export const DirectoryPage = () => {
               />
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
-            <p aria-live="polite" className="text-xs font-medium text-slate-500">
+            <p
+              role={visibleRecords.length > 0 ? "status" : undefined}
+              aria-live={visibleRecords.length > 0 ? "polite" : "off"}
+              aria-atomic={visibleRecords.length > 0 ? "true" : undefined}
+              className="text-xs font-medium text-slate-500"
+            >
               {visibleRecords.length} resultados
             </p>
           </div>
@@ -295,7 +300,7 @@ export const DirectoryPage = () => {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="px-1 py-1 font-semibold text-scs-blue transition hover:text-scs-blueDark"
+                className="focus-ring rounded-full px-2 py-1 font-semibold text-scs-blue transition hover:text-scs-blueDark"
               >
                 Limpiar
               </button>
@@ -361,25 +366,25 @@ export const DirectoryPage = () => {
           })}
           </ul>
           {visibleRecords.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               No hay resultados para la búsqueda y filtros actuales.
             </div>
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
             <nav aria-label="Paginación de resultados" className="rounded-2xl border border-slate-200 bg-white p-2">
-              <div className="flex items-center justify-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentPage === 1}
                   aria-label="Página anterior"
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
                   </svg>
                 </button>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
                   {paginationItems.map((item) => {
                     if (typeof item !== "number") {
                       return (
@@ -397,7 +402,7 @@ export const DirectoryPage = () => {
                       aria-current={item === currentPage ? "page" : undefined}
                       aria-label={`Ir a la página ${item}`}
                       className={[
-                          "flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-semibold transition",
+                          "focus-ring flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-semibold transition",
                           item === currentPage
                             ? "bg-scs-blue text-white shadow-sm"
                             : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
@@ -413,7 +418,7 @@ export const DirectoryPage = () => {
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   disabled={currentPage === totalPages}
                   aria-label="Página siguiente"
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -459,7 +464,7 @@ export const DirectoryPage = () => {
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
-                      className="inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
                       Editar registro
                     </Link>

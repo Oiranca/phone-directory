@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
@@ -22,6 +22,18 @@ type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
     text: string;
   };
 };
+
+type PendingFocusTarget =
+  | {
+    kind: "phone";
+    id?: string;
+    fallback: "add-phone";
+  }
+  | {
+    kind: "email";
+    id?: string;
+    fallback: "add-email";
+  };
 
 const recordTypeOptions: Array<{ value: RecordType; label: string }> = [
   { value: "person", label: "Persona" },
@@ -199,6 +211,12 @@ export const ContactFormPage = () => {
   const [bootstrapError, setBootstrapError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [liveMessage, setLiveMessage] = useState("");
+  const [pendingFocusTarget, setPendingFocusTarget] = useState<PendingFocusTarget | null>(null);
+  const addPhoneButtonRef = useRef<HTMLButtonElement | null>(null);
+  const addEmailButtonRef = useRef<HTMLButtonElement | null>(null);
+  const phoneNumberInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const emailAddressInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const existingRecord = useMemo(
     () => contacts?.records.find((record) => record.id === id),
@@ -239,6 +257,39 @@ export const ContactFormPage = () => {
       setFieldErrors({});
     }
   }, [existingRecord, isEditing]);
+
+  useEffect(() => {
+    if (!pendingFocusTarget) {
+      return;
+    }
+
+    if (pendingFocusTarget.kind === "phone" && pendingFocusTarget.id) {
+      const input = phoneNumberInputRefs.current[pendingFocusTarget.id];
+      if (input) {
+        input.focus();
+        setPendingFocusTarget(null);
+        return;
+      }
+    }
+
+    if (pendingFocusTarget.kind === "email" && pendingFocusTarget.id) {
+      const input = emailAddressInputRefs.current[pendingFocusTarget.id];
+      if (input) {
+        input.focus();
+        setPendingFocusTarget(null);
+        return;
+      }
+    }
+
+    if (pendingFocusTarget.fallback === "add-phone") {
+      addPhoneButtonRef.current?.focus();
+      setPendingFocusTarget(null);
+      return;
+    }
+
+    addEmailButtonRef.current?.focus();
+    setPendingFocusTarget(null);
+  }, [formState.contactMethods.emails, formState.contactMethods.phones, pendingFocusTarget]);
 
   const availableAreas = contacts?.catalogs.areas ?? [];
 
@@ -303,6 +354,7 @@ export const ContactFormPage = () => {
   };
 
   const removePhone = (phoneId: string) => {
+    const removedIndex = formState.contactMethods.phones.findIndex((phone) => phone.id === phoneId);
     setFormState((current) => {
       const nextPhones = current.contactMethods.phones.filter((phone) => phone.id !== phoneId);
       return {
@@ -313,9 +365,12 @@ export const ContactFormPage = () => {
         }
       };
     });
+    setLiveMessage(`Teléfono ${removedIndex + 1} eliminado.`);
+    setPendingFocusTarget({ kind: "phone", fallback: "add-phone" });
   };
 
   const removeEmail = (emailId: string) => {
+    const removedIndex = formState.contactMethods.emails.findIndex((email) => email.id === emailId);
     setFormState((current) => ({
       ...current,
       contactMethods: {
@@ -325,6 +380,8 @@ export const ContactFormPage = () => {
         )
       }
     }));
+    setLiveMessage(`Correo ${removedIndex + 1} eliminado.`);
+    setPendingFocusTarget({ kind: "email", fallback: "add-email" });
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -443,6 +500,10 @@ export const ContactFormPage = () => {
           Cancelar
         </Link>
       </div>
+
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveMessage}
+      </p>
 
       <form className="mt-6 space-y-8" onSubmit={handleSubmit}>
         <div className="grid gap-6 xl:grid-cols-2">
@@ -707,23 +768,28 @@ export const ContactFormPage = () => {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
             <button
+              ref={addPhoneButtonRef}
               type="button"
-              onClick={() =>
+              onClick={() => {
+                const nextPhone = {
+                  ...createPhoneDraft(),
+                  isPrimary: formState.contactMethods.phones.length === 0
+                };
+
                 setFormState((current) => ({
                   ...current,
                   contactMethods: {
                     ...current.contactMethods,
                     phones: [
                       ...current.contactMethods.phones,
-                      {
-                        ...createPhoneDraft(),
-                        isPrimary: current.contactMethods.phones.length === 0
-                      }
+                      nextPhone
                     ]
                   }
-                }))
-              }
-              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+                }));
+                setLiveMessage(`Teléfono ${formState.contactMethods.phones.length + 1} añadido.`);
+                setPendingFocusTarget({ kind: "phone", id: nextPhone.id, fallback: "add-phone" });
+              }}
+              className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir teléfono
             </button>
@@ -737,7 +803,7 @@ export const ContactFormPage = () => {
                   <button
                     type="button"
                     onClick={() => removePhone(phone.id)}
-                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+                    className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
@@ -757,6 +823,9 @@ export const ContactFormPage = () => {
                     <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">Número</label>
                     <input
                       id={`phone-number-${phone.id}`}
+                      ref={(element) => {
+                        phoneNumberInputRefs.current[phone.id] = element;
+                      }}
                       value={phone.number}
                       onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
                       aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
@@ -836,23 +905,28 @@ export const ContactFormPage = () => {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-scs-blueDark">Correos electrónicos</h3>
             <button
+              ref={addEmailButtonRef}
               type="button"
-              onClick={() =>
+              onClick={() => {
+                const nextEmail = {
+                  ...createEmailDraft(),
+                  isPrimary: formState.contactMethods.emails.length === 0
+                };
+
                 setFormState((current) => ({
                   ...current,
                   contactMethods: {
                     ...current.contactMethods,
                     emails: [
                       ...current.contactMethods.emails,
-                      {
-                        ...createEmailDraft(),
-                        isPrimary: current.contactMethods.emails.length === 0
-                      }
+                      nextEmail
                     ]
                   }
-                }))
-              }
-              className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+                }));
+                setLiveMessage(`Correo ${formState.contactMethods.emails.length + 1} añadido.`);
+                setPendingFocusTarget({ kind: "email", id: nextEmail.id, fallback: "add-email" });
+              }}
+              className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Añadir correo
             </button>
@@ -866,7 +940,7 @@ export const ContactFormPage = () => {
                   <button
                     type="button"
                     onClick={() => removeEmail(email.id)}
-                    className="rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+                    className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
                   >
                     Eliminar
                   </button>
@@ -886,6 +960,9 @@ export const ContactFormPage = () => {
                     <label htmlFor={`email-address-${email.id}`} className="text-sm font-medium text-slate-700">Correo electrónico</label>
                     <input
                       id={`email-address-${email.id}`}
+                      ref={(element) => {
+                        emailAddressInputRefs.current[email.id] = element;
+                      }}
                       value={email.address}
                       onChange={(event) => updateEmail(email.id, { address: event.target.value })}
                       aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}

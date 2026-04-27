@@ -4,6 +4,7 @@ import type { BackupListItem, CsvImportPreview } from "../../shared/types/contac
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
+import { toCompactToastMessage } from "../utils/toastMessage";
 
 const formatTimestamp = (value: string) => {
   const date = new Date(value);
@@ -28,14 +29,6 @@ const formatSize = (sizeBytes: number) => {
   }
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const toUserFacingError = (error: unknown, fallback: string) => {
-  if (!(error instanceof Error)) {
-    return fallback;
-  }
-
-  return error.message.replace(/^Error invoking remote method '[^']+': Error: /, "");
 };
 
 const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"]) => {
@@ -134,18 +127,16 @@ export const ImportExportPage = () => {
   const handleCreateBackup = async () => {
     try {
       setIsCreatingBackup(true);
-      const backupPath = await window.hospitalDirectory.createBackup();
+      await window.hospitalDirectory.createBackup();
       await refreshBackups();
       pushToast({
         type: "success",
-        message: `Backup creado en ${backupPath}.`
+        message: "Backup creado."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo crear el backup manual. Inténtalo de nuevo."
+        message: toCompactToastMessage(error, "No se pudo crear el backup manual.")
       });
     } finally {
       setIsCreatingBackup(false);
@@ -167,14 +158,12 @@ export const ImportExportPage = () => {
 
       pushToast({
         type: "success",
-        message: `Exportación completada en ${result.filePath}.`
+        message: "Exportación completada."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo exportar el dataset actual."
+        message: toCompactToastMessage(error, "No se pudo exportar el directorio.")
       });
     } finally {
       setIsExporting(false);
@@ -201,14 +190,12 @@ export const ImportExportPage = () => {
       await refreshBackups();
       pushToast({
         type: "success",
-        message: `Importación completada desde ${result.importedFilePath}. Backup automático: ${result.backupPath}.`
+        message: "Importación completada."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo importar el archivo JSON seleccionado."
+        message: toCompactToastMessage(error, "No se pudo importar el archivo JSON.")
       });
     } finally {
       setIsImporting(false);
@@ -228,12 +215,12 @@ export const ImportExportPage = () => {
       await refreshBackups();
       pushToast({
         type: "success",
-        message: `Backup restaurado desde ${backup.fileName}. Copia de seguridad previa: ${result.backupPath}.`
+        message: "Backup restaurado."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: toUserFacingError(error, "No se pudo restaurar el backup seleccionado.")
+        message: toCompactToastMessage(error, "No se pudo restaurar el backup seleccionado.")
       });
     } finally {
       setRestoringBackupPath("");
@@ -249,7 +236,7 @@ export const ImportExportPage = () => {
       if (!preview) {
         pushToast({
           type: "warning",
-          message: "Selección de archivo cancelada."
+          message: "Selección cancelada."
         });
         return;
       }
@@ -267,21 +254,21 @@ export const ImportExportPage = () => {
       pushToast({
         type: preview.warningCount > 0 ? "warning" : "success",
         message: preview.warningCount > 0
-          ? `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-          : `${preview.detectedFormat ? `Formato detectado: ${preview.detectedFormat}. ` : ""}Importación lista: ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+          ? `Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+          : `Importación lista. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
       });
 
       if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
         pushToast({
           type: "warning",
-          message: `La detección del formato tiene confianza ${formatDetectionConfidence(preview.detectionConfidence)}. Revisa la vista previa antes de importar.`
+          message: `Confianza ${formatDetectionConfidence(preview.detectionConfidence)} en la detección del formato. Revisa la vista previa.`
         });
       }
     } catch (error) {
       setCsvPreview(null);
       pushToast({
         type: "error",
-        message: toUserFacingError(error, "No se pudo preparar la vista previa del archivo.")
+        message: toCompactToastMessage(error, "No se pudo preparar la vista previa del archivo.")
       });
     } finally {
       setIsPreparingCsvPreview(false);
@@ -305,12 +292,12 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "success",
-        message: `Importación completada desde ${result.importedFilePath}. ${result.createdCount} altas, ${result.updatedCount} actualizaciones. Backup: ${result.backupPath}.`
+        message: `Importación completada. ${result.createdCount} altas y ${result.updatedCount} actualizaciones.`
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: toUserFacingError(error, "No se pudo importar el archivo seleccionado.")
+        message: toCompactToastMessage(error, "No se pudo importar el archivo seleccionado.")
       });
     } finally {
       setIsImportingCsv(false);

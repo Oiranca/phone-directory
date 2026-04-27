@@ -52,7 +52,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
                   to={item.to}
                   className={({ isActive }) =>
                     [
-                      "rounded-2xl px-4 py-3 text-center text-sm font-medium transition-colors md:rounded-full md:px-4 md:py-2.5",
+                      "focus-ring rounded-2xl px-4 py-3 text-center text-sm font-medium transition-colors md:rounded-full md:px-4 md:py-2.5",
                       isActive
                         ? "bg-scs-blue text-white shadow-sm"
                         : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -70,7 +70,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
         ref={mainRef}
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none focus-visible:rounded-3xl focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2 sm:px-6 sm:py-6 lg:px-8 lg:py-8"
       >
         {children}
       </main>
