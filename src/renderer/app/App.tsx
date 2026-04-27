@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { AppShell } from "../components/layout/AppShell";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
@@ -11,6 +12,8 @@ const RecoveryPanel = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isRestoringPaths, setIsRestoringPaths] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const resetConfirmInFlightRef = useRef(false);
   const { pushToast } = useToast();
 
   if (!recovery) {
@@ -47,13 +50,12 @@ const RecoveryPanel = () => {
   };
 
   const handleResetDataset = async () => {
-    const confirmed = window.confirm(
-      "Se creará un backup del contacts.json dañado y después se restablecerá un directorio vacío. ¿Quieres continuar?"
-    );
-
-    if (!confirmed) {
+    if (resetConfirmInFlightRef.current) {
       return;
     }
+
+    resetConfirmInFlightRef.current = true;
+    setIsResetDialogOpen(false);
 
     try {
       setIsResetting(true);
@@ -68,6 +70,7 @@ const RecoveryPanel = () => {
       });
     } finally {
       setIsResetting(false);
+      resetConfirmInFlightRef.current = false;
     }
   };
 
@@ -124,7 +127,7 @@ const RecoveryPanel = () => {
         </button>
         <button
           type="button"
-          onClick={() => void handleResetDataset()}
+          onClick={() => setIsResetDialogOpen(true)}
           disabled={isImporting || isResetting || isRestoringPaths}
           className="rounded-2xl border border-slate-300 px-5 py-4 text-sm font-semibold text-slate-800 disabled:opacity-60"
         >
@@ -139,6 +142,19 @@ const RecoveryPanel = () => {
           {isRestoringPaths ? "Restaurando rutas…" : "Usar rutas gestionadas"}
         </button>
       </div>
+
+      <ConfirmDialog
+        isOpen={isResetDialogOpen}
+        title="Restablecer directorio vacío"
+        message="Se creará un backup del contacts.json dañado y después se restablecerá un directorio vacío. ¿Quieres continuar?"
+        confirmLabel="Restablecer directorio vacío"
+        cancelLabel="Cancelar"
+        isDestructive={true}
+        onConfirm={() => {
+          void handleResetDataset();
+        }}
+        onCancel={() => setIsResetDialogOpen(false)}
+      />
     </section>
   );
 };
