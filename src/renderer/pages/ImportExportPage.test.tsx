@@ -460,4 +460,41 @@ describe("ImportExportPage", () => {
       await screen.findByText("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json.")
     ).toBeInTheDocument();
   });
+
+  it("disables competing actions while a backup restore is running", async () => {
+    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
+    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRestore = resolve;
+        })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
+    });
+    expect(screen.getByRole("button", { name: /Crear backup/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
+
+    resolveRestore?.({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-before-restore.json",
+      importedFilePath: "/tmp/backups/contacts-1.json",
+      recordCount: defaultContacts.records.length
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Actualizar" })).not.toBeDisabled();
+    });
+  });
 });

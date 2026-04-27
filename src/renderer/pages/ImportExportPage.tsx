@@ -73,6 +73,14 @@ export const ImportExportPage = () => {
   const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const isRestoreInProgress = restoringBackupPath !== "";
+  const isMutating =
+    isCreatingBackup ||
+    isExporting ||
+    isImporting ||
+    isPreparingCsvPreview ||
+    isImportingCsv ||
+    isRestoreInProgress;
 
   const loadPageData = async () => {
     try {
@@ -413,7 +421,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handleCreateBackup()}
-            disabled={isCreatingBackup}
+            disabled={isMutating}
             className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
@@ -428,7 +436,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handleExport()}
-            disabled={isExporting}
+            disabled={isMutating}
             className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
@@ -443,7 +451,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => setPendingConfirmation({ kind: "import-json" })}
-            disabled={isImporting}
+            disabled={isMutating}
             className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
@@ -458,7 +466,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void handlePreviewCsvImport()}
-            disabled={isPreparingCsvPreview || isImportingCsv}
+            disabled={isMutating}
             className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
@@ -491,6 +499,7 @@ export const ImportExportPage = () => {
                 <button
                   type="button"
                   onClick={() => setCsvPreview(null)}
+                  disabled={isMutating}
                   className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900"
                 >
                   Cerrar vista previa
@@ -498,7 +507,7 @@ export const ImportExportPage = () => {
                 <button
                   type="button"
                   onClick={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
-                  disabled={isImportingCsv || csvPreview.invalidRowCount > 0}
+                  disabled={isMutating || csvPreview.invalidRowCount > 0}
                   className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {isImportingCsv ? "Importando…" : "Confirmar importación"}
@@ -624,6 +633,7 @@ export const ImportExportPage = () => {
           <button
             type="button"
             onClick={() => void refreshBackups()}
+            disabled={isMutating}
             className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
           >
             Actualizar
@@ -647,7 +657,7 @@ export const ImportExportPage = () => {
                 <button
                   type="button"
                   onClick={() => setPendingConfirmation({ kind: "restore-backup", backup })}
-                  disabled={isImporting || isImportingCsv || restoringBackupPath === backup.filePath}
+                  disabled={isMutating}
                   className="mt-4 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
                 >
                   {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar este backup"}
