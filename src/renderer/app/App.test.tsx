@@ -1,10 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { App } from "./App";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+
+const originalHTMLDialogElement = globalThis.HTMLDialogElement;
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
 
 const editableSettings = {
   editorName: "Samuel",
@@ -54,10 +59,47 @@ const renderApp = () => {
   return router;
 };
 
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+
+  if (originalHTMLDialogElement) {
+    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
+  } else {
+    vi.unstubAllGlobals();
+  }
+});
+
 describe("App recovery flow", () => {
   beforeEach(() => {
     resetStore();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     Object.defineProperty(window, "hospitalDirectory", {
       configurable: true,
       value: {
@@ -167,6 +209,7 @@ describe("App recovery flow", () => {
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restablecer directorio vacío" })).at(-1)!);
 
     await waitFor(() => {
       expect(window.hospitalDirectory.resetDataset).toHaveBeenCalledTimes(1);
@@ -204,7 +247,6 @@ describe("App recovery flow", () => {
       },
       settings: editableSettings
     });
-    vi.stubGlobal("confirm", vi.fn(() => true));
     window.hospitalDirectory.resetDataset = vi.fn().mockRejectedValue(
       new Error("No se pudo restablecer el directorio vacío.")
     );
@@ -213,6 +255,7 @@ describe("App recovery flow", () => {
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restablecer directorio vacío" })).at(-1)!);
 
     expect(await screen.findByText("No se pudo restablecer el directorio vacío.")).toBeInTheDocument();
   });
@@ -301,9 +344,103 @@ describe("App recovery flow", () => {
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restablecer directorio vacío" })).at(-1)!);
 
     expect(await screen.findByText("Custom reset failure")).toBeInTheDocument();
     expect(screen.queryByText("No se pudo restablecer el directorio vacío.")).not.toBeInTheDocument();
+  });
+
+  it("does not reset the dataset when the recovery reset dialog is canceled", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+
+    expect(window.hospitalDirectory.resetDataset).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not reset the dataset when the recovery reset dialog is dismissed with Escape", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const cancelEvent = new Event("cancel", { cancelable: true });
+    fireEvent(dialog, cancelEvent);
+
+    expect(cancelEvent.defaultPrevented).toBe(true);
+    expect(window.hospitalDirectory.resetDataset).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("submits the recovery reset only once on rapid double confirm", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/tmp/data/contacts.json",
+        message: "El archivo local contacts.json está dañado o tiene un formato no válido."
+      },
+      settings: editableSettings
+    });
+
+    let resolveReset: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.resetDataset>>) => void) | null = null;
+    window.hospitalDirectory.resetDataset = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReset = resolve;
+        })
+    );
+
+    renderApp();
+
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer directorio vacío" }));
+
+    const confirmButton = (await screen.findAllByRole("button", { name: "Restablecer directorio vacío" })).at(-1)!;
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.resetDataset).toHaveBeenCalledTimes(1);
+    });
+
+    resolveReset?.({
+      contacts: {
+        ...defaultContacts,
+        exportedAt: "2026-04-20T00:00:00.000Z",
+        metadata: {
+          ...defaultContacts.metadata,
+          recordCount: 0,
+          editorName: "Samuel",
+          typeCounts: {},
+          areaCounts: {}
+        },
+        records: []
+      },
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-corrupted.json"
+    });
   });
 
   it("shows bootstrap error UI when getBootstrapData rejects, and Reintentar retries the call", async () => {
