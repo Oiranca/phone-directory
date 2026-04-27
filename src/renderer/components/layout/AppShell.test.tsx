@@ -37,6 +37,12 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
+  it("nav links keep the shared focus visibility class", () => {
+    renderShell();
+    expect(screen.getByRole("link", { name: "Directorio" })).toHaveClass("focus-ring");
+    expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
+  });
+
   it("shows Offline badge", () => {
     renderShell();
     expect(screen.getByText("Offline")).toBeInTheDocument();
@@ -52,6 +58,12 @@ describe("AppShell — default mode", () => {
   it("renders children in main", () => {
     renderShell();
     expect(screen.getByText("child")).toBeInTheDocument();
+  });
+
+  it("main route target keeps a visible focus style for programmatic focus", () => {
+    renderShell();
+    expect(screen.getByRole("main")).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByRole("main")).toHaveClass("focus-visible:ring-scs-blue");
   });
 });
 
