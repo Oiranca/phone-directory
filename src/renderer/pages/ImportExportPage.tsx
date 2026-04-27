@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -73,6 +73,7 @@ export const ImportExportPage = () => {
   const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const confirmationInFlightRef = useRef(false);
   const isRestoreInProgress = restoringBackupPath !== "";
   const isMutating =
     isCreatingBackup ||
@@ -316,25 +317,34 @@ export const ImportExportPage = () => {
   };
 
   const handleConfirmAction = async () => {
+    if (confirmationInFlightRef.current) {
+      return;
+    }
+
     const confirmation = pendingConfirmation;
 
     if (!confirmation) {
       return;
     }
 
+    confirmationInFlightRef.current = true;
     setPendingConfirmation(null);
 
-    if (confirmation.kind === "import-json") {
-      await handleImport();
-      return;
-    }
+    try {
+      if (confirmation.kind === "import-json") {
+        await handleImport();
+        return;
+      }
 
-    if (confirmation.kind === "import-csv") {
-      await handleImportCsv(confirmation.preview);
-      return;
-    }
+      if (confirmation.kind === "import-csv") {
+        await handleImportCsv(confirmation.preview);
+        return;
+      }
 
-    await handleRestoreBackup(confirmation.backup);
+      await handleRestoreBackup(confirmation.backup);
+    } finally {
+      confirmationInFlightRef.current = false;
+    }
   };
 
   const confirmationContent = (() => {

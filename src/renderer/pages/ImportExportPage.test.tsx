@@ -497,4 +497,35 @@ describe("ImportExportPage", () => {
       expect(screen.getByRole("button", { name: "Actualizar" })).not.toBeDisabled();
     });
   });
+
+  it("submits restore confirmation only once on rapid double click", async () => {
+    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
+    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRestore = resolve;
+        })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+
+    const confirmButton = await screen.findByRole("button", { name: "Restaurar backup" });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledTimes(1);
+    });
+
+    resolveRestore?.({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-before-restore.json",
+      importedFilePath: "/tmp/backups/contacts-1.json",
+      recordCount: defaultContacts.records.length
+    });
+  });
 });

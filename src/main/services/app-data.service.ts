@@ -223,7 +223,20 @@ export class AppDataService {
 
     this.assertPathWithinDirectory(canonicalSourceFilePath, canonicalBackupDirectory, message);
 
-    return this.importDataset(canonicalSourceFilePath);
+    const importedContacts = directoryDatasetSchema.parse(
+      await readJsonFile<DirectoryDataset>(canonicalSourceFilePath)
+    );
+    const backupPath = await this.createBackup();
+
+    await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+
+    return {
+      contacts: importedContacts,
+      settings: this.toEditableSettings(settings),
+      backupPath,
+      importedFilePath: canonicalSourceFilePath,
+      recordCount: importedContacts.records.length
+    };
   }
 
   async resetDataset(): Promise<ResetContactsResult> {
