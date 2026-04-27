@@ -17,6 +17,7 @@ Latest delivered planning note:
 
 - `OIR-25` restore-from-backup UI was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
 - destructive recovery dialog migration was merged to `develop` on 2026-04-27 and is no longer part of the active remaining backlog
+- responsive/accessibility follow-up QA and targeted fixes were merged to `develop` on 2026-04-27 and are no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -51,14 +52,13 @@ Known test note:
 
 These items have the highest product value because they reduce data-loss risk, unblock non-technical staff, and close core workflow gaps.
 
-1. responsive and accessibility follow-up QA at `200%` zoom, `320px` width, keyboard-only navigation, and screen-reader status announcement checks
+1. `OIR-22` — add Playwright end-to-end coverage for critical MVP flows
 
 ### Priority 2 — Add critical regression coverage
 
 These items protect the MVP flows that already exist in the product.
 
-1. `OIR-22` — add Playwright end-to-end coverage for critical MVP flows
-2. add targeted regression coverage for:
+1. add targeted regression coverage for:
    - status regions
    - retry and recovery flows
    - empty states
@@ -80,26 +80,7 @@ These items are important for distribution but should start after the core MVP w
 
 ## 4. Remaining Work Details
 
-### 4.1 Responsive and accessibility follow-up QA
-
-Goal:
-
-- finish the remaining manual and targeted regression sweep after the merged OIR-31 work
-
-Focus checks:
-
-- `200%` zoom
-- `320px` effective width
-- keyboard-only navigation
-- visible focus states
-- screen-reader-announced status changes
-
-Definition of done:
-
-- no critical or major responsive/accessibility gaps remain in current renderer routes
-- follow-up defects found in the sweep are either fixed or recorded as explicit backlog items
-
-### 4.2 `OIR-22` — Playwright critical flows
+### 4.1 `OIR-22` — Playwright critical flows
 
 Goal:
 
@@ -121,7 +102,7 @@ Definition of done:
 - the critical flows above pass consistently
 - failures are actionable and stable enough for CI use later
 
-### 4.3 Targeted UI regression coverage follow-up
+### 4.2 Targeted UI regression coverage follow-up
 
 Goal:
 
@@ -139,7 +120,7 @@ Definition of done:
 - targeted tests exist for the identified gaps
 - no uncovered critical regression surface remains in the current UI routes
 
-### 4.4 `OIR-26` — Tag-based filtering
+### 4.3 `OIR-26` — Tag-based filtering
 
 Goal:
 
@@ -156,7 +137,7 @@ Definition of done:
 - filter state is clear, reversible, and test-covered
 - the interaction remains accessible and responsive
 
-### 4.5 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
+### 4.4 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
 
 Goal:
 
@@ -176,23 +157,22 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. responsive/accessibility QA sweep and targeted fixes
-2. `OIR-22`
-3. targeted UI regression coverage follow-up
-4. `OIR-26`
-5. `OIR-21`
-6. `OIR-28`
-7. `OIR-29`
+1. `OIR-22`
+2. targeted UI regression coverage follow-up
+3. `OIR-26`
+4. `OIR-21`
+5. `OIR-28`
+6. `OIR-29`
 
 ## 6. Recommended Starting Point
 
-Start with responsive and accessibility follow-up QA.
+Start with `OIR-22`.
 
 Reason:
 
-- it is now the highest remaining validation gap after the destructive dialog migration landed
-- it can uncover real operator-facing defects before the Playwright and regression coverage tracks expand
-- it gives the clearest signal on whether more targeted fixes or backlog follow-ups are still needed
+- it is now the highest remaining gap after the responsive/accessibility follow-up landed
+- it protects the main operator journeys that were just refined with UI and accessibility fixes
+- it creates a stronger safety net before expanding narrower regression coverage and portable-distribution work
 
 ## 7. Explicit Exclusions
 
@@ -202,4 +182,5 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-24` settings path validation and managed recovery: implemented on the current line
 - `OIR-25` restore-from-backup UI: merged to `develop` on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
+- responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line
