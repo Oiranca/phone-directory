@@ -20,6 +20,7 @@ Latest delivered planning note:
 - responsive/accessibility follow-up QA and targeted fixes were merged to `develop` on 2026-04-27 and are no longer part of the active remaining backlog
 - `OIR-22` Playwright critical flows merged to `develop` on 2026-04-27 via PR `#24` and is no longer part of the active remaining backlog
 - `OIR-26` tag-based filtering merged to `main` on 2026-04-28 via PR `#26` and is no longer part of the active remaining backlog
+- `OIR-28` portable managed data roots merged to `main` on 2026-04-28 via PR `#27` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -36,6 +37,8 @@ The current codebase already includes:
 - CSV template header validation
 - editable settings path validation with actionable errors
 - managed-path recovery for broken custom data locations
+- portable-mode managed data roots with portable metadata rebasing
+- portable-root symlink-chain safety checks before bootstrap
 - compacted record detail cards for phones, emails, and long text
 - Playwright-based Electron end-to-end harness for critical MVP flows
 
@@ -60,13 +63,12 @@ This track is complete on the current line.
 
 This is now the highest active backlog and should be sequenced by technical dependency.
 
-1. `OIR-28` — store app data using executable-relative paths in portable mode
-2. `OIR-21` — package the Electron app as a portable cross-platform USB deployment
-3. `OIR-29` — add cross-platform launcher scripts at the USB root
+1. `OIR-21` — package the Electron app as a portable cross-platform USB deployment
+2. `OIR-29` — add cross-platform launcher scripts at the USB root
 
 ## 4. Remaining Work Details
 
-### 4.1 `OIR-28`, `OIR-21`, `OIR-29` — Portable USB deployment
+### 4.1 `OIR-21`, `OIR-29` — Portable USB deployment
 
 Goal:
 
@@ -74,7 +76,6 @@ Goal:
 
 Scope split:
 
-- `OIR-28`: executable-relative data and backup storage in portable mode
 - `OIR-21`: packaging and portable distribution
 - `OIR-29`: one-click launchers at USB root for supported platforms
 
@@ -84,14 +85,7 @@ Definition of done:
 - portable mode keeps `contacts.json`, `settings.json`, and backups with the executable
 - launcher scripts exist for the supported targets
 
-Current `OIR-28` session state:
-
-- branch: `feat/oir-28-portable-data-paths`
-- implementation is committed and tracked in the current PR
-- validation is green: `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm run build`
-- PR is open and the work is in review
-
-Current `OIR-28` implementation already covers:
+Completed foundation already on `main`:
 
 - packaged portable-mode root selection in main-process bootstrap
 - explicit portable-root override env support
@@ -100,27 +94,27 @@ Current `OIR-28` implementation already covers:
 - legacy portable migration heuristic for old `win` / `linux` / `mac` roots without metadata
 - pre-bootstrap symlink checks for the portable root chain
 
-Open `OIR-28` decisions before ship:
+Remaining `OIR-21` / `OIR-29` decisions before ship:
 
-- keep the legacy portable migration heuristic scoped to canonical `win` / `linux` / `mac` layouts only; do not broaden it without stronger metadata
-- rerun final QA/security/code review after that decision, then commit and open the PR
+- choose the packaging format and artifact layout for each supported platform
+- decide whether launcher scripts wrap unpacked artifacts, packaged artifacts, or both
+- verify the portable root layout produced by packaging still matches the `OIR-28` assumptions
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-28`
-2. `OIR-21`
-3. `OIR-29`
+1. `OIR-21`
+2. `OIR-29`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-28`.
+Start with `OIR-21`.
 
 Reason:
 
-- `OIR-26` merged to `main` on 2026-04-28 via PR `#26`, so the previous highest-priority gap is now complete
-- portable-distribution work should begin from executable-relative data handling before packaging
+- `OIR-28` merged to `main` on 2026-04-28 via PR `#27`, so the data-root prerequisite is complete
+- portable-distribution work should now move into packaging and artifact layout decisions
 - launcher scripts should follow packaging decisions, not precede them
-- this work is already partially implemented locally on `feat/oir-28-portable-data-paths`
+- launcher behavior should target the final packaged structure, not a guessed interim layout
 
 ## 7. Explicit Exclusions
 
@@ -131,6 +125,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-25` restore-from-backup UI: merged to `develop` on 2026-04-27
 - `OIR-22` Playwright critical flows: merged to `develop` on 2026-04-27 via PR `#24`
 - `OIR-26` tag-based filtering: merged to `main` on 2026-04-28 via PR `#26`
+- `OIR-28` portable managed data roots: merged to `main` on 2026-04-28 via PR `#27`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
