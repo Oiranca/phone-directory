@@ -64,6 +64,7 @@ describe("AppShell — default mode", () => {
     renderShell();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(screen.getByRole("main")).toHaveAttribute("tabIndex", "-1");
+    expect(screen.getByRole("main")).toHaveClass("focus-ring");
   });
 });
 

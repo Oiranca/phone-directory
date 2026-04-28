@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags } from "./search.service";
+import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags, normalizeTag } from "./search.service";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DirectoryFilters } from "./search.service";
@@ -73,6 +73,10 @@ describe("searchRecords", () => {
 
     const result = searchRecords(taggedRecords, "", { ...defaultFilters, selectedTags: ["admisión", "urgencias"] });
     expect(result).toHaveLength(2);
+  });
+
+  it("matches tags deterministically with Spanish normalization", () => {
+    expect(normalizeTag(" Admisión ")).toBe("admisión");
   });
 
   it("reuses the Fuse instance for the same records array reference", () => {

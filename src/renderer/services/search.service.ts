@@ -39,7 +39,7 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
 
 const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
-const normalizeTag = (value: string) => value.trim().toLocaleLowerCase();
+export const normalizeTag = (value: string) => value.trim().toLocaleLowerCase("es");
 
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   records.filter((record) => {

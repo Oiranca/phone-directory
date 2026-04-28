@@ -236,6 +236,63 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("de-duplicates tag options with the same normalized value", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[1]),
+      id: "admission-uppercase",
+      displayName: "Admisión alternativa",
+      tags: ["Admisión"]
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Etiqueta"));
+
+    expect(screen.getAllByRole("option", { name: "admisión" })).toHaveLength(1);
+  });
+
+  it("clears stale selected tags when the current dataset no longer exposes them", async () => {
+    useAppStore.setState({ selectedTags: ["admisión"] });
+
+    const contacts = structuredClone(defaultContacts);
+    contacts.records = contacts.records.map((record) => ({ ...record, tags: [] }));
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(useAppStore.getState().selectedTags).toEqual([]);
+    });
+  });
+
   it("shows privacy-only pills in the detail header for sensitive phones", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;

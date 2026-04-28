@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
-import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
+import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact } from "../../shared/types/contact";
@@ -106,13 +106,25 @@ export const DirectoryPage = () => {
       return [];
     }
 
-    return Array.from(
-      new Set(
-        contacts.records.flatMap((record) =>
-          record.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)
-        )
-      )
-    ).sort((left, right) => tagLabelIntl.compare(left, right));
+    const tagsByNormalizedValue = new Map<string, string>();
+
+    contacts.records.forEach((record) => {
+      record.tags.forEach((tag) => {
+        const trimmedTag = tag.trim();
+
+        if (trimmedTag.length === 0) {
+          return;
+        }
+
+        const normalizedTag = normalizeTag(trimmedTag);
+
+        if (!tagsByNormalizedValue.has(normalizedTag)) {
+          tagsByNormalizedValue.set(normalizedTag, trimmedTag);
+        }
+      });
+    });
+
+    return Array.from(tagsByNormalizedValue.values()).sort((left, right) => tagLabelIntl.compare(left, right));
   }, [contacts]);
   const deferredQuery = useDeferredValue(query);
   const visibleRecords = useMemo(
@@ -161,6 +173,19 @@ export const DirectoryPage = () => {
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (selectedTags.length === 0) {
+      return;
+    }
+
+    const availableNormalizedTags = new Set(availableTags.map((tag) => normalizeTag(tag)));
+    const hasOnlyValidTags = selectedTags.every((tag) => availableNormalizedTags.has(normalizeTag(tag)));
+
+    if (!hasOnlyValidTags) {
+      setSelectedTags([]);
+    }
+  }, [availableTags, selectedTags, setSelectedTags]);
 
   useEffect(() => {
     if (currentPageRecords.length === 0) {
@@ -285,7 +310,7 @@ export const DirectoryPage = () => {
                 ]}
               />
             </div>
-            {availableTags.length > 0 ? (
+            {availableTags.length > 0 || selectedTags.length > 0 ? (
               <div className="w-full md:w-48">
                 <SelectField
                   id="directory-tag-filter"

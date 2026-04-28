@@ -61,7 +61,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+        className="focus-ring mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
       >
         {children}
       </main>
