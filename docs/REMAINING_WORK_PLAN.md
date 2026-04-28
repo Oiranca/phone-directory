@@ -86,10 +86,10 @@ Definition of done:
 
 Current `OIR-28` session state:
 
-- branch in progress: `feat/oir-28-portable-data-paths`
-- local implementation exists and is not committed yet
-- local validation is green: `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm run build`
-- no PR has been opened because review cycle 2 was not fully closed before session stop
+- branch: `feat/oir-28-portable-data-paths`
+- implementation is committed and tracked in the current PR
+- validation is green: `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm run build`
+- PR is open and the work is in review
 
 Current `OIR-28` implementation already covers:
 
