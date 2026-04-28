@@ -293,6 +293,35 @@ describe("DirectoryPage", () => {
     });
   });
 
+  it("re-maps selected tags to the current canonical option label", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.tags = ["admisión"];
+    const settings = {
+      editorName: "",
+      dataFilePath: "/tmp/data/contacts.json",
+      backupDirectoryPath: "/tmp/backups",
+      ui: {
+        showInactiveByDefault: false
+      }
+    };
+
+    useAppStore.setState({
+      contacts,
+      settings,
+      selectedTags: ["Admisión"],
+      selectedRecordId: contacts.records[0]!.id,
+      isLoading: false
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    });
+  });
+
   it("shows privacy-only pills in the detail header for sensitive phones", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;

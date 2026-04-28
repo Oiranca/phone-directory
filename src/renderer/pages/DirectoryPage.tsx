@@ -179,11 +179,19 @@ export const DirectoryPage = () => {
       return;
     }
 
-    const availableNormalizedTags = new Set(availableTags.map((tag) => normalizeTag(tag)));
-    const hasOnlyValidTags = selectedTags.every((tag) => availableNormalizedTags.has(normalizeTag(tag)));
+    const normalizedToAvailableTag = new Map(
+      availableTags.map((tag) => [normalizeTag(tag), tag] as const)
+    );
+    const nextSelectedTags = selectedTags.flatMap((tag) => {
+      const matchingTag = normalizedToAvailableTag.get(normalizeTag(tag));
+      return matchingTag ? [matchingTag] : [];
+    });
+    const hasChanged =
+      nextSelectedTags.length !== selectedTags.length ||
+      nextSelectedTags.some((tag, index) => tag !== selectedTags[index]);
 
-    if (!hasOnlyValidTags) {
-      setSelectedTags([]);
+    if (hasChanged) {
+      setSelectedTags(nextSelectedTags);
     }
   }, [availableTags, selectedTags, setSelectedTags]);
 

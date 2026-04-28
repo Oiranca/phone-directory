@@ -42,7 +42,10 @@ const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 export const normalizeTag = (value: string) => value.trim().toLocaleLowerCase("es");
 
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
-  records.filter((record) => {
+  {
+    const normalizedSelectedTags = filters.selectedTags.map(normalizeTag);
+
+    return records.filter((record) => {
     if (!filters.showInactive && record.status === "inactive") {
       return false;
     }
@@ -55,16 +58,17 @@ const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
       return false;
     }
 
-    if (filters.selectedTags.length > 0) {
+    if (normalizedSelectedTags.length > 0) {
       const recordTags = new Set(record.tags.map(normalizeTag));
 
-      if (!filters.selectedTags.some((tag) => recordTags.has(normalizeTag(tag)))) {
+      if (!normalizedSelectedTags.some((tag) => recordTags.has(tag))) {
         return false;
       }
     }
 
     return true;
   });
+  };
 
 export const searchRecords = (records: ContactRecord[], query: string, filters: DirectoryFilters) => {
   const normalizedQuery = query.trim();
