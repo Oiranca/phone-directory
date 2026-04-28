@@ -215,14 +215,7 @@ export const SettingsPage = () => {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl bg-white p-6 shadow-panel">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Configuración</p>
-        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Preferencias locales</h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Ajusta quién firma los cambios y cómo debe arrancar el directorio en esta instalación.
-        </p>
-      </div>
-
+      <h2 className="sr-only">Configuración</h2>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>

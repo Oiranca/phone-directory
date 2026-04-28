@@ -390,14 +390,7 @@ export const ImportExportPage = () => {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl bg-white p-6 shadow-panel">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Intercambio de datos</p>
-        <h2 className="mt-2 text-2xl font-semibold text-scs-blueDark sm:text-3xl">Importar y exportar datos</h2>
-        <p className="mt-3 max-w-3xl text-sm text-slate-600">
-          Exporta el directorio activo como JSON, o importa archivos JSON, CSV, ODS o XLSX. Las hojas se normalizan al template interno y cada importación crea un backup automático.
-        </p>
-      </div>
-
+      <h2 className="sr-only">Importar y exportar datos</h2>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

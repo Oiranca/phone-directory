@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags } from "./search.service";
+import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags, normalizeTag } from "./search.service";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DirectoryFilters } from "./search.service";
@@ -9,6 +9,7 @@ const records = defaultContacts.records as ContactRecord[];
 const defaultFilters: DirectoryFilters = {
   selectedType: "all",
   selectedArea: "all",
+  selectedTags: [],
   showInactive: true
 };
 
@@ -58,6 +59,24 @@ describe("searchRecords", () => {
   it("filters by area", () => {
     const result = searchRecords(records, "", { ...defaultFilters, selectedArea: "gestion-administracion" });
     expect(result.every((r) => r.organization.area === "gestion-administracion")).toBe(true);
+  });
+
+  it("filters by selected tags", () => {
+    const result = searchRecords(records, "", { ...defaultFilters, selectedTags: ["admisión"] });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.displayName).toBe("Admisión General");
+  });
+
+  it("matches any selected tag across multi-tag filtering", () => {
+    const taggedRecords = structuredClone(records) as ContactRecord[];
+    taggedRecords[1]!.tags = ["urgencias"];
+
+    const result = searchRecords(taggedRecords, "", { ...defaultFilters, selectedTags: ["admisión", "urgencias"] });
+    expect(result).toHaveLength(2);
+  });
+
+  it("matches tags deterministically with Spanish normalization", () => {
+    expect(normalizeTag(" Admisión ")).toBe("admisión");
   });
 
   it("reuses the Fuse instance for the same records array reference", () => {

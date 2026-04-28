@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-27
+- Last updated: 2026-04-28
 
 ## 1. Purpose
 
@@ -51,51 +51,23 @@ Known test note:
 
 ## 3. Priority Order
 
-### Priority 1 — Finish MVP reliability and operator safety
+### Priority 1 — Improve search completeness
 
-These items have the highest remaining value because they harden UI behavior already covered by the new end-to-end baseline.
-
-1. add targeted regression coverage for:
-   - status regions
-   - retry and recovery flows
-   - empty states
-   - text reflow and narrow-width behavior
-
-### Priority 2 — Improve search completeness
-
-This item improves discoverability but is less urgent than data safety and test coverage.
+This is now the highest active product gap in the remaining backlog.
 
 1. `OIR-26` — add tag-based filtering to the directory search experience
 
-### Priority 3 — Portable USB deployment track
+### Priority 2 — Portable USB deployment track
 
-These items are important for distribution but should start after the core MVP workflow and test gaps are closed.
+These items are important for distribution and should be sequenced by technical dependency.
 
-1. `OIR-21` — package the Electron app as a portable cross-platform USB deployment
-2. `OIR-28` — store app data using executable-relative paths in portable mode
+1. `OIR-28` — store app data using executable-relative paths in portable mode
+2. `OIR-21` — package the Electron app as a portable cross-platform USB deployment
 3. `OIR-29` — add cross-platform launcher scripts at the USB root
 
 ## 4. Remaining Work Details
 
-### 4.1 Targeted UI regression coverage follow-up
-
-Goal:
-
-- close focused gaps not fully covered by the current component and page tests
-
-Required checks:
-
-- async status region announcements
-- retry and recovery surfaces
-- empty-state semantics
-- text reflow and narrow-width layout behavior
-
-Definition of done:
-
-- targeted tests exist for the identified gaps
-- no uncovered critical regression surface remains in the current UI routes
-
-### 4.2 `OIR-26` — Tag-based filtering
+### 4.1 `OIR-26` — Tag-based filtering
 
 Goal:
 
@@ -112,7 +84,7 @@ Definition of done:
 - filter state is clear, reversible, and test-covered
 - the interaction remains accessible and responsive
 
-### 4.3 `OIR-21`, `OIR-28`, `OIR-29` — Portable USB deployment
+### 4.2 `OIR-28`, `OIR-21`, `OIR-29` — Portable USB deployment
 
 Goal:
 
@@ -120,8 +92,8 @@ Goal:
 
 Scope split:
 
-- `OIR-21`: packaging and portable distribution
 - `OIR-28`: executable-relative data and backup storage in portable mode
+- `OIR-21`: packaging and portable distribution
 - `OIR-29`: one-click launchers at USB root for supported platforms
 
 Definition of done:
@@ -132,21 +104,20 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. targeted UI regression coverage follow-up
-2. `OIR-26`
+1. `OIR-26`
+2. `OIR-28`
 3. `OIR-21`
-4. `OIR-28`
 5. `OIR-29`
 
 ## 6. Recommended Starting Point
 
-Start with targeted UI regression coverage follow-up.
+Start with `OIR-26`.
 
 Reason:
 
-- it is now the highest remaining quality gap after `OIR-22` landed
-- it complements the new Playwright happy-path coverage with focused assertions on UI semantics and narrow-width behavior
-- it creates a stronger regression net before expanding search scope and portable-distribution work
+- `OIR-33` closed on 2026-04-27, so the previous testing follow-up is no longer active backlog
+- tag filtering is the highest-value open UX gap in the search experience
+- portable-distribution work should begin from executable-relative data handling before packaging
 
 ## 7. Explicit Exclusions
 
@@ -156,6 +127,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-24` settings path validation and managed recovery: implemented on the current line
 - `OIR-25` restore-from-backup UI: merged to `develop` on 2026-04-27
 - `OIR-22` Playwright critical flows: merged to `develop` on 2026-04-27 via PR `#24`
+- `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line

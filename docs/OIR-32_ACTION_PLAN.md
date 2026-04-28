@@ -34,7 +34,7 @@ Improve app-wide accessibility and make the directory easier to browse under rea
 
 ## Progress Snapshot
 
-Status as of 2026-04-24:
+Status updated on 2026-04-28:
 
 - Phase 1: complete
 - Phase 2: complete
@@ -44,7 +44,7 @@ Status as of 2026-04-24:
 
 Implemented so far:
 
-- Linear issue `OIR-32` created and moved to `In Progress`
+- Linear issue `OIR-32` completed on 2026-04-27
 - branch created: `feat/oir-32-directory-a11y-pagination`
 - app-shell skip link and route-focus target added
 - page-local loading and failure states upgraded with announcement semantics
@@ -104,7 +104,7 @@ Status: done
 ## Expected Deliverables
 
 - Updated branch: `feat/oir-32-directory-a11y-pagination`
-- Linear issue in progress: `OIR-32`
+- Linear issue completed: `OIR-32`
 - Directory pagination capped at 5 records
 - App-shell accessibility improvements
 - Test coverage for new directory behavior
