@@ -14,6 +14,7 @@ const resetStore = () => {
     query: "",
     selectedType: "all",
     selectedArea: "all",
+    selectedTags: [],
     showInactive: false,
     isLoading: true
   });
@@ -110,7 +111,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     const resultCount = screen.getByRole("status");
     expect(resultCount).toHaveAttribute("aria-live", "polite");
@@ -142,7 +143,7 @@ describe("DirectoryPage", () => {
     expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
   });
 
@@ -170,13 +171,69 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();
 
     await chooseOption("Tipo", "Control");
     fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
 
     expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
+  });
+
+  it("filters by tag and shows the active tag pill", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[1]),
+      id: "urgencias-record",
+      displayName: "Urgencias central",
+      tags: ["urgencias"]
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    await chooseOption("Etiqueta", "admisión");
+
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+    expect(screen.getByText("#admisión")).toBeInTheDocument();
+    expect(screen.queryByText("Urgencias central")).not.toBeInTheDocument();
+  });
+
+  it("clears selected tags when filter pills are reset", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    await chooseOption("Etiqueta", "admisión");
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
   it("shows privacy-only pills in the detail header for sensitive phones", async () => {
@@ -197,7 +254,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getAllByText("Confidencial").length).toBeGreaterThan(0);
     expect(screen.getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
     expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
@@ -241,7 +298,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.queryByText("Número interno confidencial.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartir con pacientes.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartas este contacto con pacientes ni acompañantes.")).not.toBeInTheDocument();
@@ -262,7 +319,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     const selectedButton = screen.getByRole("button", { name: /admisión general/i });
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
@@ -293,7 +350,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir a la página 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Página anterior" })).toHaveClass("focus-ring");
     expect(screen.queryByText("Registro extra 6")).not.toBeInTheDocument();
@@ -314,7 +371,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Buscar contactos"), {
       target: { value: "sin-coincidencias" }
     });
@@ -348,7 +405,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Ir a la página 2" }));
 
@@ -382,7 +439,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getByText("Correos electrónicos")).toBeInTheDocument();
     expect(screen.getByText("registro.largo@hospital-canarias.local")).toBeInTheDocument();
     expect(screen.getByText("Laboral")).toBeInTheDocument();

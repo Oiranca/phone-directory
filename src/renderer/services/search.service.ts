@@ -6,6 +6,7 @@ import type { ContactRecord } from "../../shared/types/contact.js";
 export interface DirectoryFilters {
   selectedType: RecordType | "all";
   selectedArea: AreaType | "all";
+  selectedTags: string[];
   showInactive: boolean;
 }
 
@@ -38,6 +39,8 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
 
 const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
+const normalizeTag = (value: string) => value.trim().toLocaleLowerCase();
+
 const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
   records.filter((record) => {
     if (!filters.showInactive && record.status === "inactive") {
@@ -50,6 +53,14 @@ const applyFilters = (records: ContactRecord[], filters: DirectoryFilters) =>
 
     if (filters.selectedArea !== "all" && record.organization.area !== filters.selectedArea) {
       return false;
+    }
+
+    if (filters.selectedTags.length > 0) {
+      const recordTags = new Set(record.tags.map(normalizeTag));
+
+      if (!filters.selectedTags.some((tag) => recordTags.has(normalizeTag(tag)))) {
+        return false;
+      }
     }
 
     return true;

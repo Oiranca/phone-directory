@@ -1,6 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { useEffect, useRef } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "Directorio" },
@@ -14,13 +13,6 @@ interface AppShellProps extends PropsWithChildren {
 }
 
 export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) => {
-  const location = useLocation();
-  const mainRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    mainRef.current?.focus();
-  }, [location.pathname]);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-scs-mist via-white to-slate-100 text-scs-ink">
       <a
@@ -29,7 +21,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       >
         Saltar al contenido principal
       </a>
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -67,10 +59,9 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
         </div>
       </header>
       <main
-        ref={mainRef}
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none focus-visible:rounded-3xl focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2 sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
       >
         {children}
       </main>
