@@ -12,6 +12,9 @@ const getErrnoException = (error: unknown) => {
 const isAllowedSystemAliasRoot = (currentPath: string, index: number) =>
   index === 0 && process.platform !== "win32" && ["/tmp", "/var"].includes(currentPath);
 
+const buildPathSafetyError = (message: string, currentPath: string, detail: string) =>
+  new Error(`${message} Ruta afectada: ${currentPath}. ${detail}`);
+
 export const assertPathChainIsNotSymlink = async (
   targetPath: string,
   message: string,
@@ -33,7 +36,7 @@ export const assertPathChainIsNotSymlink = async (
       const stats = await fs.lstat(currentPath);
 
       if (stats.isSymbolicLink()) {
-        throw new Error(`${message} Ruta afectada: ${currentPath}. No se permiten enlaces simbólicos.`);
+        throw buildPathSafetyError(message, currentPath, "No se permiten enlaces simbólicos.");
       }
     } catch (error) {
       if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
@@ -47,7 +50,12 @@ export const assertPathChainIsNotSymlink = async (
         return;
       }
 
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw buildPathSafetyError(
+        message,
+        currentPath,
+        `Error al verificar la ruta: ${errorMessage}`
+      );
     }
   }
 };

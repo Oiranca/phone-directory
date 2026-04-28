@@ -26,6 +26,7 @@ import type {
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
@@ -670,41 +671,7 @@ export class AppDataService {
   }
 
   private async assertPathChainIsNotSymlink(targetPath: string, message: string, allowMissingLeaf = false) {
-    const resolvedPath = path.resolve(targetPath);
-    const parsedPath = path.parse(resolvedPath);
-    const relativeSegments = resolvedPath.slice(parsedPath.root.length).split(path.sep).filter(Boolean);
-    let currentPath = parsedPath.root;
-
-    for (let index = 0; index < relativeSegments.length; index += 1) {
-      currentPath = path.join(currentPath, relativeSegments[index]!);
-
-      if (index === 0 && process.platform !== "win32" && ["/tmp", "/var"].includes(currentPath)) {
-        continue;
-      }
-
-      try {
-        const stats = await fs.lstat(currentPath);
-
-        if (stats.isSymbolicLink()) {
-          throw new Error(
-            `${message} Ruta afectada: ${currentPath}. No se permiten enlaces simbólicos en las rutas configuradas.`
-          );
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
-          throw error;
-        }
-
-        const filesystemError = this.getErrnoException(error);
-        const isLeaf = index === relativeSegments.length - 1;
-
-        if (allowMissingLeaf && isLeaf && filesystemError?.code === "ENOENT") {
-          return;
-        }
-
-        throw this.toFilesystemError(error, message, { filePath: currentPath });
-      }
-    }
+    await assertPathChainIsNotSymlink(targetPath, message, allowMissingLeaf);
   }
 
   private async assertDataFilePathSafe(filePath: string, message: string, allowMissing: boolean) {

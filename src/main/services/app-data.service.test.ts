@@ -107,7 +107,7 @@ describe("AppDataService", () => {
           backupDirectoryPath: symlinkBackupDirectory
         })
       )
-    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    ).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
   it("rejects relative custom data paths", async () => {
@@ -157,7 +157,38 @@ describe("AppDataService", () => {
           dataFilePath: path.join(symlinkedChildDirectory, "contacts-custom.json")
         })
       )
-    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    ).rejects.toThrow(/No se permiten enlaces simbólicos/);
+  });
+
+  it("surfaces caller context when path validation hits unexpected filesystem errors", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    const customDataFilePath = path.join(customDataDirectory, "contacts-custom.json");
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const lstatSpy = vi
+      .spyOn(fs, "lstat")
+      .mockImplementation(async (filePath) => {
+        if (filePath === customDataDirectory) {
+          throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        }
+
+        return actualFs.lstat(filePath);
+      });
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: customDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      new RegExp(`No se pudo validar la ruta del archivo de datos\\. Ruta afectada: ${customDataDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Error al verificar la ruta: EACCES: permission denied`)
+    );
+
+    lstatSpy.mockRestore();
   });
 
   it("rejects persisted relative data paths during bootstrap", async () => {
@@ -413,7 +444,7 @@ describe("AppDataService", () => {
       })
     );
 
-    await expect(service.listBackups()).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    await expect(service.listBackups()).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
   it("allows saving non-path settings even when the current data file is missing", async () => {
