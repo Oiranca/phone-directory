@@ -77,6 +77,10 @@ cp .env.example .env.local
 Available development variables:
 
 - `ELECTRON_OPEN_DEVTOOLS=1` opens Electron DevTools automatically in development.
+- `ELECTRON_PORTABLE=1` makes packaged builds store Electron `userData` next to the executable.
+- `ELECTRON_PORTABLE_ROOT_PATH=/absolute/path` overrides the portable data root for launcher-driven USB layouts. Relative values resolve from the packaged portable root.
+- Linux AppImage portable runs also honor `APPIMAGE` so data stays beside the real USB-hosted `.AppImage`, not the temporary mount path.
+- Legacy portable installs without `managedPaths` metadata auto-rebase only when the old paths match the canonical `win` / `linux` / `mac` portable layout (`data/contacts.json` plus `backups`).
 
 Run the test suite:
 
@@ -156,10 +160,8 @@ Supporting scripts:
 
 ## Next Implementation Focus
 
-The bootstrap is in place. The next product-facing iteration should implement:
+The current highest-priority track is portable USB deployment:
 
-- stronger search and filter behavior with Fuse.js
-- the real contact form flow
-- import/export UI
-- backup management UI
-- dataset editing and persistence actions from the renderer
+- `OIR-28`: executable-relative portable data paths
+- `OIR-21`: cross-platform portable packaging
+- `OIR-29`: USB-root launcher scripts

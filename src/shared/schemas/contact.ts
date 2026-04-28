@@ -86,6 +86,10 @@ export const appSettingsSchema = z.object({
   editorName: z.string(),
   dataFilePath: z.string().trim().min(1, "La ruta del archivo de datos es obligatoria."),
   backupDirectoryPath: z.string().trim().min(1, "La ruta de la carpeta de backups es obligatoria."),
+  managedPaths: z.object({
+    dataFilePath: z.boolean(),
+    backupDirectoryPath: z.boolean()
+  }).optional(),
   ui: z.object({
     showInactiveByDefault: z.boolean()
   })

@@ -83,6 +83,10 @@ export interface AppSettings {
   editorName: string;
   dataFilePath: string;
   backupDirectoryPath: string;
+  managedPaths?: {
+    dataFilePath: boolean;
+    backupDirectoryPath: boolean;
+  };
   ui: {
     showInactiveByDefault: boolean;
   };

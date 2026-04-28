@@ -27,6 +27,16 @@ const parseUserDataPath = (value: string | undefined, isE2E: boolean) => {
   return value;
 };
 
+const parsePortableRootPath = (value: string | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized.length > 0 ? normalized : null;
+};
+
 const parseJsonStringArray = (value: string | undefined) => {
   if (!value) {
     return [];
@@ -49,8 +59,10 @@ const isE2E = parseBooleanFlag(process.env.ELECTRON_E2E);
 
 export const env = {
   isE2E,
+  portableMode: parseBooleanFlag(process.env.ELECTRON_PORTABLE),
   openDevTools: parseBooleanFlag(process.env.ELECTRON_OPEN_DEVTOOLS),
   rendererUrl: parseRendererUrl(process.env.ELECTRON_RENDERER_URL, isE2E),
+  portableRootPath: parsePortableRootPath(process.env.ELECTRON_PORTABLE_ROOT_PATH),
   userDataPath: parseUserDataPath(process.env.ELECTRON_USER_DATA_PATH, isE2E),
   e2eOpenDialogPaths: isE2E ? parseJsonStringArray(process.env.E2E_OPEN_DIALOG_PATHS) : [],
   e2eSaveDialogPaths: isE2E ? parseJsonStringArray(process.env.E2E_SAVE_DIALOG_PATHS) : []

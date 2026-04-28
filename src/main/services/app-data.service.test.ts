@@ -16,10 +16,11 @@ vi.mock("electron", () => ({
 
 describe("AppDataService", () => {
   let testRoot: string;
+  let currentUserDataRoot: string;
   const buildEditableSettings = (overrides: Partial<EditableAppSettings> = {}): EditableAppSettings => ({
     editorName: "Samuel",
-    dataFilePath: path.join(testRoot, "data", "contacts.json"),
-    backupDirectoryPath: path.join(testRoot, "backups"),
+    dataFilePath: path.join(currentUserDataRoot, "data", "contacts.json"),
+    backupDirectoryPath: path.join(currentUserDataRoot, "backups"),
     ui: {
       showInactiveByDefault: false,
       ...(overrides.ui ?? {})
@@ -29,7 +30,8 @@ describe("AppDataService", () => {
 
   beforeEach(async () => {
     testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-"));
-    getPathMock.mockReturnValue(testRoot);
+    currentUserDataRoot = testRoot;
+    getPathMock.mockImplementation(() => currentUserDataRoot);
   });
 
   afterEach(async () => {
@@ -105,7 +107,7 @@ describe("AppDataService", () => {
           backupDirectoryPath: symlinkBackupDirectory
         })
       )
-    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    ).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
   it("rejects relative custom data paths", async () => {
@@ -155,7 +157,38 @@ describe("AppDataService", () => {
           dataFilePath: path.join(symlinkedChildDirectory, "contacts-custom.json")
         })
       )
-    ).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    ).rejects.toThrow(/No se permiten enlaces simbólicos/);
+  });
+
+  it("surfaces caller context when path validation hits unexpected filesystem errors", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    const customDataFilePath = path.join(customDataDirectory, "contacts-custom.json");
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const lstatSpy = vi
+      .spyOn(fs, "lstat")
+      .mockImplementation(async (filePath) => {
+        if (filePath === customDataDirectory) {
+          throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        }
+
+        return actualFs.lstat(filePath);
+      });
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: customDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      new RegExp(`No se pudo validar la ruta del archivo de datos\\. Ruta afectada: ${customDataDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Error al verificar la ruta: EACCES: permission denied`)
+    );
+
+    lstatSpy.mockRestore();
   });
 
   it("rejects persisted relative data paths during bootstrap", async () => {
@@ -178,6 +211,197 @@ describe("AppDataService", () => {
     await expect(service.getBootstrapData()).rejects.toThrow(
       "La ruta del archivo de datos configurada debe ser absoluta."
     );
+  });
+
+  it("rebases managed portable paths to the current userData root during bootstrap", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const originalRoot = path.join(testRoot, "usb-a", "win");
+    const nextRoot = path.join(testRoot, "usb-b", "win");
+    currentUserDataRoot = originalRoot;
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.mkdir(nextRoot, { recursive: true });
+    await fs.cp(path.join(originalRoot, "data"), path.join(nextRoot, "data"), { recursive: true });
+    await fs.cp(path.join(originalRoot, "backups"), path.join(nextRoot, "backups"), { recursive: true });
+    await fs.rm(originalRoot, { recursive: true, force: true });
+    currentUserDataRoot = nextRoot;
+
+    const movedService = new AppDataService();
+    const bootstrap = await movedService.getBootstrapData();
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(nextRoot, "data", "settings.json"), "utf-8")
+    ) as {
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
+    };
+
+    expect("contacts" in bootstrap).toBe(true);
+    expect(persisted.dataFilePath).toBe(path.join(nextRoot, "data", "contacts.json"));
+    expect(persisted.backupDirectoryPath).toBe(path.join(nextRoot, "backups"));
+    expect(persisted.managedPaths).toEqual({
+      dataFilePath: true,
+      backupDirectoryPath: true
+    });
+  });
+
+  it("rebases legacy managed portable paths without metadata after the userData root changes", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const originalRoot = path.join(testRoot, "usb-a", "win");
+    const nextRoot = path.join(testRoot, "usb-b", "win");
+    currentUserDataRoot = originalRoot;
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const originalSettingsPath = path.join(originalRoot, "data", "settings.json");
+    const originalSettings = JSON.parse(await fs.readFile(originalSettingsPath, "utf-8")) as {
+      editorName: string;
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
+      ui: { showInactiveByDefault: boolean };
+    };
+    delete originalSettings.managedPaths;
+    await fs.writeFile(originalSettingsPath, JSON.stringify(originalSettings, null, 2) + "\n", "utf-8");
+
+    await fs.mkdir(nextRoot, { recursive: true });
+    await fs.cp(path.join(originalRoot, "data"), path.join(nextRoot, "data"), { recursive: true });
+    await fs.cp(path.join(originalRoot, "backups"), path.join(nextRoot, "backups"), { recursive: true });
+    await fs.rm(originalRoot, { recursive: true, force: true });
+    currentUserDataRoot = nextRoot;
+
+    const movedService = new AppDataService();
+    const bootstrap = await movedService.getBootstrapData();
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(nextRoot, "data", "settings.json"), "utf-8")
+    ) as {
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
+    };
+
+    expect("contacts" in bootstrap).toBe(true);
+    expect(persisted.dataFilePath).toBe(path.join(nextRoot, "data", "contacts.json"));
+    expect(persisted.backupDirectoryPath).toBe(path.join(nextRoot, "backups"));
+    expect(persisted.managedPaths).toEqual({
+      dataFilePath: true,
+      backupDirectoryPath: true
+    });
+  });
+
+  it("keeps custom absolute paths after the managed userData root changes", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const originalRoot = path.join(testRoot, "usb-a", "win");
+    const nextRoot = path.join(testRoot, "usb-b", "win");
+    const customRoot = path.join(testRoot, "shared-custom");
+    currentUserDataRoot = originalRoot;
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.mkdir(path.join(customRoot, "data"), { recursive: true });
+    await fs.mkdir(path.join(customRoot, "backups"), { recursive: true });
+    const customDataFilePath = path.join(customRoot, "data", "contacts-custom.json");
+    const customBackupDirectory = path.join(customRoot, "backups");
+
+    await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath,
+        backupDirectoryPath: customBackupDirectory
+      })
+    );
+
+    await fs.mkdir(nextRoot, { recursive: true });
+    await fs.cp(path.join(originalRoot, "data"), path.join(nextRoot, "data"), { recursive: true });
+    await fs.cp(path.join(originalRoot, "backups"), path.join(nextRoot, "backups"), { recursive: true });
+    await fs.rm(originalRoot, { recursive: true, force: true });
+    currentUserDataRoot = nextRoot;
+
+    const movedService = new AppDataService();
+    const bootstrap = await movedService.getBootstrapData();
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(nextRoot, "data", "settings.json"), "utf-8")
+    ) as {
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
+    };
+
+    expect("contacts" in bootstrap).toBe(true);
+    expect(persisted.dataFilePath).toBe(customDataFilePath);
+    expect(persisted.backupDirectoryPath).toBe(customBackupDirectory);
+    expect(persisted.managedPaths).toEqual({
+      dataFilePath: false,
+      backupDirectoryPath: false
+    });
+  });
+
+  it("keeps legacy custom absolute paths without metadata after a userData root move", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const originalRoot = path.join(testRoot, "usb-a", "win");
+    const nextRoot = path.join(testRoot, "usb-b", "win");
+    const customRoot = path.join(testRoot, "shared-custom");
+    currentUserDataRoot = originalRoot;
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.mkdir(path.join(customRoot, "data"), { recursive: true });
+    await fs.mkdir(path.join(customRoot, "backups"), { recursive: true });
+    const customDataFilePath = path.join(customRoot, "data", "contacts-custom.json");
+    const customBackupDirectory = path.join(customRoot, "backups");
+
+    await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath,
+        backupDirectoryPath: customBackupDirectory
+      })
+    );
+
+    const originalSettingsPath = path.join(originalRoot, "data", "settings.json");
+    const originalSettings = JSON.parse(await fs.readFile(originalSettingsPath, "utf-8")) as {
+      editorName: string;
+      dataFilePath: string;
+      backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
+      ui: { showInactiveByDefault: boolean };
+    };
+    delete originalSettings.managedPaths;
+    await fs.writeFile(originalSettingsPath, JSON.stringify(originalSettings, null, 2) + "\n", "utf-8");
+
+    await fs.mkdir(nextRoot, { recursive: true });
+    await fs.cp(path.join(originalRoot, "data"), path.join(nextRoot, "data"), { recursive: true });
+    await fs.cp(path.join(originalRoot, "backups"), path.join(nextRoot, "backups"), { recursive: true });
+    await fs.rm(originalRoot, { recursive: true, force: true });
+    await fs.rm(customDataFilePath, { force: true });
+    currentUserDataRoot = nextRoot;
+
+    const movedService = new AppDataService();
+    const result = await movedService.getBootstrapData();
+
+    expect("recovery" in result).toBe(true);
+    if ("recovery" in result) {
+      expect(result.recovery.contactsFilePath).toBe(customDataFilePath);
+      expect(result.recovery.message).toBe("El archivo de datos configurado no existe o ya no está disponible.");
+    }
   });
 
   it("rejects data paths that match settings.json with case-only differences", async () => {
@@ -220,7 +444,7 @@ describe("AppDataService", () => {
       })
     );
 
-    await expect(service.listBackups()).rejects.toThrow(/No se permiten enlaces simbólicos en las rutas configuradas/);
+    await expect(service.listBackups()).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
   it("allows saving non-path settings even when the current data file is missing", async () => {
@@ -1501,9 +1725,17 @@ describe("AppDataService", () => {
       editorName: string;
       dataFilePath: string;
       backupDirectoryPath: string;
+      managedPaths?: {
+        dataFilePath: boolean;
+        backupDirectoryPath: boolean;
+      };
       ui: { showInactiveByDefault: boolean };
     };
     currentSettings.dataFilePath = invalidDataDirectory;
+    currentSettings.managedPaths = {
+      dataFilePath: false,
+      backupDirectoryPath: true
+    };
     await fs.writeFile(settingsFilePath, JSON.stringify(currentSettings, null, 2) + "\n", "utf-8");
 
     const result = await service.getBootstrapData();
