@@ -348,7 +348,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("Browse buttons are disabled while path reset is in progress", async () => {
+  it("Browse buttons are re-enabled after path reset returns", async () => {
     // Produce a path-related save error so "Cargar rutas gestionadas" becomes available.
     window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValueOnce(
       new Error("Ruta inválida")
