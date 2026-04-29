@@ -6,6 +6,7 @@
   "main": "dist-electron/main/index.js",
   "scripts": {
     "ci": "npm run typecheck && npm run test && npm run build",
+    "clean": "rm -rf dist dist-electron dist-portable",
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\" \"npm:dev:app\"",
     "dev:renderer": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
@@ -58,7 +59,7 @@
   "build": {
     "appId": "com.oiranca.phone-directory",
     "productName": "Phone Directory",
-    "copyright": "Copyright © 2024 Oiranca",
+    "copyright": "Copyright © 2026 Oiranca",
     "directories": {
       "output": "dist-portable",
       "buildResources": "build-resources"
