@@ -31,8 +31,8 @@ const api = {
   previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreview | null>,
   importCsvDataset: (importToken: string) =>
     ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>,
-  browseForPath: (type: 'dataFile' | 'backupDirectory') =>
-    ipcRenderer.invoke('settings:browse-path', type) as Promise<string | null>
+  browseForPath: (type: "dataFile" | "backupDirectory") =>
+    ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>
 };
 
 contextBridge.exposeInMainWorld("hospitalDirectory", api);

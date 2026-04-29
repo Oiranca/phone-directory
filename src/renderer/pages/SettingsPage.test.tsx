@@ -364,21 +364,42 @@ describe("SettingsPage", () => {
     const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
     expect(resetBtn).toBeInTheDocument();
 
-    // Switch to a never-resolving mock before triggering the reset. When managedDefaults
-    // is null the handler would await this call indefinitely, keeping isResettingPaths=true.
-    // When managedDefaults is already cached (the typical path after background hydration)
-    // the handler completes synchronously so isResettingPaths cannot be observed as true
-    // in the DOM — React batches both setIsResettingPaths(true/false) into a single render.
-    // Either way, after the handler finishes the Browse buttons must not be stuck disabled.
+    // At this point the managed reset action is already available, so this test exercises
+    // the branch where managed defaults have been loaded. Even if getSettingsDefaults is
+    // mocked to never resolve here, clicking reset must not leave either Browse button
+    // stuck in a disabled state once the handler returns.
     window.hospitalDirectory.getSettingsDefaults = vi.fn().mockReturnValue(
       new Promise(() => {})
     );
     fireEvent.click(resetBtn);
 
-    // Both Browse buttons must be enabled after reset, regardless of which code path ran.
+    // Both Browse buttons must be enabled after reset.
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Seleccionar archivo de datos" })).not.toBeDisabled();
       expect(screen.getByRole("button", { name: "Seleccionar carpeta de backups" })).not.toBeDisabled();
+    });
+  });
+
+  it("Browse data file in-flight: the other Browse button is disabled until resolved", async () => {
+    let resolve!: (v: string | null) => void;
+    window.hospitalDirectory.browseForPath = vi.fn().mockReturnValue(
+      new Promise<string | null>((res) => { resolve = res; })
+    );
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar archivo de datos" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Seleccionar carpeta de backups" })).toBeDisabled();
+    });
+
+    resolve(null);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Seleccionar carpeta de backups" })).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Seleccionar archivo de datos" })).not.toBeDisabled();
     });
   });
 

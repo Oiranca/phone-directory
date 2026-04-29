@@ -146,15 +146,15 @@ export const SettingsPage = () => {
   const handleBrowseDataFile = async () => {
     setIsBrowsingDataFile(true);
     try {
-      const picked = await window.hospitalDirectory.browseForPath('dataFile');
+      const picked = await window.hospitalDirectory.browseForPath("dataFile");
       if (picked) {
         setDataFilePath(picked);
-        setSaveError('');
+        setSaveError("");
       }
     } catch (error) {
-      const message = toCompactToastMessage(error, 'No se pudo abrir el selector de archivo.');
+      const message = toCompactToastMessage(error, "No se pudo abrir el selector de archivo.");
       setSaveError(message);
-      pushToast({ type: 'error', message });
+      pushToast({ type: "error", message });
     } finally {
       setIsBrowsingDataFile(false);
     }
@@ -163,15 +163,15 @@ export const SettingsPage = () => {
   const handleBrowseBackupDir = async () => {
     setIsBrowsingBackupDir(true);
     try {
-      const picked = await window.hospitalDirectory.browseForPath('backupDirectory');
+      const picked = await window.hospitalDirectory.browseForPath("backupDirectory");
       if (picked) {
         setBackupDirectoryPath(picked);
-        setSaveError('');
+        setSaveError("");
       }
     } catch (error) {
-      const message = toCompactToastMessage(error, 'No se pudo abrir el selector de carpeta.');
+      const message = toCompactToastMessage(error, "No se pudo abrir el selector de carpeta.");
       setSaveError(message);
-      pushToast({ type: 'error', message });
+      pushToast({ type: "error", message });
     } finally {
       setIsBrowsingBackupDir(false);
     }
@@ -295,9 +295,9 @@ export const SettingsPage = () => {
                   disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                   aria-label="Seleccionar archivo de datos"
                   aria-busy={isBrowsingDataFile}
-                  className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isBrowsingDataFile ? '…' : 'Examinar'}
+                  {isBrowsingDataFile ? "…" : "Examinar"}
                 </button>
               </div>
               <span className="mt-2 block text-xs text-slate-500">
@@ -323,9 +323,9 @@ export const SettingsPage = () => {
                   disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                   aria-label="Seleccionar carpeta de backups"
                   aria-busy={isBrowsingBackupDir}
-                  className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isBrowsingBackupDir ? '…' : 'Examinar'}
+                  {isBrowsingBackupDir ? "…" : "Examinar"}
                 </button>
               </div>
               <span className="mt-2 block text-xs text-slate-500">
