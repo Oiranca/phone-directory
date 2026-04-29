@@ -43,6 +43,7 @@ The current codebase already includes:
 - portable-root symlink-chain safety checks before bootstrap
 - compacted record detail cards for phones, emails, and long text
 - Playwright-based Electron end-to-end harness for critical MVP flows
+- USB launcher scripts for Windows, macOS, and Linux
 
 Latest known verified baseline:
 
