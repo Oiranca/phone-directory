@@ -29,6 +29,7 @@ declare global {
       resetDataset: () => Promise<ResetContactsResult>;
       previewCsvImport: () => Promise<CsvImportPreview | null>;
       importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
+      browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
     };
   }
 }
