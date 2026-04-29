@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-29 (OIR-34 complete)
+- Last updated: 2026-04-29 (OIR-35 complete)
 
 ## 1. Purpose
 
@@ -25,6 +25,7 @@ Latest delivered planning note:
 - `OIR-29` USB launcher scripts merged to `main` on 2026-04-29 via PR `#29` and is no longer part of the active remaining backlog
 - `OIR-43` settings folder-picker and auto-default paths merged to `main` on 2026-04-29 via PR `#30` and is no longer part of the active remaining backlog
 - `OIR-34` Electron upgrade to supported `40.9.2` merged to `main` on 2026-04-29 via PR `#31` and is no longer part of the active remaining backlog
+- `OIR-35` spreadsheet import dependency hardening merged to the current branch on 2026-04-29 and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -76,18 +77,17 @@ This track is complete on the current line.
 
 ### Priority 4 — Security hardening and dependency remediation
 
-1. `OIR-35` — spreadsheet import dependency hardening (`xlsx` replacement or isolation)
-2. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
-3. `OIR-37` — split CSP for production-safe bundle output
-4. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
-5. `OIR-39` — serialize `AppDataService` writes
-6. `OIR-40` — replace `Math.random()` record IDs
-7. `OIR-41` — strip filesystem paths from renderer-facing errors
-8. `OIR-42` — fsync temp writes before rename on USB media
+1. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
+2. `OIR-37` — split CSP for production-safe bundle output
+3. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
+4. `OIR-39` — serialize `AppDataService` writes
+5. `OIR-40` — replace `Math.random()` record IDs
+6. `OIR-41` — strip filesystem paths from renderer-facing errors
+7. `OIR-42` — fsync temp writes before rename on USB media
 
 ## 4. Remaining Work Details
 
-### 4.1 Security remediation queue (`OIR-35` through `OIR-42`)
+### 4.1 Security remediation queue (`OIR-36` through `OIR-42`)
 
 Goal:
 
@@ -95,7 +95,7 @@ Goal:
 
 Definition of done:
 
-- `OIR-35` through `OIR-42` are resolved or explicitly accepted with documented rationale
+- `OIR-36` through `OIR-42` are resolved or explicitly accepted with documented rationale
 - dependency and Electron upgrades are validated on the current packaging line
 - production bundle security posture is re-checked after the fixes
 - regression coverage remains green for affected import, IPC, and persistence flows
@@ -103,23 +103,21 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-35`
-2. `OIR-36`
-3. `OIR-37`
-4. `OIR-38`
-5. `OIR-39`
-6. `OIR-40`
-7. `OIR-41`
-8. `OIR-42`
+1. `OIR-36`
+2. `OIR-37`
+3. `OIR-38`
+4. `OIR-39`
+5. `OIR-40`
+6. `OIR-41`
+7. `OIR-42`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-35`.
+Start with `OIR-36`.
 
 Reason:
 
-- `OIR-43` merged to `main` on 2026-04-29 via PR `#30`, so the previous top product backlog item is closed
-- `OIR-34` is addressed on the current branch, so `OIR-35` is now the highest-severity remaining issue
+- `OIR-35` is complete on the current branch, so `OIR-36` is now the next remaining security item
 
 ## 7. Explicit Exclusions
 
@@ -135,6 +133,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-29` USB launcher scripts: merged to `main` on 2026-04-29 via PR `#29`
 - `OIR-43` settings folder-picker and auto-default paths: merged to `main` on 2026-04-29 via PR `#30`
 - `OIR-34` Electron upgrade to supported `40.9.2`: merged to `main` on 2026-04-29 via PR `#31`
+- `OIR-35` spreadsheet import dependency hardening: completed on 2026-04-29 on the current branch
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
@@ -162,10 +161,11 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 ### HIGH — OIR-35: xlsx 0.18.5 — Prototype Pollution + ReDoS
 
 - **Linear:** [OIR-35](https://linear.app/oiranca/issue/OIR-35)
-- **File:** `package.json` (xlsx `^0.18.5`), `src/main/services/spreadsheet-import.service.ts`
+- **File:** `package.json` (previously `xlsx` `^0.18.5`), `src/main/services/spreadsheet-import.service.ts`
 - **Risk:** `XLSX.readFile` is synchronous on the main thread and the package has known Prototype Pollution and ReDoS CVEs.
 - **Impact:** A malformed `.xlsx` file from an untrusted source could hang the process or corrupt the global prototype.
-- **Fix:** Replace with `exceljs` or isolate the call inside a `worker_threads` Worker.
+- **Fix:** replace `xlsx` with `xlsx-republish` and parse untrusted spreadsheets inside a bounded worker
+- **Current status:** addressed on the current branch; production audit no longer reports high spreadsheet import advisories
 
 ---
 
