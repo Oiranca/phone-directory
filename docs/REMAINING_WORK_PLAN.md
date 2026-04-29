@@ -25,7 +25,7 @@ Latest delivered planning note:
 - `OIR-29` USB launcher scripts merged to `main` on 2026-04-29 via PR `#29` and is no longer part of the active remaining backlog
 - `OIR-43` settings folder-picker and auto-default paths merged to `main` on 2026-04-29 via PR `#30` and is no longer part of the active remaining backlog
 - `OIR-34` Electron upgrade to supported `40.9.2` merged to `main` on 2026-04-29 via PR `#31` and is no longer part of the active remaining backlog
-- `OIR-35` spreadsheet import dependency hardening merged to the current branch on 2026-04-29 and is no longer part of the active remaining backlog
+- `OIR-35` spreadsheet import dependency hardening merged to `main` on 2026-04-29 via PR `#32` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -117,7 +117,7 @@ Start with `OIR-36`.
 
 Reason:
 
-- `OIR-35` is complete on the current branch, so `OIR-36` is now the next remaining security item
+- `OIR-35` merged to `main` on 2026-04-29 via PR `#32`, so `OIR-36` is now the next remaining security item
 
 ## 7. Explicit Exclusions
 
@@ -133,7 +133,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-29` USB launcher scripts: merged to `main` on 2026-04-29 via PR `#29`
 - `OIR-43` settings folder-picker and auto-default paths: merged to `main` on 2026-04-29 via PR `#30`
 - `OIR-34` Electron upgrade to supported `40.9.2`: merged to `main` on 2026-04-29 via PR `#31`
-- `OIR-35` spreadsheet import dependency hardening: completed on 2026-04-29 on the current branch
+- `OIR-35` spreadsheet import dependency hardening: merged to `main` on 2026-04-29 via PR `#32`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
@@ -165,7 +165,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** `XLSX.readFile` is synchronous on the main thread and the package has known Prototype Pollution and ReDoS CVEs.
 - **Impact:** A malformed `.xlsx` file from an untrusted source could hang the process or corrupt the global prototype.
 - **Fix:** replace `xlsx` with `xlsx-republish` and parse untrusted spreadsheets inside a bounded worker
-- **Current status:** addressed on the current branch; production audit no longer reports high spreadsheet import advisories
+- **Current status:** addressed and merged to `main` via PR `#32`; production audit no longer reports high spreadsheet import advisories
 
 ---
 
