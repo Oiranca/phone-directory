@@ -44,8 +44,13 @@ and runs without requiring libfuse2 (needed on Ubuntu 22.04+, Fedora 37+).
 
 DATA STORAGE
 ------------
-All data (contacts.json, settings.json, backups/) is kept in a "portable-data"
-folder on this USB drive. Nothing is written to your computer's home directory
-or application data folders.
+All data is kept in a "portable-data" folder on this USB drive. Nothing is
+written to your computer's home directory or application data folders.
+
+  portable-data/
+    data/
+      contacts.json
+      settings.json
+    backups/
 
 To back up your data, copy the "portable-data" folder to a safe location.

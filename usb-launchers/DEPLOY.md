@@ -71,6 +71,13 @@ USB_ROOT/
 
 ## Notes
 
-- All user data (contacts, settings, backups) is stored in a `portable-data/` folder created automatically at the USB root on first launch. Nothing is written to the host computer.
-- The `ELECTRON_PORTABLE=1` environment variable is set by each launcher script. The app reads this flag to activate portable mode.
+- All user data is stored in a `portable-data/` folder created automatically at the USB root on first launch. Nothing is written to the host computer. The folder layout is:
+  ```
+  portable-data/
+    data/
+      contacts.json
+      settings.json
+    backups/
+  ```
+- The launchers set both `ELECTRON_PORTABLE=1` (activates portable mode) and `ELECTRON_PORTABLE_ROOT_PATH` (points Electron userData to `<USB_ROOT>/portable-data`).
 - To back up user data, copy the `portable-data/` folder to a safe location.
