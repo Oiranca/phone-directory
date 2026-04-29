@@ -8,6 +8,7 @@ if not exist "%APP%" (
     pause
     exit /b 1
 )
+rem ELECTRON_PORTABLE=1 is inherited by the spawned child process via setlocal env block
 set ELECTRON_PORTABLE=1
 start "" "%APP%"
 endlocal

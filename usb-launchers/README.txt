@@ -33,6 +33,9 @@ Open a terminal, navigate to the USB drive, and run:
   chmod +x launch.sh
   ./launch.sh
 
+The USB drive is usually mounted at /media/<YourUser>/<DriveName> or
+/run/media/<YourUser>/<DriveName>. Run "lsblk" or "df -h" to find the exact path.
+
 The launcher tries "linux-unpacked/phone-directory" first. If that is not
 present it falls back to "Phone Directory.AppImage" at the USB root.
 

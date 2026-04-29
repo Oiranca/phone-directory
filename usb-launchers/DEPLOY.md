@@ -9,7 +9,8 @@ Run the appropriate build command for each target platform:
 ```bash
 npm run build:dist:win      # produces dist-portable/win-unpacked/
 npm run build:dist:mac      # produces dist-portable/mac/ and dist-portable/mac-arm64/
-npm run build:dist:linux    # produces dist-portable/linux-unpacked/ (and optionally .AppImage)
+npm run build:dist:linux    # produces dist-portable/linux-unpacked/
+# To produce an AppImage, add "AppImage" to the linux targets in package.json and rebuild.
 ```
 
 The `dist-portable/` directory is gitignored. Build on the target platform or use a CI runner.
@@ -43,8 +44,8 @@ From this `usb-launchers/` directory, copy the relevant launcher(s) and the READ
 On Linux and macOS, make the scripts executable after copying:
 
 ```bash
-chmod +x /Volumes/<YourUSBName>/launch.sh
-chmod +x /Volumes/<YourUSBName>/launch.command
+chmod +x <USB_MOUNT>/launch.sh
+chmod +x <USB_MOUNT>/launch.command
 ```
 
 ## Final USB layout
