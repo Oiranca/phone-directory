@@ -72,7 +72,8 @@ describe("SettingsPage", () => {
         exportDataset: vi.fn(),
         importDataset: vi.fn(),
         previewCsvImport: vi.fn(),
-        importCsvDataset: vi.fn()
+        importCsvDataset: vi.fn(),
+        browseForPath: vi.fn().mockResolvedValue(null)
       }
     });
   });
@@ -266,5 +267,96 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cargar rutas gestionadas" })).toBeInTheDocument();
+  });
+
+  it("Browse data file: successful pick populates the input and marks form dirty", async () => {
+    window.hospitalDirectory.browseForPath = vi.fn().mockResolvedValue("/new/path/contacts.json");
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar archivo de datos" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/new/path/contacts.json");
+    });
+    expect(window.hospitalDirectory.browseForPath).toHaveBeenCalledWith("dataFile");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).not.toBeDisabled();
+  });
+
+  it("Browse data file: cancelled pick (null) leaves the input unchanged", async () => {
+    window.hospitalDirectory.browseForPath = vi.fn().mockResolvedValue(null);
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar archivo de datos" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.browseForPath).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+  });
+
+  it("Browse backup dir: successful pick populates the input and marks form dirty", async () => {
+    window.hospitalDirectory.browseForPath = vi.fn().mockResolvedValue("/new/backups");
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar carpeta de backups" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Ruta de la carpeta de backups")).toHaveValue("/new/backups");
+    });
+    expect(window.hospitalDirectory.browseForPath).toHaveBeenCalledWith("backupDirectory");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).not.toBeDisabled();
+  });
+
+  it("Browse backup dir: cancelled pick (null) leaves the input unchanged", async () => {
+    window.hospitalDirectory.browseForPath = vi.fn().mockResolvedValue(null);
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar carpeta de backups" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.browseForPath).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText("Ruta de la carpeta de backups")).toHaveValue("/tmp/backups");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+  });
+
+  it("Browse buttons are disabled while save is in progress", async () => {
+    window.hospitalDirectory.saveSettings = vi.fn().mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Nombre del editor"), {
+      target: { value: "Trigger dirty" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Seleccionar archivo de datos" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Seleccionar carpeta de backups" })).toBeDisabled();
+    });
+  });
+
+  it("Browse rejection shows an error toast without mutating the path field", async () => {
+    window.hospitalDirectory.browseForPath = vi.fn().mockRejectedValue(new Error("dialog failed"));
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar archivo de datos" }));
+
+    expect((await screen.findAllByText(/dialog failed/)).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
   });
 });
