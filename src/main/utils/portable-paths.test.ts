@@ -6,20 +6,28 @@ const isWindows = process.platform === "win32";
 const platformPath = isWindows ? path.win32 : path.posix;
 
 const macPortableRoot = isWindows ? "C:\\HospitalUSB\\mac" : "/Volumes/HospitalUSB/mac";
-const macExecPath = platformPath.join(
-  macPortableRoot,
-  "PhoneDirectory.app",
+const macArm64PortableRoot = isWindows ? "C:\\HospitalUSB\\mac-arm64" : "/Volumes/HospitalUSB/mac-arm64";
+const macArm64ExecPath = platformPath.join(
+  macArm64PortableRoot,
+  "Phone Directory.app",
   "Contents",
   "MacOS",
-  "PhoneDirectory"
+  "Phone Directory"
 );
-const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win" : "/Volumes/HospitalUSB/win";
-const winExecPath = platformPath.join(winPortableRoot, "PhoneDirectory.exe");
-const linuxPortableRoot = isWindows ? "C:\\USB\\linux" : "/media/USB/linux";
+const macExecPath = platformPath.join(
+  macPortableRoot,
+  "Phone Directory.app",
+  "Contents",
+  "MacOS",
+  "Phone Directory"
+);
+const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win-unpacked" : "/Volumes/HospitalUSB/win-unpacked";
+const winExecPath = platformPath.join(winPortableRoot, "Phone Directory.exe");
+const linuxPortableRoot = isWindows ? "C:\\USB\\linux-unpacked" : "/media/USB/linux-unpacked";
 const linuxExecPath = isWindows
   ? "C:\\tmp\\.mount_PhoneD\\usr\\bin\\phone-directory"
   : "/tmp/.mount_PhoneD/usr/bin/phone-directory";
-const appImagePath = platformPath.join(linuxPortableRoot, "PhoneDirectory.AppImage");
+const appImagePath = platformPath.join(linuxPortableRoot, "Phone Directory.AppImage");
 
 describe("resolvePortableUserDataPath", () => {
   it("prefers an explicit portable root path override", () => {
@@ -65,6 +73,17 @@ describe("resolvePortableUserDataPath", () => {
         portableRootPath: null
       })
     ).toBe(platformPath.resolve(macPortableRoot));
+  });
+
+  it("returns the app bundle parent directory for packaged macOS arm64 portable builds", () => {
+    expect(
+      resolvePortableUserDataPath({
+        execPath: macArm64ExecPath,
+        isPackaged: true,
+        portableMode: true,
+        portableRootPath: null
+      })
+    ).toBe(platformPath.resolve(macArm64PortableRoot));
   });
 
   it("keeps the default Electron userData path when portable mode is inactive", () => {

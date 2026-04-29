@@ -1,11 +1,15 @@
 {
   "name": "hospital-directory-mvp",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
   "scripts": {
     "ci": "npm run typecheck && npm run test && npm run build",
+    "clean": "rimraf dist dist-electron dist-portable",
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\" \"npm:dev:app\"",
     "dev:renderer": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
@@ -13,6 +17,10 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "build:dist": "npm run build && electron-builder --dir",
+    "build:dist:win": "npm run build && electron-builder --win --dir",
+    "build:dist:mac": "npm run build && electron-builder --mac --dir",
+    "build:dist:linux": "npm run build && electron-builder --linux --dir",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -31,9 +39,9 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
-    "@playwright/test": "^1.55.0",
     "@types/node": "^20.16.5",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.5",
@@ -42,12 +50,66 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.0.1",
     "electron": "^32.1.0",
+    "electron-builder": "^26.8.1",
     "jsdom": "^25.0.0",
     "postcss": "^8.4.47",
+    "rimraf": "^6.1.3",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",
     "vite": "^5.4.8",
     "vitest": "^2.1.1",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.oiranca.phone-directory",
+    "productName": "Phone Directory",
+    "copyright": "Copyright © 2026 Oiranca",
+    "directories": {
+      "output": "dist-portable",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "extraMetadata": {
+      "scripts": null,
+      "devDependencies": null,
+      "build": null
+    },
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office"
+    }
   }
 }
