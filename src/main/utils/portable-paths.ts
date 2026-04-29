@@ -11,11 +11,11 @@ import path from "node:path";
  *     → executableDirectory = win-unpacked/
  *     → portableRoot         = win-unpacked/    (data lives alongside the executable folder)
  *
- *   macOS (mac/):
- *     dist-portable/mac/Phone Directory.app/Contents/MacOS/Phone Directory
+ *   macOS (mac/ or mac-<arch>/, e.g. mac-arm64/):
+ *     dist-portable/mac-arm64/Phone Directory.app/Contents/MacOS/Phone Directory
  *     → executableDirectory = .../MacOS/
- *     → The MacOS/Contents/.app pattern is detected below, so
- *     → portableRoot         = mac/             (parent of the .app bundle)
+ *     → The .app/Contents/MacOS bundle structure is detected below, so
+ *     → portableRoot         = mac-arm64/       (parent of the .app bundle)
  *
  *   Linux (linux-unpacked/):
  *     dist-portable/linux-unpacked/phone-directory

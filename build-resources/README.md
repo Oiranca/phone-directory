@@ -16,7 +16,7 @@ electron-builder will pick them up automatically when present.
 To include icons in the electron-builder config, add the `icon` field to each
 platform section in `package.json`:
 
-```json
+```jsonc
 "win": {
   "target": [{ "target": "dir", "arch": ["x64"] }],
   "icon": "build-resources/icon.ico"

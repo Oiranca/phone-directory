@@ -6,6 +6,14 @@ const isWindows = process.platform === "win32";
 const platformPath = isWindows ? path.win32 : path.posix;
 
 const macPortableRoot = isWindows ? "C:\\HospitalUSB\\mac" : "/Volumes/HospitalUSB/mac";
+const macArm64PortableRoot = isWindows ? "C:\\HospitalUSB\\mac-arm64" : "/Volumes/HospitalUSB/mac-arm64";
+const macArm64ExecPath = platformPath.join(
+  macArm64PortableRoot,
+  "PhoneDirectory.app",
+  "Contents",
+  "MacOS",
+  "PhoneDirectory"
+);
 const macExecPath = platformPath.join(
   macPortableRoot,
   "PhoneDirectory.app",
@@ -65,6 +73,17 @@ describe("resolvePortableUserDataPath", () => {
         portableRootPath: null
       })
     ).toBe(platformPath.resolve(macPortableRoot));
+  });
+
+  it("returns the app bundle parent directory for packaged macOS arm64 portable builds", () => {
+    expect(
+      resolvePortableUserDataPath({
+        execPath: macArm64ExecPath,
+        isPackaged: true,
+        portableMode: true,
+        portableRootPath: null
+      })
+    ).toBe(platformPath.resolve(macArm64PortableRoot));
   });
 
   it("keeps the default Electron userData path when portable mode is inactive", () => {
