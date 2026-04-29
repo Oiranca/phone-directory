@@ -38,6 +38,8 @@ The USB drive is usually mounted at /media/<YourUser>/<DriveName> or
 
 The launcher tries "linux-unpacked/phone-directory" first. If that is not
 present it falls back to "Phone Directory.AppImage" at the USB root.
+The AppImage launcher uses --appimage-extract-and-run, which extracts to /tmp
+and runs without requiring libfuse2 (needed on Ubuntu 22.04+, Fedora 37+).
 
 
 DATA STORAGE
