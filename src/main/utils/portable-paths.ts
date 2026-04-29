@@ -1,5 +1,30 @@
 import path from "node:path";
 
+/**
+ * Resolves the USB portable root directory from the process executable path.
+ *
+ * Expected packaged layouts produced by electron-builder `--dir` builds
+ * (output directory: dist-portable/):
+ *
+ *   Windows (win-unpacked/):
+ *     dist-portable/win-unpacked/Phone Directory.exe
+ *     → executableDirectory = win-unpacked/
+ *     → portableRoot         = win-unpacked/    (data lives alongside the executable folder)
+ *
+ *   macOS (mac/):
+ *     dist-portable/mac/Phone Directory.app/Contents/MacOS/Phone Directory
+ *     → executableDirectory = .../MacOS/
+ *     → The MacOS/Contents/.app pattern is detected below, so
+ *     → portableRoot         = mac/             (parent of the .app bundle)
+ *
+ *   Linux (linux-unpacked/):
+ *     dist-portable/linux-unpacked/phone-directory
+ *     → executableDirectory = linux-unpacked/
+ *     → portableRoot         = linux-unpacked/  (data lives alongside the executable folder)
+ *
+ *   Linux AppImage (when APPIMAGE env var is set by the runtime):
+ *     → portableRoot = directory containing the .AppImage file
+ */
 const resolveDefaultPortableRoot = (execPath: string, appImagePath?: string | null) => {
   if (appImagePath && path.isAbsolute(appImagePath)) {
     return path.dirname(path.resolve(appImagePath));
