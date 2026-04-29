@@ -75,19 +75,18 @@ This track is complete on the current line.
 
 ### Priority 4 — Security hardening and dependency remediation
 
-1. `OIR-34` — Electron upgrade for known security advisories
-2. `OIR-35` — spreadsheet import dependency hardening (`xlsx` replacement or isolation)
-3. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
-4. `OIR-37` — split CSP for production-safe bundle output
-5. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
-6. `OIR-39` — serialize `AppDataService` writes
-7. `OIR-40` — replace `Math.random()` record IDs
-8. `OIR-41` — strip filesystem paths from renderer-facing errors
-9. `OIR-42` — fsync temp writes before rename on USB media
+1. `OIR-35` — spreadsheet import dependency hardening (`xlsx` replacement or isolation)
+2. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
+3. `OIR-37` — split CSP for production-safe bundle output
+4. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
+5. `OIR-39` — serialize `AppDataService` writes
+6. `OIR-40` — replace `Math.random()` record IDs
+7. `OIR-41` — strip filesystem paths from renderer-facing errors
+8. `OIR-42` — fsync temp writes before rename on USB media
 
 ## 4. Remaining Work Details
 
-### 4.1 Security remediation queue (`OIR-34` through `OIR-42`)
+### 4.1 Security remediation queue (`OIR-35` through `OIR-42`)
 
 Goal:
 
@@ -95,7 +94,7 @@ Goal:
 
 Definition of done:
 
-- `OIR-34` through `OIR-42` are resolved or explicitly accepted with documented rationale
+- `OIR-35` through `OIR-42` are resolved or explicitly accepted with documented rationale
 - dependency and Electron upgrades are validated on the current packaging line
 - production bundle security posture is re-checked after the fixes
 - regression coverage remains green for affected import, IPC, and persistence flows
@@ -103,24 +102,23 @@ Definition of done:
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-34`
-2. `OIR-35`
-3. `OIR-36`
-4. `OIR-37`
-5. `OIR-38`
-6. `OIR-39`
-7. `OIR-40`
-8. `OIR-41`
-9. `OIR-42`
+1. `OIR-35`
+2. `OIR-36`
+3. `OIR-37`
+4. `OIR-38`
+5. `OIR-39`
+6. `OIR-40`
+7. `OIR-41`
+8. `OIR-42`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-34`.
+Start with `OIR-35`.
 
 Reason:
 
 - `OIR-43` merged to `main` on 2026-04-29 via PR `#30`, so the previous top product backlog item is closed
-- `OIR-34` is the highest-severity remaining issue and may reduce or unblock part of the wider security queue
+- `OIR-34` is addressed on the current branch, so `OIR-35` is now the highest-severity remaining issue
 
 ## 7. Explicit Exclusions
 
@@ -151,10 +149,11 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 ### HIGH — OIR-34: Electron dependency — 17 unfixed security advisories
 
 - **Linear:** [OIR-34](https://linear.app/oiranca/issue/OIR-34)
-- **File:** `package.json` (electron version `^32.3.3`)
+- **File:** `package.json` / `package-lock.json` (previously on Electron `32.3.3`)
 - **Risk:** 17 known unfixed advisories in Electron 32.x. No patch available in 32.x.
 - **Impact:** Renderer compromise could escalate to OS-level access.
-- **Fix:** Upgrade to Electron 33+ and re-run `npm audit`.
+- **Fix:** Upgrade to a supported non-vulnerable Electron line with runway (`40.9.2` on the current branch) and re-run `npm audit`.
+- **Current branch status:** addressed on `feat/oir-34-electron-upgrade`; `npm audit` no longer reports Electron advisories.
 
 ---
 
