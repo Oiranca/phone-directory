@@ -68,9 +68,28 @@ This track is complete on the current line.
 
 1. `OIR-29` — add cross-platform launcher scripts at the USB root
 
+### Priority 3 — Settings UX
+
+1. `OIR-43` — settings: folder-picker button and auto-default paths for data file and backup directory
+
 ## 4. Remaining Work Details
 
-### 4.1 `OIR-29` — Portable USB launcher scripts
+### 4.1 `OIR-43` — Settings folder-picker and auto-default paths
+
+Goal:
+
+- users never need to type filesystem paths manually in Settings
+
+Definition of done:
+
+- "Browse" button on data file field opens native save-file dialog (filter: `*.json`)
+- "Browse" button on backup directory field opens native open-directory dialog
+- selected paths written back to fields and saved on confirm
+- first-launch defaults pre-fill both fields from `app.getPath("userData")`
+- manual text entry still works
+- works on Windows, macOS, Linux
+
+### 4.2 `OIR-29` — Portable USB launcher scripts
 
 Goal:
 
@@ -91,6 +110,7 @@ Completed foundation already on `main` (from `OIR-21`):
 ## 5. Recommended Execution Sequence
 
 1. `OIR-29`
+2. `OIR-43`
 
 ## 6. Recommended Starting Point
 
