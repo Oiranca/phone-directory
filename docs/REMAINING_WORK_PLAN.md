@@ -130,3 +130,98 @@ These items were present in legacy planning docs but should not be treated as re
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line
+
+## 8. Security Audit Findings (OIR-34 through OIR-42)
+
+Security audit conducted 2026-04-29. All findings below are queued for remediation after OIR-21 and OIR-29 (USB packaging track).
+
+Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
+
+---
+
+### HIGH — OIR-34: Electron dependency — 17 unfixed security advisories
+
+- **Linear:** [OIR-34](https://linear.app/oiranca/issue/OIR-34)
+- **File:** `package.json` (electron version `^32.3.3`)
+- **Risk:** 17 known unfixed advisories in Electron 32.x. No patch available in 32.x.
+- **Impact:** Renderer compromise could escalate to OS-level access.
+- **Fix:** Upgrade to Electron 33+ and re-run `npm audit`.
+
+---
+
+### HIGH — OIR-35: xlsx 0.18.5 — Prototype Pollution + ReDoS
+
+- **Linear:** [OIR-35](https://linear.app/oiranca/issue/OIR-35)
+- **File:** `package.json` (xlsx `^0.18.5`), `src/main/services/spreadsheet-import.service.ts`
+- **Risk:** `XLSX.readFile` is synchronous on the main thread and the package has known Prototype Pollution and ReDoS CVEs.
+- **Impact:** A malformed `.xlsx` file from an untrusted source could hang the process or corrupt the global prototype.
+- **Fix:** Replace with `exceljs` or isolate the call inside a `worker_threads` Worker.
+
+---
+
+### MEDIUM — OIR-36: `sandbox: false` on BrowserWindow
+
+- **Linear:** [OIR-36](https://linear.app/oiranca/issue/OIR-36)
+- **File:** `src/main/index.ts` (~line 48)
+- **Risk:** OS-level process isolation is disabled. If the renderer is compromised, the attacker has unprivileged OS access.
+- **Impact:** Renderer XSS → OS process access.
+- **Fix:** Test `sandbox: true` with the CJS preload. If not feasible, document accepted risk explicitly.
+
+---
+
+### MEDIUM — OIR-37: CSP `unsafe-inline` + `localhost` in production bundle
+
+- **Linear:** [OIR-37](https://linear.app/oiranca/issue/OIR-37)
+- **File:** `index.html` (~line 8)
+- **Risk:** A single CSP covers both dev and production. The shipped `dist/index.html` includes `script-src 'unsafe-inline'` and `http://localhost:5173`.
+- **Impact:** XSS attack surface remains open in production.
+- **Fix:** Split CSP at build time (Vite plugin or post-build script). Strip `unsafe-inline` and localhost entries from the production output.
+
+---
+
+### MEDIUM — OIR-38: E2E path bypass not gated to `!app.isPackaged`
+
+- **Linear:** [OIR-38](https://linear.app/oiranca/issue/OIR-38)
+- **File:** `src/main/config/env.ts` (~lines 58–68), `src/main/ipc/contacts.ipc.ts` (~lines 28–29, 61–87)
+- **Risk:** `ELECTRON_E2E=1` env var in a production build bypasses all file dialog checks, allowing arbitrary read/write paths.
+- **Impact:** Any process on the same machine can read/write arbitrary files via IPC if the env var is set.
+- **Fix:** Gate `e2eOpenDialogPaths` / `e2eSaveDialogPaths` on `!app.isPackaged`.
+
+---
+
+### MEDIUM — OIR-39: No write serialization in `AppDataService` (concurrent write race)
+
+- **Linear:** [OIR-39](https://linear.app/oiranca/issue/OIR-39)
+- **File:** `src/main/services/app-data.service.ts` (all write methods)
+- **Risk:** Concurrent IPC calls race on read→mutate→write, causing silent data loss.
+- **Impact:** Two simultaneous contact edits → one silently lost.
+- **Fix:** Add a promise-chain write queue so writes are serialized.
+
+---
+
+### LOW — OIR-40: `Math.random()` for record IDs
+
+- **Linear:** [OIR-40](https://linear.app/oiranca/issue/OIR-40)
+- **File:** `src/main/services/app-data.service.ts` (~lines 972–973)
+- **Risk:** `Math.random()` is not cryptographically random; ID collisions are possible under load.
+- **Fix:** Replace with `crypto.randomUUID()` (already available in Node/Electron).
+
+---
+
+### LOW — OIR-41: Full filesystem paths leaked in renderer error messages
+
+- **Linear:** [OIR-41](https://linear.app/oiranca/issue/OIR-41)
+- **File:** `src/main/services/app-data.service.ts` (~lines 1015–1059)
+- **Risk:** Raw USB mount path (containing OS username and drive letter) is serialized into IPC error messages and shown in UI toasts.
+- **Impact:** Leaks system info in shared/kiosk environments.
+- **Fix:** Strip raw path context before serializing errors across the IPC boundary.
+
+---
+
+### INFO — OIR-42: No `fsync` before `rename` in `writeJsonFile` (USB data safety)
+
+- **Linear:** [OIR-42](https://linear.app/oiranca/issue/OIR-42)
+- **File:** `src/main/utils/fs-json.ts` (~lines 12–34)
+- **Risk:** On FAT32 USB drives, abrupt removal can corrupt or zero the file despite a "successful" atomic rename, because the OS write cache may not have flushed.
+- **Impact:** Data loss on unexpected USB ejection.
+- **Fix:** Call `fileHandle.sync()` before closing the temp file in the atomic write path.
