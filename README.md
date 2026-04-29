@@ -81,6 +81,7 @@ Available development variables:
 - `ELECTRON_PORTABLE_ROOT_PATH=/absolute/path` overrides the portable data root for launcher-driven USB layouts. Relative values resolve from the packaged portable root.
 - Linux AppImage portable runs also honor `APPIMAGE` so data stays beside the real USB-hosted `.AppImage`, not the temporary mount path.
 - Legacy portable installs without `managedPaths` metadata auto-rebase only when the old paths match the canonical `win` / `linux` / `mac` portable layout (`data/contacts.json` plus `backups`).
+- Electron `40.x` requires packaged macOS builds to enforce a macOS 12+ minimum; set Electron Builder `mac.minimumSystemVersion` to `12.0.0` so unsupported older macOS versions cannot install or launch the app.
 
 Run the test suite:
 
@@ -160,8 +161,7 @@ Supporting scripts:
 
 ## Next Implementation Focus
 
-The current highest-priority track is portable USB deployment:
+The current highest-priority track is security hardening:
 
-- `OIR-28`: executable-relative portable data paths
-- `OIR-21`: cross-platform portable packaging
-- `OIR-29`: USB-root launcher scripts
+- `OIR-35`: spreadsheet import dependency hardening
+- `OIR-36` through `OIR-42`: remaining security remediation queue

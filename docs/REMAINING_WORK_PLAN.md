@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-29 (OIR-29 complete)
+- Last updated: 2026-04-29 (OIR-43 complete)
 
 ## 1. Purpose
 
@@ -23,6 +23,7 @@ Latest delivered planning note:
 - `OIR-28` portable managed data roots merged to `main` on 2026-04-28 via PR `#27` and is no longer part of the active remaining backlog
 - `OIR-21` portable cross-platform USB packaging merged to `main` on 2026-04-29 via PR `#28` and is no longer part of the active remaining backlog
 - `OIR-29` USB launcher scripts merged to `main` on 2026-04-29 via PR `#29` and is no longer part of the active remaining backlog
+- `OIR-43` settings folder-picker and auto-default paths merged to `main` on 2026-04-29 via PR `#30` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -45,6 +46,7 @@ The current codebase already includes:
 - compacted record detail cards for phones, emails, and long text
 - Playwright-based Electron end-to-end harness for critical MVP flows
 - USB launcher scripts for Windows (`launch.bat`), macOS (`launch.command`), and Linux (`launch.sh`) with `ELECTRON_PORTABLE_ROOT_PATH` pointing data to `portable-data/` at USB root
+- Settings page native path pickers for data file and backup directory, with auto-default paths and browse-state coverage
 
 Latest known verified baseline:
 
@@ -69,38 +71,54 @@ Complete. `OIR-21` and `OIR-29` both merged to `main` on 2026-04-29.
 
 ### Priority 3 — Settings UX
 
-1. `OIR-43` — settings: folder-picker button and auto-default paths for data file and backup directory
+This track is complete on the current line.
+
+### Priority 4 — Security hardening and dependency remediation
+
+1. `OIR-35` — spreadsheet import dependency hardening (`xlsx` replacement or isolation)
+2. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
+3. `OIR-37` — split CSP for production-safe bundle output
+4. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
+5. `OIR-39` — serialize `AppDataService` writes
+6. `OIR-40` — replace `Math.random()` record IDs
+7. `OIR-41` — strip filesystem paths from renderer-facing errors
+8. `OIR-42` — fsync temp writes before rename on USB media
 
 ## 4. Remaining Work Details
 
-### 4.1 `OIR-43` — Settings folder-picker and auto-default paths
+### 4.1 Security remediation queue (`OIR-35` through `OIR-42`)
 
 Goal:
 
-- users never need to type filesystem paths manually in Settings
+- close the remaining security findings now that the portable deployment and Settings UX tracks are complete
 
 Definition of done:
 
-- "Browse" button on data file field opens native save-file dialog (filter: `*.json`)
-- "Browse" button on backup directory field opens native open-directory dialog
-- selected paths written back to fields and saved on confirm
-- first-launch defaults pre-fill both fields from `app.getPath("userData")`
-- manual text entry still works
-- works on Windows, macOS, Linux
+- `OIR-35` through `OIR-42` are resolved or explicitly accepted with documented rationale
+- dependency and Electron upgrades are validated on the current packaging line
+- production bundle security posture is re-checked after the fixes
+- regression coverage remains green for affected import, IPC, and persistence flows
 
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-43`
+1. `OIR-35`
+2. `OIR-36`
+3. `OIR-37`
+4. `OIR-38`
+5. `OIR-39`
+6. `OIR-40`
+7. `OIR-41`
+8. `OIR-42`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-43`.
+Start with `OIR-35`.
 
 Reason:
 
-- Portable USB deployment track (OIR-21 + OIR-29) fully shipped on 2026-04-29
-- Settings UX is the highest remaining user-facing pain point
+- `OIR-43` merged to `main` on 2026-04-29 via PR `#30`, so the previous top product backlog item is closed
+- `OIR-34` is addressed on the current branch, so `OIR-35` is now the highest-severity remaining issue
 
 ## 7. Explicit Exclusions
 
@@ -114,6 +132,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-28` portable managed data roots: merged to `main` on 2026-04-28 via PR `#27`
 - `OIR-21` portable USB packaging: merged to `main` on 2026-04-29 via PR `#28`
 - `OIR-29` USB launcher scripts: merged to `main` on 2026-04-29 via PR `#29`
+- `OIR-43` settings folder-picker and auto-default paths: merged to `main` on 2026-04-29 via PR `#30`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
@@ -121,7 +140,7 @@ These items were present in legacy planning docs but should not be treated as re
 
 ## 8. Security Audit Findings (OIR-34 through OIR-42)
 
-Security audit conducted 2026-04-29. All findings below are queued for remediation after OIR-21 and OIR-29 (USB packaging track).
+Security audit conducted 2026-04-29. These findings are now the active remaining backlog after `OIR-43` merged to `main`.
 
 Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 
@@ -130,10 +149,11 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 ### HIGH — OIR-34: Electron dependency — 17 unfixed security advisories
 
 - **Linear:** [OIR-34](https://linear.app/oiranca/issue/OIR-34)
-- **File:** `package.json` (electron version `^32.3.3`)
+- **File:** `package.json` / `package-lock.json` (previously on Electron `32.3.3`)
 - **Risk:** 17 known unfixed advisories in Electron 32.x. No patch available in 32.x.
 - **Impact:** Renderer compromise could escalate to OS-level access.
-- **Fix:** Upgrade to Electron 33+ and re-run `npm audit`.
+- **Fix:** Upgrade to a supported non-vulnerable Electron line with runway (`40.9.2` on the current branch) and re-run `npm audit`.
+- **Current status:** addressed by upgrading to Electron `40.9.2`; `npm audit` no longer reports Electron advisories.
 
 ---
 
