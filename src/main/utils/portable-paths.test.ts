@@ -9,25 +9,25 @@ const macPortableRoot = isWindows ? "C:\\HospitalUSB\\mac" : "/Volumes/HospitalU
 const macArm64PortableRoot = isWindows ? "C:\\HospitalUSB\\mac-arm64" : "/Volumes/HospitalUSB/mac-arm64";
 const macArm64ExecPath = platformPath.join(
   macArm64PortableRoot,
-  "PhoneDirectory.app",
+  "Phone Directory.app",
   "Contents",
   "MacOS",
-  "PhoneDirectory"
+  "Phone Directory"
 );
 const macExecPath = platformPath.join(
   macPortableRoot,
-  "PhoneDirectory.app",
+  "Phone Directory.app",
   "Contents",
   "MacOS",
-  "PhoneDirectory"
+  "Phone Directory"
 );
 const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win" : "/Volumes/HospitalUSB/win";
-const winExecPath = platformPath.join(winPortableRoot, "PhoneDirectory.exe");
+const winExecPath = platformPath.join(winPortableRoot, "Phone Directory.exe");
 const linuxPortableRoot = isWindows ? "C:\\USB\\linux" : "/media/USB/linux";
 const linuxExecPath = isWindows
   ? "C:\\tmp\\.mount_PhoneD\\usr\\bin\\phone-directory"
   : "/tmp/.mount_PhoneD/usr/bin/phone-directory";
-const appImagePath = platformPath.join(linuxPortableRoot, "PhoneDirectory.AppImage");
+const appImagePath = platformPath.join(linuxPortableRoot, "Phone Directory.AppImage");
 
 describe("resolvePortableUserDataPath", () => {
   it("prefers an explicit portable root path override", () => {

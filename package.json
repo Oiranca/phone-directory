@@ -1,6 +1,9 @@
 {
   "name": "hospital-directory-mvp",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
