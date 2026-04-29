@@ -10,8 +10,18 @@ Run the appropriate build command for each target platform:
 npm run build:dist:win      # produces dist-portable/win-unpacked/
 npm run build:dist:mac      # produces dist-portable/mac/ and dist-portable/mac-arm64/
 npm run build:dist:linux    # produces dist-portable/linux-unpacked/
-# To produce an AppImage, add "AppImage" to the linux targets in package.json and rebuild.
 ```
+
+To also produce an AppImage (optional Linux fallback), temporarily add `"AppImage"` to the
+`linux.target` array in the `build` section of `package.json`, then rebuild:
+
+```bash
+npm run build:dist:linux    # now produces dist-portable/linux-unpacked/ AND
+                             # dist-portable/Phone Directory-<version>.AppImage
+```
+
+Rename the AppImage to exactly `Phone Directory.AppImage` before copying to the USB root
+(the launcher's fallback path expects that exact filename).
 
 The `dist-portable/` directory is gitignored. Build on the target platform or use a CI runner.
 
@@ -25,7 +35,7 @@ Copy the relevant output folder(s) from `dist-portable/` to the root of the USB 
 | macOS x64      | `dist-portable/mac/`          | `<USB_ROOT>/mac/`          |
 | macOS arm64    | `dist-portable/mac-arm64/`    | `<USB_ROOT>/mac-arm64/`    |
 | Linux (dir)    | `dist-portable/linux-unpacked/` | `<USB_ROOT>/linux-unpacked/` |
-| Linux (AppImage) | `dist-portable/Phone Directory.AppImage` | `<USB_ROOT>/Phone Directory.AppImage` |
+| Linux (AppImage) | `dist-portable/Phone Directory-<version>.AppImage` → rename to `Phone Directory.AppImage` | `<USB_ROOT>/Phone Directory.AppImage` |
 
 You do not need to include all platforms on a single drive. Include only the platforms your target users need.
 
