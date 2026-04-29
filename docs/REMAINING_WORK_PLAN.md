@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-29 (OIR-43 complete)
+- Last updated: 2026-04-29 (OIR-34 complete)
 
 ## 1. Purpose
 
@@ -24,6 +24,7 @@ Latest delivered planning note:
 - `OIR-21` portable cross-platform USB packaging merged to `main` on 2026-04-29 via PR `#28` and is no longer part of the active remaining backlog
 - `OIR-29` USB launcher scripts merged to `main` on 2026-04-29 via PR `#29` and is no longer part of the active remaining backlog
 - `OIR-43` settings folder-picker and auto-default paths merged to `main` on 2026-04-29 via PR `#30` and is no longer part of the active remaining backlog
+- `OIR-34` Electron upgrade to supported `40.9.2` merged to `main` on 2026-04-29 via PR `#31` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -133,6 +134,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-21` portable USB packaging: merged to `main` on 2026-04-29 via PR `#28`
 - `OIR-29` USB launcher scripts: merged to `main` on 2026-04-29 via PR `#29`
 - `OIR-43` settings folder-picker and auto-default paths: merged to `main` on 2026-04-29 via PR `#30`
+- `OIR-34` Electron upgrade to supported `40.9.2`: merged to `main` on 2026-04-29 via PR `#31`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
