@@ -153,7 +153,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** 17 known unfixed advisories in Electron 32.x. No patch available in 32.x.
 - **Impact:** Renderer compromise could escalate to OS-level access.
 - **Fix:** Upgrade to a supported non-vulnerable Electron line with runway (`40.9.2` on the current branch) and re-run `npm audit`.
-- **Current branch status:** addressed on `feat/oir-34-electron-upgrade`; `npm audit` no longer reports Electron advisories.
+- **Current status:** addressed by upgrading to Electron `40.9.2`; `npm audit` no longer reports Electron advisories.
 
 ---
 
