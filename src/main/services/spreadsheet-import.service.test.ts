@@ -116,4 +116,17 @@ describe("readWorkbookRowsInWorker", () => {
 
     await expect(promise).rejects.toThrow("El proceso de importación terminó de forma inesperada.");
   });
+
+  it("rejects zero-code exits that never send a response", async () => {
+    const { readWorkbookRowsInWorker } = await import("./spreadsheet-import.service.js");
+    const worker = new FakeWorker();
+    const promise = readWorkbookRowsInWorker("/tmp/source.xlsx", {
+      workerFactory: () => worker,
+      timeoutMs: 50
+    });
+
+    worker.emit("exit", 0);
+
+    await expect(promise).rejects.toThrow("El proceso terminó sin respuesta.");
+  });
 });

@@ -1198,13 +1198,15 @@ export const readWorkbookRowsInWorker = (
     });
 
     worker.once("exit", (code) => {
-      if (settled || code === 0) {
+      if (settled) {
         return;
       }
 
       rejectWorker(
         new Error(
-          "No se pudo leer la hoja de cálculo seleccionada. El proceso de importación terminó de forma inesperada."
+          code === 0
+            ? "No se pudo leer la hoja de cálculo seleccionada. El proceso terminó sin respuesta."
+            : "No se pudo leer la hoja de cálculo seleccionada. El proceso de importación terminó de forma inesperada."
         )
       );
     });
