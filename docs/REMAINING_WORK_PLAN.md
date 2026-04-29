@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-29
+- Last updated: 2026-04-29 (OIR-29 complete)
 
 ## 1. Purpose
 
@@ -22,6 +22,7 @@ Latest delivered planning note:
 - `OIR-26` tag-based filtering merged to `main` on 2026-04-28 via PR `#26` and is no longer part of the active remaining backlog
 - `OIR-28` portable managed data roots merged to `main` on 2026-04-28 via PR `#27` and is no longer part of the active remaining backlog
 - `OIR-21` portable cross-platform USB packaging merged to `main` on 2026-04-29 via PR `#28` and is no longer part of the active remaining backlog
+- `OIR-29` USB launcher scripts merged to `main` on 2026-04-29 via PR `#29` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -43,7 +44,7 @@ The current codebase already includes:
 - portable-root symlink-chain safety checks before bootstrap
 - compacted record detail cards for phones, emails, and long text
 - Playwright-based Electron end-to-end harness for critical MVP flows
-- USB launcher scripts for Windows, macOS, and Linux
+- USB launcher scripts for Windows (`launch.bat`), macOS (`launch.command`), and Linux (`launch.sh`) with `ELECTRON_PORTABLE_ROOT_PATH` pointing data to `portable-data/` at USB root
 
 Latest known verified baseline:
 
@@ -64,9 +65,7 @@ This track is complete on the current line.
 
 ### Priority 2 — Portable USB deployment track
 
-`OIR-21` is complete. Remaining work in this track:
-
-1. `OIR-29` — add cross-platform launcher scripts at the USB root
+Complete. `OIR-21` and `OIR-29` both merged to `main` on 2026-04-29.
 
 ### Priority 3 — Settings UX
 
@@ -89,37 +88,19 @@ Definition of done:
 - manual text entry still works
 - works on Windows, macOS, Linux
 
-### 4.2 `OIR-29` — Portable USB launcher scripts
-
-Goal:
-
-- one-click launchers at USB root for each supported platform
-
-Definition of done:
-
-- launcher scripts exist for Windows, macOS, and Linux
-- scripts target the `win-unpacked/`, `mac[-arm64]/`, and `linux-unpacked/` layouts produced by `OIR-21`
-
-Completed foundation already on `main` (from `OIR-21`):
-
-- electron-builder `--dir` config for all three platforms
-- `dist-portable/` output layout documented and tested
-- portable root resolution via `ELECTRON_PORTABLE_ROOT_PATH` env var
-- `build:dist`, `build:dist:win`, `build:dist:mac`, `build:dist:linux` npm scripts
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-29`
-2. `OIR-43`
+1. `OIR-43`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-29`.
+Start with `OIR-43`.
 
 Reason:
 
-- `OIR-21` merged to `main` on 2026-04-29 via PR `#28` — packaging layout is finalized
-- launcher scripts can now target the confirmed `dist-portable/` structure
+- Portable USB deployment track (OIR-21 + OIR-29) fully shipped on 2026-04-29
+- Settings UX is the highest remaining user-facing pain point
 
 ## 7. Explicit Exclusions
 
@@ -132,6 +113,7 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-26` tag-based filtering: merged to `main` on 2026-04-28 via PR `#26`
 - `OIR-28` portable managed data roots: merged to `main` on 2026-04-28 via PR `#27`
 - `OIR-21` portable USB packaging: merged to `main` on 2026-04-29 via PR `#28`
+- `OIR-29` USB launcher scripts: merged to `main` on 2026-04-29 via PR `#29`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
