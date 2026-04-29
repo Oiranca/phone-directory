@@ -23,7 +23,7 @@ export const registerSettingsIpc = (service: AppDataService) => {
     if (type === 'dataFile') {
       const result = await dialog.showSaveDialog({
         filters: [{ name: 'JSON', extensions: ['json'] }],
-        properties: ['showHiddenFiles', 'createDirectory']
+        properties: ['createDirectory']
       });
       return result.canceled ? null : (result.filePath ?? null);
     }
