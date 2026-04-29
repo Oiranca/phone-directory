@@ -69,6 +69,11 @@
       "package.json"
     ],
     "asar": true,
+    "extraMetadata": {
+      "scripts": null,
+      "devDependencies": null,
+      "build": null
+    },
     "win": {
       "target": [{ "target": "dir", "arch": ["x64"] }]
     },
