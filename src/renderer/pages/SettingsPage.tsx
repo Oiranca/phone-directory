@@ -16,6 +16,8 @@ export const SettingsPage = () => {
     backupDirectoryPath: string;
   }>(null);
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
+  const [isBrowsingDataFile, setIsBrowsingDataFile] = useState(false);
+  const [isBrowsingBackupDir, setIsBrowsingBackupDir] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isResettingPaths, setIsResettingPaths] = useState(false);
   const [bootstrapError, setBootstrapError] = useState("");
@@ -125,6 +127,32 @@ export const SettingsPage = () => {
   const handleBackupDirectoryPathChange = (event: ChangeEvent<HTMLInputElement>) => {
     setBackupDirectoryPath(event.target.value);
     setSaveError("");
+  };
+
+  const handleBrowseDataFile = async () => {
+    setIsBrowsingDataFile(true);
+    try {
+      const picked = await window.hospitalDirectory.browseForPath('dataFile');
+      if (picked) {
+        setDataFilePath(picked);
+        setSaveError('');
+      }
+    } finally {
+      setIsBrowsingDataFile(false);
+    }
+  };
+
+  const handleBrowseBackupDir = async () => {
+    setIsBrowsingBackupDir(true);
+    try {
+      const picked = await window.hospitalDirectory.browseForPath('backupDirectory');
+      if (picked) {
+        setBackupDirectoryPath(picked);
+        setSaveError('');
+      }
+    } finally {
+      setIsBrowsingBackupDir(false);
+    }
   };
 
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -243,15 +271,26 @@ export const SettingsPage = () => {
 
             <label htmlFor="settings-data-file-path" className="block">
               <span className="text-sm font-semibold text-slate-700">Ruta del archivo de datos</span>
-              <input
-                id="settings-data-file-path"
-                aria-label="Ruta del archivo de datos"
-                type="text"
-                value={dataFilePath}
-                onChange={handleDataFilePathChange}
-                placeholder="/ruta/al/directorio/contacts.json"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
-              />
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="settings-data-file-path"
+                  aria-label="Ruta del archivo de datos"
+                  type="text"
+                  value={dataFilePath}
+                  onChange={handleDataFilePathChange}
+                  placeholder="/ruta/al/directorio/contacts.json"
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleBrowseDataFile()}
+                  disabled={isBrowsingDataFile || isSaving}
+                  aria-label="Seleccionar archivo de datos"
+                  className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isBrowsingDataFile ? '…' : 'Examinar'}
+                </button>
+              </div>
               <span className="mt-2 block text-xs text-slate-500">
                 Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura.
               </span>
@@ -259,15 +298,26 @@ export const SettingsPage = () => {
 
             <label htmlFor="settings-backup-directory-path" className="block">
               <span className="text-sm font-semibold text-slate-700">Ruta de la carpeta de backups</span>
-              <input
-                id="settings-backup-directory-path"
-                aria-label="Ruta de la carpeta de backups"
-                type="text"
-                value={backupDirectoryPath}
-                onChange={handleBackupDirectoryPathChange}
-                placeholder="/ruta/a/la/carpeta/backups"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
-              />
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="settings-backup-directory-path"
+                  aria-label="Ruta de la carpeta de backups"
+                  type="text"
+                  value={backupDirectoryPath}
+                  onChange={handleBackupDirectoryPathChange}
+                  placeholder="/ruta/a/la/carpeta/backups"
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleBrowseBackupDir()}
+                  disabled={isBrowsingBackupDir || isSaving}
+                  aria-label="Seleccionar carpeta de backups"
+                  className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isBrowsingBackupDir ? '…' : 'Examinar'}
+                </button>
+              </div>
               <span className="mt-2 block text-xs text-slate-500">
                 Debe ser una ruta absoluta. La carpeta debe existir y permitir lectura y escritura para crear copias de seguridad.
               </span>
