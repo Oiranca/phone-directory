@@ -1,7 +1,8 @@
+import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-republish";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
@@ -13,6 +14,8 @@ vi.mock("electron", () => ({
     getPath: getPathMock
   }
 }));
+
+XLSX.set_fs(nodeFs);
 
 describe("AppDataService", () => {
   let testRoot: string;

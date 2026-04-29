@@ -1,11 +1,18 @@
+import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import Papa from "papaparse";
-import XLSX from "xlsx";
+import XLSX from "xlsx-republish";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImportRow } from "./csv-import.service.js";
 import type { CsvImportPreview, DirectoryDataset } from "../../shared/types/contact.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS = 5_000;
+const IS_VITEST_RUNTIME = process.env.VITEST === "true";
+
+XLSX.set_fs(nodeFs);
 const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "externalId",
   "type",
@@ -94,6 +101,12 @@ type SheetData = {
 };
 
 type DetectionConfidence = "high" | "medium" | "low";
+
+export type SpreadsheetImportNormalizationResult = {
+  rows: NormalizedImportRow[];
+  detectedFormat: string;
+  detectionConfidence: DetectionConfidence;
+};
 
 type SheetProfile = {
   parser: "centers" | "service";
@@ -1042,17 +1055,17 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
   };
 };
 
-const normalizeWorkbookRows = (
+export const normalizeWorkbookRowsFromFile = (
   sourceFilePath: string
-): { rows: NormalizedImportRow[]; detectedFormat: string; detectionConfidence: DetectionConfidence } => {
+): SpreadsheetImportNormalizationResult => {
   let sheets: SheetData[];
 
   try {
     sheets = readWorkbookSheets(sourceFilePath);
   } catch (error) {
     throw new Error(
-      error instanceof Error && error.message
-        ? `No se pudo leer la hoja de cálculo seleccionada. ${error.message}`
+      error instanceof Error && error.message.includes("Unsupported")
+        ? "No se pudo leer la hoja de cálculo seleccionada. El formato del archivo no es compatible."
         : "No se pudo leer la hoja de cálculo seleccionada."
     );
   }
@@ -1093,6 +1106,111 @@ const normalizeWorkbookRows = (
   };
 };
 
+type SpreadsheetImportWorkerResponse =
+  | { type: "success"; result: SpreadsheetImportNormalizationResult }
+  | { type: "error"; message: string };
+
+type SpreadsheetImportWorker = Pick<Worker, "once" | "terminate">;
+
+type SpreadsheetImportWorkerFactory = (sourceFilePath: string) => SpreadsheetImportWorker;
+
+type ReadWorkbookRowsInWorkerOptions = {
+  timeoutMs?: number;
+  workerFactory?: SpreadsheetImportWorkerFactory;
+};
+
+const createSpreadsheetImportWorker: SpreadsheetImportWorkerFactory = (sourceFilePath) =>
+  new Worker(
+    pathToFileURL(fileURLToPath(new URL("./spreadsheet-import.worker.js", import.meta.url))),
+    {
+      execArgv: [],
+      resourceLimits: {
+        maxOldGenerationSizeMb: 128,
+        maxYoungGenerationSizeMb: 32,
+        stackSizeMb: 4
+      },
+      workerData: { sourceFilePath }
+    }
+  );
+
+export const readWorkbookRowsInWorker = (
+  sourceFilePath: string,
+  options: ReadWorkbookRowsInWorkerOptions = {}
+): Promise<SpreadsheetImportNormalizationResult> => {
+  const timeoutMs = options.timeoutMs ?? MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS;
+  const workerFactory = options.workerFactory ?? createSpreadsheetImportWorker;
+
+  return new Promise((resolve, reject) => {
+    const worker = workerFactory(sourceFilePath);
+    let settled = false;
+
+    const settle = (handler: (value: SpreadsheetImportNormalizationResult | Error) => void) =>
+      (value: SpreadsheetImportNormalizationResult | Error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        handler(value);
+      };
+
+    const resolveWorker = settle((value) => resolve(value as SpreadsheetImportNormalizationResult));
+    const rejectWorker = settle((value) =>
+      reject(value instanceof Error ? value : new Error("No se pudo leer la hoja de cálculo seleccionada."))
+    );
+
+    const timeoutId = setTimeout(() => {
+      void worker.terminate().catch(() => {});
+      rejectWorker(
+        new Error(
+          "No se pudo leer la hoja de cálculo seleccionada. El procesamiento tardó demasiado. Prueba con un archivo más pequeño o conviértelo a CSV."
+        )
+      );
+    }, timeoutMs);
+
+    worker.once("message", (payload: SpreadsheetImportWorkerResponse) => {
+      if (payload?.type === "success") {
+        resolveWorker(payload.result);
+        return;
+      }
+
+      if (payload?.type === "error") {
+        rejectWorker(new Error(payload.message));
+        return;
+      }
+
+      rejectWorker(
+        new Error(
+          "No se pudo leer la hoja de cálculo seleccionada. El proceso de importación devolvió una respuesta no válida."
+        )
+      );
+    });
+
+    worker.once("error", (error) => {
+      rejectWorker(
+        new Error(
+          error instanceof Error && error.name === "RangeError"
+            ? "No se pudo leer la hoja de cálculo seleccionada. El archivo supera los límites seguros de procesamiento."
+            : "No se pudo leer la hoja de cálculo seleccionada."
+        )
+      );
+    });
+
+    worker.once("exit", (code) => {
+      if (settled || code === 0) {
+        return;
+      }
+
+      rejectWorker(
+        new Error(
+          "No se pudo leer la hoja de cálculo seleccionada. El proceso de importación terminó de forma inesperada."
+        )
+      );
+    });
+  });
+};
+
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
   editorName: string
@@ -1125,7 +1243,9 @@ export const buildSpreadsheetImportPreview = async (
     throw new Error("Formato no soportado. Usa CSV, ODS, XLSX o XLS.");
   }
 
-  const normalized = normalizeWorkbookRows(sourceFilePath);
+  const normalized = IS_VITEST_RUNTIME
+    ? normalizeWorkbookRowsFromFile(sourceFilePath)
+    : await readWorkbookRowsInWorker(sourceFilePath);
 
   return buildImportPreviewFromRows(normalized.rows, {
     sourceFilePath,
