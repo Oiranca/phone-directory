@@ -21,9 +21,9 @@ const macExecPath = platformPath.join(
   "MacOS",
   "Phone Directory"
 );
-const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win" : "/Volumes/HospitalUSB/win";
+const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win-unpacked" : "/Volumes/HospitalUSB/win-unpacked";
 const winExecPath = platformPath.join(winPortableRoot, "Phone Directory.exe");
-const linuxPortableRoot = isWindows ? "C:\\USB\\linux" : "/media/USB/linux";
+const linuxPortableRoot = isWindows ? "C:\\USB\\linux-unpacked" : "/media/USB/linux-unpacked";
 const linuxExecPath = isWindows
   ? "C:\\tmp\\.mount_PhoneD\\usr\\bin\\phone-directory"
   : "/tmp/.mount_PhoneD/usr/bin/phone-directory";

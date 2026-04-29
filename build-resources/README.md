@@ -4,8 +4,8 @@ This directory holds static assets consumed by electron-builder during packaging
 
 ## Icon files
 
-Place the application icon files here before running any `build:dist*` script.
-electron-builder will pick them up automatically when present.
+Icon files are optional — electron-builder falls back to its own default icons when none are provided.
+To use custom icons, place the files below and add an `icon` field to each platform section in `package.json` (see example config at the bottom of this file).
 
 | File        | Platform | Recommended size      |
 |-------------|----------|-----------------------|
@@ -32,5 +32,4 @@ platform section in `package.json`:
 }
 ```
 
-Icon fields are intentionally omitted from the current config to avoid build
-failures when the icon files are not yet present.
+The icon fields are intentionally omitted from the current config — add them when icon files are ready.
