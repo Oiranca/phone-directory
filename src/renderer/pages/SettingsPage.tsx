@@ -129,32 +129,6 @@ export const SettingsPage = () => {
     setSaveError("");
   };
 
-  const handleBrowseDataFile = async () => {
-    setIsBrowsingDataFile(true);
-    try {
-      const picked = await window.hospitalDirectory.browseForPath('dataFile');
-      if (picked) {
-        setDataFilePath(picked);
-        setSaveError('');
-      }
-    } finally {
-      setIsBrowsingDataFile(false);
-    }
-  };
-
-  const handleBrowseBackupDir = async () => {
-    setIsBrowsingBackupDir(true);
-    try {
-      const picked = await window.hospitalDirectory.browseForPath('backupDirectory');
-      if (picked) {
-        setBackupDirectoryPath(picked);
-        setSaveError('');
-      }
-    } finally {
-      setIsBrowsingBackupDir(false);
-    }
-  };
-
   const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
     setShowInactiveByDefault(event.target.checked);
     setSaveError("");
