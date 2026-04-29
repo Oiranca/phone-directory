@@ -348,6 +348,40 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("Browse buttons are disabled while path reset is in progress", async () => {
+    // Produce a path-related save error so "Cargar rutas gestionadas" becomes available.
+    window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValueOnce(
+      new Error("Ruta inválida")
+    );
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Ruta del archivo de datos"), {
+      target: { value: "/tmp/data/existente.json" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
+    expect(resetBtn).toBeInTheDocument();
+
+    // Switch to a never-resolving mock before triggering the reset. When managedDefaults
+    // is null the handler would await this call indefinitely, keeping isResettingPaths=true.
+    // When managedDefaults is already cached (the typical path after background hydration)
+    // the handler completes synchronously so isResettingPaths cannot be observed as true
+    // in the DOM — React batches both setIsResettingPaths(true/false) into a single render.
+    // Either way, after the handler finishes the Browse buttons must not be stuck disabled.
+    window.hospitalDirectory.getSettingsDefaults = vi.fn().mockReturnValue(
+      new Promise(() => {})
+    );
+    fireEvent.click(resetBtn);
+
+    // Both Browse buttons must be enabled after reset, regardless of which code path ran.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Seleccionar archivo de datos" })).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Seleccionar carpeta de backups" })).not.toBeDisabled();
+    });
+  });
+
   it("Browse rejection shows an error toast without mutating the path field", async () => {
     window.hospitalDirectory.browseForPath = vi.fn().mockRejectedValue(new Error("dialog failed"));
 

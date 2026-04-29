@@ -292,7 +292,7 @@ export const SettingsPage = () => {
                 <button
                   type="button"
                   onClick={() => void handleBrowseDataFile()}
-                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving}
+                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                   aria-label="Seleccionar archivo de datos"
                   aria-busy={isBrowsingDataFile}
                   className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -320,7 +320,7 @@ export const SettingsPage = () => {
                 <button
                   type="button"
                   onClick={() => void handleBrowseBackupDir()}
-                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving}
+                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                   aria-label="Seleccionar carpeta de backups"
                   aria-busy={isBrowsingBackupDir}
                   className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
