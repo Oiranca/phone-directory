@@ -29,6 +29,17 @@ import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.writeQueue.then(fn);
+    this.writeQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
   async ensureInitialFiles() {
     const managedDefaults = this.getManagedSettingsDefaults();
     const dataDirectory = path.dirname(managedDefaults.dataFilePath);
@@ -638,21 +649,23 @@ export class AppDataService {
     await this.assertPathChainIsNotSymlink(directoryPath, message);
   }
 
-  private async writeDatasetToPath(filePath: string, dataset: DirectoryDataset) {
-    const canonicalFilePath = await this.resolveCanonicalDataFilePath(
-      filePath,
-      "No se pudo escribir el archivo de datos configurado.",
-      true
-    );
-    try {
-      await writeJsonFile(canonicalFilePath, dataset);
-    } catch (error) {
-      throw this.toFilesystemError(
-        error,
+  private writeDatasetToPath(filePath: string, dataset: DirectoryDataset): Promise<void> {
+    return this.enqueueWrite(async () => {
+      const canonicalFilePath = await this.resolveCanonicalDataFilePath(
+        filePath,
         "No se pudo escribir el archivo de datos configurado.",
-        { filePath: canonicalFilePath }
+        true
       );
-    }
+      try {
+        await writeJsonFile(canonicalFilePath, dataset);
+      } catch (error) {
+        throw this.toFilesystemError(
+          error,
+          "No se pudo escribir el archivo de datos configurado.",
+          { filePath: canonicalFilePath }
+        );
+      }
+    });
   }
 
   private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {
