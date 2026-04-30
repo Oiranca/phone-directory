@@ -22,10 +22,11 @@ const isAllowedNavigationUrl = (targetUrl: string) => {
   return targetUrl.startsWith("file://");
 };
 
-const devOrigin = new URL(DEV_SERVER_URL).origin;
-const devWsOrigin = devOrigin.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:"));
-const DEV_CSP =
-  `default-src 'self'; script-src 'self' 'unsafe-inline' ${devOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${devOrigin} ${devWsOrigin};`;
+const devOrigin = isDev ? new URL(DEV_SERVER_URL).origin : "";
+const devWsOrigin = isDev ? devOrigin.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:")) : "";
+const DEV_CSP = isDev
+  ? `default-src 'self'; script-src 'self' 'unsafe-inline' ${devOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${devOrigin} ${devWsOrigin};`
+  : "";
 const PROD_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';";
 

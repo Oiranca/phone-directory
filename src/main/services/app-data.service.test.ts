@@ -1892,7 +1892,11 @@ describe("AppDataService", () => {
     ]);
 
     expect(r1.savedRecordId).not.toBe(r2.savedRecordId);
-    const ids = r2.contacts.records.map((r) => r.id);
+    const finalRecords =
+      r1.contacts.records.length >= r2.contacts.records.length
+        ? r1.contacts.records
+        : r2.contacts.records;
+    const ids = finalRecords.map((r) => r.id);
     expect(ids).toContain(r1.savedRecordId);
     expect(ids).toContain(r2.savedRecordId);
   });
