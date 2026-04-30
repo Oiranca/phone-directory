@@ -1875,4 +1875,31 @@ describe("AppDataService", () => {
 
     expect(backups[0]?.createdAt).toBe(knownMtime.toISOString());
   });
+  it("does not lose records when two createRecord calls run concurrently", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const makePayload = (label: string) => ({
+      type: "service" as const,
+      displayName: `Concurrent ${label}`,
+      organization: { department: "Test" },
+      contactMethods: { phones: [], emails: [] },
+      aliases: [] as string[],
+      tags: [] as string[],
+      status: "active" as const
+    });
+
+    const [r1, r2] = await Promise.all([
+      service.createRecord(makePayload("A")),
+      service.createRecord(makePayload("B"))
+    ]);
+
+    expect(r1.savedRecordId).not.toBe(r2.savedRecordId);
+    const ids = r2.contacts.records.map((r) => r.id);
+    expect(ids).toContain(r1.savedRecordId);
+    expect(ids).toContain(r2.savedRecordId);
+  });
+
 });

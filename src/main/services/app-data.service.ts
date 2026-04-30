@@ -29,7 +29,19 @@ import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.writeQueue.then(fn);
+    this.writeQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
   async ensureInitialFiles() {
+    return this.enqueueWrite(async () => {
     const managedDefaults = this.getManagedSettingsDefaults();
     const dataDirectory = path.dirname(managedDefaults.dataFilePath);
     const backupDirectory = managedDefaults.backupDirectoryPath;
@@ -46,6 +58,7 @@ export class AppDataService {
     if (!(await this.fileExists(settingsFilePath))) {
       await writeJsonFile(settingsFilePath, managedDefaults);
     }
+    });
   }
 
   async getBootstrapData(): Promise<BootstrapResult> {
@@ -70,6 +83,7 @@ export class AppDataService {
   }
 
   async saveSettings(settings: EditableAppSettings) {
+    return this.enqueueWrite(async () => {
     const parsed = editableAppSettingsSchema.parse(settings);
     const normalizedDataFilePath = parsed.dataFilePath.trim();
     const normalizedBackupDirectoryPath = parsed.backupDirectoryPath.trim();
@@ -103,6 +117,7 @@ export class AppDataService {
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
     return nextSettings;
+    });
   }
 
   getEditableSettingsDefaults(): EditableAppSettings {
@@ -168,6 +183,7 @@ export class AppDataService {
   }
 
   async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
+    return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
     const directory = path.dirname(targetFilePath);
@@ -188,9 +204,11 @@ export class AppDataService {
       exportedAt: contacts.exportedAt,
       recordCount: contacts.records.length
     };
+    });
   }
 
   async importDataset(sourceFilePath: string): Promise<ImportContactsResult> {
+    return this.enqueueWrite(async () => {
     const importedContacts = directoryDatasetSchema.parse(
       await readJsonFile<DirectoryDataset>(sourceFilePath)
     );
@@ -206,9 +224,11 @@ export class AppDataService {
       importedFilePath: sourceFilePath,
       recordCount: importedContacts.records.length
     };
+    });
   }
 
   async restoreBackup(sourceFilePath: string): Promise<ImportContactsResult> {
+    return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const message = "No se pudo restaurar el backup seleccionado.";
     const canonicalBackupDirectory = await this.resolveCanonicalDirectoryPath(
@@ -262,9 +282,11 @@ export class AppDataService {
       importedFilePath: canonicalSourceFilePath,
       recordCount: importedContacts.records.length
     };
+    });
   }
 
   async resetDataset(): Promise<ResetContactsResult> {
+    return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contactsFilePath = settings.dataFilePath;
     const backupPath = (await this.fileExists(contactsFilePath))
@@ -279,6 +301,7 @@ export class AppDataService {
       settings: this.toEditableSettings(settings),
       backupPath
     };
+    });
   }
 
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
@@ -299,6 +322,7 @@ export class AppDataService {
   }
 
   async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
+    return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
@@ -330,9 +354,11 @@ export class AppDataService {
       createdCount: merged.createdCount,
       updatedCount: merged.updatedCount
     };
+    });
   }
 
   async createRecord(payload: EditableContactRecord): Promise<SaveContactResult> {
+    return this.enqueueWrite(async () => {
     const parsed = editableContactRecordSchema.parse(payload);
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
@@ -362,9 +388,11 @@ export class AppDataService {
       settings: this.toEditableSettings(settings),
       savedRecordId
     };
+    });
   }
 
   async updateRecord(recordId: string, payload: EditableContactRecord): Promise<SaveContactResult> {
+    return this.enqueueWrite(async () => {
     const parsed = editableContactRecordSchema.parse(payload);
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
@@ -402,6 +430,7 @@ export class AppDataService {
       settings: this.toEditableSettings(settings),
       savedRecordId: currentRecord.id
     };
+    });
   }
 
   private async fileExists(filePath: string) {
@@ -638,7 +667,7 @@ export class AppDataService {
     await this.assertPathChainIsNotSymlink(directoryPath, message);
   }
 
-  private async writeDatasetToPath(filePath: string, dataset: DirectoryDataset) {
+  private async writeDatasetToPath(filePath: string, dataset: DirectoryDataset): Promise<void> {
     const canonicalFilePath = await this.resolveCanonicalDataFilePath(
       filePath,
       "No se pudo escribir el archivo de datos configurado.",
