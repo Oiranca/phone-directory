@@ -47,3 +47,7 @@ docs/DECISIONS.md
 
 # AIA internal data (secrets, executions, sessions)
 .aia/
+
+# Build artifacts and tool directories
+dist-portable/
+aia/
