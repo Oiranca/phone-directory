@@ -15,6 +15,7 @@ const resetStore = () => {
     query: "",
     selectedType: "all",
     selectedArea: "all",
+    selectedTags: [],
     showInactive: false,
     isLoading: true
   });

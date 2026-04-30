@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
-import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
+import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact } from "../../shared/types/contact";
@@ -28,6 +28,8 @@ const areaLabels = {
   especialidades: "Especialidades",
   otros: "Otros"
 } as const satisfies Record<AreaType | "all" | "none", string>;
+
+const tagLabelIntl = new Intl.Collator("es", { sensitivity: "base" });
 
 const privacyInlineRiskText = {
   Confidencial: "Número interno confidencial.",
@@ -84,11 +86,13 @@ export const DirectoryPage = () => {
     selectedRecordId,
     selectedType,
     selectedArea,
+    selectedTags,
     showInactive,
     initialize,
     setQuery,
     setSelectedType,
     setSelectedArea,
+    setSelectedTags,
     setShowInactive,
     setSelectedRecordId,
     isLoading
@@ -97,15 +101,40 @@ export const DirectoryPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
   const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
+  const availableTags = useMemo(() => {
+    if (!contacts) {
+      return [];
+    }
+
+    const tagsByNormalizedValue = new Map<string, string>();
+
+    contacts.records.forEach((record) => {
+      record.tags.forEach((tag) => {
+        const trimmedTag = tag.trim();
+
+        if (trimmedTag.length === 0) {
+          return;
+        }
+
+        const normalizedTag = normalizeTag(trimmedTag);
+
+        if (!tagsByNormalizedValue.has(normalizedTag)) {
+          tagsByNormalizedValue.set(normalizedTag, trimmedTag);
+        }
+      });
+    });
+
+    return Array.from(tagsByNormalizedValue.values()).sort((left, right) => tagLabelIntl.compare(left, right));
+  }, [contacts]);
   const deferredQuery = useDeferredValue(query);
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
         contacts?.records ?? [],
         deferredQuery,
-        { selectedType, selectedArea, showInactive }
+        { selectedType, selectedArea, selectedTags, showInactive }
       ),
-    [contacts, deferredQuery, selectedType, selectedArea, showInactive]
+    [contacts, deferredQuery, selectedType, selectedArea, selectedTags, showInactive]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
@@ -139,11 +168,32 @@ export const DirectoryPage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredQuery, selectedType, selectedArea, showInactive]);
+  }, [deferredQuery, selectedType, selectedArea, selectedTags, showInactive]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (selectedTags.length === 0) {
+      return;
+    }
+
+    const normalizedToAvailableTag = new Map(
+      availableTags.map((tag) => [normalizeTag(tag), tag] as const)
+    );
+    const nextSelectedTags = selectedTags.flatMap((tag) => {
+      const matchingTag = normalizedToAvailableTag.get(normalizeTag(tag));
+      return matchingTag ? [matchingTag] : [];
+    });
+    const hasChanged =
+      nextSelectedTags.length !== selectedTags.length ||
+      nextSelectedTags.some((tag, index) => tag !== selectedTags[index]);
+
+    if (hasChanged) {
+      setSelectedTags(nextSelectedTags);
+    }
+  }, [availableTags, selectedTags, setSelectedTags]);
 
   useEffect(() => {
     if (currentPageRecords.length === 0) {
@@ -202,7 +252,22 @@ export const DirectoryPage = () => {
     setQuery("");
     setSelectedType("all");
     setSelectedArea("all");
+    setSelectedTags([]);
     setShowInactive(false);
+  };
+
+  const handleTagChange = (value: string) => {
+    if (value === "all") {
+      setSelectedTags([]);
+      return;
+    }
+
+    if (availableTags.includes(value)) {
+      setSelectedTags([value]);
+      return;
+    }
+
+    setSelectedTags([]);
   };
 
   const selectedRecord =
@@ -210,13 +275,11 @@ export const DirectoryPage = () => {
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
-    <section aria-labelledby="directory-page-title" className="flex flex-col gap-6">
+    <section aria-labelledby="directory-page-title" className="flex flex-col gap-5">
       {/* Search Header */}
-      <div className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
-        <div className="flex flex-col gap-5">
-          <div>
-            <h2 id="directory-page-title" className="text-2xl font-semibold text-scs-blueDark sm:text-3xl">Directorio</h2>
-          </div>
+      <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+        <div className="flex flex-col gap-4">
+          <h2 id="directory-page-title" className="sr-only">Directorio</h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -255,6 +318,20 @@ export const DirectoryPage = () => {
                 ]}
               />
             </div>
+            {availableTags.length > 0 || selectedTags.length > 0 ? (
+              <div className="w-full md:w-48">
+                <SelectField
+                  id="directory-tag-filter"
+                  label="Etiqueta"
+                  value={selectedTags[0] ?? "all"}
+                  onChange={handleTagChange}
+                  options={[
+                    { value: "all", label: "Todas las etiquetas" },
+                    ...availableTags.map((tag) => ({ value: tag, label: tag }))
+                  ]}
+                />
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -275,7 +352,7 @@ export const DirectoryPage = () => {
               {visibleRecords.length} resultados
             </p>
           </div>
-          {(query || selectedType !== "all" || selectedArea !== "all" || showInactive) && (
+          {(query || selectedType !== "all" || selectedArea !== "all" || selectedTags.length > 0 || showInactive) && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {query ? (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
@@ -292,6 +369,11 @@ export const DirectoryPage = () => {
                   {areaLabels[selectedArea]}
                 </span>
               ) : null}
+              {selectedTags.map((tag) => (
+                <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                  #{tag}
+                </span>
+              ))}
               {showInactive ? (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   Inactivos

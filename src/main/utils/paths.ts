@@ -3,10 +3,18 @@ import path from "node:path";
 
 export const getAppDataRoot = () => app.getPath("userData");
 
-export const getManagedDataDirectory = () => path.join(getAppDataRoot(), "data");
+export const getManagedPaths = (appDataRoot: string) => ({
+  appDataRoot,
+  dataDirectory: path.join(appDataRoot, "data"),
+  backupDirectory: path.join(appDataRoot, "backups"),
+  contactsFilePath: path.join(appDataRoot, "data", "contacts.json"),
+  settingsFilePath: path.join(appDataRoot, "data", "settings.json")
+});
 
-export const getManagedBackupDirectory = () => path.join(getAppDataRoot(), "backups");
+export const getManagedDataDirectory = () => getManagedPaths(getAppDataRoot()).dataDirectory;
 
-export const getContactsFilePath = () => path.join(getManagedDataDirectory(), "contacts.json");
+export const getManagedBackupDirectory = () => getManagedPaths(getAppDataRoot()).backupDirectory;
 
-export const getSettingsFilePath = () => path.join(getManagedDataDirectory(), "settings.json");
+export const getContactsFilePath = () => getManagedPaths(getAppDataRoot()).contactsFilePath;
+
+export const getSettingsFilePath = () => getManagedPaths(getAppDataRoot()).settingsFilePath;

@@ -60,10 +60,11 @@ describe("AppShell — default mode", () => {
     expect(screen.getByText("child")).toBeInTheDocument();
   });
 
-  it("main route target keeps a visible focus style for programmatic focus", () => {
+  it("main route target remains the skip-link anchor", () => {
     renderShell();
-    expect(screen.getByRole("main")).toHaveClass("focus-visible:ring-2");
-    expect(screen.getByRole("main")).toHaveClass("focus-visible:ring-scs-blue");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
+    expect(screen.getByRole("main")).toHaveAttribute("tabIndex", "-1");
+    expect(screen.getByRole("main")).toHaveClass("focus-ring");
   });
 });
 

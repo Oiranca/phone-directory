@@ -26,6 +26,7 @@ import type {
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
@@ -97,13 +98,13 @@ export class AppDataService {
     }
 
     const currentSettings = await this.readSettings();
-    const nextSettings = {
+    const nextSettings = this.normalizeManagedSettingsForPersistence({
       ...currentSettings,
       editorName: parsed.editorName,
       dataFilePath: path.normalize(normalizedDataFilePath),
       backupDirectoryPath: path.normalize(normalizedBackupDirectoryPath),
       ui: parsed.ui
-    };
+    });
 
     await this.validateEditableSettings(nextSettings, currentSettings);
 
@@ -483,8 +484,10 @@ export class AppDataService {
   }
 
   private async readSettings(validatePaths = false) {
-    const settings = appSettingsSchema.parse(
-      await readJsonFile<AppSettings>(getSettingsFilePath())
+    const settings = await this.rebaseManagedSettingsToCurrentRoot(
+      appSettingsSchema.parse(
+        await readJsonFile<AppSettings>(getSettingsFilePath())
+      )
     );
 
     if (validatePaths) {
@@ -494,8 +497,96 @@ export class AppDataService {
     return settings;
   }
 
+  private async rebaseManagedSettingsToCurrentRoot(settings: AppSettings) {
+    const managedDefaults = this.getManagedSettingsDefaults();
+    const normalizedSettings = await this.normalizeManagedSettingsFromPersistence(settings);
+    const rebasedSettings = {
+      ...normalizedSettings,
+      dataFilePath: normalizedSettings.managedPaths?.dataFilePath
+        ? managedDefaults.dataFilePath
+        : normalizedSettings.dataFilePath,
+      backupDirectoryPath: normalizedSettings.managedPaths?.backupDirectoryPath
+        ? managedDefaults.backupDirectoryPath
+        : normalizedSettings.backupDirectoryPath
+    };
+
+    if (
+      !this.pathsMatch(rebasedSettings.dataFilePath, settings.dataFilePath) ||
+      !this.pathsMatch(rebasedSettings.backupDirectoryPath, settings.backupDirectoryPath) ||
+      normalizedSettings.managedPaths?.dataFilePath !== settings.managedPaths?.dataFilePath ||
+      normalizedSettings.managedPaths?.backupDirectoryPath !== settings.managedPaths?.backupDirectoryPath
+    ) {
+      await writeJsonFile(getSettingsFilePath(), rebasedSettings);
+    }
+
+    return rebasedSettings;
+  }
+
+  private async normalizeManagedSettingsFromPersistence(settings: AppSettings) {
+    const managedDefaults = this.getManagedSettingsDefaults();
+    const inferredLegacyManagedPaths = await this.inferLegacyManagedPaths(settings);
+
+    return {
+      ...settings,
+      managedPaths: {
+        dataFilePath: settings.managedPaths?.dataFilePath ??
+          inferredLegacyManagedPaths?.dataFilePath ??
+          this.pathsMatch(settings.dataFilePath, managedDefaults.dataFilePath),
+        backupDirectoryPath: settings.managedPaths?.backupDirectoryPath ??
+          inferredLegacyManagedPaths?.backupDirectoryPath ??
+          this.pathsMatch(settings.backupDirectoryPath, managedDefaults.backupDirectoryPath)
+      }
+    };
+  }
+
+  private normalizeManagedSettingsForPersistence(settings: AppSettings) {
+    const managedDefaults = this.getManagedSettingsDefaults();
+
+    return {
+      ...settings,
+      managedPaths: {
+        dataFilePath: this.pathsMatch(settings.dataFilePath, managedDefaults.dataFilePath),
+        backupDirectoryPath: this.pathsMatch(settings.backupDirectoryPath, managedDefaults.backupDirectoryPath)
+      }
+    };
+  }
+
   private getManagedSettingsDefaults(): AppSettings {
     return defaultSettings(getContactsFilePath(), getManagedBackupDirectory());
+  }
+
+  private async inferLegacyManagedPaths(settings: AppSettings) {
+    if (settings.managedPaths) {
+      return null;
+    }
+
+    const legacyDataDirectory = path.dirname(settings.dataFilePath);
+    const legacyManagedRoot = path.dirname(legacyDataDirectory);
+    const currentManagedRoot = path.dirname(path.dirname(this.getManagedSettingsDefaults().dataFilePath));
+    const legacyRootName = path.basename(legacyManagedRoot).toLowerCase();
+
+    if (
+      path.basename(settings.dataFilePath).toLowerCase() !== "contacts.json" ||
+      path.basename(legacyDataDirectory).toLowerCase() !== "data" ||
+      path.basename(settings.backupDirectoryPath).toLowerCase() !== "backups" ||
+      !["win", "linux", "mac"].includes(legacyRootName) ||
+      legacyRootName !== path.basename(currentManagedRoot).toLowerCase() ||
+      !this.pathsMatch(path.dirname(settings.backupDirectoryPath), legacyManagedRoot)
+    ) {
+      return null;
+    }
+
+    if (
+      await this.fileExists(settings.dataFilePath) ||
+      await this.fileExists(settings.backupDirectoryPath)
+    ) {
+      return null;
+    }
+
+    return {
+      dataFilePath: true,
+      backupDirectoryPath: true
+    };
   }
 
   private pathsMatch(leftPath: string, rightPath: string) {
@@ -532,6 +623,12 @@ export class AppDataService {
   private async validateEditableSettings(settings: AppSettings, currentSettings: AppSettings) {
     const settingsFilePath = getSettingsFilePath();
 
+    if (this.pathsMatch(settings.dataFilePath, settingsFilePath)) {
+      throw new Error(
+        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
+      );
+    }
+
     await this.assertPathChainIsNotSymlink(
       settings.dataFilePath,
       "No se pudo validar la ruta del archivo de datos.",
@@ -541,12 +638,6 @@ export class AppDataService {
       settings.backupDirectoryPath,
       "No se pudo validar la carpeta de backups."
     );
-
-    if (this.pathsMatch(settings.dataFilePath, settingsFilePath)) {
-      throw new Error(
-        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
-      );
-    }
 
     if (path.extname(settings.dataFilePath).toLowerCase() !== ".json") {
       throw new Error(
@@ -609,41 +700,7 @@ export class AppDataService {
   }
 
   private async assertPathChainIsNotSymlink(targetPath: string, message: string, allowMissingLeaf = false) {
-    const resolvedPath = path.resolve(targetPath);
-    const parsedPath = path.parse(resolvedPath);
-    const relativeSegments = resolvedPath.slice(parsedPath.root.length).split(path.sep).filter(Boolean);
-    let currentPath = parsedPath.root;
-
-    for (let index = 0; index < relativeSegments.length; index += 1) {
-      currentPath = path.join(currentPath, relativeSegments[index]!);
-
-      if (index === 0) {
-        continue;
-      }
-
-      try {
-        const stats = await fs.lstat(currentPath);
-
-        if (stats.isSymbolicLink()) {
-          throw new Error(
-            `${message} Ruta afectada: ${currentPath}. No se permiten enlaces simbólicos en las rutas configuradas.`
-          );
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("No se permiten enlaces simbólicos")) {
-          throw error;
-        }
-
-        const filesystemError = this.getErrnoException(error);
-        const isLeaf = index === relativeSegments.length - 1;
-
-        if (allowMissingLeaf && isLeaf && filesystemError?.code === "ENOENT") {
-          return;
-        }
-
-        throw this.toFilesystemError(error, message, { filePath: currentPath });
-      }
-    }
+    await assertPathChainIsNotSymlink(targetPath, message, allowMissingLeaf);
   }
 
   private async assertDataFilePathSafe(filePath: string, message: string, allowMissing: boolean) {

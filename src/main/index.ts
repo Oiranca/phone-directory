@@ -5,12 +5,24 @@ import { env } from "./config/env.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
 import { AppDataService } from "./services/app-data.service.js";
+import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
+import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = env.rendererUrl ?? "http://localhost:5173";
 
-if (env.userDataPath) {
+const portableUserDataPath = resolvePortableUserDataPath({
+  execPath: process.execPath,
+  appImagePath: process.env.APPIMAGE,
+  isPackaged: app.isPackaged,
+  portableMode: env.portableMode,
+  portableRootPath: env.portableRootPath
+});
+
+if (portableUserDataPath) {
+  app.setPath("userData", portableUserDataPath);
+} else if (env.userDataPath) {
   app.setPath("userData", path.resolve(env.userDataPath));
 }
 
@@ -64,6 +76,14 @@ const createWindow = () => {
 };
 
 const bootstrap = async () => {
+  if (portableUserDataPath) {
+    await assertPathChainIsNotSymlink(
+      portableUserDataPath,
+      "No se pudo preparar la ruta portable de datos.",
+      true
+    );
+  }
+
   const service = new AppDataService();
   await service.ensureInitialFiles();
   registerContactsIpc(service);
@@ -85,7 +105,10 @@ const bootstrap = async () => {
 };
 
 app.whenReady().then(() => {
-  void bootstrap();
+  void bootstrap().catch((error) => {
+    console.error(error);
+    app.quit();
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

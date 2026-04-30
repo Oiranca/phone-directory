@@ -486,9 +486,6 @@ export const ContactFormPage = () => {
     <section className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">
-            {isEditing ? "Editar registro" : "Nuevo registro"}
-          </p>
           <h2 className="text-2xl font-semibold text-scs-blueDark">
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>

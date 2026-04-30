@@ -18,6 +18,7 @@ interface AppStore {
   query: string;
   selectedType: RecordType | "all";
   selectedArea: AreaType | "all";
+  selectedTags: string[];
   showInactive: boolean;
   isLoading: boolean;
   initialize: (payload: BootstrapData) => void;
@@ -26,6 +27,7 @@ interface AppStore {
   setQuery: (query: string) => void;
   setSelectedType: (type: RecordType | "all") => void;
   setSelectedArea: (area: AreaType | "all") => void;
+  setSelectedTags: (tags: string[]) => void;
   setShowInactive: (showInactive: boolean) => void;
   setSelectedRecordId: (id: string | null) => void;
   setSettings: (settings: EditableAppSettings) => void;
@@ -40,6 +42,7 @@ export const useAppStore = create<AppStore>((set) => ({
   query: "",
   selectedType: "all",
   selectedArea: "all",
+  selectedTags: [],
   showInactive: false,
   isLoading: true,
   initialize: (payload) =>
@@ -50,6 +53,7 @@ export const useAppStore = create<AppStore>((set) => ({
       selectedRecordId: payload.contacts.records[0]?.id ?? null,
       selectedType: "all",
       selectedArea: "all",
+      selectedTags: [],
       showInactive: payload.settings.ui.showInactiveByDefault,
       isLoading: false
     }),
@@ -61,6 +65,7 @@ export const useAppStore = create<AppStore>((set) => ({
       selectedRecordId: null,
       selectedType: "all",
       selectedArea: "all",
+      selectedTags: [],
       showInactive: settings.ui.showInactiveByDefault,
       isLoading: false
     }),
@@ -68,6 +73,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setQuery: (query) => set({ query }),
   setSelectedType: (selectedType) => set({ selectedType }),
   setSelectedArea: (selectedArea) => set({ selectedArea }),
+  setSelectedTags: (selectedTags) => set({ selectedTags }),
   setShowInactive: (showInactive) => set({ showInactive }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setSettings: (settings) => set({ settings }),

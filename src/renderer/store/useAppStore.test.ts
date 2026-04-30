@@ -15,7 +15,7 @@ describe("selectVisibleRecords", () => {
     record.contactMethods.phones[0].notes = "Solo uso interno";
     record.contactMethods.emails = [{ id: "email_1", address: "ana.perez@hospital.local", label: "Laboral", isPrimary: true }];
 
-    const filters = { selectedType: "all" as const, selectedArea: "all" as const, showInactive: true };
+    const filters = { selectedType: "all" as const, selectedArea: "all" as const, selectedTags: [], showInactive: true };
 
     expect(selectVisibleRecords([record], "1234", filters)).toHaveLength(1);
     expect(selectVisibleRecords([record], "admisión", filters)).toHaveLength(1);
@@ -31,6 +31,7 @@ describe("selectVisibleRecords", () => {
       selectVisibleRecords([active, inactive], "", {
         selectedType: "all",
         selectedArea: "all",
+        selectedTags: [],
         showInactive: false
       })
     ).toEqual([active]);
@@ -39,6 +40,7 @@ describe("selectVisibleRecords", () => {
       selectVisibleRecords([active, inactive], "", {
         selectedType: "external-center",
         selectedArea: "otros",
+        selectedTags: [],
         showInactive: true
       })
     ).toEqual([inactive]);
@@ -121,6 +123,7 @@ function resetStore() {
     query: "",
     selectedType: "all",
     selectedArea: "all",
+    selectedTags: [],
     showInactive: false,
     isLoading: true
   });
@@ -141,6 +144,7 @@ describe("useAppStore actions", () => {
       expect(state.selectedRecordId).toBe(defaultContacts.records[0].id);
       expect(state.selectedType).toBe("all");
       expect(state.selectedArea).toBe("all");
+      expect(state.selectedTags).toEqual([]);
       expect(state.showInactive).toBe(false);
       expect(state.isLoading).toBe(false);
     });
@@ -163,11 +167,12 @@ describe("useAppStore actions", () => {
     });
 
     it("resets filters to all", () => {
-      useAppStore.setState({ selectedType: "person", selectedArea: "otros" });
+      useAppStore.setState({ selectedType: "person", selectedArea: "otros", selectedTags: ["urgencias"] });
       useAppStore.getState().initialize(bootstrapPayload);
       const state = useAppStore.getState();
       expect(state.selectedType).toBe("all");
       expect(state.selectedArea).toBe("all");
+      expect(state.selectedTags).toEqual([]);
     });
   });
 
@@ -179,6 +184,7 @@ describe("useAppStore actions", () => {
       expect(state.recovery).toBe(recoveryState);
       expect(state.settings).toBe(defaultSettings);
       expect(state.selectedRecordId).toBeNull();
+      expect(state.selectedTags).toEqual([]);
       expect(state.isLoading).toBe(false);
     });
 
@@ -194,11 +200,12 @@ describe("useAppStore actions", () => {
     });
 
     it("resets filters to all in recovery mode", () => {
-      useAppStore.setState({ selectedType: "service", selectedArea: "especialidades" });
+      useAppStore.setState({ selectedType: "service", selectedArea: "especialidades", selectedTags: ["admisión"] });
       useAppStore.getState().initializeRecovery(recoveryState, defaultSettings);
       const state = useAppStore.getState();
       expect(state.selectedType).toBe("all");
       expect(state.selectedArea).toBe("all");
+      expect(state.selectedTags).toEqual([]);
     });
   });
 
@@ -251,6 +258,19 @@ describe("useAppStore actions", () => {
       useAppStore.setState({ selectedArea: "otros" });
       useAppStore.getState().setSelectedArea("all");
       expect(useAppStore.getState().selectedArea).toBe("all");
+    });
+  });
+
+  describe("setSelectedTags", () => {
+    it("sets selected tags", () => {
+      useAppStore.getState().setSelectedTags(["admisión"]);
+      expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    });
+
+    it("clears selected tags", () => {
+      useAppStore.setState({ selectedTags: ["urgencias"] });
+      useAppStore.getState().setSelectedTags([]);
+      expect(useAppStore.getState().selectedTags).toEqual([]);
     });
   });
 
