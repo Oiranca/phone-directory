@@ -12,6 +12,12 @@ export const readJsonFile = async <T>(filePath: string): Promise<T> => {
 export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
   const tmp = filePath + ".tmp";
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
+  const fh = await fs.open(tmp, "r+");
+  try {
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
   try {
     await fs.rename(tmp, filePath);
   } catch (err: unknown) {
