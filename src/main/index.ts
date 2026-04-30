@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, app, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
@@ -34,6 +34,14 @@ const isAllowedNavigationUrl = (targetUrl: string) => {
   return targetUrl.startsWith("file://");
 };
 
+const devOrigin = isDev ? new URL(DEV_SERVER_URL).origin : "";
+const devWsOrigin = isDev ? devOrigin.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:")) : "";
+const DEV_CSP = isDev
+  ? `default-src 'self'; script-src 'self' 'unsafe-inline' ${devOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${devOrigin} ${devWsOrigin};`
+  : "";
+const PROD_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';";
+
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1440,
@@ -45,7 +53,7 @@ const createWindow = () => {
       preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   });
 
@@ -80,6 +88,19 @@ const bootstrap = async () => {
   await service.ensureInitialFiles();
   registerContactsIpc(service);
   registerSettingsIpc(service);
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const filteredHeaders = Object.fromEntries(
+      Object.entries(details.responseHeaders ?? {}).filter(
+        ([key]) => key.toLowerCase() !== "content-security-policy"
+      )
+    );
+    callback({
+      responseHeaders: {
+        ...filteredHeaders,
+        "Content-Security-Policy": [isDev ? DEV_CSP : PROD_CSP],
+      },
+    });
+  });
   createWindow();
 };
 

@@ -90,7 +90,7 @@ describe("AppDataService", () => {
         })
       )
     ).rejects.toThrow(
-      new RegExp(`No se pudo validar la carpeta de backups\\. Ruta afectada: ${path.join(testRoot, "missing-backups").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      /No se pudo validar la carpeta de backups\. Ruta afectada: missing-backups/
     );
   });
 
@@ -732,9 +732,7 @@ describe("AppDataService", () => {
       );
 
     await expect(service.createBackup()).rejects.toThrow(
-      new RegExp(
-        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No tienes permisos suficientes para acceder al archivo o directorio\\.`
-      )
+      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -755,9 +753,7 @@ describe("AppDataService", () => {
     const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
 
     await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. El archivo o directorio está en un sistema de solo lectura\\.`
-      )
+      /No se pudo exportar el directorio al destino seleccionado\. Ruta afectada: contacts-share\.json\. El archivo o directorio está en un sistema de solo lectura\./
     );
     expect(writeFileSpy).toHaveBeenCalled();
   });
@@ -784,9 +780,7 @@ describe("AppDataService", () => {
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: (?:\\/private)?${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
-      )
+      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -1871,14 +1865,15 @@ describe("AppDataService", () => {
     );
   });
 
-  it("throws after 1000 attempts when Math.random always returns the same value", async () => {
+  it("throws after 1000 attempts when crypto.randomUUID always returns the same value", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    // Math.random returning 0.5 always produces the same ID string
-    const fixedId = `cnt_${(0.5).toString(36).slice(2, 10)}`;
+    // crypto.randomUUID always returns same UUID to force collision
+    const fixedUUID = "aaaaaaaa-0000-0000-0000-000000000000" as `${string}-${string}-${string}-${string}-${string}`;
+    const fixedId = `cnt_${fixedUUID.slice(0, 8)}`;
 
     // Pre-populate contacts.json with a valid record that has the fixed ID
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
@@ -1930,7 +1925,7 @@ describe("AppDataService", () => {
     existing.metadata.recordCount = existing.records.length;
     await fs.writeFile(contactsFilePath, JSON.stringify(existing, null, 2), "utf-8");
 
-    const fixedRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const randomUUIDSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(fixedUUID);
 
     await expect(
       service.createRecord({
@@ -1957,7 +1952,7 @@ describe("AppDataService", () => {
       })
     ).rejects.toThrow("No se pudo generar un ID único para el registro después de 1000 intentos");
 
-    fixedRandom.mockRestore();
+    randomUUIDSpy.mockRestore();
   });
 
   it("returns backupPath null and succeeds when contacts.json does not exist before resetDataset", async () => {
@@ -2110,4 +2105,35 @@ describe("AppDataService", () => {
 
     expect(backups[0]?.createdAt).toBe(knownMtime.toISOString());
   });
+  it("does not lose records when two createRecord calls run concurrently", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const makePayload = (label: string) => ({
+      type: "service" as const,
+      displayName: `Concurrent ${label}`,
+      organization: { department: "Test" },
+      contactMethods: { phones: [], emails: [] },
+      aliases: [] as string[],
+      tags: [] as string[],
+      status: "active" as const
+    });
+
+    const [r1, r2] = await Promise.all([
+      service.createRecord(makePayload("A")),
+      service.createRecord(makePayload("B"))
+    ]);
+
+    expect(r1.savedRecordId).not.toBe(r2.savedRecordId);
+    const finalRecords =
+      r1.contacts.records.length >= r2.contacts.records.length
+        ? r1.contacts.records
+        : r2.contacts.records;
+    const ids = finalRecords.map((r) => r.id);
+    expect(ids).toContain(r1.savedRecordId);
+    expect(ids).toContain(r2.savedRecordId);
+  });
+
 });
