@@ -22,7 +22,7 @@ const isAllowedNavigationUrl = (targetUrl: string) => {
   return targetUrl.startsWith("file://");
 };
 
-const devWsUrl = DEV_SERVER_URL.replace(/^http:/, "ws:");
+const devWsUrl = DEV_SERVER_URL.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:"));
 const DEV_CSP =
   `default-src 'self'; script-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${DEV_SERVER_URL} ${devWsUrl};`;
 const PROD_CSP =
