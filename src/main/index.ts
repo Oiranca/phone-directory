@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, app, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
@@ -21,6 +21,11 @@ const isAllowedNavigationUrl = (targetUrl: string) => {
 
   return targetUrl.startsWith("file://");
 };
+
+const DEV_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' http://localhost:5173; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:5173 ws://localhost:5173;";
+const PROD_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';";
 
 const createWindow = () => {
   const window = new BrowserWindow({
@@ -60,6 +65,14 @@ const bootstrap = async () => {
   await service.ensureInitialFiles();
   registerContactsIpc(service);
   registerSettingsIpc(service);
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [isDev ? DEV_CSP : PROD_CSP],
+      },
+    });
+  });
   createWindow();
 };
 
