@@ -24,8 +24,9 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "EPERM" || code === "EEXIST") {
-        // Windows: rename over existing file fails. Use copyFile which overwrites atomically.
-        // If copyFile fails, the original file is untouched — no data loss.
+        // Windows: rename over existing file fails. copyFile overwrites the destination but is
+        // not atomic — a crash mid-copy can leave a partial file. We fsync afterwards to flush
+        // as much data as possible. If copyFile itself fails, the original file is untouched.
         try {
           await fs.copyFile(tmp, filePath);
           const destFh = await fs.open(filePath, "r+");

@@ -22,9 +22,10 @@ const isAllowedNavigationUrl = (targetUrl: string) => {
   return targetUrl.startsWith("file://");
 };
 
-const devWsUrl = DEV_SERVER_URL.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:"));
+const devOrigin = new URL(DEV_SERVER_URL).origin;
+const devWsOrigin = devOrigin.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:"));
 const DEV_CSP =
-  `default-src 'self'; script-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${DEV_SERVER_URL} ${devWsUrl};`;
+  `default-src 'self'; script-src 'self' 'unsafe-inline' ${devOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${devOrigin} ${devWsOrigin};`;
 const PROD_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';";
 
@@ -67,9 +68,14 @@ const bootstrap = async () => {
   registerContactsIpc(service);
   registerSettingsIpc(service);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const filteredHeaders = Object.fromEntries(
+      Object.entries(details.responseHeaders ?? {}).filter(
+        ([key]) => key.toLowerCase() !== "content-security-policy"
+      )
+    );
     callback({
       responseHeaders: {
-        ...details.responseHeaders,
+        ...filteredHeaders,
         "Content-Security-Policy": [isDev ? DEV_CSP : PROD_CSP],
       },
     });
