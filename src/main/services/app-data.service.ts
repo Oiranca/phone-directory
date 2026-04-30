@@ -1,6 +1,7 @@
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
@@ -913,7 +914,7 @@ export class AppDataService {
   }
 
   private createEntityId(prefix: string) {
-    return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    return `${prefix}_${globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
   }
 
   private createUniqueRecordId(records: ContactRecord[]) {

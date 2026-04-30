@@ -62,7 +62,7 @@ const phoneKindOptions = [
 ];
 
 // client-side only: used as React keys for draft phone/email entries, discarded on save
-const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+const createId = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
 const createPhoneDraft = (): EditablePhoneContact => ({
   id: createId("ph"),
