@@ -28,6 +28,12 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
         // If copyFile fails, the original file is untouched — no data loss.
         try {
           await fs.copyFile(tmp, filePath);
+          const destFh = await fs.open(filePath, "r+");
+          try {
+            await destFh.sync();
+          } finally {
+            await destFh.close();
+          }
           await fs.unlink(tmp).catch(() => undefined);
         } catch (copyErr) {
           await fs.unlink(tmp).catch(() => undefined);
