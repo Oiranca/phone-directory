@@ -1636,14 +1636,15 @@ describe("AppDataService", () => {
     );
   });
 
-  it("throws after 1000 attempts when Math.random always returns the same value", async () => {
+  it("throws after 1000 attempts when crypto.randomUUID always returns the same value", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    // Math.random returning 0.5 always produces the same ID string
-    const fixedId = `cnt_${(0.5).toString(36).slice(2, 10)}`;
+    // crypto.randomUUID always returns same UUID to force collision
+    const fixedUUID = "aaaaaaaa-0000-0000-0000-000000000000" as `${string}-${string}-${string}-${string}-${string}`;
+    const fixedId = `cnt_${fixedUUID.slice(0, 8)}`;
 
     // Pre-populate contacts.json with a valid record that has the fixed ID
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
@@ -1695,7 +1696,7 @@ describe("AppDataService", () => {
     existing.metadata.recordCount = existing.records.length;
     await fs.writeFile(contactsFilePath, JSON.stringify(existing, null, 2), "utf-8");
 
-    const fixedRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const randomUUIDSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(fixedUUID);
 
     await expect(
       service.createRecord({
@@ -1722,7 +1723,7 @@ describe("AppDataService", () => {
       })
     ).rejects.toThrow("No se pudo generar un ID único para el registro después de 1000 intentos");
 
-    fixedRandom.mockRestore();
+    randomUUIDSpy.mockRestore();
   });
 
   it("returns backupPath null and succeeds when contacts.json does not exist before resetDataset", async () => {

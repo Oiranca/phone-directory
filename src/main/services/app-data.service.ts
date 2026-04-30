@@ -942,7 +942,7 @@ export class AppDataService {
   }
 
   private createEntityId(prefix: string) {
-    return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    return `${prefix}_${globalThis.crypto.randomUUID().slice(0, 8)}`;
   }
 
   private createUniqueRecordId(records: ContactRecord[]) {
