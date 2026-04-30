@@ -1,3 +1,5 @@
+import { app } from "electron";
+
 const parseBooleanFlag = (value: string | undefined) => value === "1" || value === "true";
 const isLoopbackUrl = (value: string) => {
   try {
@@ -45,7 +47,7 @@ const parseJsonStringArray = (value: string | undefined) => {
   }
 };
 
-const isE2E = parseBooleanFlag(process.env.ELECTRON_E2E);
+const isE2E = parseBooleanFlag(process.env.ELECTRON_E2E) && !app.isPackaged;
 
 export const env = {
   isE2E,
