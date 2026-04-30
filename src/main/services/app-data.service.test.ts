@@ -1636,7 +1636,7 @@ describe("AppDataService", () => {
     );
   });
 
-  it("throws after 1000 attempts when Math.random always returns the same value", async () => {
+  it("throws after 1000 attempts when crypto.randomUUID always returns the same value", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1644,7 +1644,7 @@ describe("AppDataService", () => {
 
     // crypto.randomUUID always returns same UUID to force collision
     const fixedUUID = "aaaaaaaa-0000-0000-0000-000000000000" as `${string}-${string}-${string}-${string}-${string}`;
-    const fixedId = `cnt_${fixedUUID.replace(/-/g, "").slice(0, 8)}`;
+    const fixedId = `cnt_${fixedUUID.slice(0, 8)}`;
 
     // Pre-populate contacts.json with a valid record that has the fixed ID
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
