@@ -968,23 +968,23 @@ export class AppDataService {
     const filesystemError = this.getErrnoException(error);
 
     if (typeof filesystemError?.path === "string" && filesystemError.path.trim() !== "") {
-      routeDetails.add(`Ruta afectada: ${filesystemError.path}`);
+      routeDetails.add(`Ruta afectada: ${path.basename(filesystemError.path)}`);
     }
 
     if (typeof filesystemError?.dest === "string" && filesystemError.dest.trim() !== "") {
-      routeDetails.add(`Ruta de destino: ${filesystemError.dest}`);
+      routeDetails.add(`Ruta de destino: ${path.basename(filesystemError.dest)}`);
     }
 
     if (routeDetails.size === 0 && context.filePath) {
-      routeDetails.add(`Ruta afectada: ${context.filePath}`);
+      routeDetails.add(`Ruta afectada: ${path.basename(context.filePath)}`);
     }
 
     if (context.sourceFilePath) {
-      routeDetails.add(`Ruta de origen: ${context.sourceFilePath}`);
+      routeDetails.add(`Ruta de origen: ${path.basename(context.sourceFilePath)}`);
     }
 
     if (context.targetFilePath) {
-      routeDetails.add(`Ruta de destino: ${context.targetFilePath}`);
+      routeDetails.add(`Ruta de destino: ${path.basename(context.targetFilePath)}`);
     }
 
     const routeContext =

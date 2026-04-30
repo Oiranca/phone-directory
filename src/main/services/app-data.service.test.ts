@@ -85,7 +85,7 @@ describe("AppDataService", () => {
         })
       )
     ).rejects.toThrow(
-      new RegExp(`No se pudo validar la carpeta de backups\\. Ruta afectada: ${path.join(testRoot, "missing-backups").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+      /No se pudo validar la carpeta de backups\. Ruta afectada: missing-backups/
     );
   });
 
@@ -505,9 +505,7 @@ describe("AppDataService", () => {
       );
 
     await expect(service.createBackup()).rejects.toThrow(
-      new RegExp(
-        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: ${backupFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No tienes permisos suficientes para acceder al archivo o directorio\\.`
-      )
+      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -528,9 +526,7 @@ describe("AppDataService", () => {
     const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
 
     await expect(service.exportDataset(exportFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo exportar el directorio al destino seleccionado\\. Ruta afectada: ${exportFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. El archivo o directorio está en un sistema de solo lectura\\.`
-      )
+      /No se pudo exportar el directorio al destino seleccionado\. Ruta afectada: contacts-share\.json\. El archivo o directorio está en un sistema de solo lectura\./
     );
     expect(writeFileSpy).toHaveBeenCalled();
   });
@@ -557,9 +553,7 @@ describe("AppDataService", () => {
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo crear el backup del directorio\\. Ruta afectada: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de origen: ${contactsFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Ruta de destino: (?:\\/private)?${backupDirectoryPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*No hay espacio suficiente en disco para completar la operación\\.`
-      )
+      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
