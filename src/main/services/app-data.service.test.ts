@@ -1696,7 +1696,7 @@ describe("AppDataService", () => {
     existing.metadata.recordCount = existing.records.length;
     await fs.writeFile(contactsFilePath, JSON.stringify(existing, null, 2), "utf-8");
 
-    const fixedRandom = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(fixedUUID);
+    const randomUUIDSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(fixedUUID);
 
     await expect(
       service.createRecord({
@@ -1723,7 +1723,7 @@ describe("AppDataService", () => {
       })
     ).rejects.toThrow("No se pudo generar un ID único para el registro después de 1000 intentos");
 
-    fixedRandom.mockRestore();
+    randomUUIDSpy.mockRestore();
   });
 
   it("returns backupPath null and succeeds when contacts.json does not exist before resetDataset", async () => {
