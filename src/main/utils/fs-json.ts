@@ -10,6 +10,9 @@ export const readJsonFile = async <T>(filePath: string): Promise<T> => {
   return JSON.parse(contents) as T;
 };
 
+export const shouldFsyncParentDirectory = (platform: NodeJS.Platform = process.platform): boolean =>
+  platform !== "win32";
+
 export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
   const tmp = filePath + ".tmp";
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
@@ -22,8 +25,8 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
     }
     try {
       await fs.rename(tmp, filePath);
-      if (process.platform !== 'win32') {
-        const dirFd = await fs.open(path.dirname(filePath), 'r');
+      if (shouldFsyncParentDirectory()) {
+        const dirFd = await fs.open(path.dirname(filePath), "r");
         try {
           await dirFd.sync();
         } finally {
