@@ -760,6 +760,390 @@ describe("AppDataService", () => {
     expect(autoBackupFailures).toHaveLength(1);
   });
 
+  it("preserves edit-threshold progress when saving unrelated settings", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Progress One",
+      person: {
+        firstName: "Auto",
+        lastName: "Progress"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_progress_1",
+            number: "12345",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await service.saveSettings(
+      buildEditableSettings({
+        editorName: "Samuel Updated",
+        ui: {
+          showInactiveByDefault: true,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Progress Two",
+      person: {
+        firstName: "Auto",
+        lastName: "Trigger"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_progress_2",
+            number: "67890",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await waitForCondition(async () => {
+      const files = await fs.readdir(path.join(testRoot, "backups"));
+      return files.some((file) => file.startsWith("auto-backup-"));
+    });
+
+    const files = await fs.readdir(path.join(testRoot, "backups"));
+    expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+  });
+
+  it("resets edit-threshold progress when backup targets change", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Reset One",
+      person: {
+        firstName: "Auto",
+        lastName: "Reset"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_reset_1",
+            number: "12345",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const nextBackupDirectory = path.join(testRoot, "backups-next");
+    await fs.mkdir(nextBackupDirectory, { recursive: true });
+    await service.saveSettings(
+      buildEditableSettings({
+        backupDirectoryPath: nextBackupDirectory,
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Reset Two",
+      person: {
+        firstName: "Auto",
+        lastName: "Still Waiting"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_reset_2",
+            number: "67890",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect((service as unknown as { autoBackupPending: boolean }).autoBackupPending).toBe(false);
+    expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Reset Three",
+      person: {
+        firstName: "Auto",
+        lastName: "Now Trigger"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_reset_3",
+            number: "24680",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await waitForCondition(async () => {
+      const files = await fs.readdir(nextBackupDirectory);
+      return files.some((file) => file.startsWith("auto-backup-"));
+    });
+
+    expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+  });
+
+  it("resets edit-threshold progress when the data file changes", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Data Path One",
+      person: {
+        firstName: "Auto",
+        lastName: "Data"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_data_path_1",
+            number: "12345",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const nextDataDirectory = path.join(testRoot, "custom-data-next");
+    await fs.mkdir(nextDataDirectory, { recursive: true });
+    const nextDataFilePath = path.join(nextDataDirectory, "contacts-custom.json");
+    await service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: nextDataFilePath,
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 2,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Data Path Two",
+      person: {
+        firstName: "Auto",
+        lastName: "Still Waiting"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_data_path_2",
+            number: "67890",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect((service as unknown as { autoBackupPending: boolean }).autoBackupPending).toBe(false);
+    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Data Path Three",
+      person: {
+        firstName: "Auto",
+        lastName: "Now Trigger"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_data_path_3",
+            number: "24680",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await waitForCondition(async () => {
+      const files = await fs.readdir(path.join(testRoot, "backups"));
+      return files.some((file) => file.startsWith("auto-backup-"));
+    });
+
+    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+  });
+
   it("ignores client supplied ids when creating a new record", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

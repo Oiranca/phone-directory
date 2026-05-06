@@ -133,7 +133,12 @@ export class AppDataService {
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
-    this.configureAutoBackup(nextSettings.ui.autoBackup);
+    this.configureAutoBackup(nextSettings.ui.autoBackup, {
+      forceResetEditCount: (
+        !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) ||
+        !this.pathsMatch(nextSettings.backupDirectoryPath, currentSettings.backupDirectoryPath)
+      )
+    });
     return nextSettings;
     });
   }
@@ -761,9 +766,23 @@ export class AppDataService {
     }
   }
 
-  private configureAutoBackup(settings: AutoBackupSettings) {
+  private configureAutoBackup(
+    settings: AutoBackupSettings,
+    options: { forceResetEditCount?: boolean } = {}
+  ) {
+    const shouldResetEditCount = (
+      options.forceResetEditCount ||
+      !settings.enabled ||
+      settings.trigger !== "editCount" ||
+      !this.autoBackupSettings.enabled ||
+      this.autoBackupSettings.trigger !== "editCount" ||
+      this.autoBackupSettings.editCountThreshold !== settings.editCountThreshold
+    );
+
     this.autoBackupSettings = settings;
-    this.autoBackupEditCount = 0;
+    if (shouldResetEditCount) {
+      this.autoBackupEditCount = 0;
+    }
 
     if (this.autoBackupTimer) {
       clearInterval(this.autoBackupTimer);
