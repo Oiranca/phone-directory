@@ -79,6 +79,7 @@ describe("AppDataService", () => {
 
   it("rejects a custom backup directory that does not exist", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const missingBackupDirectory = path.join(testRoot, "missing-backups");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
@@ -86,11 +87,13 @@ describe("AppDataService", () => {
     await expect(
       service.saveSettings(
         buildEditableSettings({
-          backupDirectoryPath: path.join(testRoot, "missing-backups")
+          backupDirectoryPath: missingBackupDirectory
         })
       )
     ).rejects.toThrow(
-      /No se pudo validar la carpeta de backups\. Ruta afectada: missing-backups/
+      new RegExp(
+        `No se pudo validar la carpeta de backups\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
+      )
     );
   });
 
