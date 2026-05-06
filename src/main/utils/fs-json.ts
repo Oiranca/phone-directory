@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 
 export const ensureDirectory = async (directoryPath: string) => {
   await fs.mkdir(directoryPath, { recursive: true });
@@ -8,6 +9,9 @@ export const readJsonFile = async <T>(filePath: string): Promise<T> => {
   const contents = await fs.readFile(filePath, "utf-8");
   return JSON.parse(contents) as T;
 };
+
+export const shouldFsyncParentDirectory = (platform: NodeJS.Platform = process.platform): boolean =>
+  platform !== "win32";
 
 export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
   const tmp = filePath + ".tmp";
@@ -21,6 +25,14 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
     }
     try {
       await fs.rename(tmp, filePath);
+      if (shouldFsyncParentDirectory()) {
+        const dirFd = await fs.open(path.dirname(filePath), "r");
+        try {
+          await dirFd.sync();
+        } finally {
+          await dirFd.close();
+        }
+      }
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "EPERM" || code === "EEXIST") {
