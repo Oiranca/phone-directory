@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-05-06 (`OIR-44` merged to `main`)
+- Last updated: 2026-05-06 (`OIR-47` merged to `main`)
 
 ## 1. Purpose
 
@@ -30,6 +30,7 @@ Latest delivered planning note:
 - `OIR-37`, `OIR-39`, `OIR-40`, `OIR-41`, and `OIR-42` merged to `main` on 2026-04-30 via PR `#41` and are no longer part of the active remaining backlog
 - `OIR-38` E2E packaging gate merged on 2026-04-30 via PR `#37` and is no longer part of the active remaining backlog
 - `OIR-44` POSIX directory fsync durability merged to `main` on 2026-05-06 via PR `#42` and is no longer part of the active remaining backlog
+- `OIR-47` configurable scheduled auto-backup merged to `main` on 2026-05-06 via PR `#43` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -53,16 +54,18 @@ The current codebase already includes:
 - Playwright-based Electron end-to-end harness for critical MVP flows
 - USB launcher scripts for Windows (`launch.bat`), macOS (`launch.command`), and Linux (`launch.sh`) with `ELECTRON_PORTABLE_ROOT_PATH` pointing data to `portable-data/` at USB root
 - Settings page native path pickers for data file and backup directory, with auto-default paths and browse-state coverage
+- configurable scheduled auto-backups with launch, interval, and edit-count triggers plus retention and failure feedback
 
 Latest known verified baseline:
 
 - `npm run typecheck`
 - `npm run build`
+- `npx vitest run --exclude '.aia/**'`
 
 Known test note:
 
 - the bootstrap-failure stderr output in `src/renderer/app/App.test.tsx` is expected and not a failing condition
-- `OIR-45` tracks the remaining known `app-data.service.test.ts` failures on `main`
+- the current `main` baseline is clean under `npx vitest run --exclude '.aia/**'`
 
 ## 3. Priority Order
 
@@ -80,13 +83,11 @@ This track is complete on the current line.
 
 ### Priority 4 — Reliability follow-up and release hardening
 
-1. `OIR-45` — fix the remaining pre-existing backup-path test failures on `main`
-2. `OIR-46` — sign distribution builds to reduce Windows/macOS trust warnings
-3. `OIR-47` — add configurable scheduled auto-backup
+1. `OIR-46` — sign distribution builds to reduce Windows/macOS trust warnings
 
 ## 4. Remaining Work Details
 
-### 4.1 Remaining tracked backlog (`OIR-45` through `OIR-47`)
+### 4.1 Remaining tracked backlog (`OIR-46`)
 
 Goal:
 
@@ -94,25 +95,21 @@ Goal:
 
 Definition of done:
 
-- `OIR-45` removes the remaining known failing tests from the main branch baseline
 - `OIR-46` documents or implements code-signing for shipped builds
-- `OIR-47` adds background backup protection with clear configuration and recovery semantics
 - verification is re-run on the resulting release line
 
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-45`
-2. `OIR-46`
-3. `OIR-47`
+1. `OIR-46`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-45`.
+Start with `OIR-46`.
 
 Reason:
 
-- `OIR-45` is the only known issue directly blocking a clean main-branch test baseline
+- the main-branch verification baseline is now clean, leaving code-signing as the main release-hardening gap
 
 ## 7. Explicit Exclusions
 
@@ -137,6 +134,8 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-41` IPC path sanitization: merged to `main` on 2026-04-30 via PR `#41`
 - `OIR-42` temp-file fsync before rename: merged to `main` on 2026-04-30 via PR `#41`
 - `OIR-44` POSIX parent-directory fsync durability: merged to `main` on 2026-05-06 via PR `#42`
+- `OIR-45` known backup-path test failures: no longer reproducing on the verified current `main` baseline
+- `OIR-47` configurable scheduled auto-backup: merged to `main` on 2026-05-06 via PR `#43`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
