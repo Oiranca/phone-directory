@@ -16,7 +16,14 @@ const editableSettings = {
   dataFilePath: "/tmp/data/contacts.json",
   backupDirectoryPath: "/tmp/backups",
   ui: {
-    showInactiveByDefault: false
+    showInactiveByDefault: false,
+    autoBackup: {
+      enabled: false,
+      trigger: "launch",
+      intervalHours: 2,
+      editCountThreshold: 10,
+      retentionCount: 5
+    }
   }
 };
 
@@ -110,7 +117,8 @@ describe("App recovery flow", () => {
           dataFilePath: "/tmp/default-data/contacts.json",
           backupDirectoryPath: "/tmp/default-backups",
           ui: {
-            showInactiveByDefault: false
+            showInactiveByDefault: false,
+            autoBackup: editableSettings.ui.autoBackup
           }
         }),
         saveSettings: vi.fn(),
@@ -297,7 +305,8 @@ describe("App recovery flow", () => {
         dataFilePath: "/tmp/default-data/contacts.json",
         backupDirectoryPath: "/tmp/default-backups",
         ui: {
-          showInactiveByDefault: false
+          showInactiveByDefault: false,
+          autoBackup: editableSettings.ui.autoBackup
         }
       });
       expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);

@@ -84,7 +84,13 @@ const bootstrap = async () => {
     );
   }
 
-  const service = new AppDataService();
+  const service = new AppDataService({
+    onAutoBackupFailure: (message) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send("app:auto-backup-failed", { message });
+      }
+    }
+  });
   await service.ensureInitialFiles();
   registerContactsIpc(service);
   registerSettingsIpc(service);
@@ -102,6 +108,9 @@ const bootstrap = async () => {
     });
   });
   createWindow();
+  void service.startAutoBackup().catch((error) => {
+    console.error("[auto-backup] Failed to start auto-backup scheduler.", error);
+  });
 };
 
 app.whenReady().then(() => {

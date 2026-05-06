@@ -4,6 +4,16 @@ import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
 
+const clampInteger = (value: string, minimum: number, maximum: number) => {
+  const parsed = Math.trunc(Number(value));
+
+  if (!Number.isFinite(parsed)) {
+    return minimum;
+  }
+
+  return Math.min(maximum, Math.max(minimum, parsed));
+};
+
 export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
   const { pushToast } = useToast();
@@ -16,6 +26,11 @@ export const SettingsPage = () => {
     backupDirectoryPath: string;
   }>(null);
   const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [autoBackupTrigger, setAutoBackupTrigger] = useState<"launch" | "intervalHours" | "editCount">("launch");
+  const [autoBackupIntervalHours, setAutoBackupIntervalHours] = useState("2");
+  const [autoBackupEditCountThreshold, setAutoBackupEditCountThreshold] = useState("10");
+  const [autoBackupRetentionCount, setAutoBackupRetentionCount] = useState("5");
   const [isBrowsingDataFile, setIsBrowsingDataFile] = useState(false);
   const [isBrowsingBackupDir, setIsBrowsingBackupDir] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,6 +72,11 @@ export const SettingsPage = () => {
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
+    setAutoBackupEnabled(settings.ui.autoBackup.enabled);
+    setAutoBackupTrigger(settings.ui.autoBackup.trigger);
+    setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
+    setAutoBackupEditCountThreshold(String(settings.ui.autoBackup.editCountThreshold));
+    setAutoBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
     setSaveError("");
   }, [settings]);
 
@@ -111,7 +131,12 @@ export const SettingsPage = () => {
     (hasEditorDraft && editorName !== settings.editorName) ||
     dataFilePath !== settings.dataFilePath ||
     backupDirectoryPath !== settings.backupDirectoryPath ||
-    showInactiveByDefault !== settings.ui.showInactiveByDefault;
+    showInactiveByDefault !== settings.ui.showInactiveByDefault ||
+    autoBackupEnabled !== settings.ui.autoBackup.enabled ||
+    autoBackupTrigger !== settings.ui.autoBackup.trigger ||
+    autoBackupIntervalHours !== String(settings.ui.autoBackup.intervalHours) ||
+    autoBackupEditCountThreshold !== String(settings.ui.autoBackup.editCountThreshold) ||
+    autoBackupRetentionCount !== String(settings.ui.autoBackup.retentionCount);
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
@@ -134,12 +159,22 @@ export const SettingsPage = () => {
     setSaveError("");
   };
 
+  const handleAutoBackupEnabledChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setAutoBackupEnabled(event.target.checked);
+    setSaveError("");
+  };
+
   const handleReset = () => {
     setEditorName(settings.editorName);
     setHasEditorDraft(false);
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
     setShowInactiveByDefault(settings.ui.showInactiveByDefault);
+    setAutoBackupEnabled(settings.ui.autoBackup.enabled);
+    setAutoBackupTrigger(settings.ui.autoBackup.trigger);
+    setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
+    setAutoBackupEditCountThreshold(String(settings.ui.autoBackup.editCountThreshold));
+    setAutoBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
     setSaveError("");
   };
 
@@ -213,13 +248,22 @@ export const SettingsPage = () => {
     setIsSaving(true);
     setSaveError("");
 
+    const normalizedAutoBackupSettings = {
+      enabled: autoBackupEnabled,
+      trigger: autoBackupTrigger,
+      intervalHours: clampInteger(autoBackupIntervalHours, 1, 168),
+      editCountThreshold: clampInteger(autoBackupEditCountThreshold, 1, 1000),
+      retentionCount: clampInteger(autoBackupRetentionCount, 1, 100)
+    };
+
     try {
       const saved = await window.hospitalDirectory.saveSettings({
         editorName,
         dataFilePath,
         backupDirectoryPath,
         ui: {
-          showInactiveByDefault
+          showInactiveByDefault,
+          autoBackup: normalizedAutoBackupSettings
         }
       });
       setSettings(saved);
@@ -348,6 +392,100 @@ export const SettingsPage = () => {
                 </span>
               </span>
             </label>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex items-start gap-3">
+                <input
+                  aria-label="Activar auto-backup"
+                  type="checkbox"
+                  checked={autoBackupEnabled}
+                  onChange={handleAutoBackupEnabledChange}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-700">Activar auto-backup</span>
+                  <span className="mt-1 block text-sm text-slate-600">
+                    Crea copias automáticas en segundo plano para reducir riesgo entre backups manuales.
+                  </span>
+                </span>
+              </label>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Cuándo crear el auto-backup</span>
+                  <select
+                    aria-label="Trigger del auto-backup"
+                    value={autoBackupTrigger}
+                    onChange={(event) => {
+                      setAutoBackupTrigger(event.target.value as "launch" | "intervalHours" | "editCount");
+                      setSaveError("");
+                    }}
+                    disabled={!autoBackupEnabled}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20 disabled:opacity-60"
+                  >
+                    <option value="launch">Al abrir la app</option>
+                    <option value="intervalHours">Cada N horas</option>
+                    <option value="editCount">Cada N ediciones</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Retención de auto-backups</span>
+                  <input
+                    aria-label="Retención de auto-backups"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={autoBackupRetentionCount}
+                    onChange={(event) => {
+                      setAutoBackupRetentionCount(event.target.value);
+                      setSaveError("");
+                    }}
+                    disabled={!autoBackupEnabled}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20 disabled:opacity-60"
+                  />
+                </label>
+              </div>
+
+              {autoBackupEnabled && autoBackupTrigger === "intervalHours" ? (
+                <label className="mt-4 block">
+                  <span className="text-sm font-semibold text-slate-700">Horas entre auto-backups</span>
+                  <input
+                    aria-label="Horas entre auto-backups"
+                    type="number"
+                    min={1}
+                    max={168}
+                    step={1}
+                    value={autoBackupIntervalHours}
+                    onChange={(event) => {
+                      setAutoBackupIntervalHours(event.target.value);
+                      setSaveError("");
+                    }}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                  />
+                </label>
+              ) : null}
+
+              {autoBackupEnabled && autoBackupTrigger === "editCount" ? (
+                <label className="mt-4 block">
+                  <span className="text-sm font-semibold text-slate-700">Ediciones entre auto-backups</span>
+                  <input
+                    aria-label="Ediciones entre auto-backups"
+                    type="number"
+                    min={1}
+                    max={1000}
+                    step={1}
+                    value={autoBackupEditCountThreshold}
+                    onChange={(event) => {
+                      setAutoBackupEditCountThreshold(event.target.value);
+                      setSaveError("");
+                    }}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                  />
+                </label>
+              ) : null}
+            </div>
           </div>
 
           {saveError ? (
@@ -408,6 +546,18 @@ export const SettingsPage = () => {
                 <dt className="font-medium text-slate-500">Inactivos al iniciar</dt>
                 <dd className="mt-1">{settings.ui.showInactiveByDefault ? "Sí" : "No"}</dd>
               </div>
+              <div>
+                <dt className="font-medium text-slate-500">Auto-backup</dt>
+                <dd className="mt-1">
+                  {settings.ui.autoBackup.enabled
+                    ? `Sí · ${settings.ui.autoBackup.trigger === "launch"
+                      ? "al abrir"
+                      : settings.ui.autoBackup.trigger === "intervalHours"
+                        ? `cada ${settings.ui.autoBackup.intervalHours} h`
+                        : `cada ${settings.ui.autoBackup.editCountThreshold} ediciones`}`
+                    : "No"}
+                </dd>
+              </div>
             </dl>
           </div>
 
@@ -418,6 +568,7 @@ export const SettingsPage = () => {
               <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el dataset actual.</li>
               <li>La carpeta de backups debe existir y ser accesible antes de guardarla aquí.</li>
               <li>La preferencia de inactivos se usará como comportamiento inicial del directorio.</li>
+              <li>Los auto-backups usan el prefijo <code>auto-backup-</code> y rotan según la retención indicada.</li>
               <li>Si una ruta falla, puedes cargar las rutas gestionadas y guardarlas cuando lo revises.</li>
             </ul>
           </div>

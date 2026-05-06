@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
   CsvImportPreview,
@@ -32,7 +33,18 @@ const api = {
   importCsvDataset: (importToken: string) =>
     ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>,
   browseForPath: (type: "dataFile" | "backupDirectory") =>
-    ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>
+    ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>,
+  onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
+    const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
+      listener(payload);
+    };
+
+    ipcRenderer.on("app:auto-backup-failed", wrappedListener);
+
+    return () => {
+      ipcRenderer.removeListener("app:auto-backup-failed", wrappedListener);
+    };
+  }
 };
 
 contextBridge.exposeInMainWorld("hospitalDirectory", api);

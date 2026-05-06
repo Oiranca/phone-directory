@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
   CsvImportPreview,
@@ -30,6 +31,7 @@ declare global {
       previewCsvImport: () => Promise<CsvImportPreview | null>;
       importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
+      onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }
 }

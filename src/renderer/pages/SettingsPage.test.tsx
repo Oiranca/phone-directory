@@ -26,7 +26,14 @@ const editableSettings = {
   dataFilePath: "/tmp/data/contacts.json",
   backupDirectoryPath: "/tmp/backups",
   ui: {
-    showInactiveByDefault: false
+    showInactiveByDefault: false,
+    autoBackup: {
+      enabled: false,
+      trigger: "launch",
+      intervalHours: 2,
+      editCountThreshold: 10,
+      retentionCount: 5
+    }
   }
 };
 
@@ -54,7 +61,8 @@ describe("SettingsPage", () => {
           dataFilePath: "/tmp/default-data/contacts.json",
           backupDirectoryPath: "/tmp/default-backups",
           ui: {
-            showInactiveByDefault: false
+            showInactiveByDefault: false,
+            autoBackup: editableSettings.ui.autoBackup
           }
         }),
         saveSettings: vi.fn().mockResolvedValue({
@@ -62,7 +70,8 @@ describe("SettingsPage", () => {
           dataFilePath: "/tmp/data/contacts.json",
           backupDirectoryPath: "/tmp/backups",
           ui: {
-            showInactiveByDefault: true
+            showInactiveByDefault: true,
+            autoBackup: editableSettings.ui.autoBackup
           }
         }),
         createBackup: vi.fn(),
@@ -109,7 +118,8 @@ describe("SettingsPage", () => {
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
         ui: {
-          showInactiveByDefault: true
+          showInactiveByDefault: true,
+          autoBackup: editableSettings.ui.autoBackup
         }
       });
     });
@@ -120,7 +130,8 @@ describe("SettingsPage", () => {
       dataFilePath: "/tmp/data/contacts.json",
       backupDirectoryPath: "/tmp/backups",
       ui: {
-        showInactiveByDefault: true
+        showInactiveByDefault: true,
+        autoBackup: editableSettings.ui.autoBackup
       }
     });
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Guardia tarde");
@@ -141,6 +152,45 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
     expect(screen.getByRole("checkbox", { name: /Mostrar inactivos al iniciar/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+  });
+
+  it("normalizes auto-backup numeric values before saving", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Activar auto-backup" }));
+    fireEvent.change(screen.getByLabelText("Trigger del auto-backup"), {
+      target: { value: "intervalHours" }
+    });
+    fireEvent.change(screen.getByLabelText("Horas entre auto-backups"), {
+      target: { value: "1.5" }
+    });
+    fireEvent.change(screen.getByLabelText("Retención de auto-backups"), {
+      target: { value: "999" }
+    });
+    fireEvent.change(screen.getByLabelText("Trigger del auto-backup"), {
+      target: { value: "launch" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledWith({
+        editorName: "Samuel",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "launch",
+            intervalHours: 1,
+            editCountThreshold: 10,
+            retentionCount: 100
+          }
+        }
+      });
+    });
   });
 
   it("shows recovery actions when bootstrap loading fails", async () => {

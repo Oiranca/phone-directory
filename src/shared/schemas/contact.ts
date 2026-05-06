@@ -2,6 +2,13 @@ import { z } from "zod";
 import { AREAS, RECORD_TYPES } from "../constants/catalogs.js";
 
 const isoDateTimeString = z.string().datetime({ offset: true });
+const autoBackupDefaults = {
+  enabled: false,
+  trigger: "launch" as const,
+  intervalHours: 2,
+  editCountThreshold: 10,
+  retentionCount: 5
+};
 
 export const phoneContactSchema = z.object({
   id: z.string(),
@@ -91,7 +98,14 @@ export const appSettingsSchema = z.object({
     backupDirectoryPath: z.boolean()
   }).optional(),
   ui: z.object({
-    showInactiveByDefault: z.boolean()
+    showInactiveByDefault: z.boolean(),
+    autoBackup: z.object({
+      enabled: z.boolean(),
+      trigger: z.enum(["launch", "intervalHours", "editCount"]),
+      intervalHours: z.number().int().min(1).max(168),
+      editCountThreshold: z.number().int().min(1).max(1000),
+      retentionCount: z.number().int().min(1).max(100)
+    }).default(autoBackupDefaults)
   })
 });
 
