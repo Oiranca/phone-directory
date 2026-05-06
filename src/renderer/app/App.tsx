@@ -159,6 +159,7 @@ export const App = () => {
   const [bootstrapError, setBootstrapError] = useState("");
   const [bootstrapHelp, setBootstrapHelp] = useState("");
   const hasAttempted = useRef(false);
+  const { pushToast } = useToast();
 
   const loadBootstrapData = async () => {
     try {
@@ -201,6 +202,19 @@ export const App = () => {
     hasAttempted.current = true;
     void loadBootstrapData();
   }, [contacts, recovery, settings]);
+
+  useEffect(() => {
+    if (typeof window.hospitalDirectory?.onAutoBackupFailure !== "function") {
+      return;
+    }
+
+    return window.hospitalDirectory.onAutoBackupFailure(({ message }) => {
+      pushToast({
+        type: "error",
+        message: toCompactToastMessage(message, "No se pudo crear el auto-backup.")
+      });
+    });
+  }, [pushToast]);
 
   if (bootstrapError) {
     return (

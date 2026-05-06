@@ -7,6 +7,7 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 import type {
+  AutoBackupSettings,
   AppSettings,
   BackupListItem,
   BootstrapData,
@@ -31,6 +32,16 @@ import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
+  private autoBackupTimer: NodeJS.Timeout | null = null;
+  private autoBackupPending = false;
+  private autoBackupEditCount = 0;
+  private autoBackupSettings: AutoBackupSettings = defaultSettings("", "").ui.autoBackup;
+
+  constructor(
+    private readonly options: {
+      onAutoBackupFailure?: (message: string) => void;
+    } = {}
+  ) {}
 
   private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.writeQueue.then(fn);
@@ -60,6 +71,11 @@ export class AppDataService {
       await writeJsonFile(settingsFilePath, managedDefaults);
     }
     });
+  }
+
+  async startAutoBackup() {
+    const settings = await this.readSettings(true);
+    this.configureAutoBackup(settings.ui.autoBackup);
   }
 
   async getBootstrapData(): Promise<BootstrapResult> {
@@ -117,6 +133,7 @@ export class AppDataService {
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
+    this.configureAutoBackup(nextSettings.ui.autoBackup);
     return nextSettings;
     });
   }
@@ -127,12 +144,13 @@ export class AppDataService {
 
   async createBackup() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePath(settings);
+    const backupFilePath = await this.createBackupFilePath(settings, "contacts");
     await this.copyFileWithContext(
       settings.dataFilePath,
       backupFilePath,
       "No se pudo crear el backup del directorio."
     );
+    this.autoBackupEditCount = 0;
     return backupFilePath;
   }
 
@@ -384,6 +402,7 @@ export class AppDataService {
 
     const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
+    this.noteAutoBackupEligibleEdit();
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -426,6 +445,7 @@ export class AppDataService {
     );
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
+    this.noteAutoBackupEligibleEdit();
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -465,7 +485,7 @@ export class AppDataService {
     );
   }
 
-  private async createBackupFilePath(settings: AppSettings) {
+  private async createBackupFilePath(settings: AppSettings, prefix: string) {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
@@ -480,7 +500,7 @@ export class AppDataService {
         { filePath: backupDirectory }
       );
     }
-    return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
+    return path.join(backupDirectory, `${prefix}-${safeTimestamp}.json`);
   }
 
   private async readSettings(validatePaths = false) {
@@ -739,6 +759,108 @@ export class AppDataService {
         { filePath: canonicalFilePath }
       );
     }
+  }
+
+  private configureAutoBackup(settings: AutoBackupSettings) {
+    this.autoBackupSettings = settings;
+    this.autoBackupEditCount = 0;
+
+    if (this.autoBackupTimer) {
+      clearInterval(this.autoBackupTimer);
+      this.autoBackupTimer = null;
+    }
+
+    if (!settings.enabled) {
+      return;
+    }
+
+    if (settings.trigger === "launch") {
+      this.runAutoBackupInBackground();
+      return;
+    }
+
+    if (settings.trigger === "intervalHours") {
+      this.autoBackupTimer = setInterval(() => {
+        this.runAutoBackupInBackground();
+      }, settings.intervalHours * 60 * 60 * 1000);
+    }
+  }
+
+  private noteAutoBackupEligibleEdit() {
+    if (!this.autoBackupSettings.enabled || this.autoBackupSettings.trigger !== "editCount") {
+      return;
+    }
+
+    this.autoBackupEditCount += 1;
+
+    if (this.autoBackupEditCount < this.autoBackupSettings.editCountThreshold) {
+      return;
+    }
+
+    this.autoBackupEditCount = 0;
+    this.runAutoBackupInBackground();
+  }
+
+  private runAutoBackupInBackground() {
+    if (!this.autoBackupSettings.enabled || this.autoBackupPending) {
+      return;
+    }
+
+    this.autoBackupPending = true;
+
+    void this.enqueueWrite(async () => {
+      try {
+        await this.createAutoBackup();
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : "No se pudo crear el auto-backup.";
+        this.options.onAutoBackupFailure?.(message);
+      } finally {
+        this.autoBackupPending = false;
+      }
+    });
+  }
+
+  private async createAutoBackup() {
+    const settings = await this.readSettings(true);
+    const backupFilePath = await this.createBackupFilePath(settings, "auto-backup");
+
+    await this.copyFileWithContext(
+      settings.dataFilePath,
+      backupFilePath,
+      "No se pudo crear el auto-backup del directorio."
+    );
+    await this.pruneAutoBackups(settings);
+  }
+
+  private async pruneAutoBackups(settings: AppSettings) {
+    const backupDirectory = await this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      "No se pudo preparar la carpeta de backups del directorio."
+    );
+    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+    const autoBackupFiles = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.startsWith("auto-backup-") && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          const filePath = path.join(backupDirectory, entry.name);
+          const stats = await fs.stat(filePath);
+
+          return {
+            filePath,
+            createdAt: stats.birthtimeMs > 1000 ? stats.birthtimeMs : stats.mtimeMs
+          };
+        })
+    );
+
+    autoBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+
+    await Promise.all(
+      autoBackupFiles
+        .slice(settings.ui.autoBackup.retentionCount)
+        .map((entry) => fs.unlink(entry.filePath))
+    );
   }
 
   private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {

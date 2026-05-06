@@ -12,6 +12,13 @@ export const defaultSettings = (
     backupDirectoryPath: true
   },
   ui: {
-    showInactiveByDefault: false
+    showInactiveByDefault: false,
+    autoBackup: {
+      enabled: false,
+      trigger: "launch",
+      intervalHours: 2,
+      editCountThreshold: 10,
+      retentionCount: 5
+    }
   }
 });

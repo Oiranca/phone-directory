@@ -26,7 +26,14 @@ const editableSettings = {
   dataFilePath: "/tmp/data/contacts.json",
   backupDirectoryPath: "/tmp/backups",
   ui: {
-    showInactiveByDefault: false
+    showInactiveByDefault: false,
+    autoBackup: {
+      enabled: false,
+      trigger: "launch",
+      intervalHours: 2,
+      editCountThreshold: 10,
+      retentionCount: 5
+    }
   }
 };
 
@@ -54,7 +61,8 @@ describe("SettingsPage", () => {
           dataFilePath: "/tmp/default-data/contacts.json",
           backupDirectoryPath: "/tmp/default-backups",
           ui: {
-            showInactiveByDefault: false
+            showInactiveByDefault: false,
+            autoBackup: editableSettings.ui.autoBackup
           }
         }),
         saveSettings: vi.fn().mockResolvedValue({
@@ -62,7 +70,8 @@ describe("SettingsPage", () => {
           dataFilePath: "/tmp/data/contacts.json",
           backupDirectoryPath: "/tmp/backups",
           ui: {
-            showInactiveByDefault: true
+            showInactiveByDefault: true,
+            autoBackup: editableSettings.ui.autoBackup
           }
         }),
         createBackup: vi.fn(),
@@ -109,7 +118,8 @@ describe("SettingsPage", () => {
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
         ui: {
-          showInactiveByDefault: true
+          showInactiveByDefault: true,
+          autoBackup: editableSettings.ui.autoBackup
         }
       });
     });
@@ -120,7 +130,8 @@ describe("SettingsPage", () => {
       dataFilePath: "/tmp/data/contacts.json",
       backupDirectoryPath: "/tmp/backups",
       ui: {
-        showInactiveByDefault: true
+        showInactiveByDefault: true,
+        autoBackup: editableSettings.ui.autoBackup
       }
     });
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Guardia tarde");

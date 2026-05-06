@@ -89,7 +89,22 @@ export interface AppSettings {
   };
   ui: {
     showInactiveByDefault: boolean;
+    autoBackup: AutoBackupSettings;
   };
+}
+
+export type AutoBackupTrigger = "launch" | "intervalHours" | "editCount";
+
+export interface AutoBackupSettings {
+  enabled: boolean;
+  trigger: AutoBackupTrigger;
+  intervalHours: number;
+  editCountThreshold: number;
+  retentionCount: number;
+}
+
+export interface AutoBackupFailureEvent {
+  message: string;
 }
 
 // EditableAppSettings is structurally derived from AppSettings so that adding a
