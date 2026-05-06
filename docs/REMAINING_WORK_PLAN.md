@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-04-29 (OIR-35 complete)
+- Last updated: 2026-05-06 (`OIR-44` merged to `main`)
 
 ## 1. Purpose
 
@@ -26,6 +26,10 @@ Latest delivered planning note:
 - `OIR-43` settings folder-picker and auto-default paths merged to `main` on 2026-04-29 via PR `#30` and is no longer part of the active remaining backlog
 - `OIR-34` Electron upgrade to supported `40.9.2` merged to `main` on 2026-04-29 via PR `#31` and is no longer part of the active remaining backlog
 - `OIR-35` spreadsheet import dependency hardening merged to `main` on 2026-04-29 via PR `#32` and is no longer part of the active remaining backlog
+- `OIR-36` BrowserWindow sandbox hardening merged to `main` on 2026-04-30 via PR `#40` and is no longer part of the active remaining backlog
+- `OIR-37`, `OIR-39`, `OIR-40`, `OIR-41`, and `OIR-42` merged to `main` on 2026-04-30 via PR `#41` and are no longer part of the active remaining backlog
+- `OIR-38` E2E packaging gate merged on 2026-04-30 via PR `#37` and is no longer part of the active remaining backlog
+- `OIR-44` POSIX directory fsync durability merged to `main` on 2026-05-06 via PR `#42` and is no longer part of the active remaining backlog
 
 ## 2. Current Baseline
 
@@ -53,13 +57,12 @@ The current codebase already includes:
 Latest known verified baseline:
 
 - `npm run typecheck`
-- `npm test`
-- `npm run test:e2e`
 - `npm run build`
 
 Known test note:
 
 - the bootstrap-failure stderr output in `src/renderer/app/App.test.tsx` is expected and not a failing condition
+- `OIR-45` tracks the remaining known `app-data.service.test.ts` failures on `main`
 
 ## 3. Priority Order
 
@@ -75,49 +78,41 @@ Complete. `OIR-21` and `OIR-29` both merged to `main` on 2026-04-29.
 
 This track is complete on the current line.
 
-### Priority 4 — Security hardening and dependency remediation
+### Priority 4 — Reliability follow-up and release hardening
 
-1. `OIR-36` — enable or explicitly document BrowserWindow sandbox posture
-2. `OIR-37` — split CSP for production-safe bundle output
-3. `OIR-38` — gate E2E dialog bypass to unpackaged builds only
-4. `OIR-39` — serialize `AppDataService` writes
-5. `OIR-40` — replace `Math.random()` record IDs
-6. `OIR-41` — strip filesystem paths from renderer-facing errors
-7. `OIR-42` — fsync temp writes before rename on USB media
+1. `OIR-45` — fix the remaining pre-existing backup-path test failures on `main`
+2. `OIR-46` — sign distribution builds to reduce Windows/macOS trust warnings
+3. `OIR-47` — add configurable scheduled auto-backup
 
 ## 4. Remaining Work Details
 
-### 4.1 Security remediation queue (`OIR-36` through `OIR-42`)
+### 4.1 Remaining tracked backlog (`OIR-45` through `OIR-47`)
 
 Goal:
 
-- close the remaining security findings now that the portable deployment and Settings UX tracks are complete
+- close the remaining release-quality gaps now that the security remediation queue and POSIX durability follow-up are merged
 
 Definition of done:
 
-- `OIR-36` through `OIR-42` are resolved or explicitly accepted with documented rationale
-- dependency and Electron upgrades are validated on the current packaging line
-- production bundle security posture is re-checked after the fixes
-- regression coverage remains green for affected import, IPC, and persistence flows
+- `OIR-45` removes the remaining known failing tests from the main branch baseline
+- `OIR-46` documents or implements code-signing for shipped builds
+- `OIR-47` adds background backup protection with clear configuration and recovery semantics
+- verification is re-run on the resulting release line
 
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-36`
-2. `OIR-37`
-3. `OIR-38`
-4. `OIR-39`
-5. `OIR-40`
-6. `OIR-41`
-7. `OIR-42`
+1. `OIR-45`
+2. `OIR-46`
+3. `OIR-47`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-36`.
+Start with `OIR-45`.
 
 Reason:
 
-- `OIR-35` merged to `main` on 2026-04-29 via PR `#32`, so `OIR-36` is now the next remaining security item
+- `OIR-45` is the only known issue directly blocking a clean main-branch test baseline
 
 ## 7. Explicit Exclusions
 
@@ -134,16 +129,24 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-43` settings folder-picker and auto-default paths: merged to `main` on 2026-04-29 via PR `#30`
 - `OIR-34` Electron upgrade to supported `40.9.2`: merged to `main` on 2026-04-29 via PR `#31`
 - `OIR-35` spreadsheet import dependency hardening: merged to `main` on 2026-04-29 via PR `#32`
+- `OIR-36` BrowserWindow sandbox hardening: merged to `main` on 2026-04-30 via PR `#40`
+- `OIR-37` split CSP: merged to `main` on 2026-04-30 via PR `#41`
+- `OIR-38` E2E path gate: merged on 2026-04-30 via PR `#37`
+- `OIR-39` write serialization: merged to `main` on 2026-04-30 via PR `#41`
+- `OIR-40` crypto UUID record IDs: merged to `main` on 2026-04-30 via PR `#41`
+- `OIR-41` IPC path sanitization: merged to `main` on 2026-04-30 via PR `#41`
+- `OIR-42` temp-file fsync before rename: merged to `main` on 2026-04-30 via PR `#41`
+- `OIR-44` POSIX parent-directory fsync durability: merged to `main` on 2026-05-06 via PR `#42`
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27
 - merged OIR-31 responsive layout work already delivered on the current line
 
-## 8. Security Audit Findings (OIR-34 through OIR-42)
+## 8. Completed Security and Durability Queue
 
-Security audit conducted 2026-04-29. These findings are now the active remaining backlog after `OIR-43` merged to `main`.
+Security audit conducted 2026-04-29. This queue is no longer active backlog.
 
-Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
+Linear issues `OIR-34` through `OIR-42` are complete, and the POSIX durability follow-up `OIR-44` is also merged.
 
 ---
 
@@ -176,6 +179,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** OS-level process isolation is disabled. If the renderer is compromised, the attacker has unprivileged OS access.
 - **Impact:** Renderer XSS → OS process access.
 - **Fix:** Test `sandbox: true` with the CJS preload. If not feasible, document accepted risk explicitly.
+- **Current status:** addressed and merged to `main` via PR `#40`.
 
 ---
 
@@ -186,6 +190,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** A single CSP covers both dev and production. The shipped `dist/index.html` includes `script-src 'unsafe-inline'` and `http://localhost:5173`.
 - **Impact:** XSS attack surface remains open in production.
 - **Fix:** Split CSP at build time (Vite plugin or post-build script). Strip `unsafe-inline` and localhost entries from the production output.
+- **Current status:** addressed and merged to `main` via PR `#41`.
 
 ---
 
@@ -196,6 +201,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** `ELECTRON_E2E=1` env var in a production build bypasses all file dialog checks, allowing arbitrary read/write paths.
 - **Impact:** Any process on the same machine can read/write arbitrary files via IPC if the env var is set.
 - **Fix:** Gate `e2eOpenDialogPaths` / `e2eSaveDialogPaths` on `!app.isPackaged`.
+- **Current status:** addressed and merged on 2026-04-30 via PR `#37`.
 
 ---
 
@@ -206,6 +212,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** Concurrent IPC calls race on read→mutate→write, causing silent data loss.
 - **Impact:** Two simultaneous contact edits → one silently lost.
 - **Fix:** Add a promise-chain write queue so writes are serialized.
+- **Current status:** addressed and merged to `main` via PR `#41`.
 
 ---
 
@@ -215,6 +222,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **File:** `src/main/services/app-data.service.ts` (~lines 972–973)
 - **Risk:** `Math.random()` is not cryptographically random; ID collisions are possible under load.
 - **Fix:** Replace with `crypto.randomUUID()` (already available in Node/Electron).
+- **Current status:** addressed and merged to `main` via PR `#41`.
 
 ---
 
@@ -225,6 +233,7 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** Raw USB mount path (containing OS username and drive letter) is serialized into IPC error messages and shown in UI toasts.
 - **Impact:** Leaks system info in shared/kiosk environments.
 - **Fix:** Strip raw path context before serializing errors across the IPC boundary.
+- **Current status:** addressed and merged to `main` via PR `#41`.
 
 ---
 
@@ -235,3 +244,15 @@ Linear issues created: OIR-34 through OIR-42. Findings are ordered by severity.
 - **Risk:** On FAT32 USB drives, abrupt removal can corrupt or zero the file despite a "successful" atomic rename, because the OS write cache may not have flushed.
 - **Impact:** Data loss on unexpected USB ejection.
 - **Fix:** Call `fileHandle.sync()` before closing the temp file in the atomic write path.
+- **Current status:** addressed and merged to `main` via PR `#41`.
+
+## 9. Post-Audit Durability Follow-up
+
+### INFO — OIR-44: fsync parent directory after atomic rename on POSIX
+
+- **Linear:** [OIR-44](https://linear.app/oiranca/issue/OIR-44)
+- **File:** `src/main/utils/fs-json.ts`
+- **Risk:** A crash after `rename(2)` but before the parent directory metadata is flushed can lose the renamed file entry on POSIX filesystems.
+- **Impact:** Successful writes can disappear after sudden power loss.
+- **Fix:** `fsync` the parent directory after the atomic rename on non-Windows platforms.
+- **Current status:** addressed and merged to `main` on 2026-05-06 via PR `#42`.
