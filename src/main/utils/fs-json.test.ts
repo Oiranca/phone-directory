@@ -17,20 +17,20 @@ describe("writeJsonFile", () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it.runIf(process.platform !== "win32")(
     "should call fsync on parent directory on non-Windows platforms",
     async () => {
-    const testFilePath = "/test/data.json";
-    const testData = { key: "value" };
+      const testFilePath = "/test/data.json";
+      const testData = { key: "value" };
 
       vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
 
-    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (filePath: string | number) => {
-      return mockFileHandle as any;
-    });
+      const openSpy = vi.spyOn(fs, "open").mockImplementation(async () => {
+        return mockFileHandle as any;
+      });
 
       vi.spyOn(fs, "rename").mockResolvedValue(undefined);
 
@@ -50,14 +50,14 @@ describe("writeJsonFile", () => {
   it.runIf(process.platform === "win32")(
     "should NOT call fsync on parent directory on Windows platform",
     async () => {
-    const testFilePath = "C:\\test\\data.json";
-    const testData = { key: "value" };
+      const testFilePath = "C:\\test\\data.json";
+      const testData = { key: "value" };
 
       vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
 
       const openSpy = vi.spyOn(fs, "open").mockImplementation(async () => {
-      return mockFileHandle as any;
-    });
+        return mockFileHandle as any;
+      });
 
       vi.spyOn(fs, "rename").mockResolvedValue(undefined);
 
