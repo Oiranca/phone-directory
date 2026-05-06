@@ -20,7 +20,7 @@ XLSX.set_fs(nodeFs);
 describe("AppDataService", () => {
   let testRoot: string;
   let currentUserDataRoot: string;
-  const waitForCondition = async (assertion: () => Promise<boolean>, timeoutMs = 500) => {
+  const waitForCondition = async (assertion: () => Promise<boolean>, timeoutMs = 3000) => {
     const startedAt = Date.now();
 
     while (!(await assertion())) {
@@ -661,6 +661,103 @@ describe("AppDataService", () => {
 
     const files = await fs.readdir(path.join(testRoot, "backups"));
     expect(files.some((file) => file.startsWith("auto-backup-"))).toBe(true);
+  });
+
+  it("retries the edit-threshold auto-backup after a failed attempt", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const autoBackupFailures: string[] = [];
+
+    const service = new AppDataService({
+      onAutoBackupFailure: (message) => {
+        autoBackupFailures.push(message);
+      }
+    });
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "editCount",
+            intervalHours: 2,
+            editCountThreshold: 1,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+    vi.spyOn(fs, "copyFile")
+      .mockRejectedValueOnce(Object.assign(new Error("copy failed"), { code: "EACCES" }));
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Failure One",
+      person: {
+        firstName: "Auto",
+        lastName: "Failure"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_failure_1",
+            number: "12345",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await waitForCondition(async () => autoBackupFailures.length === 1);
+
+    await service.createRecord({
+      type: "person",
+      displayName: "Auto Backup Failure Two",
+      person: {
+        firstName: "Auto",
+        lastName: "Retry"
+      },
+      organization: {
+        department: "Urgencias",
+        service: "Coordinación",
+        area: "sanitaria-asistencial"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_auto_backup_failure_2",
+            number: "67890",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    await waitForCondition(async () => {
+      const files = await fs.readdir(path.join(testRoot, "backups"));
+      return files.some((file) => file.startsWith("auto-backup-"));
+    });
+
+    expect(autoBackupFailures).toHaveLength(1);
   });
 
   it("ignores client supplied ids when creating a new record", async () => {

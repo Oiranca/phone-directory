@@ -797,11 +797,10 @@ export class AppDataService {
       return;
     }
 
-    this.autoBackupEditCount = 0;
-    this.runAutoBackupInBackground();
+    this.runAutoBackupInBackground({ resetEditCountOnSuccess: true });
   }
 
-  private runAutoBackupInBackground() {
+  private runAutoBackupInBackground(options: { resetEditCountOnSuccess?: boolean } = {}) {
     if (!this.autoBackupSettings.enabled || this.autoBackupPending) {
       return;
     }
@@ -811,7 +810,16 @@ export class AppDataService {
     void this.enqueueWrite(async () => {
       try {
         await this.createAutoBackup();
+        if (options.resetEditCountOnSuccess) {
+          this.autoBackupEditCount = 0;
+        }
       } catch (error) {
+        if (options.resetEditCountOnSuccess) {
+          this.autoBackupEditCount = Math.max(
+            this.autoBackupEditCount,
+            this.autoBackupSettings.editCountThreshold
+          );
+        }
         const message = error instanceof Error
           ? error.message
           : "No se pudo crear el auto-backup.";
@@ -839,28 +847,59 @@ export class AppDataService {
       settings.backupDirectoryPath,
       "No se pudo preparar la carpeta de backups del directorio."
     );
-    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-    const autoBackupFiles = await Promise.all(
-      entries
-        .filter((entry) => entry.isFile() && entry.name.startsWith("auto-backup-") && entry.name.endsWith(".json"))
-        .map(async (entry) => {
-          const filePath = path.join(backupDirectory, entry.name);
-          const stats = await fs.stat(filePath);
+    const pruneErrorMessage = "No se pudo rotar los auto-backups del directorio.";
 
-          return {
-            filePath,
-            createdAt: stats.birthtimeMs > 1000 ? stats.birthtimeMs : stats.mtimeMs
-          };
-        })
-    );
+    try {
+      const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+      const autoBackupFiles = (
+        await Promise.all(
+          entries
+            .filter((entry) => entry.isFile() && entry.name.startsWith("auto-backup-") && entry.name.endsWith(".json"))
+            .map(async (entry) => {
+              const filePath = path.join(backupDirectory, entry.name);
 
-    autoBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+              try {
+                const stats = await fs.stat(filePath);
 
-    await Promise.all(
-      autoBackupFiles
-        .slice(settings.ui.autoBackup.retentionCount)
-        .map((entry) => fs.unlink(entry.filePath))
-    );
+                return {
+                  filePath,
+                  createdAt: stats.birthtimeMs > 1000 ? stats.birthtimeMs : stats.mtimeMs
+                };
+              } catch (error) {
+                const filesystemError = this.getErrnoException(error);
+
+                if (filesystemError?.code === "ENOENT") {
+                  return null;
+                }
+
+                throw this.toFilesystemError(error, pruneErrorMessage, { filePath });
+              }
+            })
+        )
+      ).filter((entry): entry is { filePath: string; createdAt: number } => entry !== null);
+
+      autoBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+
+      await Promise.all(
+        autoBackupFiles
+          .slice(settings.ui.autoBackup.retentionCount)
+          .map(async (entry) => {
+            try {
+              await fs.unlink(entry.filePath);
+            } catch (error) {
+              const filesystemError = this.getErrnoException(error);
+
+              if (filesystemError?.code === "ENOENT") {
+                return;
+              }
+
+              throw this.toFilesystemError(error, pruneErrorMessage, { filePath: entry.filePath });
+            }
+          })
+      );
+    } catch (error) {
+      throw this.toFilesystemError(error, pruneErrorMessage, { filePath: backupDirectory });
+    }
   }
 
   private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {

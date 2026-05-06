@@ -108,7 +108,9 @@ const bootstrap = async () => {
     });
   });
   createWindow();
-  void service.startAutoBackup();
+  void service.startAutoBackup().catch((error) => {
+    console.error("[auto-backup] Failed to start auto-backup scheduler.", error);
+  });
 };
 
 app.whenReady().then(() => {

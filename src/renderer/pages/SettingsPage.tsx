@@ -4,6 +4,16 @@ import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
 
+const clampInteger = (value: string, minimum: number, maximum: number) => {
+  const parsed = Math.trunc(Number(value));
+
+  if (!Number.isFinite(parsed)) {
+    return minimum;
+  }
+
+  return Math.min(maximum, Math.max(minimum, parsed));
+};
+
 export const SettingsPage = () => {
   const { settings, initialize, setSettings } = useAppStore();
   const { pushToast } = useToast();
@@ -238,6 +248,14 @@ export const SettingsPage = () => {
     setIsSaving(true);
     setSaveError("");
 
+    const normalizedAutoBackupSettings = {
+      enabled: autoBackupEnabled,
+      trigger: autoBackupTrigger,
+      intervalHours: clampInteger(autoBackupIntervalHours, 1, 168),
+      editCountThreshold: clampInteger(autoBackupEditCountThreshold, 1, 1000),
+      retentionCount: clampInteger(autoBackupRetentionCount, 1, 100)
+    };
+
     try {
       const saved = await window.hospitalDirectory.saveSettings({
         editorName,
@@ -245,13 +263,7 @@ export const SettingsPage = () => {
         backupDirectoryPath,
         ui: {
           showInactiveByDefault,
-          autoBackup: {
-            enabled: autoBackupEnabled,
-            trigger: autoBackupTrigger,
-            intervalHours: Math.max(1, Number(autoBackupIntervalHours) || 1),
-            editCountThreshold: Math.max(1, Number(autoBackupEditCountThreshold) || 1),
-            retentionCount: Math.max(1, Number(autoBackupRetentionCount) || 1)
-          }
+          autoBackup: normalizedAutoBackupSettings
         }
       });
       setSettings(saved);
@@ -423,6 +435,8 @@ export const SettingsPage = () => {
                     aria-label="Retención de auto-backups"
                     type="number"
                     min={1}
+                    max={100}
+                    step={1}
                     value={autoBackupRetentionCount}
                     onChange={(event) => {
                       setAutoBackupRetentionCount(event.target.value);
@@ -441,6 +455,8 @@ export const SettingsPage = () => {
                     aria-label="Horas entre auto-backups"
                     type="number"
                     min={1}
+                    max={168}
+                    step={1}
                     value={autoBackupIntervalHours}
                     onChange={(event) => {
                       setAutoBackupIntervalHours(event.target.value);
@@ -458,6 +474,8 @@ export const SettingsPage = () => {
                     aria-label="Ediciones entre auto-backups"
                     type="number"
                     min={1}
+                    max={1000}
+                    step={1}
                     value={autoBackupEditCountThreshold}
                     onChange={(event) => {
                       setAutoBackupEditCountThreshold(event.target.value);
