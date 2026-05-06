@@ -2,6 +2,17 @@
 
 This directory holds static assets consumed by electron-builder during packaging.
 
+## Signing files
+
+The macOS signing entitlements live here:
+
+| File | Purpose |
+|------|---------|
+| `entitlements.mac.plist` | Primary app entitlements for hardened runtime signing |
+| `entitlements.mac.inherit.plist` | Inherited entitlements for helper apps and frameworks |
+
+These files are referenced from the `mac` section in `package.json`.
+
 ## Icon files
 
 Icon files are optional — electron-builder falls back to its own default icons when none are provided.
