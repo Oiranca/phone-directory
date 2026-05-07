@@ -1,4 +1,5 @@
-import type { AuditLogQueryParams, EditableContactRecord } from "../../shared/types/contact.js";
+import type { EditableContactRecord } from "../../shared/types/contact.js";
+import { auditLogQueryParamsSchema } from "../../shared/schemas/contact.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
@@ -179,32 +180,50 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.importCsvDataset(pendingImport.sourceFilePath);
   });
 
-  ipcMain.handle(CHANNELS.getAuditLog, async (_event, params: AuditLogQueryParams) => {
-    return service.getAuditLog(params ?? {});
+  ipcMain.handle(CHANNELS.getAuditLog, async (_event, rawParams: unknown) => {
+    const parsed = auditLogQueryParamsSchema.safeParse(rawParams ?? {});
+    if (!parsed.success) {
+      throw new Error("Invalid query parameters");
+    }
+    try {
+      return await service.getAuditLog(parsed.data);
+    } catch (err) {
+      console.error("[contacts:get-audit-log]", err);
+      throw new Error("Internal server error");
+    }
   });
 
-  ipcMain.handle(CHANNELS.exportAuditLog, async (event, params: AuditLogQueryParams) => {
-    const e2eFilePath = consumeE2eSaveDialogPath();
-
-    if (e2eFilePath) {
-      return service.exportAuditLog(e2eFilePath, params ?? {});
+  ipcMain.handle(CHANNELS.exportAuditLog, async (event, rawParams: unknown) => {
+    const parsed = auditLogQueryParamsSchema.safeParse(rawParams ?? {});
+    if (!parsed.success) {
+      throw new Error("Invalid query parameters");
     }
+    try {
+      const e2eFilePath = consumeE2eSaveDialogPath();
 
-    const browserWindow = BrowserWindow.fromWebContents(event.sender);
-    const saveOptions = {
-      title: "Exportar registro de auditoría",
-      defaultPath: path.join(app.getPath("downloads"), "audit-log-export.csv"),
-      filters: [{ name: "CSV", extensions: ["csv"] }]
-    };
-    const { canceled, filePath } = browserWindow
-      ? await dialog.showSaveDialog(browserWindow, saveOptions)
-      : await dialog.showSaveDialog(saveOptions);
+      if (e2eFilePath) {
+        return await service.exportAuditLog(e2eFilePath, parsed.data);
+      }
 
-    if (canceled || !filePath) {
-      return null;
+      const browserWindow = BrowserWindow.fromWebContents(event.sender);
+      const saveOptions = {
+        title: "Exportar registro de auditoría",
+        defaultPath: path.join(app.getPath("downloads"), "audit-log-export.csv"),
+        filters: [{ name: "CSV", extensions: ["csv"] }]
+      };
+      const { canceled, filePath } = browserWindow
+        ? await dialog.showSaveDialog(browserWindow, saveOptions)
+        : await dialog.showSaveDialog(saveOptions);
+
+      if (canceled || !filePath) {
+        return null;
+      }
+
+      return await service.exportAuditLog(filePath, parsed.data);
+    } catch (err) {
+      console.error("[contacts:export-audit-log]", err);
+      throw new Error("Internal server error");
     }
-
-    return service.exportAuditLog(filePath, params ?? {});
   });
 };
 

@@ -154,6 +154,14 @@ export const auditLogEntrySchema = z.object({
 
 export const auditLogSchema = z.array(auditLogEntrySchema);
 
+export const auditLogQueryParamsSchema = z.object({
+  fromDate: z.string().optional(),
+  toDate: z.string().optional(),
+  editor: z.string().optional(),
+  action: auditActionSchema.optional(),
+  recordName: z.string().optional()
+});
+
 export const editableContactRecordSchema = z.object({
   id: z.string().optional(),
   externalId: optionalTextField(),
