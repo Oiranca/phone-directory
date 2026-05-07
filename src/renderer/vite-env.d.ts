@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-
 import type {
   AutoBackupFailureEvent,
   BackupListItem,
@@ -11,27 +10,27 @@ import type {
   ExportContactsResult,
   ImportContactsResult,
   ResetContactsResult,
+  SaveContactResult,
+  AuditLogQueryParams,
+  AuditLogResult,
+  BackupListItem,
+  BootstrapResult,
+  CsvImportPreview,
+  CsvImportResult,
+  EditableAppSettings,
+  EditableContactRecord,
+  ExportAuditLogResult,
+  ExportContactsResult,
+  ImportContactsResult,
+  ResetContactsResult,
   SaveContactResult
-} from "../shared/types/contact";
+} from "../shared/types/contact.js";
 
 declare global {
   interface Window {
     hospitalDirectory: {
-      getBootstrapData: () => Promise<BootstrapResult>;
-      getSettingsDefaults: () => Promise<EditableAppSettings>;
-      saveSettings: (settings: EditableAppSettings) => Promise<EditableAppSettings>;
-      createBackup: () => Promise<string>;
-      createRecord: (record: EditableContactRecord) => Promise<SaveContactResult>;
-      updateRecord: (recordId: string, record: EditableContactRecord) => Promise<SaveContactResult>;
-      listBackups: () => Promise<BackupListItem[]>;
-      restoreBackup: (backupFilePath: string) => Promise<ImportContactsResult>;
-      exportDataset: () => Promise<ExportContactsResult | null>;
-      importDataset: () => Promise<ImportContactsResult | null>;
-      resetDataset: () => Promise<ResetContactsResult>;
-      previewCsvImport: () => Promise<CsvImportPreview | null>;
-      importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
-      browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
-      onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
+      ;
+    
     };
   }
 }

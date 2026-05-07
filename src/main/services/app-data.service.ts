@@ -6,9 +6,12 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import { AuditLogService } from "./audit-log.service.js";
 import type {
-  AutoBackupSettings,
   AppSettings,
+  AuditLogEntry,
+  AuditLogQueryParams,
+  AuditLogResult,
   BackupListItem,
   BootstrapData,
   BootstrapResult,
@@ -18,6 +21,7 @@ import type {
   DirectoryDataset,
   EditableAppSettings,
   EditableContactRecord,
+  ExportAuditLogResult,
   ExportContactsResult,
   ImportContactsResult,
   RecoveryState,
@@ -42,6 +46,7 @@ export class AppDataService {
       onAutoBackupFailure?: (message: string) => void;
     } = {}
   ) {}
+  private auditLog = new AuditLogService();
 
   private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.writeQueue.then(fn);
@@ -70,12 +75,9 @@ export class AppDataService {
     if (!(await this.fileExists(settingsFilePath))) {
       await writeJsonFile(settingsFilePath, managedDefaults);
     }
-    });
-  }
 
-  async startAutoBackup() {
-    const settings = await this.readSettings(true);
-    this.configureAutoBackup(settings.ui.autoBackup);
+    await this.auditLog.ensureInitialized();
+    });
   }
 
   async getBootstrapData(): Promise<BootstrapResult> {
@@ -133,12 +135,6 @@ export class AppDataService {
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
-    this.configureAutoBackup(nextSettings.ui.autoBackup, {
-      forceResetEditCount: (
-        !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) ||
-        !this.pathsMatch(nextSettings.backupDirectoryPath, currentSettings.backupDirectoryPath)
-      )
-    });
     return nextSettings;
     });
   }
@@ -149,13 +145,12 @@ export class AppDataService {
 
   async createBackup() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePath(settings, "contacts");
+    const backupFilePath = await this.createBackupFilePath(settings);
     await this.copyFileWithContext(
       settings.dataFilePath,
       backupFilePath,
       "No se pudo crear el backup del directorio."
     );
-    this.autoBackupEditCount = 0;
     return backupFilePath;
   }
 
@@ -238,8 +233,17 @@ export class AppDataService {
     );
     const backupPath = await this.createBackup();
     const settings = await this.readSettings(true);
+    const editorName = this.getEditorName(settings);
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: editorName,
+      action: "bulk-import",
+      recordsAffected: importedContacts.records.length,
+      importSource: path.basename(sourceFilePath)
+    });
+        this.noteAutoBackupEligibleEdit();
 
     return {
       contacts: importedContacts,
@@ -296,8 +300,17 @@ export class AppDataService {
     }
 
     const backupPath = await this.createBackup();
+    const editorName = this.getEditorName(settings);
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: editorName,
+      action: "restore-from-backup",
+      recordsAffected: importedContacts.records.length,
+      importSource: path.basename(canonicalSourceFilePath)
+    });
+        this.noteAutoBackupEligibleEdit();
 
     return {
       contacts: importedContacts,
@@ -366,6 +379,14 @@ export class AppDataService {
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName);
     const backupPath = await this.createBackup();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
+    await this.appendAuditEntry({
+      timestamp: merged.contacts.exportedAt,
+      editor: editorName,
+      action: "bulk-import",
+      recordsAffected: merged.createdCount + merged.updatedCount,
+      importSource: path.basename(sourceFilePath)
+    });
+        this.noteAutoBackupEligibleEdit();
 
     return {
       contacts: merged.contacts,
@@ -407,7 +428,14 @@ export class AppDataService {
 
     const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
-    this.noteAutoBackupEligibleEdit();
+    await this.appendAuditEntry({
+      timestamp: now,
+      editor: editorName,
+      action: "create",
+      recordId: savedRecordId,
+      recordName: nextRecord.displayName
+    });
+        this.noteAutoBackupEligibleEdit();
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -445,18 +473,94 @@ export class AppDataService {
       }
     });
 
+    const changes = this.buildRecordChanges(currentRecord!, updatedRecord);
     const nextRecords = contacts.records.map((record, index) =>
       index === recordIndex ? updatedRecord : record
     );
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
-    this.noteAutoBackupEligibleEdit();
+    await this.appendAuditEntry({
+      timestamp: now,
+      editor: editorName,
+      action: "update",
+      recordId: currentRecord.id,
+      recordName: updatedRecord.displayName,
+      changes
+    });
+        this.noteAutoBackupEligibleEdit();
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
       savedRecordId: currentRecord.id
     };
     });
+  }
+
+  async getAuditLog(params: AuditLogQueryParams): Promise<AuditLogResult> {
+    return this.auditLog.query(params);
+  }
+
+  async exportAuditLog(targetFilePath: string, params: AuditLogQueryParams): Promise<ExportAuditLogResult> {
+    const result = await this.auditLog.query(params);
+    const csv = this.auditLog.toCsv(result.entries);
+    const directory = path.dirname(targetFilePath);
+
+    await ensureDirectory(directory);
+    await fs.writeFile(targetFilePath, csv, "utf-8");
+
+    return {
+      filePath: targetFilePath,
+      exportedAt: new Date().toISOString(),
+      entryCount: result.entries.length
+    };
+  }
+
+  private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
+    try {
+      await this.auditLog.append(entry);
+    } catch (error) {
+      console.error("[AuditLog] Failed to append entry:", error);
+    }
+  }
+
+  private buildRecordChanges(
+    oldRecord: ContactRecord,
+    newRecord: ContactRecord
+  ): Record<string, { old: unknown; new: unknown }> | null {
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
+
+    const compare = (key: string, oldVal: unknown, newVal: unknown) => {
+      if (JSON.stringify(oldVal ?? null) !== JSON.stringify(newVal ?? null)) {
+        changes[key] = { old: oldVal ?? null, new: newVal ?? null };
+      }
+    };
+
+    compare("displayName", oldRecord.displayName, newRecord.displayName);
+    compare("type", oldRecord.type, newRecord.type);
+    compare("status", oldRecord.status, newRecord.status);
+    compare("notes", oldRecord.notes, newRecord.notes);
+    compare("organization.department", oldRecord.organization.department, newRecord.organization.department);
+    compare("organization.service", oldRecord.organization.service, newRecord.organization.service);
+    compare("organization.area", oldRecord.organization.area, newRecord.organization.area);
+    compare("organization.specialty", oldRecord.organization.specialty, newRecord.organization.specialty);
+    compare("location.building", oldRecord.location?.building, newRecord.location?.building);
+    compare("location.floor", oldRecord.location?.floor, newRecord.location?.floor);
+    compare("location.room", oldRecord.location?.room, newRecord.location?.room);
+    compare("location.text", oldRecord.location?.text, newRecord.location?.text);
+
+    const oldPhones = oldRecord.contactMethods.phones.map((p) => p.number).sort().join(",");
+    const newPhones = newRecord.contactMethods.phones.map((p) => p.number).sort().join(",");
+    if (oldPhones !== newPhones) {
+      changes["phones"] = { old: oldPhones, new: newPhones };
+    }
+
+    const oldEmails = oldRecord.contactMethods.emails.map((e) => e.address).sort().join(",");
+    const newEmails = newRecord.contactMethods.emails.map((e) => e.address).sort().join(",");
+    if (oldEmails !== newEmails) {
+      changes["emails"] = { old: oldEmails, new: newEmails };
+    }
+
+    return Object.keys(changes).length > 0 ? changes : null;
   }
 
   private async fileExists(filePath: string) {
@@ -490,7 +594,7 @@ export class AppDataService {
     );
   }
 
-  private async createBackupFilePath(settings: AppSettings, prefix: string) {
+  private async createBackupFilePath(settings: AppSettings) {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
@@ -505,7 +609,7 @@ export class AppDataService {
         { filePath: backupDirectory }
       );
     }
-    return path.join(backupDirectory, `${prefix}-${safeTimestamp}.json`);
+    return path.join(backupDirectory, `contacts-${safeTimestamp}.json`);
   }
 
   private async readSettings(validatePaths = false) {
@@ -764,6 +868,424 @@ export class AppDataService {
         { filePath: canonicalFilePath }
       );
     }
+  }
+
+  private async resolveCanonicalDataFilePath(filePath: string, message: string, allowMissing: boolean) {
+    await this.assertPathChainIsNotSymlink(filePath, message, true);
+
+    const canonicalParentPath = await this.resolveCanonicalDirectoryPath(path.dirname(filePath), message);
+
+    if (!(await this.fileExists(filePath))) {
+      if (allowMissing) {
+        return path.join(canonicalParentPath, path.basename(filePath));
+      }
+
+      throw this.toFilesystemError(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT", path: filePath }),
+        message,
+        { filePath }
+      );
+    }
+
+    try {
+      return await fs.realpath(filePath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath });
+    }
+  }
+
+  private async resolveCanonicalDirectoryPath(directoryPath: string, message: string) {
+    await this.assertBackupDirectorySafe(directoryPath, message);
+
+    try {
+      return await fs.realpath(directoryPath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, { filePath: directoryPath });
+    }
+  }
+
+  private assertPathWithinDirectory(filePath: string, directoryPath: string, message: string) {
+    const relativePath = path.relative(directoryPath, filePath);
+
+    if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error(
+        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de backups configurada.`
+      );
+    }
+  }
+
+  private async assertDataFilePathAvailable(filePath: string, message: string, allowExisting: boolean) {
+    try {
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        throw new Error("is-directory");
+      }
+
+      throw new Error("file-exists");
+    } catch (error) {
+      const filesystemError = this.getErrnoException(error);
+
+      if (filesystemError?.code === "ENOENT") {
+        return;
+      }
+
+      if (error instanceof Error && error.message === "file-exists" && allowExisting) {
+        return;
+      }
+
+      if (error instanceof Error && error.message === "file-exists") {
+        throw new Error(
+          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el dataset actual o restablece las rutas gestionadas.`
+        );
+      }
+
+      if (error instanceof Error && error.message === "is-directory") {
+        throw new Error(
+          `${message} Ruta afectada: ${filePath}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
+        );
+      }
+
+      throw this.toFilesystemError(error, message, { filePath });
+    }
+  }
+
+  private buildNextDataset(
+    records: ContactRecord[],
+    currentDataset: DirectoryDataset,
+    editorName: string,
+    exportedAt: string
+  ): DirectoryDataset {
+    const typeCounts: Partial<Record<RecordType, number>> = {};
+    const areaCounts: Partial<Record<AreaType, number>> = {};
+
+    for (const record of records) {
+      typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
+
+      if (record.organization.area) {
+        areaCounts[record.organization.area] = (areaCounts[record.organization.area] ?? 0) + 1;
+      }
+    }
+
+    return directoryDatasetSchema.parse({
+      ...currentDataset,
+      exportedAt,
+      metadata: {
+        ...currentDataset.metadata,
+        recordCount: records.length,
+        editorName,
+        typeCounts,
+        areaCounts
+      },
+      records
+    });
+  }
+
+  private mergeImportedDataset(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset,
+    editorName: string
+  ) {
+    const exportedAt = new Date().toISOString();
+    const mergedRecords = [...currentDataset.records];
+    const currentIndexesByExternalId = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, number>();
+
+    mergedRecords.forEach((record, index) => {
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, index);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, index);
+        }
+      }
+    });
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const importedRecord of importedDataset.records) {
+      const externalIdMatchIndex = importedRecord.externalId
+        ? currentIndexesByExternalId.get(importedRecord.externalId)
+        : undefined;
+      const stableMatchIndex = this.buildStableMergeKeys(importedRecord)
+        .map((stableKey) => currentIndexesByStableKey.get(stableKey))
+        .find((index): index is number => index !== undefined);
+      const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
+
+      if (matchIndex !== undefined) {
+        const currentRecord = mergedRecords[matchIndex]!;
+        const mergedRecord = contactRecordSchema.parse({
+          ...importedRecord,
+          id: currentRecord.id,
+          audit: {
+            ...currentRecord.audit,
+            updatedAt: exportedAt,
+            updatedBy: editorName
+          }
+        });
+        mergedRecords[matchIndex] = mergedRecord;
+
+        if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
+          currentIndexesByExternalId.set(mergedRecord.externalId, matchIndex);
+        }
+
+        for (const stableKey of this.buildStableMergeKeys(mergedRecord)) {
+          if (!currentIndexesByStableKey.has(stableKey)) {
+            currentIndexesByStableKey.set(stableKey, matchIndex);
+          }
+        }
+
+        updatedCount += 1;
+        continue;
+      }
+
+      const createdRecord = contactRecordSchema.parse({
+        ...importedRecord,
+        id: this.createUniqueRecordId(mergedRecords),
+        audit: {
+          createdAt: exportedAt,
+          updatedAt: exportedAt,
+          createdBy: editorName,
+          updatedBy: editorName
+        }
+      });
+      mergedRecords.push(createdRecord);
+      const createdIndex = mergedRecords.length - 1;
+
+      if (createdRecord.externalId && !currentIndexesByExternalId.has(createdRecord.externalId)) {
+        currentIndexesByExternalId.set(createdRecord.externalId, createdIndex);
+      }
+
+      for (const stableKey of this.buildStableMergeKeys(createdRecord)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, createdIndex);
+        }
+      }
+
+      createdCount += 1;
+    }
+
+    return {
+      contacts: this.buildNextDataset(mergedRecords, currentDataset, editorName, exportedAt),
+      createdCount,
+      updatedCount
+    };
+  }
+
+  private buildStableMergeKeys(record: ContactRecord): string[] {
+    const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
+    const phoneNumbers = record.contactMethods.phones
+      .map((phone) => phone.number.replace(/\D/g, ""))
+      .filter(Boolean)
+      .sort();
+    const emailAddresses = record.contactMethods.emails
+      .map((email) => normalized(email.address))
+      .filter(Boolean)
+      .sort();
+    const keys = new Set<string>();
+    const base = [
+      normalized(record.type),
+      normalized(record.organization.department),
+      normalized(record.organization.service),
+      normalized(record.location?.text)
+    ].join("|");
+
+    if (phoneNumbers.length > 0) {
+      keys.add(`${base}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    if (emailAddresses.length > 0) {
+      keys.add(`${base}|emails:${emailAddresses.join(",")}`);
+    }
+
+    if (normalized(record.displayName) && phoneNumbers.length > 0) {
+      keys.add(`${normalized(record.type)}|${normalized(record.displayName)}|phones:${phoneNumbers.join(",")}`);
+    }
+
+    return [...keys];
+  }
+
+  private buildEmptyDataset(editorName: string): DirectoryDataset {
+    const exportedAt = new Date().toISOString();
+
+    return directoryDatasetSchema.parse({
+      version: defaultContacts.version,
+      exportedAt,
+      metadata: {
+        recordCount: 0,
+        generatedFrom: "recovery-reset",
+        generatedBy: "app-recovery-reset",
+        editorName,
+        typeCounts: {},
+        areaCounts: {}
+      },
+      catalogs: defaultContacts.catalogs,
+      records: []
+    });
+  }
+
+  private createEntityId(prefix: string) {
+    return `${prefix}_${globalThis.crypto.randomUUID().slice(0, 8)}`;
+  }
+
+  private createUniqueRecordId(records: ContactRecord[]) {
+    const maxAttempts = 1000;
+    let attempts = 0;
+    let candidate = this.createEntityId("cnt");
+
+    while (records.some((record) => record.id === candidate)) {
+      attempts += 1;
+
+      if (attempts >= maxAttempts) {
+        throw new Error("No se pudo generar un ID único para el registro después de 1000 intentos");
+      }
+
+      candidate = this.createEntityId("cnt");
+    }
+
+    return candidate;
+  }
+
+  private getEditorName(settings: AppSettings) {
+    return settings.editorName.trim() || "Editor local";
+  }
+
+  private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
+    try {
+      const canonicalSourceFilePath = await this.resolveCanonicalDataFilePath(sourceFilePath, message, false);
+      const canonicalTargetFilePath = path.join(
+        await this.resolveCanonicalDirectoryPath(path.dirname(targetFilePath), message),
+        path.basename(targetFilePath)
+      );
+
+      await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
+    } catch (error) {
+      throw this.toFilesystemError(error, message, {
+        sourceFilePath,
+        targetFilePath
+      });
+    }
+  }
+
+  private toFilesystemError(
+    error: unknown,
+    message: string,
+    context: {
+      filePath?: string;
+      sourceFilePath?: string;
+      targetFilePath?: string;
+    }
+  ) {
+    const routeDetails = new Set<string>();
+    const filesystemError = this.getErrnoException(error);
+
+    if (typeof filesystemError?.path === "string" && filesystemError.path.trim() !== "") {
+      routeDetails.add(`Ruta afectada: ${(path.basename(filesystemError.path) || "<raíz>")}`);
+    }
+
+    if (typeof filesystemError?.dest === "string" && filesystemError.dest.trim() !== "") {
+      routeDetails.add(`Ruta de destino: ${(path.basename(filesystemError.dest) || "<raíz>")}`);
+    }
+
+    if (routeDetails.size === 0 && context.filePath) {
+      routeDetails.add(`Ruta afectada: ${(path.basename(context.filePath) || "<raíz>")}`);
+    }
+
+    if (context.sourceFilePath) {
+      routeDetails.add(`Ruta de origen: ${(path.basename(context.sourceFilePath) || "<raíz>")}`);
+    }
+
+    if (context.targetFilePath && !filesystemError?.dest) {
+      routeDetails.add(`Ruta de destino: ${(path.basename(context.targetFilePath) || "<raíz>")}`);
+    }
+
+    const routeContext =
+      routeDetails.size > 0 ? ` ${Array.from(routeDetails).join(". ")}.` : "";
+    const detail = this.getFilesystemErrorDetail(filesystemError ?? undefined);
+
+    return Object.assign(
+      new Error(`${message}${routeContext} ${detail}`.trim()),
+      {
+        code: filesystemError?.code,
+        path: filesystemError?.path ?? context.filePath,
+        dest: filesystemError?.dest ?? context.targetFilePath
+      }
+    );
+  }
+
+  private getErrnoException(error: unknown): (NodeJS.ErrnoException & { dest?: string }) | null {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      ("code" in error || "message" in error)
+    ) {
+      return error as NodeJS.ErrnoException & { dest?: string };
+    }
+    return null;
+  }
+
+  private getFilesystemErrorDetail(error?: NodeJS.ErrnoException & { dest?: string }) {
+    switch (error?.code) {
+      case "EACCES":
+        return "No tienes permisos suficientes para acceder al archivo o directorio.";
+      case "ENOENT":
+        return "El archivo o directorio no existe.";
+      case "ENOTDIR":
+        return "Alguno de los segmentos de la ruta no es una carpeta válida.";
+      case "EROFS":
+        return "El archivo o directorio está en un sistema de solo lectura.";
+      case "ENOSPC":
+        return "No hay espacio suficiente en disco para completar la operación.";
+      default:
+        return "Se produjo un error al acceder al sistema de archivos.";
+    }
+  }
+
+  private isRecoverableContactsError(error: unknown) {
+    const filesystemError = this.getErrnoException(error);
+
+    return (
+      error instanceof SyntaxError ||
+      error instanceof ZodError ||
+      filesystemError?.code === "ENOENT" ||
+      filesystemError?.code === "ENOTDIR" ||
+      filesystemError?.code === "EISDIR"
+    );
+  }
+
+  private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
+    let details: string;
+
+    if (error instanceof ZodError) {
+      details = "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos.";
+    } else if (this.getErrnoException(error)?.code === "ENOENT") {
+      details = "El archivo configurado no existe. Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
+    } else if (this.getErrnoException(error)?.code === "ENOTDIR" || this.getErrnoException(error)?.code === "EISDIR") {
+      details = "La ruta configurada no apunta a un archivo JSON válido. Corrige la ruta o restablece un directorio vacío para volver a trabajar.";
+    } else if (error instanceof Error) {
+      details = "El archivo no es un JSON válido. Verifica que el archivo no esté corrupto.";
+    } else {
+      details = "Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";
+    }
+
+    return {
+      reason: "invalid-contacts-json",
+      contactsFilePath,
+      message: this.getErrnoException(error)?.code === "ENOENT"
+        ? "El archivo de datos configurado no existe o ya no está disponible."
+        : (this.getErrnoException(error)?.code === "ENOTDIR" || this.getErrnoException(error)?.code === "EISDIR")
+            ? "La ruta de datos configurada no apunta a un archivo utilizable."
+        : "El archivo local contacts.json está dañado o tiene un formato no válido.",
+      details
+    };
+  }
+
+  async startAutoBackup() {
+    const settings = await this.readSettings(true);
+    this.configureAutoBackup(settings.ui.autoBackup);
   }
 
   private configureAutoBackup(
@@ -1333,4 +1855,5 @@ export class AppDataService {
       details
     };
   }
+
 }

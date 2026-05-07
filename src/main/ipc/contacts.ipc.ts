@@ -1,4 +1,4 @@
-import type { EditableContactRecord } from "../../shared/types/contact.js";
+import type { AuditLogQueryParams, EditableContactRecord } from "../../shared/types/contact.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
@@ -18,7 +18,9 @@ const CHANNELS = {
   exportDataset: "contacts:export-dataset",
   importDataset: "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
-  importCsvDataset: "contacts:import-csv-dataset"
+  importCsvDataset: "contacts:import-csv-dataset",
+  getAuditLog: "contacts:get-audit-log",
+  exportAuditLog: "contacts:export-audit-log"
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -175,6 +177,34 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     clearPendingCsvImport(importToken);
     return service.importCsvDataset(pendingImport.sourceFilePath);
+  });
+
+  ipcMain.handle(CHANNELS.getAuditLog, async (_event, params: AuditLogQueryParams) => {
+    return service.getAuditLog(params ?? {});
+  });
+
+  ipcMain.handle(CHANNELS.exportAuditLog, async (event, params: AuditLogQueryParams) => {
+    const e2eFilePath = consumeE2eSaveDialogPath();
+
+    if (e2eFilePath) {
+      return service.exportAuditLog(e2eFilePath, params ?? {});
+    }
+
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const saveOptions = {
+      title: "Exportar registro de auditoría",
+      defaultPath: path.join(app.getPath("downloads"), "audit-log-export.csv"),
+      filters: [{ name: "CSV", extensions: ["csv"] }]
+    };
+    const { canceled, filePath } = browserWindow
+      ? await dialog.showSaveDialog(browserWindow, saveOptions)
+      : await dialog.showSaveDialog(saveOptions);
+
+    if (canceled || !filePath) {
+      return null;
+    }
+
+    return service.exportAuditLog(filePath, params ?? {});
   });
 };
 

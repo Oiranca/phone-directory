@@ -138,6 +138,22 @@ export const editableEmailContactSchema = z.object({
   isPrimary: z.boolean()
 });
 
+export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "restore-from-backup"]);
+
+export const auditLogEntrySchema = z.object({
+  timestamp: isoDateTimeString,
+  editor: z.string(),
+  action: auditActionSchema,
+  recordId: z.string().optional(),
+  recordName: z.string().optional(),
+  changes: z.record(z.object({ old: z.any(), new: z.any() })).nullable().optional(),
+  reason: z.string().nullable().optional(),
+  recordsAffected: z.number().optional(),
+  importSource: z.string().optional()
+});
+
+export const auditLogSchema = z.array(auditLogEntrySchema);
+
 export const editableContactRecordSchema = z.object({
   id: z.string().optional(),
   externalId: optionalTextField(),

@@ -252,3 +252,36 @@ export interface CsvImportResult extends ImportContactsResult {
   createdCount: number;
   updatedCount: number;
 }
+
+export type AuditAction = "create" | "update" | "delete" | "bulk-import" | "restore-from-backup";
+
+export interface AuditLogEntry {
+  timestamp: string;
+  editor: string;
+  action: AuditAction;
+  recordId?: string;
+  recordName?: string;
+  changes?: Record<string, { old?: unknown; new?: unknown }> | null;
+  reason?: string | null;
+  recordsAffected?: number;
+  importSource?: string;
+}
+
+export interface AuditLogQueryParams {
+  fromDate?: string;
+  toDate?: string;
+  editor?: string;
+  action?: AuditAction;
+  recordName?: string;
+}
+
+export interface AuditLogResult {
+  entries: AuditLogEntry[];
+  totalCount: number;
+}
+
+export interface ExportAuditLogResult {
+  filePath: string;
+  exportedAt: string;
+  entryCount: number;
+}
