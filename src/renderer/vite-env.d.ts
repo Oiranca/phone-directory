@@ -9,6 +9,9 @@ import type {
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
+  AuditLogQueryParams,
+  AuditLogResult,
+  ExportAuditLogResult,
   ImportContactsResult,
   ResetContactsResult,
   SaveContactResult
@@ -31,6 +34,8 @@ declare global {
       previewCsvImport: () => Promise<CsvImportPreview | null>;
       importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
+      getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
+      exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

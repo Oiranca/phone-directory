@@ -8,6 +8,9 @@ import type {
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
+  AuditLogQueryParams,
+  AuditLogResult,
+  ExportAuditLogResult,
   ImportContactsResult,
   ResetContactsResult,
   SaveContactResult

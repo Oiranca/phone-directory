@@ -6,6 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import { AuditLogService } from "./audit-log.service.js";
 import type {
   AutoBackupSettings,
   AppSettings,
@@ -19,9 +20,13 @@ import type {
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
+  AuditLogEntry,
+  AuditLogQueryParams,
+  AuditLogResult,
   ImportContactsResult,
   RecoveryState,
   ResetContactsResult,
+  ExportAuditLogResult,
   SaveContactResult
 } from "../../shared/types/contact.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
@@ -32,6 +37,7 @@ import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
+  private auditLog = new AuditLogService();
   private autoBackupTimer: NodeJS.Timeout | null = null;
   private autoBackupPending = false;
   private autoBackupEditCount = 0;
@@ -1332,5 +1338,30 @@ export class AppDataService {
         : "El archivo local contacts.json está dañado o tiene un formato no válido.",
       details
     };
+  }
+
+  async getAuditLog(params: AuditLogQueryParams): Promise<AuditLogResult> {
+    return this.auditLog.query(params);
+  }
+
+  async exportAuditLog(targetFilePath: string, params: AuditLogQueryParams): Promise<ExportAuditLogResult> {
+    const result = await this.auditLog.query(params);
+    const csv = this.auditLog.toCsv(result.entries);
+    const directory = path.dirname(targetFilePath);
+    await ensureDirectory(directory);
+    await fs.writeFile(targetFilePath, csv, "utf-8");
+    return {
+      filePath: targetFilePath,
+      exportedAt: new Date().toISOString(),
+      entryCount: result.entries.length
+    };
+  }
+
+  private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
+    try {
+      await this.auditLog.append(entry);
+    } catch (error) {
+      console.error("[AuditLog] Failed to append entry:", error);
+    }
   }
 }
