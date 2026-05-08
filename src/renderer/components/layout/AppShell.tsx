@@ -5,7 +5,6 @@ const navItems = [
   { to: "/", label: "Directorio" },
   { to: "/contacts/new", label: "Nuevo registro" },
   { to: "/import-export", label: "Importar/Exportar" },
-  { to: "/audit-log", label: "Auditoría" },
   { to: "/settings", label: "Configuración" }
 ];
 

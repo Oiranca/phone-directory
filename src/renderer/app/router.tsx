@@ -1,6 +1,5 @@
 import { createHashRouter } from "react-router-dom";
 import { App } from "./App";
-import { AuditLogPage } from "../pages/AuditLogPage";
 import { ContactFormPage } from "../pages/ContactFormPage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { ImportExportPage } from "../pages/ImportExportPage";
@@ -27,10 +26,6 @@ export const router = createHashRouter([
       {
         path: "import-export",
         element: <ImportExportPage />
-      },
-      {
-        path: "audit-log",
-        element: <AuditLogPage />
       },
       {
         path: "settings",

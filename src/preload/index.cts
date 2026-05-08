@@ -37,6 +37,10 @@ const api = {
     ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>,
   browseForPath: (type: "dataFile" | "backupDirectory") =>
     ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>,
+  getAuditLog: (params: AuditLogQueryParams) =>
+    ipcRenderer.invoke("contacts:get-audit-log", params) as Promise<AuditLogResult>,
+  exportAuditLog: (params: AuditLogQueryParams) =>
+    ipcRenderer.invoke("contacts:export-audit-log", params) as Promise<ExportAuditLogResult | null>,
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
       listener(payload);
