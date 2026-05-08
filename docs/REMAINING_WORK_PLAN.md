@@ -5,7 +5,7 @@
 - Language: English
 - Scope: active backlog and follow-up work only
 - Source consolidation: `MVP_PLAN.md` + `RESPONSIVE_ACCESSIBILITY_PLAN.md`
-- Last updated: 2026-05-06 (`OIR-47` merged to `main`)
+- Last updated: 2026-05-08 (Linear backlog pruned and re-scoped for USB workstation deployment)
 
 ## 1. Purpose
 
@@ -31,6 +31,11 @@ Latest delivered planning note:
 - `OIR-38` E2E packaging gate merged on 2026-04-30 via PR `#37` and is no longer part of the active remaining backlog
 - `OIR-44` POSIX directory fsync durability merged to `main` on 2026-05-06 via PR `#42` and is no longer part of the active remaining backlog
 - `OIR-47` configurable scheduled auto-backup merged to `main` on 2026-05-06 via PR `#43` and is no longer part of the active remaining backlog
+- `OIR-46` signing follow-up is complete and is no longer part of the active remaining backlog
+- audit-log UI entrypoints were hidden on `main` on 2026-05-08; audit capture remains in code but is not part of the active operator workflow
+- `OIR-51`, `OIR-55`, and `OIR-56` were canceled on 2026-05-08 after scope review because they do not fit the current single-workstation USB deployment model
+- `OIR-52` and `OIR-53` were rewritten on 2026-05-08 to match the local USB release model instead of CI / cloud assumptions
+- `OIR-49`, `OIR-50`, `OIR-52`, and `OIR-54` were split into child issues on 2026-05-08 for narrower execution
 
 ## 2. Current Baseline
 
@@ -69,47 +74,105 @@ Known test note:
 
 ## 3. Priority Order
 
-### Priority 1 — Improve search completeness
+### Priority 1 — Safe bulk import workflow
 
-This track is complete on the current line.
+Active Linear umbrella: `OIR-49` (`In Progress`)
 
-### Priority 2 — Portable USB deployment track
+Execution children:
 
-Complete. `OIR-21` and `OIR-29` both merged to `main` on 2026-04-29.
+- `OIR-57` — build bulk import preview summary and record review UI (`Todo`)
+- `OIR-58` — add import conflict detection and merge policy selection (`Todo`)
 
-### Priority 3 — Settings UX
+Reason:
 
-This track is complete on the current line.
+- imports remain the highest-risk operator action because they can affect many records at once
+- this track directly reduces silent corruption and bad merges during real workstation usage
 
-### Priority 4 — Reliability follow-up and release hardening
+### Priority 2 — USB release workflow
 
-1. `OIR-46` — sign distribution builds to reduce Windows/macOS trust warnings
+Active Linear umbrella: `OIR-52` (`In Progress`)
+
+Execution children:
+
+- `OIR-61` — create local release orchestrator for portable USB builds (`Todo`)
+- `OIR-62` — document USB release packaging and handoff checklist (`Todo`)
+
+Reason:
+
+- the app is deployed from a USB drive on a workstation, so repeatable local release packaging is a core operational requirement
+
+### Priority 3 — Keyboard-first workstation efficiency
+
+Active Linear umbrella: `OIR-54` (`Todo`)
+
+Execution children:
+
+- `OIR-63` — add app-level keyboard shortcuts and predictable focus order (`Backlog`)
+- `OIR-64` — add keyboard navigation for directory results and detail interactions (`Backlog`)
+
+Reason:
+
+- fixed-station use benefits from fast keyboard navigation more than from advanced search/filter complexity
+
+### Priority 4 — Duplicate cleanup workflow
+
+Active Linear umbrella: `OIR-50` (`Todo`)
+
+Execution children:
+
+- `OIR-59` — detect duplicate contact candidates with confidence scoring (`Backlog`)
+- `OIR-60` — build duplicate review and safe merge workflow (`Backlog`)
+
+Reason:
+
+- useful after import safety improves; prevention comes before cleanup
+
+### Priority 5 — Release-time dependency/security hygiene
+
+Tracked issue:
+
+- `OIR-53` — add local dependency audit and release-time Electron security checks (`Todo`)
+
+Reason:
+
+- still important, but lower than operator-facing data safety and release workflow work
 
 ## 4. Remaining Work Details
 
-### 4.1 Remaining tracked backlog (`OIR-46`)
+### 4.1 Current active backlog
 
 Goal:
 
-- close the remaining release-quality gaps now that the security remediation queue and POSIX durability follow-up are merged
+- finish the workstation-focused backlog that still matters for a USB-delivered local deployment
 
 Definition of done:
 
-- `OIR-46` documents or implements code-signing for shipped builds
-- verification is re-run on the resulting release line
+- bulk import supports preview + conflict-aware confirmation before commit
+- release packaging for USB deployment is reproducible and documented
+- keyboard-first operator flows are available for high-frequency navigation
+- duplicate cleanup can be performed safely when needed
+- local release prep includes dependency/security checks appropriate to this offline workflow
 
 
 ## 5. Recommended Execution Sequence
 
-1. `OIR-46`
+1. `OIR-57`
+2. `OIR-58`
+3. `OIR-61`
+4. `OIR-62`
+5. `OIR-63`
+6. `OIR-64`
+7. `OIR-59`
+8. `OIR-60`
+9. `OIR-53`
 
 ## 6. Recommended Starting Point
 
-Start with `OIR-46`.
+Start with `OIR-57`.
 
 Reason:
 
-- the main-branch verification baseline is now clean, leaving code-signing as the main release-hardening gap
+- `OIR-49` is already active, and the preview UI is the first concrete slice needed to make bulk import safe for operators
 
 ## 7. Explicit Exclusions
 
@@ -135,7 +198,11 @@ These items were present in legacy planning docs but should not be treated as re
 - `OIR-42` temp-file fsync before rename: merged to `main` on 2026-04-30 via PR `#41`
 - `OIR-44` POSIX parent-directory fsync durability: merged to `main` on 2026-05-06 via PR `#42`
 - `OIR-45` known backup-path test failures: no longer reproducing on the verified current `main` baseline
+- `OIR-46` signing distribution builds: completed and no longer active backlog
 - `OIR-47` configurable scheduled auto-backup: merged to `main` on 2026-05-06 via PR `#43`
+- `OIR-51` advanced search syntax/history: canceled on 2026-05-08 after scope review
+- `OIR-55` advanced filter builder and presets: canceled on 2026-05-08 after scope review
+- `OIR-56` LDIF/vCard export: canceled on 2026-05-08 after scope review
 - `OIR-33` targeted regression coverage: completed on 2026-04-27
 - destructive dialog migration follow-up: merged to `develop` on 2026-04-27
 - responsive/accessibility follow-up QA and targeted fixes: merged to `develop` on 2026-04-27

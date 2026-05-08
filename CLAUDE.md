@@ -34,3 +34,31 @@ Electron + React 18 + TypeScript + Vite + Vitest. IPC contracts validated with Z
 - `src/preload/index.cts` — context bridge (IPC surface exposed to renderer)
 - `src/shared/` — shared types and Zod schemas
 - `data/` — runtime data files (contacts.json, audit-log.json, backups)
+
+## Current Handoff
+
+- Branch baseline: `main`
+- Product deployment model: local USB install on a shared workstation
+- Search is considered good enough for now; do not reopen advanced search/filter work unless real usage proves a gap
+- Audit logging remains implemented in code, but the audit UI entrypoints are hidden because there is no multi-user workflow right now
+
+### Active Linear Focus
+
+- `OIR-49` (`In Progress`) — safe bulk import workflow
+  - next execution slices: `OIR-57`, then `OIR-58`
+- `OIR-52` (`In Progress`) — local USB release workflow
+  - next execution slices: `OIR-61`, then `OIR-62`
+
+### Next Queue
+
+- `OIR-54` — keyboard-first workstation flow
+  - children: `OIR-63`, `OIR-64`
+- `OIR-50` — duplicate cleanup
+  - children: `OIR-59`, `OIR-60`
+- `OIR-53` — local release-time dependency/security checks
+
+### Canceled By Scope Review On 2026-05-08
+
+- `OIR-51` advanced search syntax/history
+- `OIR-55` advanced filter builder/presets
+- `OIR-56` LDIF/vCard export
