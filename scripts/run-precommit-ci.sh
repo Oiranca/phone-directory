@@ -37,11 +37,11 @@ run_check() {
 : > "$STATUS_FILE"
 
 set +e
-run_check "typecheck" npm run typecheck
+run_check "typecheck" pnpm typecheck
 TYPECHECK_EXIT=$?
-run_check "test" npm run test
+run_check "test" pnpm test
 TEST_EXIT=$?
-run_check "build" npm run build
+run_check "build" pnpm run build
 BUILD_EXIT=$?
 set -e
 

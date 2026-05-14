@@ -59,13 +59,13 @@ tmp/                     Ignored local migration outputs
 Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 Start the development environment:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Optional local development environment file:
@@ -86,13 +86,13 @@ Available development variables:
 Run the test suite:
 
 ```bash
-npm run test
+pnpm test
 ```
 
 Run the local pre-commit CI gate:
 
 ```bash
-npm run ci
+pnpm run ci
 ```
 
 Equivalent shell helper:
@@ -107,9 +107,9 @@ This repository is configured to run a local CI gate automatically on `git commi
 
 The pre-commit hook runs:
 
-- `npm run typecheck`
-- `npm run test`
-- `npm run build`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm run build`
 
 If the gate fails:
 
@@ -128,7 +128,7 @@ SKIP_PRECOMMIT_CI=1 git commit
 Build renderer and Electron sources:
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 ## Application Language Policy
