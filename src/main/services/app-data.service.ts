@@ -16,7 +16,6 @@ import type {
   ContactRecord,
   ConflictType,
   ConflictedImportRecord,
-  CsvImportPreview,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
   DirectoryDataset,
