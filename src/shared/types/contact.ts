@@ -270,16 +270,16 @@ export type MergePolicy = "overwrite" | "skip" | "merge-fields";
 
 /** Represents a single imported record that collides with an existing record in the directory. */
 export interface ConflictedImportRecord {
-  /** Zero-based index of the row in the imported dataset. */
-  rowNumber: number;
+  /** Zero-based index of the imported record in the dataset (used internally; not the CSV row number shown to users). */
+  recordIndex: number;
   /** The record as parsed from the import file. */
   importedRecord: ContactRecord;
   /** The existing record that was matched. */
   matchingExistingRecord: ContactRecord;
   /** How the conflict was detected. */
   conflictType: ConflictType;
-  /** Human-readable description of why the conflict occurred. */
-  conflictReason: string;
+  /** I18n key for conflict reason (e.g., "conflict_reason.phone_match"). Resolved in the renderer for localization. */
+  conflictReasonKey: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
   selectedPolicy?: MergePolicy;
 }

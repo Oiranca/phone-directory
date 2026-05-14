@@ -1180,7 +1180,7 @@ export class AppDataService {
 
     // Build lookup indexes from the current dataset
     const currentIndexesByExternalId = new Map<string, number>();
-    const currentIndexesByStableKey = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, { recordIndex: number; conflictType: ConflictType }>();
 
     for (let i = 0; i < currentDataset.records.length; i++) {
       const record = currentDataset.records[i]!;
@@ -1189,16 +1189,17 @@ export class AppDataService {
       }
       for (const stableKey of this.buildStableMergeKeys(record)) {
         if (!currentIndexesByStableKey.has(stableKey)) {
-          currentIndexesByStableKey.set(stableKey, i);
+          const conflictType = this.classifyConflictTypeByKey(stableKey);
+          currentIndexesByStableKey.set(stableKey, { recordIndex: i, conflictType });
         }
       }
     }
 
     // Check each imported record for a collision with an existing record
-    importedDataset.records.forEach((importedRecord, importRowIndex) => {
+    importedDataset.records.forEach((importedRecord, importRecordIndex) => {
       let matchIndex: number | undefined;
       let conflictType: ConflictType | undefined;
-      let conflictReason = "";
+      let conflictReasonKey = "";
 
       // Prefer externalId match (most precise)
       if (importedRecord.externalId) {
@@ -1206,18 +1207,18 @@ export class AppDataService {
         if (idx !== undefined) {
           matchIndex = idx;
           conflictType = "external-id-match";
-          conflictReason = `External ID collision: ${importedRecord.externalId}`;
+          conflictReasonKey = "external-id";
         }
       }
 
       // Fall back to stable-key match when no externalId match was found
       if (matchIndex === undefined) {
         for (const key of this.buildStableMergeKeys(importedRecord)) {
-          const idx = currentIndexesByStableKey.get(key);
-          if (idx !== undefined) {
-            matchIndex = idx;
-            conflictType = this.classifyConflictType(key);
-            conflictReason = `Collision detected via ${conflictType === "phone-match" ? "phone" : conflictType === "email-match" ? "email" : "department/service"} match`;
+          const match = currentIndexesByStableKey.get(key);
+          if (match !== undefined) {
+            matchIndex = match.recordIndex;
+            conflictType = match.conflictType;
+            conflictReasonKey = this.conflictTypeToReasonKey(conflictType);
             break;
           }
         }
@@ -1225,11 +1226,11 @@ export class AppDataService {
 
       if (matchIndex !== undefined && conflictType !== undefined) {
         conflicts.push({
-          rowNumber: importRowIndex,
+          recordIndex: importRecordIndex,
           importedRecord,
           matchingExistingRecord: currentDataset.records[matchIndex]!,
           conflictType,
-          conflictReason,
+          conflictReasonKey,
           selectedPolicy: undefined
         });
       }
@@ -1238,11 +1239,25 @@ export class AppDataService {
     return conflicts;
   }
 
-  private classifyConflictType(stableKey: string): ConflictType {
-    if (stableKey.includes("emails:")) return "email-match";
-    if (stableKey.includes("phones:")) return "phone-match";
-    if (stableKey.includes("dept") || stableKey.includes("service")) return "dept-service-match";
-    return "phone-match"; // safe default: all stable keys currently include phone or email
+  private classifyConflictTypeByKey(stableKey: string): ConflictType {
+    // All keys produced by buildStableMergeKeys contain either phones: or emails: or both
+    // Classify based on which comes first or is present
+    if (stableKey.includes("emails:") && !stableKey.includes("phones:")) {
+      return "email-match";
+    }
+    // If phones: is present (or both), classify as phone-match
+    // (keys with both typically prioritize phone matching)
+    return "phone-match";
+  }
+
+  private conflictTypeToReasonKey(conflictType: ConflictType): string {
+    const keys: Record<ConflictType, string> = {
+      "external-id-match": "conflict_reason.external_id",
+      "phone-match": "conflict_reason.phone_match",
+      "email-match": "conflict_reason.email_match",
+      "dept-service-match": "conflict_reason.dept_service_match"
+    };
+    return keys[conflictType];
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {
