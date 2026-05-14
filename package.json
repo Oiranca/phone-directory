@@ -13,7 +13,7 @@
     "dev": "concurrently -k \"pnpm:dev:renderer\" \"pnpm:dev:electron\" \"pnpm:dev:app\"",
     "dev:renderer": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
-    "dev:app": "wait-on http://localhost:4173 dist-electron/main/index.js dist-electron/preload/index.cjs && node scripts/run-electron-dev.mjs",
+    "dev:app": "wait-on http://localhost:5173 dist-electron/main/index.js dist-electron/preload/index.cjs && node scripts/run-electron-dev.mjs",
     "build": "pnpm run build:renderer && pnpm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
