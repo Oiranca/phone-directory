@@ -5,6 +5,7 @@ import type {
   BackupListItem,
   BootstrapResult,
   CsvImportPreview,
+  CsvImportPreviewWithConflicts,
   CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
@@ -31,7 +32,7 @@ declare global {
       exportDataset: () => Promise<ExportContactsResult | null>;
       importDataset: () => Promise<ImportContactsResult | null>;
       resetDataset: () => Promise<ResetContactsResult>;
-      previewCsvImport: () => Promise<CsvImportPreview | null>;
+      previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
       importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
