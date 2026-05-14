@@ -485,7 +485,7 @@ describe("App recovery flow", () => {
       await screen.findByText("La interfaz abierta en el navegador no puede acceder a los datos locales.")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Usa la ventana de Electron que arranca con `npm run dev`\./)
+      screen.getByText(/Usa la ventana de Electron que arranca con `pnpm dev`\./)
     ).toBeInTheDocument();
   });
 });

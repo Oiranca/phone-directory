@@ -7,16 +7,16 @@ This document describes how to prepare a USB drive for portable Phone Directory 
 Run the appropriate build command for each target platform:
 
 ```bash
-npm run build:dist:win      # produces dist-portable/win-unpacked/
-npm run build:dist:mac      # produces dist-portable/mac/ and dist-portable/mac-arm64/
-npm run build:dist:linux    # produces dist-portable/linux-unpacked/
+pnpm run build:dist:win      # produces dist-portable/win-unpacked/
+pnpm run build:dist:mac      # produces dist-portable/mac/ and dist-portable/mac-arm64/
+pnpm run build:dist:linux    # produces dist-portable/linux-unpacked/
 ```
 
 To also produce an AppImage (optional Linux fallback), temporarily add `"AppImage"` to the
 `linux.target` array in the `build` section of `package.json`, then rebuild:
 
 ```bash
-npm run build:dist:linux    # now produces dist-portable/linux-unpacked/ AND
+pnpm run build:dist:linux    # now produces dist-portable/linux-unpacked/ AND
                              # dist-portable/Phone Directory-<version>.AppImage
 ```
 

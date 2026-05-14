@@ -6,7 +6,7 @@ import type { FullConfig } from "@playwright/test";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const globalSetup = async (_config: FullConfig) => {
-  execFileSync("npm", ["run", "build:electron"], {
+  execFileSync("pnpm", ["run", "build:electron"], {
     cwd: rootDir,
     stdio: "inherit"
   });
