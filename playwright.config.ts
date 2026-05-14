@@ -8,7 +8,6 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   reporter: process.env.CI ? "dot" : "list",
   use: {
-    headless: true,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
