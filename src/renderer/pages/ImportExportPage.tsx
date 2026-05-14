@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
@@ -29,22 +30,6 @@ const formatSize = (sizeBytes: number) => {
   }
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"]) => {
-  if (value === "high") {
-    return "alta";
-  }
-
-  if (value === "medium") {
-    return "media";
-  }
-
-  if (value === "low") {
-    return "baja";
-  }
-
-  return "";
 };
 
 type PendingConfirmation =
@@ -261,7 +246,7 @@ export const ImportExportPage = () => {
       if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
         pushToast({
           type: "warning",
-          message: `Confianza ${formatDetectionConfidence(preview.detectionConfidence)} en la detección del formato. Revisa la vista previa.`
+          message: `Confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} en la detección del formato. Revisa la vista previa.`
         });
       }
     } catch (error) {
@@ -355,7 +340,7 @@ export const ImportExportPage = () => {
       return {
         title: "Confirmar importación de agenda",
         message: `Se importarán ${preview.validRowCount} registros válidos desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
-          ? ` La detección del formato tiene confianza ${formatDetectionConfidence(preview.detectionConfidence)} y debe revisarse con atención.`
+          ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
           : ""} Se creará un backup automático. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"
       };
@@ -471,147 +456,13 @@ export const ImportExportPage = () => {
         </div>
 
         {csvPreview && (
-          <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Vista previa importación</p>
-                <h3 className="mt-2 text-xl font-semibold text-emerald-950">{csvPreview.fileName}</h3>
-                <p className="mt-1 text-sm text-emerald-900/80">{csvPreview.sourceFilePath}</p>
-                {csvPreview.detectedFormat && (
-                  <p className="mt-2 text-sm text-emerald-900/80">
-                    Formato detectado: {csvPreview.detectedFormat}
-                    {csvPreview.detectionConfidence
-                      ? ` (confianza ${formatDetectionConfidence(csvPreview.detectionConfidence)})`
-                      : ""}
-                  </p>
-                )}
-              </div>
-              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => setCsvPreview(null)}
-                  disabled={isMutating}
-                  className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900"
-                >
-                  Cerrar vista previa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
-                  disabled={isMutating || csvPreview.invalidRowCount > 0}
-                  className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {isImportingCsv ? "Importando…" : "Confirmar importación"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Filas leídas</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.totalRowCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Válidas</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.validRowCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Inválidas</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.invalidRowCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Advertencias</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.warningCount}</p>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Altas</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.createdCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Actualizaciones</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.updatedCount}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Total final</p>
-                <p className="mt-2 text-3xl font-semibold text-emerald-950">{csvPreview.mergedRecordCount}</p>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {Object.entries(csvPreview.typeCounts).length === 0 ? (
-                    <span className="text-sm text-emerald-900/80">Sin registros válidos todavía.</span>
-                  ) : (
-                    Object.entries(csvPreview.typeCounts).map(([type, count]) => (
-                      <span key={type} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
-                        {type}: {count}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-sm font-semibold text-emerald-950">Áreas detectadas</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {Object.entries(csvPreview.areaCounts).length === 0 ? (
-                    <span className="text-sm text-emerald-900/80">Sin áreas clasificadas en el CSV.</span>
-                  ) : (
-                    Object.entries(csvPreview.areaCounts).map(([area, count]) => (
-                      <span key={area} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
-                        {area}: {count}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-sm font-semibold text-emerald-950">Filas inválidas</p>
-                {csvPreview.rowIssues.length === 0 ? (
-                  <p className="mt-3 text-sm text-emerald-900/80">No se detectaron filas inválidas.</p>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    {csvPreview.rowIssues.slice(0, 5).map((issue) => (
-                      <article key={`issue-${issue.rowNumber}`} className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                        <p className="font-semibold">
-                          Fila {issue.rowNumber}
-                          {issue.displayName ? ` · ${issue.displayName}` : ""}
-                        </p>
-                        <p className="mt-1">{issue.messages.join(" ")}</p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl bg-white/80 p-4">
-                <p className="text-sm font-semibold text-emerald-950">Advertencias</p>
-                {csvPreview.warnings.length === 0 ? (
-                  <p className="mt-3 text-sm text-emerald-900/80">No se detectaron advertencias.</p>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    {csvPreview.warnings.slice(0, 5).map((warning, index) => (
-                      <article key={`warning-${warning.rowNumber}-${index}`} className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        <p className="font-semibold">
-                          Fila {warning.rowNumber}
-                          {warning.displayName ? ` · ${warning.displayName}` : ""}
-                        </p>
-                        <p className="mt-1">{warning.message}</p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
+          <CsvImportPreviewPanel
+            preview={csvPreview}
+            isImporting={isImportingCsv}
+            isMutating={isMutating}
+            onConfirm={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
+            onClose={() => setCsvPreview(null)}
+          />
         )}
         </article>
 

@@ -19,7 +19,7 @@ Recommended release path:
 3. Run the existing Windows packaging command from a signing-capable environment:
 
 ```bash
-npm run build:dist:win
+pnpm run build:dist:win
 ```
 
 Common electron-builder signing inputs:
@@ -49,7 +49,7 @@ Recommended release path:
 3. Run the existing macOS packaging command from a macOS machine:
 
 ```bash
-npm run build:dist:mac
+pnpm run build:dist:mac
 ```
 
 The checked-in entitlements enable the Electron requirements called out by the official notarization tooling:

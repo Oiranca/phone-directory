@@ -63,9 +63,9 @@ The current codebase already includes:
 
 Latest known verified baseline:
 
-- `npm run typecheck`
-- `npm run build`
-- `npx vitest run --exclude '.aia/**'`
+- `pnpm typecheck`
+- `pnpm run build`
+- `pnpm test --exclude '.aia/**'`
 
 Known test note:
 
@@ -219,11 +219,11 @@ Linear issues `OIR-34` through `OIR-42` are complete, and the POSIX durability f
 ### HIGH — OIR-34: Electron dependency — 17 unfixed security advisories
 
 - **Linear:** [OIR-34](https://linear.app/oiranca/issue/OIR-34)
-- **File:** `package.json` / `package-lock.json` (previously on Electron `32.3.3`)
+- **File:** `package.json` / `pnpm-lock.yaml` (previously on Electron `32.3.3` with npm)
 - **Risk:** 17 known unfixed advisories in Electron 32.x. No patch available in 32.x.
 - **Impact:** Renderer compromise could escalate to OS-level access.
-- **Fix:** Upgrade to a supported non-vulnerable Electron line with runway (`40.9.2` on the current branch) and re-run `npm audit`.
-- **Current status:** addressed by upgrading to Electron `40.9.2`; `npm audit` no longer reports Electron advisories.
+- **Fix:** Upgrade to a supported non-vulnerable Electron line with runway (`40.9.2` on the current branch) and re-run `pnpm audit`.
+- **Current status:** addressed by upgrading to Electron `40.9.2` and migrating to pnpm 10.x (2026-05-14); `pnpm audit` no longer reports HIGH vulnerabilities.
 
 ---
 

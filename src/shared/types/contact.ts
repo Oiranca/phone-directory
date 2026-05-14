@@ -226,6 +226,21 @@ export interface CsvImportWarning {
   message: string;
 }
 
+export type CsvImportRowStatus = "accepted" | "warning" | "rejected";
+
+export interface CsvImportPreviewRow {
+  rowNumber: number;
+  status: CsvImportRowStatus;
+  displayName?: string;
+  type?: string;
+  department?: string;
+  area?: string;
+  phone1Number?: string;
+  email1?: string;
+  errorMessages?: string[];
+  warningMessages?: string[];
+}
+
 export interface CsvImportPreview {
   importToken: string;
   sourceFilePath: string;
@@ -244,6 +259,7 @@ export interface CsvImportPreview {
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
   warnings: CsvImportWarning[];
+  previewRows: CsvImportPreviewRow[];
 }
 
 export interface CsvImportResult extends ImportContactsResult {

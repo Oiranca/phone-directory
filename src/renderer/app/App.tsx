@@ -169,7 +169,7 @@ export const App = () => {
 
       if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
         setBootstrapError("La interfaz abierta en el navegador no puede acceder a los datos locales.");
-        setBootstrapHelp("Usa la ventana de Electron que arranca con `npm run dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.");
+        setBootstrapHelp("Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.");
         setIsLoading(false);
         return;
       }
