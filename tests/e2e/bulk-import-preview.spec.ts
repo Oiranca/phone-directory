@@ -49,14 +49,15 @@ test.describe("OIR-57 bulk import preview UI", () => {
       const table = page.getByRole("table", { name: "Filas de importación" });
       await expect(table).toBeVisible();
       await expect(table.getByText("Admisión Central")).toBeVisible();
-      await expect(table.getByText("Urgencias")).toBeVisible();
+      await expect(table.getByRole("cell", { name: "Urgencias" })).toBeVisible();
       await expect(table.getByText("Dr. García")).toBeVisible();
 
       // All rows accepted — at least one "Aceptada" badge visible
       await expect(table.getByText("Aceptada").first()).toBeVisible();
 
-      // No blocker alert
-      await expect(page.getByRole("alert")).not.toBeVisible();
+      // No blocker alert inside the preview panel
+      const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
+      await expect(previewPanel.getByRole("alert")).not.toBeVisible();
 
       // Confirm button is enabled
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeEnabled();
@@ -96,8 +97,9 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Preview panel appears
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
-      // Blocker alert is rendered
-      const alert = page.getByRole("alert");
+      // Blocker alert is rendered inside the preview panel
+      const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
+      const alert = previewPanel.getByRole("alert");
       await expect(alert).toBeVisible();
       await expect(alert).toContainText("filas rechazadas");
 
@@ -153,8 +155,9 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Error message for rejected row is visible in table
       await expect(table.getByText("El tipo es obligatorio.")).toBeVisible();
 
-      // Blocker alert present
-      await expect(page.getByRole("alert")).toBeVisible();
+      // Blocker alert present inside the preview panel
+      const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
+      await expect(previewPanel.getByRole("alert")).toBeVisible();
 
       // Confirm blocked
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
@@ -196,10 +199,10 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Warning badge present
       await expect(table.getByText("Advertencia")).toBeVisible();
 
-      // No blocker alert — only the warning acknowledgement status
-      await expect(page.getByRole("alert")).not.toBeVisible();
-      const warningStatus = page.getByRole("status");
-      await expect(warningStatus).toContainText("advertencia");
+      // No blocker alert inside the preview panel — only the warning acknowledgement status
+      const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
+      await expect(previewPanel.getByRole("alert")).not.toBeVisible();
+      await expect(previewPanel.getByRole("status")).toContainText("advertencia");
 
       // Confirm is enabled
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeEnabled();
