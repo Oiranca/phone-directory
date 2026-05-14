@@ -65,12 +65,9 @@ describe("CsvImportPreviewPanel", () => {
       expect(zeroValues.length).toBeGreaterThanOrEqual(4);
     });
 
-    it("allows confirm when there are no invalid rows", () => {
-      const { onConfirm } = renderPanel(basePreview);
-      const confirmButton = screen.getByRole("button", { name: /Confirmar importación/ });
-      expect(confirmButton).not.toBeDisabled();
-      fireEvent.click(confirmButton);
-      expect(onConfirm).toHaveBeenCalledTimes(1);
+    it("disables confirm when there are no valid rows to import", () => {
+      renderPanel(basePreview);
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
   });
 
@@ -398,7 +395,7 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   describe("detected format display", () => {
-    it("shows format and high confidence without the confidence label", () => {
+    it("shows format and confidence label for high confidence", () => {
       renderPanel({
         ...basePreview,
         detectedFormat: "plantilla normalizada",
