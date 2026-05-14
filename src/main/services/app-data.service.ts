@@ -1253,8 +1253,7 @@ export class AppDataService {
     const keys: Record<ConflictType, string> = {
       "external-id-match": "conflict_reason.external_id",
       "phone-match": "conflict_reason.phone_match",
-      "email-match": "conflict_reason.email_match",
-      "dept-service-match": "conflict_reason.dept_service_match"
+      "email-match": "conflict_reason.email_match"
     };
     return keys[conflictType];
   }

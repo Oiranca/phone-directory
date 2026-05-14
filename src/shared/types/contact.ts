@@ -263,7 +263,7 @@ export interface CsvImportPreview {
 }
 
 /** The mechanism by which a conflict was detected between an imported record and an existing one. */
-export type ConflictType = "external-id-match" | "phone-match" | "email-match" | "dept-service-match";
+export type ConflictType = "external-id-match" | "phone-match" | "email-match";
 
 /** How to resolve a conflict between an imported record and an existing record during bulk import. */
 export type MergePolicy = "overwrite" | "skip" | "merge-fields";
