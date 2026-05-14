@@ -1206,7 +1206,7 @@ export class AppDataService {
         if (idx !== undefined) {
           matchIndex = idx;
           conflictType = "external-id-match";
-          conflictReasonKey = "external-id";
+          conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
         }
       }
 
