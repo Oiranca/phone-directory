@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, type ElectronApplication, type Page } from "@playwright/test";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const rendererUrl = "http://127.0.0.1:4173";
+const rendererUrl = "http://127.0.0.1:5173";
 
 export type E2eWorkspace = {
   workspaceRootDir: string;
