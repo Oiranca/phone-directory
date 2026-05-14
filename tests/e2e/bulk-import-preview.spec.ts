@@ -49,7 +49,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       const table = page.getByRole("table", { name: "Filas de importación" });
       await expect(table).toBeVisible();
       await expect(table.getByText("Admisión Central")).toBeVisible();
-      await expect(table.getByRole("cell", { name: "Urgencias" })).toBeVisible();
+      await expect(table.getByRole("cell", { name: "Urgencias" }).first()).toBeVisible();
       await expect(table.getByText("Dr. García")).toBeVisible();
 
       // All rows accepted — at least one "Aceptada" badge visible
