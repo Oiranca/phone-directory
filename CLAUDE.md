@@ -45,7 +45,8 @@ Electron + React 18 + TypeScript + Vite + Vitest. IPC contracts validated with Z
 ### Active Linear Focus
 
 - `OIR-49` (`In Progress`) — safe bulk import workflow
-  - next execution slices: `OIR-57`, then `OIR-58`
+  - ✅ `OIR-57` (Done) — bulk import preview UI with row-level validation
+  - next execution slice: `OIR-58` — pagination/virtualization for large imports
 - `OIR-52` (`In Progress`) — local USB release workflow
   - next execution slices: `OIR-61`, then `OIR-62`
 
