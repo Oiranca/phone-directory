@@ -1217,7 +1217,7 @@ export class AppDataService {
           if (idx !== undefined) {
             matchIndex = idx;
             conflictType = this.classifyConflictType(key);
-            conflictReason = `Collision detected via: ${key.substring(0, 50)}`;
+            conflictReason = `Collision detected via ${conflictType === "phone-match" ? "phone" : conflictType === "email-match" ? "email" : "department/service"} match`;
             break;
           }
         }

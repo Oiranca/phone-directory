@@ -4,7 +4,6 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
-  CsvImportPreview,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
   EditableAppSettings,
