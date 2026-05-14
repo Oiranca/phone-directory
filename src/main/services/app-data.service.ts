@@ -14,7 +14,10 @@ import type {
   BootstrapData,
   BootstrapResult,
   ContactRecord,
+  ConflictType,
+  ConflictedImportRecord,
   CsvImportPreview,
+  CsvImportPreviewWithConflicts,
   CsvImportResult,
   DirectoryDataset,
   EditableAppSettings,
@@ -334,7 +337,7 @@ export class AppDataService {
     });
   }
 
-  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
+  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts> {
     const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
@@ -342,12 +345,16 @@ export class AppDataService {
     );
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
+    const conflictedRecords = this.detectConflicts(currentContacts, dataset);
 
     return {
       ...preview,
       mergedRecordCount: mergeSummary.contacts.records.length,
       createdCount: mergeSummary.createdCount,
-      updatedCount: mergeSummary.updatedCount
+      updatedCount: mergeSummary.updatedCount,
+      conflictCount: conflictedRecords.length,
+      conflictedRecords,
+      policiesResolved: false
     };
   }
 
@@ -1163,6 +1170,79 @@ export class AppDataService {
     }
 
     return [...keys];
+  }
+
+  private detectConflicts(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset
+  ): ConflictedImportRecord[] {
+    const conflicts: ConflictedImportRecord[] = [];
+
+    // Build lookup indexes from the current dataset
+    const currentIndexesByExternalId = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, number>();
+
+    for (let i = 0; i < currentDataset.records.length; i++) {
+      const record = currentDataset.records[i]!;
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, i);
+      }
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, i);
+        }
+      }
+    }
+
+    // Check each imported record for a collision with an existing record
+    importedDataset.records.forEach((importedRecord, importRowIndex) => {
+      let matchIndex: number | undefined;
+      let conflictType: ConflictType | undefined;
+      let conflictReason = "";
+
+      // Prefer externalId match (most precise)
+      if (importedRecord.externalId) {
+        const idx = currentIndexesByExternalId.get(importedRecord.externalId);
+        if (idx !== undefined) {
+          matchIndex = idx;
+          conflictType = "external-id-match";
+          conflictReason = `External ID collision: ${importedRecord.externalId}`;
+        }
+      }
+
+      // Fall back to stable-key match when no externalId match was found
+      if (matchIndex === undefined) {
+        for (const key of this.buildStableMergeKeys(importedRecord)) {
+          const idx = currentIndexesByStableKey.get(key);
+          if (idx !== undefined) {
+            matchIndex = idx;
+            conflictType = this.classifyConflictType(key);
+            conflictReason = `Collision detected via: ${key.substring(0, 50)}`;
+            break;
+          }
+        }
+      }
+
+      if (matchIndex !== undefined && conflictType !== undefined) {
+        conflicts.push({
+          rowNumber: importRowIndex,
+          importedRecord,
+          matchingExistingRecord: currentDataset.records[matchIndex]!,
+          conflictType,
+          conflictReason,
+          selectedPolicy: undefined
+        });
+      }
+    });
+
+    return conflicts;
+  }
+
+  private classifyConflictType(stableKey: string): ConflictType {
+    if (stableKey.includes("emails:")) return "email-match";
+    if (stableKey.includes("phones:")) return "phone-match";
+    if (stableKey.includes("dept") || stableKey.includes("service")) return "dept-service-match";
+    return "phone-match"; // safe default: all stable keys currently include phone or email
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {
