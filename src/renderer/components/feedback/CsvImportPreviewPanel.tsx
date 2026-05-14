@@ -41,6 +41,7 @@ type Props = {
 
 export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onClose }: Props) => {
   const hasBlockers = preview.invalidRowCount > 0;
+  const isConfirmDisabled = isMutating || hasBlockers || preview.validRowCount === 0;
 
   return (
     <section
@@ -76,7 +77,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <button
             type="button"
             onClick={onConfirm}
-            disabled={isMutating || hasBlockers}
+            disabled={isConfirmDisabled}
             className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
           >
             {isImporting ? "Importando…" : "Confirmar importación"}
@@ -282,13 +283,6 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
               </tbody>
             </table>
           </div>
-
-          {/* Empty state for zero rows */}
-          {preview.previewRows.length === 0 && (
-            <p className="mt-3 text-sm text-emerald-900/80">
-              No se encontraron filas para mostrar.
-            </p>
-          )}
         </div>
       )}
 
