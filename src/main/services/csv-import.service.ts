@@ -8,6 +8,7 @@ import type {
   ContactRecord,
   CsvImportIssue,
   CsvImportPreview,
+  CsvImportPreviewRow,
   CsvImportWarning,
   DirectoryDataset,
   PhoneContact,
@@ -349,6 +350,8 @@ export const buildImportPreviewFromRows = async (
   const rowIssues: CsvImportIssue[] = [];
   const warnings: CsvImportWarning[] = [];
 
+  const previewRows: CsvImportPreviewRow[] = [];
+
   rows.forEach((row: NormalizedImportRow, index: number) => {
     const rowNumber = index + 2;
     const displayName = maybe(row.displayName);
@@ -425,6 +428,18 @@ export const buildImportPreviewFromRows = async (
         messages: issues
       });
       warnings.push(...rowWarnings);
+      previewRows.push({
+        rowNumber,
+        status: "rejected",
+        displayName,
+        type: maybe(row.type),
+        department: maybe(row.department),
+        area: maybe(row.area),
+        phone1Number: maybe(row.phone1Number),
+        email1: maybe(row.email1),
+        errorMessages: issues,
+        warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
+      });
       return;
     }
 
@@ -465,6 +480,17 @@ export const buildImportPreviewFromRows = async (
 
       records.push(record);
       warnings.push(...rowWarnings);
+      previewRows.push({
+        rowNumber,
+        status: rowWarnings.length > 0 ? "warning" : "accepted",
+        displayName,
+        type: record.type,
+        department: record.organization.department,
+        area: record.organization.area,
+        phone1Number: record.contactMethods.phones[0]?.number,
+        email1: record.contactMethods.emails[0]?.address,
+        warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
+      });
     } catch (error) {
       const messages =
         error instanceof Error
@@ -477,6 +503,18 @@ export const buildImportPreviewFromRows = async (
         messages
       });
       warnings.push(...rowWarnings);
+      previewRows.push({
+        rowNumber,
+        status: "rejected",
+        displayName,
+        type: maybe(row.type),
+        department: maybe(row.department),
+        area: maybe(row.area),
+        phone1Number: maybe(row.phone1Number),
+        email1: maybe(row.email1),
+        errorMessages: messages,
+        warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
+      });
     }
   });
 
@@ -501,7 +539,8 @@ export const buildImportPreviewFromRows = async (
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,
-      warnings
+      warnings,
+      previewRows
     }
   };
 };

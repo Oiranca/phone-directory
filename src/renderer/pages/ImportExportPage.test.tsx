@@ -160,6 +160,26 @@ describe("ImportExportPage", () => {
               displayName: "Urgencias",
               message: "El área \"urgencias\" no está soportada y se omitirá."
             }
+          ],
+          previewRows: [
+            {
+              rowNumber: 2,
+              status: "accepted",
+              displayName: "Admisión General",
+              type: "service",
+              department: "Admisión",
+              area: "gestion-administracion",
+              phone1Number: "12345"
+            },
+            {
+              rowNumber: 3,
+              status: "warning",
+              displayName: "Urgencias",
+              type: "service",
+              department: "Urgencias",
+              phone1Number: "99999",
+              warningMessages: ["El área \"urgencias\" no está soportada y se omitirá."]
+            }
           ]
         }),
         importCsvDataset: vi.fn().mockResolvedValue({
@@ -426,7 +446,22 @@ describe("ImportExportPage", () => {
           messages: ["El tipo es obligatorio."]
         }
       ],
-      warnings: []
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "accepted",
+          displayName: "Registro válido",
+          type: "person",
+          phone1Number: "11111"
+        },
+        {
+          rowNumber: 3,
+          status: "rejected",
+          displayName: "Fila rota",
+          errorMessages: ["El tipo es obligatorio."]
+        }
+      ]
     });
 
     renderPage();
@@ -459,7 +494,23 @@ describe("ImportExportPage", () => {
         },
         areaCounts: {},
         rowIssues: [],
-        warnings: []
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "accepted",
+            displayName: "Registro A",
+            type: "person",
+            phone1Number: "11111"
+          },
+          {
+            rowNumber: 3,
+            status: "accepted",
+            displayName: "Registro B",
+            type: "person",
+            phone1Number: "22222"
+          }
+        ]
       })
       .mockResolvedValueOnce(null);
 
