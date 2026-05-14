@@ -2732,5 +2732,4 @@ describe("AppDataService", () => {
     expect(ids).toContain(r1.savedRecordId);
     expect(ids).toContain(r2.savedRecordId);
   });
-
 });

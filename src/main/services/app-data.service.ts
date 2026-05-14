@@ -14,7 +14,9 @@ import type {
   BootstrapData,
   BootstrapResult,
   ContactRecord,
-  CsvImportPreview,
+  ConflictType,
+  ConflictedImportRecord,
+  CsvImportPreviewWithConflicts,
   CsvImportResult,
   DirectoryDataset,
   EditableAppSettings,
@@ -334,7 +336,7 @@ export class AppDataService {
     });
   }
 
-  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
+  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts> {
     const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
@@ -342,12 +344,16 @@ export class AppDataService {
     );
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
+    const conflictedRecords = this.detectConflicts(currentContacts, dataset);
 
     return {
       ...preview,
       mergedRecordCount: mergeSummary.contacts.records.length,
       createdCount: mergeSummary.createdCount,
-      updatedCount: mergeSummary.updatedCount
+      updatedCount: mergeSummary.updatedCount,
+      conflictCount: conflictedRecords.length,
+      conflictedRecords,
+      policiesResolved: false
     };
   }
 
@@ -1163,6 +1169,93 @@ export class AppDataService {
     }
 
     return [...keys];
+  }
+
+  private detectConflicts(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset
+  ): ConflictedImportRecord[] {
+    const conflicts: ConflictedImportRecord[] = [];
+
+    // Build lookup indexes from the current dataset
+    const currentIndexesByExternalId = new Map<string, number>();
+    const currentIndexesByStableKey = new Map<string, { recordIndex: number; conflictType: ConflictType }>();
+
+    for (let i = 0; i < currentDataset.records.length; i++) {
+      const record = currentDataset.records[i]!;
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, i);
+      }
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          const conflictType = this.classifyConflictTypeByKey(stableKey);
+          currentIndexesByStableKey.set(stableKey, { recordIndex: i, conflictType });
+        }
+      }
+    }
+
+    // Check each imported record for a collision with an existing record
+    importedDataset.records.forEach((importedRecord, importRecordIndex) => {
+      let matchIndex: number | undefined;
+      let conflictType: ConflictType | undefined;
+      let conflictReasonKey = "";
+
+      // Prefer externalId match (most precise)
+      if (importedRecord.externalId) {
+        const idx = currentIndexesByExternalId.get(importedRecord.externalId);
+        if (idx !== undefined) {
+          matchIndex = idx;
+          conflictType = "external-id-match";
+          conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
+        }
+      }
+
+      // Fall back to stable-key match when no externalId match was found
+      if (matchIndex === undefined) {
+        for (const key of this.buildStableMergeKeys(importedRecord)) {
+          const match = currentIndexesByStableKey.get(key);
+          if (match !== undefined) {
+            matchIndex = match.recordIndex;
+            conflictType = match.conflictType;
+            conflictReasonKey = this.conflictTypeToReasonKey(conflictType);
+            break;
+          }
+        }
+      }
+
+      if (matchIndex !== undefined && conflictType !== undefined) {
+        conflicts.push({
+          recordIndex: importRecordIndex,
+          importedRecord,
+          matchingExistingRecord: currentDataset.records[matchIndex]!,
+          conflictType,
+          conflictReasonKey,
+          selectedPolicy: undefined
+        });
+      }
+    });
+
+    return conflicts;
+  }
+
+  private classifyConflictTypeByKey(stableKey: string): ConflictType {
+    // All keys produced by buildStableMergeKeys contain either phones: or emails: or both
+    // Classify based on which comes first or is present
+    if (stableKey.includes("emails:") && !stableKey.includes("phones:")) {
+      return "email-match";
+    }
+    // If phones: is present (or both), classify as phone-match
+    // (keys with both typically prioritize phone matching)
+    return "phone-match";
+  }
+
+  private conflictTypeToReasonKey(conflictType: ConflictType): string {
+    const keys: Record<ConflictType, string> = {
+      "external-id-match": "conflict_reason.external_id",
+      "phone-match": "conflict_reason.phone_match",
+      "email-match": "conflict_reason.email_match"
+    };
+    return keys[conflictType];
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {

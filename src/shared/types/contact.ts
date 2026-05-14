@@ -262,6 +262,38 @@ export interface CsvImportPreview {
   previewRows: CsvImportPreviewRow[];
 }
 
+/** The mechanism by which a conflict was detected between an imported record and an existing one. */
+export type ConflictType = "external-id-match" | "phone-match" | "email-match";
+
+/** How to resolve a conflict between an imported record and an existing record during bulk import. */
+export type MergePolicy = "overwrite" | "skip" | "merge-fields";
+
+/** Represents a single imported record that collides with an existing record in the directory. */
+export interface ConflictedImportRecord {
+  /** Zero-based index of the imported record in the dataset (used internally; not the CSV row number shown to users). */
+  recordIndex: number;
+  /** The record as parsed from the import file. */
+  importedRecord: ContactRecord;
+  /** The existing record that was matched. */
+  matchingExistingRecord: ContactRecord;
+  /** How the conflict was detected. */
+  conflictType: ConflictType;
+  /** I18n key for conflict reason (e.g., "conflict_reason.phone_match"). Resolved in the renderer for localization. */
+  conflictReasonKey: string;
+  /** Resolution policy chosen by the user; undefined until the user selects one. */
+  selectedPolicy?: MergePolicy;
+}
+
+/** Extends CsvImportPreview with per-record conflict information for the conflict-resolution UI. */
+export interface CsvImportPreviewWithConflicts extends CsvImportPreview {
+  /** Total number of conflicting rows detected. */
+  conflictCount: number;
+  /** Detail of each conflicting row, including the matched existing record. */
+  conflictedRecords: ConflictedImportRecord[];
+  /** True once every conflict has a selectedPolicy assigned. */
+  policiesResolved: boolean;
+}
+
 export interface CsvImportResult extends ImportContactsResult {
   warningCount: number;
   invalidRowCount: number;
