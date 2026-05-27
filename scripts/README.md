@@ -21,6 +21,14 @@ dist-portable/usb-package/
 
 Copy the contents of that directory to the USB root.
 
+The staged package includes the platform payload folder, the platform launcher,
+`README.txt`, and a generated `RELEASE_MANIFEST.txt` with the build timestamp,
+version, and source commit. Linux packages may also include
+`Phone Directory.AppImage` when the build configuration produces it.
+
+For the full packaging and operator handoff process, see
+[../docs/USB_RELEASE_HANDOFF_CHECKLIST.md](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
+
 ## `extract_ods_to_csv.py`
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.

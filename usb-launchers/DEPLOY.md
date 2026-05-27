@@ -2,46 +2,50 @@
 
 This document describes how to prepare a USB drive for portable Phone Directory distribution.
 
-## Step 1 — Build the platform artifacts
+## Step 1 — Build the USB package
 
-Run the appropriate build command for each target platform:
+Use the release orchestrator for the target platform:
 
 ```bash
-pnpm run build:dist:win      # produces dist-portable/win-unpacked/
-pnpm run build:dist:mac      # produces dist-portable/mac/ and dist-portable/mac-arm64/
-pnpm run build:dist:linux    # produces dist-portable/linux-unpacked/
+pnpm run release:usb -- win
+pnpm run release:usb -- mac
+pnpm run release:usb -- linux
+```
+
+The command runs typecheck, tests, the production build, `electron-builder --dir`,
+and USB package staging. The copy-ready output is:
+
+```bash
+dist-portable/usb-package/
 ```
 
 To also produce an AppImage (optional Linux fallback), temporarily add `"AppImage"` to the
-`linux.target` array in the `build` section of `package.json`, then rebuild:
+`linux.target` array in the `build` section of `package.json`, then run:
 
 ```bash
-pnpm run build:dist:linux    # now produces dist-portable/linux-unpacked/ AND
-                             # dist-portable/Phone Directory-<version>.AppImage
+pnpm run release:usb -- linux
 ```
 
-Rename the AppImage to exactly `Phone Directory.AppImage` before copying to the USB root
-(the launcher's fallback path expects that exact filename).
+When `dist-portable/Phone Directory-<version>.AppImage` exists, the release script
+copies it into the USB package as `Phone Directory.AppImage`.
 
 The `dist-portable/` directory is gitignored. Build on the target platform or use a CI runner.
 
-## Step 2 — Copy platform artifacts to the USB root
+## Step 2 — Copy the staged package to the USB root
 
-Copy the relevant output folder(s) from `dist-portable/` to the root of the USB drive:
+Copy the contents of `dist-portable/usb-package/` to the root of the USB drive.
 
 | Platform       | Folder to copy             | Destination on USB  |
 |----------------|----------------------------|---------------------|
-| Windows        | `dist-portable/win-unpacked/` | `<USB_ROOT>/win-unpacked/` |
-| macOS x64      | `dist-portable/mac/`          | `<USB_ROOT>/mac/`          |
-| macOS arm64    | `dist-portable/mac-arm64/`    | `<USB_ROOT>/mac-arm64/`    |
-| Linux (dir)    | `dist-portable/linux-unpacked/` | `<USB_ROOT>/linux-unpacked/` |
-| Linux (AppImage) | `dist-portable/Phone Directory-<version>.AppImage` → rename to `Phone Directory.AppImage` | `<USB_ROOT>/Phone Directory.AppImage` |
+| Windows        | `dist-portable/usb-package/*` | `<USB_ROOT>/` |
+| macOS          | `dist-portable/usb-package/*` | `<USB_ROOT>/` |
+| Linux          | `dist-portable/usb-package/*` | `<USB_ROOT>/` |
 
 You do not need to include all platforms on a single drive. Include only the platforms your target users need.
 
-## Step 3 — Copy the launcher files to the USB root
+## Step 3 — Verify launcher files
 
-From this `usb-launchers/` directory, copy the relevant launcher(s) and the README to the USB root:
+The release package includes the relevant launcher and `README.txt`:
 
 ```
 <USB_ROOT>/
@@ -51,7 +55,8 @@ From this `usb-launchers/` directory, copy the relevant launcher(s) and the READ
 └── README.txt          (all platforms)
 ```
 
-On Linux and macOS, make the scripts executable after copying:
+On Linux and macOS, the release script marks the staged launcher executable. If the
+USB filesystem strips executable bits, restore them after copying:
 
 ```bash
 chmod +x <USB_MOUNT>/launch.sh
@@ -76,12 +81,13 @@ USB_ROOT/
 ├── launch.bat
 ├── launch.sh
 ├── launch.command
-└── README.txt
+├── README.txt
+└── RELEASE_MANIFEST.txt
 ```
 
 ## Notes
 
-- All user data is stored in a `portable-data/` folder created automatically at the USB root on first launch. Nothing is written to the host computer. The folder layout is:
+- All persistent user data is stored in a `portable-data/` folder created automatically at the USB root on first launch. Linux AppImage fallback launches may extract temporary runtime files under `/tmp`, but directory data and backups stay on the USB drive. The folder layout is:
   ```
   portable-data/
     data/
@@ -91,3 +97,4 @@ USB_ROOT/
   ```
 - The launchers set both `ELECTRON_PORTABLE=1` (activates portable mode) and `ELECTRON_PORTABLE_ROOT_PATH` (points Electron userData to `<USB_ROOT>/portable-data`).
 - To back up user data, copy the `portable-data/` folder to a safe location.
+- For the release checklist and operator handoff steps, see [`../docs/USB_RELEASE_HANDOFF_CHECKLIST.md`](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
