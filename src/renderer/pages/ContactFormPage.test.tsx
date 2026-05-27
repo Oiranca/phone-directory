@@ -98,6 +98,45 @@ describe("ContactFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("ignores repeated submit attempts while a save is already running", async () => {
+    let resolveCreateRecord: ((value: {
+      contacts: typeof defaultContacts;
+      settings: typeof editableSettings;
+      savedRecordId: string;
+    }) => void) | undefined;
+    window.hospitalDirectory.createRecord = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreateRecord = resolve;
+        })
+    );
+    const router = renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+      target: { value: "Nuevo Control" }
+    });
+    fireEvent.change(screen.getByLabelText("Número"), {
+      target: { value: "112233" }
+    });
+
+    fireEvent.submit(screen.getByRole("button", { name: "Crear registro" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Guardando…" }).closest("form")!);
+
+    expect(window.hospitalDirectory.createRecord).toHaveBeenCalledTimes(1);
+
+    resolveCreateRecord?.({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      savedRecordId: "cnt_0009"
+    });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/");
+    });
+  });
+
   it("preserves directory search state after saving", async () => {
     useAppStore.setState({
       contacts: defaultContacts,
