@@ -21,6 +21,7 @@
     "build:dist:win": "pnpm run build && electron-builder --win --dir",
     "build:dist:mac": "pnpm run build && electron-builder --mac --dir",
     "build:dist:linux": "pnpm run build && electron-builder --linux --dir",
+    "release:usb": "bash scripts/release-usb.sh",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",

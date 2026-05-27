@@ -1,5 +1,26 @@
 # Migration Scripts
 
+## `release-usb.sh`
+
+Runs the local release workflow for USB deployment.
+
+```bash
+pnpm run release:usb
+pnpm run release:usb -- mac
+pnpm run release:usb -- linux
+pnpm run release:usb -- win
+```
+
+The command runs typecheck, tests, and the production build before invoking
+`electron-builder --dir` for the target platform. It writes the copy-ready USB
+layout to:
+
+```bash
+dist-portable/usb-package/
+```
+
+Copy the contents of that directory to the USB root.
+
 ## `extract_ods_to_csv.py`
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.
