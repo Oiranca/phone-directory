@@ -10,10 +10,14 @@ const navItems = [
 ];
 
 const shortcutRoutes: Record<string, string> = {
-  "1": "/",
-  "2": "/contacts/new",
-  "3": "/import-export",
-  "4": "/settings"
+  Digit1: "/",
+  Numpad1: "/",
+  Digit2: "/contacts/new",
+  Numpad2: "/contacts/new",
+  Digit3: "/import-export",
+  Numpad3: "/import-export",
+  Digit4: "/settings",
+  Numpad4: "/settings"
 };
 
 const isTextEntryElement = (target: EventTarget | null) => {
@@ -55,8 +59,8 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       const isModifierShortcut = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
 
-      const shortcutRoute = shortcutRoutes[event.key];
-      if (event.altKey && shortcutRoute) {
+      const shortcutRoute = shortcutRoutes[event.code];
+      if (event.altKey && shortcutRoute && !isTextEntryElement(event.target)) {
         event.preventDefault();
         navigate(shortcutRoute);
         return;

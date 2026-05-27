@@ -144,9 +144,27 @@ describe("AppShell — default mode", () => {
       </MemoryRouter>
     );
 
-    fireEvent.keyDown(window, { key: "4", altKey: true });
+    fireEvent.keyDown(window, { code: "Digit4", key: "¡", altKey: true });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/settings");
+  });
+
+  it("ignores alt number route shortcuts inside text entry", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          <LocationProbe />
+          <input aria-label="Campo activo" />
+        </AppShell>
+      </MemoryRouter>
+    );
+    const activeField = screen.getByLabelText("Campo activo");
+    activeField.focus();
+
+    fireEvent.keyDown(activeField, { code: "Digit4", key: "¡", altKey: true });
+
+    expect(activeField).toHaveFocus();
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
   });
 
   it("does not cancel a form while Escape is pressed inside a text field", () => {
