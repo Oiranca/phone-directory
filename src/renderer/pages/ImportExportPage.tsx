@@ -273,14 +273,25 @@ export const ImportExportPage = () => {
       return;
     }
 
+    const policySelections = (preview.conflictedRecords ?? []).flatMap((conflict) =>
+      conflict.selectedPolicy
+        ? [{ recordIndex: conflict.recordIndex, policy: conflict.selectedPolicy }]
+        : []
+    );
+
+    if (policySelections.length !== (preview.conflictedRecords ?? []).length) {
+      pushToast({
+        type: "error",
+        message: "Resuelve todos los conflictos antes de importar."
+      });
+      return;
+    }
+
     try {
       setIsImportingCsv(true);
       const result = await window.hospitalDirectory.importCsvDataset(
         preview.importToken,
-        (preview.conflictedRecords ?? []).map((conflict) => ({
-          recordIndex: conflict.recordIndex,
-          policy: conflict.selectedPolicy!
-        }))
+        policySelections
       );
 
       initialize({
@@ -309,14 +320,18 @@ export const ImportExportPage = () => {
         return current;
       }
 
+      const previousSkippedUpdates = current.conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
       const conflictedRecords = current.conflictedRecords.map((conflict) =>
         conflict.recordIndex === recordIndex
           ? { ...conflict, selectedPolicy: policy }
           : conflict
       );
+      const skippedUpdates = conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
+      const baseUpdatedCount = current.updatedCount + previousSkippedUpdates;
 
       return {
         ...current,
+        updatedCount: Math.max(0, baseUpdatedCount - skippedUpdates),
         conflictedRecords,
         policiesResolved: conflictedRecords.every((conflict) => conflict.selectedPolicy)
       };
