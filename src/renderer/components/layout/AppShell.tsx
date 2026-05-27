@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "Directorio" },
@@ -8,11 +9,100 @@ const navItems = [
   { to: "/settings", label: "Configuración" }
 ];
 
+const shortcutRoutes: Record<string, string> = {
+  Digit1: "/",
+  Numpad1: "/",
+  Digit2: "/contacts/new",
+  Numpad2: "/contacts/new",
+  Digit3: "/import-export",
+  Numpad3: "/import-export",
+  Digit4: "/settings",
+  Numpad4: "/settings"
+};
+
+const isTextEntryElement = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable) {
+    return true;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select";
+};
+
+const clickKeyboardCancelTarget = () => {
+  const cancelTarget = document.querySelector<HTMLElement>("[data-keyboard-cancel]");
+  cancelTarget?.click();
+};
+
+const submitKeyboardForm = () => {
+  const form = document.querySelector<HTMLFormElement>("form[data-keyboard-submit]");
+  form?.requestSubmit();
+};
+
 interface AppShellProps extends PropsWithChildren {
   isRecoveryMode?: boolean;
 }
 
 export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isRecoveryMode) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isModifierShortcut = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      const shortcutRoute = shortcutRoutes[event.code];
+      if (event.altKey && shortcutRoute && !isTextEntryElement(event.target)) {
+        event.preventDefault();
+        navigate(shortcutRoute);
+        return;
+      }
+
+      if (isModifierShortcut && key === "n") {
+        event.preventDefault();
+        navigate("/contacts/new");
+        return;
+      }
+
+      if (isModifierShortcut && key === "s") {
+        const form = document.querySelector<HTMLFormElement>("form[data-keyboard-submit]");
+        if (form) {
+          event.preventDefault();
+          submitKeyboardForm();
+        }
+        return;
+      }
+
+      if (event.key === "/" && !isTextEntryElement(event.target)) {
+        const searchInput = document.getElementById("directory-search") as HTMLInputElement | null;
+        if (searchInput) {
+          event.preventDefault();
+          searchInput.focus();
+        }
+        return;
+      }
+
+      if (event.key === "Escape" && !isTextEntryElement(event.target)) {
+        const cancelTarget = document.querySelector<HTMLElement>("[data-keyboard-cancel]");
+        if (cancelTarget) {
+          event.preventDefault();
+          clickKeyboardCancelTarget();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRecoveryMode, navigate]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-scs-mist via-white to-slate-100 text-scs-ink">
       <a

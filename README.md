@@ -30,6 +30,7 @@ Planning and migration reference files:
 - [CSV_IMPORT_TEMPLATE.md](./docs/CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./docs/ODS_TO_CSV_MAPPING.md)
 - [USB_RELEASE_HANDOFF_CHECKLIST.md](./docs/USB_RELEASE_HANDOFF_CHECKLIST.md)
+- [KEYBOARD_SHORTCUTS.md](./docs/KEYBOARD_SHORTCUTS.md)
 - [scripts/README.md](./scripts/README.md)
 
 ## Tech Stack

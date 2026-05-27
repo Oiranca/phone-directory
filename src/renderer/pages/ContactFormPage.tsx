@@ -387,6 +387,10 @@ export const ContactFormPage = () => {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (isSubmitting) {
+      return;
+    }
+
     const payload = buildPayload(formState);
     const parsed = editableContactRecordSchema.safeParse(payload);
 
@@ -493,7 +497,11 @@ export const ContactFormPage = () => {
             Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
           </p>
         </div>
-        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
+        <Link
+          to="/"
+          data-keyboard-cancel
+          className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+        >
           Cancelar
         </Link>
       </div>
@@ -502,7 +510,7 @@ export const ContactFormPage = () => {
         {liveMessage}
       </p>
 
-      <form className="mt-6 space-y-8" onSubmit={handleSubmit}>
+      <form className="mt-6 space-y-8" data-keyboard-submit onSubmit={handleSubmit}>
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
