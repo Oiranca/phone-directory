@@ -1576,6 +1576,109 @@ describe("AppDataService", () => {
     expect(preview.warningCount).toBe(1);
     expect(preview.rowIssues[0]?.messages).toContain("El tipo es obligatorio.");
     expect(preview.warnings[0]?.message).toContain("no está soportada");
+    expect(preview.conflictCount).toBe(0);
+    expect(preview.conflictedRecords).toEqual([]);
+    expect(preview.policiesResolved).toBe(false);
+  });
+
+  it("previews conflicts against existing records without exposing full contact payloads", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "existing-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status,notes",
+        `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},12345,active,nota privada`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const conflict = preview.conflictedRecords[0]!;
+
+    expect(preview.conflictCount).toBe(1);
+    expect(conflict.recordIndex).toBe(0);
+    expect(conflict.matchingRecordSource).toBe("existing");
+    expect(conflict.matchingRecordIndex).toBe(0);
+    expect(conflict.conflictType).toBe("external-id-match");
+    expect(conflict.conflictReasonKey).toBe("conflict_reason.external_id");
+    expect(conflict.importedRecord.displayName).toBe(`${existing.displayName} Importada`);
+    expect(conflict.matchingRecord.id).toBe(existing.id);
+    expect(conflict.importedRecord).not.toHaveProperty("contactMethods");
+    expect(conflict.importedRecord).not.toHaveProperty("notes");
+    expect(conflict.matchingRecord).not.toHaveProperty("contactMethods");
+    expect(conflict.matchingRecord).not.toHaveProperty("audit");
+    expect(preview.policiesResolved).toBe(false);
+  });
+
+  it("previews conflicts created by duplicate rows inside the same import file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "batch-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "batch-1,service,Mostrador A,Recepción,55555,active",
+        "batch-1,service,Mostrador B,Recepción,55556,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const conflict = preview.conflictedRecords[0]!;
+
+    expect(preview.conflictCount).toBe(1);
+    expect(conflict.recordIndex).toBe(1);
+    expect(conflict.matchingRecordSource).toBe("import");
+    expect(conflict.matchingRecordIndex).toBe(0);
+    expect(conflict.conflictType).toBe("external-id-match");
+    expect(conflict.importedRecord.displayName).toBe("Mostrador B");
+    expect(conflict.matchingRecord.displayName).toBe("Mostrador A");
+  });
+
+  it("keeps duplicate rows matched to the existing record when an earlier import row updates it", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "existing-then-batch-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        `${existing.externalId},service,${existing.displayName} Primera,${existing.organization.department},55555,active`,
+        `${existing.externalId},service,${existing.displayName} Segunda,${existing.organization.department},55556,active`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+
+    expect(preview.conflictCount).toBe(2);
+    expect(preview.conflictedRecords.map((conflict) => conflict.matchingRecordSource)).toEqual([
+      "existing",
+      "existing"
+    ]);
+    expect(preview.conflictedRecords.map((conflict) => conflict.matchingRecordIndex)).toEqual([0, 0]);
+    expect(preview.conflictedRecords[1]?.matchingRecord.id).toBe(existing.id);
   });
 
   it("localizes unsupported phone kind warnings during CSV preview", async () => {

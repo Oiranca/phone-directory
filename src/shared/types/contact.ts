@@ -268,14 +268,30 @@ export type ConflictType = "external-id-match" | "phone-match" | "email-match";
 /** How to resolve a conflict between an imported record and an existing record during bulk import. */
 export type MergePolicy = "overwrite" | "skip" | "merge-fields";
 
+/** Minimal record data safe to expose in import conflict previews. */
+export interface ConflictRecordSummary {
+  id?: string;
+  externalId?: string;
+  type: RecordType;
+  displayName: string;
+  department?: string;
+  service?: string;
+  area?: AreaType;
+  status: ContactRecord["status"];
+}
+
 /** Represents a single imported record that collides with an existing record in the directory. */
 export interface ConflictedImportRecord {
   /** Zero-based index of the imported record in the dataset (used internally; not the CSV row number shown to users). */
   recordIndex: number;
-  /** The record as parsed from the import file. */
-  importedRecord: ContactRecord;
-  /** The existing record that was matched. */
-  matchingExistingRecord: ContactRecord;
+  /** Minimal summary of the record parsed from the import file. */
+  importedRecord: ConflictRecordSummary;
+  /** Minimal summary of the record that caused the collision. */
+  matchingRecord: ConflictRecordSummary;
+  /** Zero-based index of the matching existing/imported record in its source dataset. */
+  matchingRecordIndex: number;
+  /** Whether the match came from saved data or an earlier imported row. */
+  matchingRecordSource: "existing" | "import";
   /** How the conflict was detected. */
   conflictType: ConflictType;
   /** I18n key for conflict reason (e.g., "conflict_reason.phone_match"). Resolved in the renderer for localization. */

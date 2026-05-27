@@ -15,6 +15,7 @@ import type {
   BootstrapResult,
   ContactRecord,
   ConflictType,
+  ConflictRecordSummary,
   ConflictedImportRecord,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
@@ -1176,66 +1177,112 @@ export class AppDataService {
     importedDataset: DirectoryDataset
   ): ConflictedImportRecord[] {
     const conflicts: ConflictedImportRecord[] = [];
+    type ConflictIndexEntry = {
+      recordIndex: number;
+      conflictType: ConflictType;
+      record: ConflictRecordSummary;
+      source: "existing" | "import";
+    };
 
     // Build lookup indexes from the current dataset
-    const currentIndexesByExternalId = new Map<string, number>();
-    const currentIndexesByStableKey = new Map<string, { recordIndex: number; conflictType: ConflictType }>();
+    const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
+    const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
 
     for (let i = 0; i < currentDataset.records.length; i++) {
       const record = currentDataset.records[i]!;
       if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
-        currentIndexesByExternalId.set(record.externalId, i);
+        currentIndexesByExternalId.set(record.externalId, {
+          recordIndex: i,
+          conflictType: "external-id-match",
+          record: this.toConflictRecordSummary(record),
+          source: "existing"
+        });
       }
       for (const stableKey of this.buildStableMergeKeys(record)) {
         if (!currentIndexesByStableKey.has(stableKey)) {
           const conflictType = this.classifyConflictTypeByKey(stableKey);
-          currentIndexesByStableKey.set(stableKey, { recordIndex: i, conflictType });
+          currentIndexesByStableKey.set(stableKey, {
+            recordIndex: i,
+            conflictType,
+            record: this.toConflictRecordSummary(record),
+            source: "existing"
+          });
         }
       }
     }
 
     // Check each imported record for a collision with an existing record
     importedDataset.records.forEach((importedRecord, importRecordIndex) => {
-      let matchIndex: number | undefined;
-      let conflictType: ConflictType | undefined;
+      let match: ConflictIndexEntry | undefined;
       let conflictReasonKey = "";
 
       // Prefer externalId match (most precise)
       if (importedRecord.externalId) {
-        const idx = currentIndexesByExternalId.get(importedRecord.externalId);
-        if (idx !== undefined) {
-          matchIndex = idx;
-          conflictType = "external-id-match";
+        const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
+        if (indexed !== undefined) {
+          match = indexed;
           conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
         }
       }
 
       // Fall back to stable-key match when no externalId match was found
-      if (matchIndex === undefined) {
+      if (match === undefined) {
         for (const key of this.buildStableMergeKeys(importedRecord)) {
-          const match = currentIndexesByStableKey.get(key);
-          if (match !== undefined) {
-            matchIndex = match.recordIndex;
-            conflictType = match.conflictType;
-            conflictReasonKey = this.conflictTypeToReasonKey(conflictType);
+          const indexed = currentIndexesByStableKey.get(key);
+          if (indexed !== undefined) {
+            match = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
             break;
           }
         }
       }
 
-      if (matchIndex !== undefined && conflictType !== undefined) {
+      if (match !== undefined) {
         conflicts.push({
           recordIndex: importRecordIndex,
-          importedRecord,
-          matchingExistingRecord: currentDataset.records[matchIndex]!,
-          conflictType,
+          importedRecord: this.toConflictRecordSummary(importedRecord),
+          matchingRecord: match.record,
+          matchingRecordIndex: match.recordIndex,
+          matchingRecordSource: match.source,
+          conflictType: match.conflictType,
           conflictReasonKey,
           selectedPolicy: undefined
         });
       }
+
+      const importedIndexEntry = match ?? {
+        recordIndex: importRecordIndex,
+        conflictType: "external-id-match" as const,
+        record: this.toConflictRecordSummary(importedRecord),
+        source: "import" as const
+      };
+      if (importedRecord.externalId && !currentIndexesByExternalId.has(importedRecord.externalId)) {
+        currentIndexesByExternalId.set(importedRecord.externalId, importedIndexEntry);
+      }
+      for (const stableKey of this.buildStableMergeKeys(importedRecord)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, {
+            ...importedIndexEntry,
+            conflictType: this.classifyConflictTypeByKey(stableKey)
+          });
+        }
+      }
     });
 
     return conflicts;
+  }
+
+  private toConflictRecordSummary(record: ContactRecord): ConflictRecordSummary {
+    return {
+      id: record.id,
+      externalId: record.externalId,
+      type: record.type,
+      displayName: record.displayName,
+      department: record.organization.department,
+      service: record.organization.service,
+      area: record.organization.area,
+      status: record.status
+    };
   }
 
   private classifyConflictTypeByKey(stableKey: string): ConflictType {
