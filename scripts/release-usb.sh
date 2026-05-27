@@ -77,6 +77,18 @@ copy_required() {
   cp -R "$source" "$target"
 }
 
+copy_linux_appimage() {
+  local version
+  local source
+
+  version="$(node -p "require('./package.json').version")"
+  source="$DIST_ROOT/Phone Directory-$version.AppImage"
+
+  if [[ -f "$source" ]]; then
+    cp "$source" "$PACKAGE_ROOT/Phone Directory.AppImage"
+  fi
+}
+
 case "$PLATFORM" in
   win)
     copy_required "$DIST_ROOT/win-unpacked" "$PACKAGE_ROOT/win-unpacked"
@@ -98,9 +110,7 @@ case "$PLATFORM" in
     ;;
   linux)
     copy_required "$DIST_ROOT/linux-unpacked" "$PACKAGE_ROOT/linux-unpacked"
-    if compgen -G "$DIST_ROOT/*.AppImage" > /dev/null; then
-      cp "$DIST_ROOT"/*.AppImage "$PACKAGE_ROOT/Phone Directory.AppImage"
-    fi
+    copy_linux_appimage
     copy_required "$REPO_ROOT/usb-launchers/launch.sh" "$PACKAGE_ROOT/launch.sh"
     chmod +x "$PACKAGE_ROOT/launch.sh"
     ;;
