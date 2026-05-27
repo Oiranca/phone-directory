@@ -29,6 +29,7 @@ Planning and migration reference files:
 - [REMAINING_WORK_PLAN.md](./docs/REMAINING_WORK_PLAN.md)
 - [CSV_IMPORT_TEMPLATE.md](./docs/CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./docs/ODS_TO_CSV_MAPPING.md)
+- [USB_RELEASE_HANDOFF_CHECKLIST.md](./docs/USB_RELEASE_HANDOFF_CHECKLIST.md)
 - [scripts/README.md](./scripts/README.md)
 
 ## Tech Stack
@@ -100,6 +101,16 @@ Equivalent shell helper:
 ```bash
 bash scripts/ci-local.sh
 ```
+
+Build a copy-ready USB release package:
+
+```bash
+pnpm run release:usb
+```
+
+The staged package is written to `dist-portable/usb-package/`. See
+[USB_RELEASE_HANDOFF_CHECKLIST.md](./docs/USB_RELEASE_HANDOFF_CHECKLIST.md) for the
+release and operator handoff checklist.
 
 ## Automatic Commit Gate
 
