@@ -14,7 +14,10 @@ import type {
   BootstrapData,
   BootstrapResult,
   ContactRecord,
-  CsvImportPreview,
+  ConflictType,
+  ConflictRecordSummary,
+  ConflictedImportRecord,
+  CsvImportPreviewWithConflicts,
   CsvImportResult,
   DirectoryDataset,
   EditableAppSettings,
@@ -334,7 +337,7 @@ export class AppDataService {
     });
   }
 
-  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreview> {
+  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts> {
     const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
@@ -342,12 +345,16 @@ export class AppDataService {
     );
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
+    const conflictedRecords = this.detectConflicts(currentContacts, dataset);
 
     return {
       ...preview,
       mergedRecordCount: mergeSummary.contacts.records.length,
       createdCount: mergeSummary.createdCount,
-      updatedCount: mergeSummary.updatedCount
+      updatedCount: mergeSummary.updatedCount,
+      conflictCount: conflictedRecords.length,
+      conflictedRecords,
+      policiesResolved: false
     };
   }
 
@@ -1163,6 +1170,139 @@ export class AppDataService {
     }
 
     return [...keys];
+  }
+
+  private detectConflicts(
+    currentDataset: DirectoryDataset,
+    importedDataset: DirectoryDataset
+  ): ConflictedImportRecord[] {
+    const conflicts: ConflictedImportRecord[] = [];
+    type ConflictIndexEntry = {
+      recordIndex: number;
+      conflictType: ConflictType;
+      record: ConflictRecordSummary;
+      source: "existing" | "import";
+    };
+
+    // Build lookup indexes from the current dataset
+    const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
+    const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
+
+    for (let i = 0; i < currentDataset.records.length; i++) {
+      const record = currentDataset.records[i]!;
+      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
+        currentIndexesByExternalId.set(record.externalId, {
+          recordIndex: i,
+          conflictType: "external-id-match",
+          record: this.toConflictRecordSummary(record),
+          source: "existing"
+        });
+      }
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          const conflictType = this.classifyConflictTypeByKey(stableKey);
+          currentIndexesByStableKey.set(stableKey, {
+            recordIndex: i,
+            conflictType,
+            record: this.toConflictRecordSummary(record),
+            source: "existing"
+          });
+        }
+      }
+    }
+
+    // Check each imported record for a collision with an existing record
+    importedDataset.records.forEach((importedRecord, importRecordIndex) => {
+      let match: ConflictIndexEntry | undefined;
+      let conflictReasonKey = "";
+
+      // Prefer externalId match (most precise)
+      if (importedRecord.externalId) {
+        const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
+        if (indexed !== undefined) {
+          match = indexed;
+          conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
+        }
+      }
+
+      // Fall back to stable-key match when no externalId match was found
+      if (match === undefined) {
+        for (const key of this.buildStableMergeKeys(importedRecord)) {
+          const indexed = currentIndexesByStableKey.get(key);
+          if (indexed !== undefined) {
+            match = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
+            break;
+          }
+        }
+      }
+
+      if (match !== undefined) {
+        conflicts.push({
+          recordIndex: importRecordIndex,
+          importedRecord: this.toConflictRecordSummary(importedRecord),
+          matchingRecord: match.record,
+          matchingRecordIndex: match.recordIndex,
+          matchingRecordSource: match.source,
+          conflictType: match.conflictType,
+          conflictReasonKey,
+          selectedPolicy: undefined
+        });
+      }
+
+      const importedIndexEntry = match ?? {
+        recordIndex: importRecordIndex,
+        conflictType: "external-id-match" as const,
+        record: this.toConflictRecordSummary(importedRecord),
+        source: "import" as const
+      };
+      if (importedRecord.externalId && !currentIndexesByExternalId.has(importedRecord.externalId)) {
+        currentIndexesByExternalId.set(importedRecord.externalId, importedIndexEntry);
+      }
+      for (const stableKey of this.buildStableMergeKeys(importedRecord)) {
+        if (!currentIndexesByStableKey.has(stableKey)) {
+          currentIndexesByStableKey.set(stableKey, {
+            ...importedIndexEntry,
+            conflictType: this.classifyConflictTypeByKey(stableKey)
+          });
+        }
+      }
+    });
+
+    return conflicts;
+  }
+
+  private toConflictRecordSummary(record: ContactRecord): ConflictRecordSummary {
+    return {
+      id: record.id,
+      externalId: record.externalId,
+      type: record.type,
+      displayName: record.displayName,
+      department: record.organization.department,
+      service: record.organization.service,
+      area: record.organization.area,
+      status: record.status
+    };
+  }
+
+  private classifyConflictTypeByKey(stableKey: string): ConflictType {
+    // All keys produced by buildStableMergeKeys contain either phones: or emails: or both
+    // Classify based on which comes first or is present
+    if (stableKey.includes("emails:") && !stableKey.includes("phones:")) {
+      return "email-match";
+    }
+    // If phones: is present (or both), classify as phone-match
+    // (keys with both typically prioritize phone matching)
+    return "phone-match";
+  }
+
+  private conflictTypeToReasonKey(conflictType: ConflictType): string {
+    const keys: Record<ConflictType, string> = {
+      "external-id-match": "conflict_reason.external_id",
+      "phone-match": "conflict_reason.phone_match",
+      "email-match": "conflict_reason.email_match"
+    };
+    return keys[conflictType];
   }
 
   private buildEmptyDataset(editorName: string): DirectoryDataset {

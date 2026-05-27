@@ -3,7 +3,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
-  CsvImportPreview,
+  CsvImportPreviewWithConflicts,
   CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
@@ -32,7 +32,7 @@ const api = {
   exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
   importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
   resetDataset: () => ipcRenderer.invoke("contacts:reset-dataset") as Promise<ResetContactsResult>,
-  previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreview | null>,
+  previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreviewWithConflicts | null>,
   importCsvDataset: (importToken: string) =>
     ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>,
   browseForPath: (type: "dataFile" | "backupDirectory") =>
