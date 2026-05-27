@@ -1619,6 +1619,98 @@ describe("AppDataService", () => {
     expect(preview.policiesResolved).toBe(false);
   });
 
+  it("rejects conflicted CSV imports until every conflict has a policy", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "unresolved-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},12345,active`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
+      "Resuelve todos los conflictos antes de importar."
+    );
+  });
+
+  it("skips conflicted rows when the selected import policy is skip", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "skip-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        `${existing.externalId},service,No debe entrar,${existing.organization.department},12345,active`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath, [
+      { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "skip" }
+    ]);
+
+    expect(result.createdCount).toBe(0);
+    expect(result.updatedCount).toBe(0);
+    expect(result.conflictCount).toBe(1);
+    expect(result.conflictPolicyCounts?.skip).toBe(1);
+    expect(result.contacts.records.find((record) => record.id === existing.id)?.displayName).toBe(existing.displayName);
+  });
+
+  it("merges new fields into an existing record when the selected import policy is merge-fields", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "merge-fields-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,phone2Number,email1,status,tags",
+        `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},12345,67890,nuevo@example.com,active,nuevo`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath, [
+      { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+    ]);
+    const updated = result.contacts.records.find((record) => record.id === existing.id)!;
+
+    expect(result.createdCount).toBe(0);
+    expect(result.updatedCount).toBe(1);
+    expect(result.conflictPolicyCounts?.["merge-fields"]).toBe(1);
+    expect(updated.displayName).toBe(existing.displayName);
+    expect(updated.contactMethods.phones.some((phone) => phone.number === "67890")).toBe(true);
+    expect(updated.contactMethods.emails.some((email) => email.address === "nuevo@example.com")).toBe(true);
+    expect(updated.tags).toContain("nuevo");
+  });
+
   it("previews conflicts created by duplicate rows inside the same import file", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -1726,7 +1818,11 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
-    const result = await service.importCsvDataset(sourceFilePath);
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(
+      sourceFilePath,
+      preview.conflictedRecords.map((conflict) => ({ recordIndex: conflict.recordIndex, policy: "overwrite" }))
+    );
     const persisted = JSON.parse(
       await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
     ) as { records: Array<{ displayName: string; aliases: string[]; tags: string[]; status: string }> };
@@ -1744,6 +1840,10 @@ describe("AppDataService", () => {
     expect(created?.contactMethods.phones[0]?.kind).toBe("other");
     expect(result.backupPath).toContain(path.join(testRoot, "backups"));
     expect(persisted.records.some((record) => record.status === "inactive")).toBe(true);
+    const audit = await service.getAuditLog({ action: "bulk-import" });
+    expect(audit.entries[0]?.recordsAffected).toBe(2);
+    expect(audit.entries[0]?.changes?.conflictCount?.new).toBe(1);
+    expect(audit.entries[0]?.changes?.conflictPolicyCounts?.new).toEqual({ overwrite: 1 });
   });
 
   it("previews and imports an ODS workbook through the spreadsheet pipeline", async () => {
@@ -1817,7 +1917,11 @@ describe("AppDataService", () => {
     XLSX.writeFile(secondWorkbook, secondPath);
 
     const firstImport = await service.importCsvDataset(firstPath);
-    const secondImport = await service.importCsvDataset(secondPath);
+    const secondPreview = await service.previewCsvImport(secondPath);
+    const secondImport = await service.importCsvDataset(
+      secondPath,
+      secondPreview.conflictedRecords.map((conflict) => ({ recordIndex: conflict.recordIndex, policy: "overwrite" }))
+    );
     const ingenioMatches = secondImport.contacts.records.filter(
       (record) => record.contactMethods.phones.some((phone) => phone.number === "928304114")
     );
@@ -1849,7 +1953,11 @@ describe("AppDataService", () => {
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     XLSX.writeFile(workbook, sourceFilePath);
 
-    const result = await service.importCsvDataset(sourceFilePath);
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(
+      sourceFilePath,
+      preview.conflictedRecords.map((conflict) => ({ recordIndex: conflict.recordIndex, policy: "overwrite" }))
+    );
     const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
 
     expect(imported?.contactMethods.phones).toHaveLength(2);
@@ -1879,7 +1987,11 @@ describe("AppDataService", () => {
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     XLSX.writeFile(workbook, sourceFilePath);
 
-    const result = await service.importCsvDataset(sourceFilePath);
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(
+      sourceFilePath,
+      preview.conflictedRecords.map((conflict) => ({ recordIndex: conflict.recordIndex, policy: "overwrite" }))
+    );
     const imported = result.contacts.records.find((record) => record.displayName === "Ingenio - Administración");
 
     expect(imported?.contactMethods.phones).toHaveLength(1);
@@ -2515,7 +2627,11 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
-    const result = await service.importCsvDataset(sourceFilePath);
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(
+      sourceFilePath,
+      preview.conflictedRecords.map((conflict) => ({ recordIndex: conflict.recordIndex, policy: "overwrite" }))
+    );
     const matches = result.contacts.records.filter((record) =>
       record.organization.department === "Urgencias" &&
       record.organization.service === "Mostrador" &&

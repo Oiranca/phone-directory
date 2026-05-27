@@ -1,4 +1,4 @@
-import type { EditableContactRecord } from "../../shared/types/contact.js";
+import type { CsvImportPolicySelection, EditableContactRecord, MergePolicy } from "../../shared/types/contact.js";
 import { auditLogQueryParamsSchema } from "../../shared/schemas/contact.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -7,6 +7,7 @@ import { AppDataService } from "../services/app-data.service.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
+const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
 
 const CHANNELS = {
   bootstrap: "contacts:get-bootstrap-data",
@@ -169,15 +170,32 @@ export const registerContactsIpc = (service: AppDataService) => {
       importToken
     };
   });
-  ipcMain.handle(CHANNELS.importCsvDataset, async (_event, importToken: string) => {
+  ipcMain.handle(CHANNELS.importCsvDataset, async (_event, importToken: string, rawPolicies: unknown = []) => {
     const pendingImport = pendingCsvImports.get(importToken);
 
     if (!pendingImport) {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
+    if (!Array.isArray(rawPolicies)) {
+      throw new Error("Las políticas de conflicto no tienen un formato válido.");
+    }
+
+    const policies = rawPolicies.map((item) => {
+      if (
+        typeof item !== "object" ||
+        item === null ||
+        !Number.isInteger((item as CsvImportPolicySelection).recordIndex) ||
+        !MERGE_POLICIES.has((item as CsvImportPolicySelection).policy)
+      ) {
+        throw new Error("Las políticas de conflicto no tienen un formato válido.");
+      }
+
+      return item as CsvImportPolicySelection;
+    });
+
     clearPendingCsvImport(importToken);
-    return service.importCsvDataset(pendingImport.sourceFilePath);
+    return service.importCsvDataset(pendingImport.sourceFilePath, policies);
   });
 
   ipcMain.handle(CHANNELS.getAuditLog, async (_event, rawParams: unknown) => {

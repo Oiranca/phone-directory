@@ -4,6 +4,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
+  CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
   EditableAppSettings,
@@ -32,7 +33,7 @@ declare global {
       importDataset: () => Promise<ImportContactsResult | null>;
       resetDataset: () => Promise<ResetContactsResult>;
       previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
-      importCsvDataset: (importToken: string) => Promise<CsvImportResult>;
+      importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
       exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;

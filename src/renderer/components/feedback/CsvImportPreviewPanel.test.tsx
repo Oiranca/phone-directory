@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CsvImportPreview } from "../../../shared/types/contact";
+import type { CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
 
-const basePreview: CsvImportPreview = {
+const basePreview: CsvImportPreviewWithConflicts = {
   importToken: "test-token",
   sourceFilePath: "/tmp/incoming/test.csv",
   fileName: "test.csv",
@@ -19,25 +19,30 @@ const basePreview: CsvImportPreview = {
   areaCounts: {},
   rowIssues: [],
   warnings: [],
-  previewRows: []
+  previewRows: [],
+  conflictCount: 0,
+  conflictedRecords: [],
+  policiesResolved: false
 };
 
 const renderPanel = (
-  preview: CsvImportPreview,
+  preview: CsvImportPreviewWithConflicts,
   overrides: Partial<{ isImporting: boolean; isMutating: boolean }> = {}
 ) => {
   const onConfirm = vi.fn();
   const onClose = vi.fn();
+  const onPolicyChange = vi.fn();
   const result = render(
     <CsvImportPreviewPanel
       preview={preview}
       isImporting={overrides.isImporting ?? false}
       isMutating={overrides.isMutating ?? false}
       onConfirm={onConfirm}
+      onPolicyChange={onPolicyChange}
       onClose={onClose}
     />
   );
-  return { ...result, onConfirm, onClose };
+  return { ...result, onConfirm, onPolicyChange, onClose };
 };
 
 afterEach(() => {
@@ -391,6 +396,76 @@ describe("CsvImportPreviewPanel", () => {
 
       expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
       expect(screen.getByText("El tipo de teléfono \"ext\" no está soportado y se normalizó como \"other\".")).toBeInTheDocument();
+    });
+  });
+
+  describe("conflict policies", () => {
+    const conflictPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "conflicts.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador importado",
+            department: "Admisión",
+            status: "active"
+          },
+          matchingRecord: {
+            id: "existing-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador actual",
+            department: "Admisión",
+            status: "active"
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    it("blocks confirmation until conflict policies are selected", () => {
+      renderPanel(conflictPreview);
+
+      expect(screen.getByRole("alert")).toHaveTextContent("Selecciona una política");
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+    });
+
+    it("calls onPolicyChange when a policy is selected", () => {
+      const { onPolicyChange } = renderPanel(conflictPreview);
+
+      fireEvent.click(screen.getByRole("radio", { name: "Combinar" }));
+
+      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
+    });
+
+    it("enables confirmation when all conflict policies are resolved", () => {
+      renderPanel({
+        ...conflictPreview,
+        policiesResolved: true,
+        conflictedRecords: [
+          {
+            ...conflictPreview.conflictedRecords[0]!,
+            selectedPolicy: "overwrite"
+          }
+        ]
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent("Todas las políticas");
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
   });
 

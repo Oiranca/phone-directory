@@ -268,6 +268,11 @@ export type ConflictType = "external-id-match" | "phone-match" | "email-match";
 /** How to resolve a conflict between an imported record and an existing record during bulk import. */
 export type MergePolicy = "overwrite" | "skip" | "merge-fields";
 
+export interface CsvImportPolicySelection {
+  recordIndex: number;
+  policy: MergePolicy;
+}
+
 /** Minimal record data safe to expose in import conflict previews. */
 export interface ConflictRecordSummary {
   id?: string;
@@ -315,6 +320,8 @@ export interface CsvImportResult extends ImportContactsResult {
   invalidRowCount: number;
   createdCount: number;
   updatedCount: number;
+  conflictCount: number;
+  conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
 }
 
 export type AuditAction = "create" | "update" | "delete" | "bulk-import" | "restore-from-backup";
