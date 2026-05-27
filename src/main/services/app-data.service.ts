@@ -14,6 +14,7 @@ import type {
   BootstrapData,
   BootstrapResult,
   ContactRecord,
+  CsvImportPolicySelection,
   ConflictType,
   ConflictRecordSummary,
   ConflictedImportRecord,
@@ -30,7 +31,8 @@ import type {
   RecoveryState,
   ResetContactsResult,
   ExportAuditLogResult,
-  SaveContactResult
+  SaveContactResult,
+  MergePolicy
 } from "../../shared/types/contact.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
@@ -358,7 +360,10 @@ export class AppDataService {
     };
   }
 
-  async importCsvDataset(sourceFilePath: string): Promise<CsvImportResult> {
+  async importCsvDataset(
+    sourceFilePath: string,
+    policySelections: CsvImportPolicySelection[] = []
+  ): Promise<CsvImportResult> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
@@ -376,9 +381,25 @@ export class AppDataService {
     }
 
     const currentContacts = await this.readContacts(settings);
-    const merged = this.mergeImportedDataset(currentContacts, dataset, editorName);
+    const conflicts = this.detectConflicts(currentContacts, dataset);
+    const policies = this.resolveImportPolicies(conflicts, policySelections);
+    const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
     const backupPath = await this.createBackup();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
+    this.noteAutoBackupEligibleEdit();
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: editorName,
+      action: "bulk-import",
+      recordsAffected: merged.createdCount + merged.updatedCount,
+      importSource: path.basename(sourceFilePath),
+      changes: {
+        createdCount: { new: merged.createdCount },
+        updatedCount: { new: merged.updatedCount },
+        conflictCount: { new: conflicts.length },
+        conflictPolicyCounts: { new: merged.conflictPolicyCounts }
+      }
+    });
 
     return {
       contacts: merged.contacts,
@@ -389,7 +410,9 @@ export class AppDataService {
       warningCount: preview.warningCount,
       invalidRowCount: preview.invalidRowCount,
       createdCount: merged.createdCount,
-      updatedCount: merged.updatedCount
+      updatedCount: merged.updatedCount,
+      conflictCount: conflicts.length,
+      conflictPolicyCounts: merged.conflictPolicyCounts
     };
     });
   }
@@ -1048,7 +1071,8 @@ export class AppDataService {
   private mergeImportedDataset(
     currentDataset: DirectoryDataset,
     importedDataset: DirectoryDataset,
-    editorName: string
+    editorName: string,
+    conflictPolicies: Map<number, MergePolicy> = new Map()
   ) {
     const exportedAt = new Date().toISOString();
     const mergedRecords = [...currentDataset.records];
@@ -1069,8 +1093,9 @@ export class AppDataService {
 
     let createdCount = 0;
     let updatedCount = 0;
+    const conflictPolicyCounts: Partial<Record<MergePolicy, number>> = {};
 
-    for (const importedRecord of importedDataset.records) {
+    for (const [importRecordIndex, importedRecord] of importedDataset.records.entries()) {
       const externalIdMatchIndex = importedRecord.externalId
         ? currentIndexesByExternalId.get(importedRecord.externalId)
         : undefined;
@@ -1080,16 +1105,25 @@ export class AppDataService {
       const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
 
       if (matchIndex !== undefined) {
+        const selectedPolicy = conflictPolicies.get(importRecordIndex) ?? "overwrite";
+        conflictPolicyCounts[selectedPolicy] = (conflictPolicyCounts[selectedPolicy] ?? 0) + 1;
+
+        if (selectedPolicy === "skip") {
+          continue;
+        }
+
         const currentRecord = mergedRecords[matchIndex]!;
-        const mergedRecord = contactRecordSchema.parse({
-          ...importedRecord,
-          id: currentRecord.id,
-          audit: {
-            ...currentRecord.audit,
-            updatedAt: exportedAt,
-            updatedBy: editorName
-          }
-        });
+        const mergedRecord = selectedPolicy === "merge-fields"
+          ? this.mergeImportedRecordFields(currentRecord, importedRecord, exportedAt, editorName)
+          : contactRecordSchema.parse({
+            ...importedRecord,
+            id: currentRecord.id,
+            audit: {
+              ...currentRecord.audit,
+              updatedAt: exportedAt,
+              updatedBy: editorName
+            }
+          });
         mergedRecords[matchIndex] = mergedRecord;
 
         if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
@@ -1135,8 +1169,80 @@ export class AppDataService {
     return {
       contacts: this.buildNextDataset(mergedRecords, currentDataset, editorName, exportedAt),
       createdCount,
-      updatedCount
+      updatedCount,
+      conflictPolicyCounts
     };
+  }
+
+  private resolveImportPolicies(
+    conflicts: ConflictedImportRecord[],
+    policySelections: CsvImportPolicySelection[]
+  ): Map<number, MergePolicy> {
+    const conflictIndexes = new Set(conflicts.map((conflict) => conflict.recordIndex));
+    const policies = new Map<number, MergePolicy>();
+
+    for (const selection of policySelections) {
+      if (!conflictIndexes.has(selection.recordIndex)) {
+        throw new Error("Hay políticas de conflicto para filas que ya no tienen conflicto. Vuelve a preparar la importación.");
+      }
+      policies.set(selection.recordIndex, selection.policy);
+    }
+
+    const unresolved = conflicts.filter((conflict) => !policies.has(conflict.recordIndex));
+    if (unresolved.length > 0) {
+      throw new Error("Resuelve todos los conflictos antes de importar.");
+    }
+
+    return policies;
+  }
+
+  private mergeImportedRecordFields(
+    currentRecord: ContactRecord,
+    importedRecord: ContactRecord,
+    exportedAt: string,
+    editorName: string
+  ): ContactRecord {
+    const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => phone.number.replace(/\D/g, "")));
+    const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
+    const nextPhones = [
+      ...currentRecord.contactMethods.phones,
+      ...importedRecord.contactMethods.phones.filter((phone) => {
+        const key = phone.number.replace(/\D/g, "");
+        return key && !hasPhone.has(key);
+      })
+    ];
+    const nextEmails = [
+      ...currentRecord.contactMethods.emails,
+      ...importedRecord.contactMethods.emails.filter((email) => {
+        const key = email.address.trim().toLowerCase();
+        return key && !hasEmail.has(key);
+      })
+    ];
+
+    return contactRecordSchema.parse({
+      ...currentRecord,
+      externalId: currentRecord.externalId ?? importedRecord.externalId,
+      organization: {
+        ...currentRecord.organization,
+        department: currentRecord.organization.department ?? importedRecord.organization.department,
+        service: currentRecord.organization.service ?? importedRecord.organization.service,
+        area: currentRecord.organization.area ?? importedRecord.organization.area,
+        specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty
+      },
+      location: currentRecord.location ?? importedRecord.location,
+      contactMethods: {
+        phones: normalizePrimaryEntries(nextPhones),
+        emails: normalizePrimaryEntries(nextEmails)
+      },
+      aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
+      tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
+      notes: currentRecord.notes ?? importedRecord.notes,
+      audit: {
+        ...currentRecord.audit,
+        updatedAt: exportedAt,
+        updatedBy: editorName
+      }
+    });
   }
 
   private buildStableMergeKeys(record: ContactRecord): string[] {

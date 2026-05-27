@@ -1,4 +1,4 @@
-import type { CsvImportPreview, CsvImportPreviewRow } from "../../../shared/types/contact";
+import type { CsvImportPreviewWithConflicts, CsvImportPreviewRow, MergePolicy } from "../../../shared/types/contact";
 
 const STATUS_LABELS: Record<CsvImportPreviewRow["status"], string> = {
   accepted: "Aceptada",
@@ -24,7 +24,19 @@ const STATUS_ICON: Record<CsvImportPreviewRow["status"], string> = {
   rejected: "✗"
 };
 
-const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"]) => {
+const POLICY_LABELS: Record<MergePolicy, string> = {
+  skip: "Omitir",
+  overwrite: "Sobrescribir",
+  "merge-fields": "Combinar"
+};
+
+const CONFLICT_REASON_LABELS: Record<string, string> = {
+  "conflict_reason.external_id": "Mismo identificador externo",
+  "conflict_reason.phone_match": "Teléfono coincidente",
+  "conflict_reason.email_match": "Correo coincidente"
+};
+
+const formatDetectionConfidence = (value: CsvImportPreviewWithConflicts["detectionConfidence"]) => {
   if (value === "high") return "alta";
   if (value === "medium") return "media";
   if (value === "low") return "baja";
@@ -32,16 +44,21 @@ const formatDetectionConfidence = (value: CsvImportPreview["detectionConfidence"
 };
 
 type Props = {
-  preview: CsvImportPreview;
+  preview: CsvImportPreviewWithConflicts;
   isImporting: boolean;
   isMutating: boolean;
   onConfirm: () => void;
+  onPolicyChange: (recordIndex: number, policy: MergePolicy) => void;
   onClose: () => void;
 };
 
-export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onClose }: Props) => {
+export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose }: Props) => {
+  const conflictedRecords = preview.conflictedRecords ?? [];
+  const conflictCount = preview.conflictCount ?? conflictedRecords.length;
+  const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
   const hasBlockers = preview.invalidRowCount > 0;
-  const isConfirmDisabled = isMutating || hasBlockers || preview.validRowCount === 0;
+  const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
+  const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || preview.validRowCount === 0;
 
   return (
     <section
@@ -109,6 +126,25 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
+      {!hasBlockers && conflictCount > 0 && (
+        <div
+          role={hasUnresolvedConflicts ? "alert" : "status"}
+          className={[
+            "mt-5 rounded-2xl border px-4 py-3 text-sm",
+            hasUnresolvedConflicts
+              ? "border-amber-300 bg-amber-50 text-amber-950"
+              : "border-emerald-200 bg-white/70 text-emerald-950"
+          ].join(" ")}
+        >
+          <span className="font-semibold">
+            {conflictCount} {conflictCount === 1 ? "conflicto detectado" : "conflictos detectados"}.
+          </span>{" "}
+          {hasUnresolvedConflicts
+            ? "Selecciona una política para cada conflicto antes de confirmar."
+            : "Todas las políticas de conflicto están seleccionadas."}
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-white/80 p-4">
@@ -143,6 +179,61 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="mt-2 text-3xl font-semibold text-emerald-950">{preview.mergedRecordCount}</p>
         </div>
       </div>
+
+      {conflictedRecords.length > 0 && (
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-emerald-950">
+            Conflictos ({conflictedRecords.length})
+          </p>
+          <div className="mt-3 space-y-3">
+            {conflictedRecords.map((conflict) => (
+              <article
+                key={`conflict-${conflict.recordIndex}`}
+                className="rounded-2xl border border-amber-200 bg-white/80 p-4"
+              >
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(220px,0.8fr)]">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">Importado</p>
+                    <p className="mt-1 font-semibold text-slate-900">{conflict.importedRecord.displayName}</p>
+                    <p className="text-sm text-slate-600">{conflict.importedRecord.department ?? "Sin departamento"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">Coincide con</p>
+                    <p className="mt-1 font-semibold text-slate-900">{conflict.matchingRecord.displayName}</p>
+                    <p className="text-sm text-slate-600">
+                      {CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada"}
+                    </p>
+                  </div>
+                  <fieldset>
+                    <legend className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
+                      Política
+                    </legend>
+                    <div className="mt-2 grid gap-2">
+                      {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((policy) => (
+                        <label
+                          key={policy}
+                          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800"
+                        >
+                          <input
+                            type="radio"
+                            name={`conflict-policy-${conflict.recordIndex}`}
+                            value={policy}
+                            checked={conflict.selectedPolicy === policy}
+                            disabled={isMutating}
+                            onChange={() => onPolicyChange(conflict.recordIndex, policy)}
+                            className="h-4 w-4"
+                          />
+                          {POLICY_LABELS[policy]}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Type/area counts */}
       <div className="mt-5 grid gap-4 xl:grid-cols-2">

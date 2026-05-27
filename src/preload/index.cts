@@ -3,6 +3,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
+  CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
   EditableAppSettings,
@@ -33,8 +34,8 @@ const api = {
   importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
   resetDataset: () => ipcRenderer.invoke("contacts:reset-dataset") as Promise<ResetContactsResult>,
   previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreviewWithConflicts | null>,
-  importCsvDataset: (importToken: string) =>
-    ipcRenderer.invoke("contacts:import-csv-dataset", importToken) as Promise<CsvImportResult>,
+  importCsvDataset: (importToken: string, policies: CsvImportPolicySelection[] = []) =>
+    ipcRenderer.invoke("contacts:import-csv-dataset", importToken, policies) as Promise<CsvImportResult>,
   browseForPath: (type: "dataFile" | "backupDirectory") =>
     ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>,
   getAuditLog: (params: AuditLogQueryParams) =>

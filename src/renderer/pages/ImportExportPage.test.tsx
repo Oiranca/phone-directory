@@ -416,10 +416,208 @@ describe("ImportExportPage", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1");
+      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1", []);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
     expect(await screen.findByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeInTheDocument();
+  });
+
+  it("passes selected conflict policies when confirming a spreadsheet import", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-conflict",
+      sourceFilePath: "/tmp/incoming/conflicts.csv",
+      fileName: "conflicts.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 1,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 1,
+      typeCounts: { service: 1 },
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "accepted",
+          displayName: "Mostrador importado",
+          type: "service"
+        }
+      ],
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador importado",
+            department: "Admisión",
+            status: "active"
+          },
+          matchingRecord: {
+            id: "existing-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador actual",
+            department: "Admisión",
+            status: "active"
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    expect(await screen.findByText("Conflictos (1)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Combinar" }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith(
+        "csv-token-conflict",
+        [{ recordIndex: 0, policy: "merge-fields" }]
+      );
+    });
+  });
+
+  it("updates confirmation counts when a conflict is skipped", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-skip-conflict",
+      sourceFilePath: "/tmp/incoming/skip-conflicts.csv",
+      fileName: "skip-conflicts.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 1,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 1,
+      typeCounts: { service: 1 },
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "accepted",
+          displayName: "Mostrador importado",
+          type: "service"
+        }
+      ],
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador importado",
+            status: "active"
+          },
+          matchingRecord: {
+            id: "existing-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador actual",
+            status: "active"
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+
+    expect(await screen.findByText(/0 se crearán y 0 se actualizarán/)).toBeInTheDocument();
+  });
+
+  it("blocks stale resolved previews when a conflict is missing its selected policy", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-stale-conflict",
+      sourceFilePath: "/tmp/incoming/stale-conflicts.csv",
+      fileName: "stale-conflicts.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 1,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 1,
+      typeCounts: { service: 1 },
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "accepted",
+          displayName: "Mostrador importado",
+          type: "service"
+        }
+      ],
+      conflictCount: 1,
+      policiesResolved: true,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador importado",
+            status: "active"
+          },
+          matchingRecord: {
+            id: "existing-1",
+            externalId: "legacy-1",
+            type: "service",
+            displayName: "Mostrador actual",
+            status: "active"
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    expect(await screen.findByText("Resuelve todos los conflictos antes de importar.")).toBeInTheDocument();
+    expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
   it("blocks import confirmation when the preview contains invalid rows", async () => {

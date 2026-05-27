@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
-import type { BackupListItem, CsvImportPreview } from "../../shared/types/contact";
+import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
 import { useToast } from "../components/feedback/ToastRegion";
@@ -34,7 +34,7 @@ const formatSize = (sizeBytes: number) => {
 
 type PendingConfirmation =
   | { kind: "import-json" }
-  | { kind: "import-csv"; preview: CsvImportPreview }
+  | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
   | { kind: "restore-backup"; backup: BackupListItem };
 
 export const ImportExportPage = () => {
@@ -49,7 +49,7 @@ export const ImportExportPage = () => {
   const [isPreparingCsvPreview, setIsPreparingCsvPreview] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [restoringBackupPath, setRestoringBackupPath] = useState("");
-  const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
+  const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const confirmationInFlightRef = useRef(false);
   const isRestoreInProgress = restoringBackupPath !== "";
@@ -260,14 +260,39 @@ export const ImportExportPage = () => {
     }
   };
 
-  const handleImportCsv = async (preview: CsvImportPreview) => {
+  const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
     if (preview.invalidRowCount > 0) {
+      return;
+    }
+
+    if ((preview.conflictCount ?? 0) > 0 && !preview.policiesResolved) {
+      pushToast({
+        type: "error",
+        message: "Resuelve todos los conflictos antes de importar."
+      });
+      return;
+    }
+
+    const policySelections = (preview.conflictedRecords ?? []).flatMap((conflict) =>
+      conflict.selectedPolicy
+        ? [{ recordIndex: conflict.recordIndex, policy: conflict.selectedPolicy }]
+        : []
+    );
+
+    if (policySelections.length !== (preview.conflictedRecords ?? []).length) {
+      pushToast({
+        type: "error",
+        message: "Resuelve todos los conflictos antes de importar."
+      });
       return;
     }
 
     try {
       setIsImportingCsv(true);
-      const result = await window.hospitalDirectory.importCsvDataset(preview.importToken);
+      const result = await window.hospitalDirectory.importCsvDataset(
+        preview.importToken,
+        policySelections
+      );
 
       initialize({
         contacts: result.contacts,
@@ -287,6 +312,30 @@ export const ImportExportPage = () => {
     } finally {
       setIsImportingCsv(false);
     }
+  };
+
+  const handleConflictPolicyChange = (recordIndex: number, policy: MergePolicy) => {
+    setCsvPreview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const previousSkippedUpdates = current.conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
+      const conflictedRecords = current.conflictedRecords.map((conflict) =>
+        conflict.recordIndex === recordIndex
+          ? { ...conflict, selectedPolicy: policy }
+          : conflict
+      );
+      const skippedUpdates = conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
+      const baseUpdatedCount = current.updatedCount + previousSkippedUpdates;
+
+      return {
+        ...current,
+        updatedCount: Math.max(0, baseUpdatedCount - skippedUpdates),
+        conflictedRecords,
+        policiesResolved: conflictedRecords.every((conflict) => conflict.selectedPolicy)
+      };
+    });
   };
 
   const handleConfirmAction = async () => {
@@ -461,6 +510,7 @@ export const ImportExportPage = () => {
             isImporting={isImportingCsv}
             isMutating={isMutating}
             onConfirm={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
+            onPolicyChange={handleConflictPolicyChange}
             onClose={() => setCsvPreview(null)}
           />
         )}
