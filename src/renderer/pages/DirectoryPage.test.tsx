@@ -512,13 +512,14 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     // First record should be selected by default
     const firstButton = screen.getByRole("button", { name: /admisión general/i });
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
 
-    fireEvent.keyDown(list, { key: "ArrowDown" });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
 
     const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
@@ -538,16 +539,18 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     // Move to second record first
-    fireEvent.keyDown(list, { key: "ArrowDown" });
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
     const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
 
     // Now move back up
-    fireEvent.keyDown(list, { key: "ArrowUp" });
-    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    secondButton.focus();
+    fireEvent.keyDown(secondButton, { key: "ArrowUp" });
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
     expect(secondButton).toHaveAttribute("aria-pressed", "false");
   });
@@ -565,14 +568,17 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     // Move to last record (index 1 of 2)
-    fireEvent.keyDown(list, { key: "ArrowDown" });
-    // Wrap back to first
-    fireEvent.keyDown(list, { key: "ArrowDown" });
-
     const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+    // Wrap back to first
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    secondButton.focus();
+    fireEvent.keyDown(secondButton, { key: "ArrowDown" });
+
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -589,10 +595,12 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     // First record is selected; Arrow Up should wrap to last
-    fireEvent.keyDown(list, { key: "ArrowUp" });
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowUp" });
 
     const lastButton = screen.getByRole("button", { name: /centro de salud demo/i });
     expect(lastButton).toHaveAttribute("aria-pressed", "true");
@@ -611,13 +619,14 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     const firstButton = screen.getByRole("button", { name: /admisión general/i });
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
 
     // Enter should confirm/keep selection without changing it
-    fireEvent.keyDown(list, { key: "Enter" });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "Enter" });
 
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
   });
@@ -635,12 +644,14 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     const initialId = useAppStore.getState().selectedRecordId;
     expect(initialId).toBe(defaultContacts.records[0]!.id);
 
-    fireEvent.keyDown(list, { key: "ArrowDown" });
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
 
     await waitFor(() => {
       expect(useAppStore.getState().selectedRecordId).toBe(defaultContacts.records[1]!.id);
@@ -660,15 +671,16 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    await screen.findByRole("list", { name: "Resultados del directorio" });
 
     // Move to second via keyboard
-    fireEvent.keyDown(list, { key: "ArrowDown" });
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
     const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
 
     // Click first via mouse
-    const firstButton = screen.getByRole("button", { name: /admisión general/i });
     fireEvent.click(firstButton);
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
     expect(secondButton).toHaveAttribute("aria-pressed", "false");

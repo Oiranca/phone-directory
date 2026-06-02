@@ -228,7 +228,7 @@ export const DirectoryPage = () => {
       setSelectedRecordId(nextRecord.id);
       requestAnimationFrame(() => {
         const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${nextRecord.id}"]`
+          `[data-record-id="${CSS.escape(nextRecord.id)}"]`
         );
         button?.focus();
         if (button && typeof button.scrollIntoView === "function") {
@@ -242,7 +242,7 @@ export const DirectoryPage = () => {
       setSelectedRecordId(prevRecord.id);
       requestAnimationFrame(() => {
         const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${prevRecord.id}"]`
+          `[data-record-id="${CSS.escape(prevRecord.id)}"]`
         );
         button?.focus();
         if (button && typeof button.scrollIntoView === "function") {
@@ -250,16 +250,31 @@ export const DirectoryPage = () => {
         }
       });
     } else if (event.key === "Enter") {
-      event.preventDefault();
-      if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
-        detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
+      // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
+      // Scroll the detail panel into view after the microtask so the click handler runs first.
+      setTimeout(() => {
+        if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
+          detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }, 0);
     } else if (event.key === "Escape") {
       event.preventDefault();
-      const activeButton = listRef.current?.querySelector<HTMLButtonElement>(
-        `[data-record-id="${selectedRecordId}"]`
+      if (selectedRecordId !== null) {
+        const activeButton = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(selectedRecordId)}"]`
+        );
+        activeButton?.focus();
+      }
+    }
+  };
+
+  const handleDetailKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && selectedRecordId !== null) {
+      event.preventDefault();
+      const selectedButton = listRef.current?.querySelector<HTMLButtonElement>(
+        `[data-record-id="${CSS.escape(selectedRecordId)}"]`
       );
-      activeButton?.focus();
+      selectedButton?.focus();
     }
   };
 
@@ -566,7 +581,7 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <div ref={detailRef} className="lg:sticky lg:top-6">
+        <div ref={detailRef} onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
           <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
             <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Detalle del registro</h3>
             {selectedRecord ? (
