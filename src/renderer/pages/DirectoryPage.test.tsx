@@ -499,6 +499,181 @@ describe("DirectoryPage", () => {
     expect(selectedOption).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("Arrow Down moves selection to the next record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // First record should be selected by default
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(secondButton).toHaveAttribute("aria-pressed", "true");
+    expect(firstButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("Arrow Up moves selection to the previous record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // Move to second record first
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(secondButton).toHaveAttribute("aria-pressed", "true");
+
+    // Now move back up
+    fireEvent.keyDown(list, { key: "ArrowUp" });
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+    expect(secondButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("Arrow Down wraps from last to first record", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // Move to last record (index 1 of 2)
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+    // Wrap back to first
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Arrow Up wraps from first to last record", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // First record is selected; Arrow Up should wrap to last
+    fireEvent.keyDown(list, { key: "ArrowUp" });
+
+    const lastButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(lastButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Enter key does not change selection but does not throw", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+
+    // Enter should confirm/keep selection without changing it
+    fireEvent.keyDown(list, { key: "Enter" });
+
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keyboard nav updates selectedRecordId in the store correctly", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    const initialId = useAppStore.getState().selectedRecordId;
+    expect(initialId).toBe(defaultContacts.records[0]!.id);
+
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+
+    await waitFor(() => {
+      expect(useAppStore.getState().selectedRecordId).toBe(defaultContacts.records[1]!.id);
+    });
+  });
+
+  it("mouse click still selects a record and overrides keyboard selection", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // Move to second via keyboard
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(secondButton).toHaveAttribute("aria-pressed", "true");
+
+    // Click first via mouse
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    fireEvent.click(firstButton);
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+    expect(secondButton).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("renders email details and wraps long notes safely", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.emails = [
