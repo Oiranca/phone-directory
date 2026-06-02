@@ -218,8 +218,24 @@ export const DirectoryPage = () => {
       return;
     }
 
-    const currentIndex = currentPageRecords.findIndex((record) => record.id === selectedRecordId);
-    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+    // Derive starting index from the focused button (event.target) so Arrow keys move
+    // from the element the user actually has focused, not from the last clicked record.
+    let safeIndex: number;
+    if (event.target instanceof HTMLElement && event.target.hasAttribute("data-record-id")) {
+      const focusedId = event.target.getAttribute("data-record-id");
+      const focusedIndex = currentPageRecords.findIndex((r) => r.id === focusedId);
+      if (focusedIndex !== -1) {
+        safeIndex = focusedIndex;
+      } else {
+        // Focused button's ID not in current page — fall back to selectedRecordId.
+        const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
+        safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
+      }
+    } else {
+      // event.target is not a record button — fall back to selectedRecordId.
+      const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
+      safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -251,7 +267,7 @@ export const DirectoryPage = () => {
       });
     } else if (event.key === "Enter") {
       // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
-      // Scroll the detail panel into view after the microtask so the click handler runs first.
+      // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
       setTimeout(() => {
         if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
           detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
