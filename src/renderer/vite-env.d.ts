@@ -18,6 +18,8 @@ import type {
   SaveContactResult
 } from "../shared/types/contact";
 
+import type { BuscaRecord, EditableBuscaRecord } from "../shared/types/busca";
+
 declare global {
   interface Window {
     hospitalDirectory: {
@@ -38,6 +40,10 @@ declare global {
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
       exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
+      listBuscas: () => Promise<BuscaRecord[]>;
+      createBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
+      updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
+      deleteBusca: (id: string) => Promise<void>;
     };
   }
 }

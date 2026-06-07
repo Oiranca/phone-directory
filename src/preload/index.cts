@@ -16,6 +16,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact.js";
+import type { BuscaRecord, EditableBuscaRecord } from "../shared/types/busca.js";
 
 const api = {
   getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
@@ -42,6 +43,12 @@ const api = {
     ipcRenderer.invoke("contacts:get-audit-log", params) as Promise<AuditLogResult>,
   exportAuditLog: (params: AuditLogQueryParams) =>
     ipcRenderer.invoke("contacts:export-audit-log", params) as Promise<ExportAuditLogResult | null>,
+  listBuscas: () => ipcRenderer.invoke("buscas:list") as Promise<BuscaRecord[]>,
+  createBusca: (record: EditableBuscaRecord) =>
+    ipcRenderer.invoke("buscas:create", record) as Promise<BuscaRecord>,
+  updateBusca: (id: string, record: EditableBuscaRecord) =>
+    ipcRenderer.invoke("buscas:update", id, record) as Promise<BuscaRecord>,
+  deleteBusca: (id: string) => ipcRenderer.invoke("buscas:delete", id) as Promise<void>,
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
       listener(payload);

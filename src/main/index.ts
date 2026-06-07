@@ -3,8 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
+import { registerBuscasIpc } from "./ipc/buscas.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
 import { AppDataService } from "./services/app-data.service.js";
+import { BuscaService } from "./services/busca.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
 
@@ -92,7 +94,10 @@ const bootstrap = async () => {
     }
   });
   await service.ensureInitialFiles();
+  const buscaService = new BuscaService();
+  await buscaService.ensureFile();
   registerContactsIpc(service);
+  registerBuscasIpc(buscaService);
   registerSettingsIpc(service);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const filteredHeaders = Object.fromEntries(
