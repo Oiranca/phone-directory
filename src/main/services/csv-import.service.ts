@@ -60,6 +60,7 @@ const SUPPORTED_COLUMNS = [
 const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_CSV_IMPORT_ROWS = 5000;
 
 export type NormalizedImportRow = Record<string, string>;
 
@@ -329,6 +330,11 @@ export const buildCsvImportPreview = async (
   if (parseResult.errors.length > 0) {
     throw new Error(`No se pudo leer el CSV: ${parseResult.errors[0]?.message ?? "error desconocido"}.`);
   }
+
+  if (parseResult.data.length > MAX_CSV_IMPORT_ROWS) {
+    throw new Error(`El CSV supera el límite máximo de ${MAX_CSV_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+  }
+
   return buildImportPreviewFromRows(parseResult.data, {
     sourceFilePath,
     fileName: path.basename(sourceFilePath),
