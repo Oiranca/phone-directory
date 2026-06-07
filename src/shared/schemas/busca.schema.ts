@@ -5,30 +5,29 @@ export type BuscaShift = (typeof BUSCA_SHIFTS)[number];
 
 export const buscaRecordSchema = z.object({
   id: z.string(),
-  deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio."),
-  assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio."),
-  department: z.string().trim().min(1, "El departamento es obligatorio."),
-  role: z.string().trim().min(1, "El rol es obligatorio."),
+  deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
+  assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio.").max(255),
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255),
+  role: z.string().trim().min(1, "El rol es obligatorio.").max(255),
   shift: z.enum(BUSCA_SHIFTS, {
     errorMap: () => ({ message: "El turno debe ser mañana, tarde o noche." })
   }),
-  group: z.string().trim().optional()
+  group: z.string().trim().max(255).optional()
 });
 
 export const editableBuscaRecordSchema = z.object({
-  id: z.string().optional(),
-  deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio."),
-  assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio."),
-  department: z.string().trim().min(1, "El departamento es obligatorio."),
-  role: z.string().trim().min(1, "El rol es obligatorio."),
+  deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
+  assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio.").max(255),
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255),
+  role: z.string().trim().min(1, "El rol es obligatorio.").max(255),
   shift: z.enum(BUSCA_SHIFTS, {
     errorMap: () => ({ message: "El turno debe ser mañana, tarde o noche." })
   }),
-  group: z.string().trim().optional().transform((v) => v || undefined)
+  group: z.string().trim().max(255).optional().transform((v) => v || undefined)
 });
 
 export const buscasDatasetSchema = z.object({
-  version: z.string(),
+  version: z.literal("1.0.0"),
   records: z.array(buscaRecordSchema)
 });
 

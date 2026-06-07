@@ -67,6 +67,49 @@ describe("buscaRecordSchema", () => {
       buscaRecordSchema.parse({ ...validRecord, role: "" })
     ).toThrow();
   });
+
+  it("rejects deviceNumber longer than 255 characters", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, deviceNumber: "B".repeat(256) })
+    ).toThrow();
+  });
+
+  it("rejects assignedTo longer than 255 characters", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, assignedTo: "A".repeat(256) })
+    ).toThrow();
+  });
+
+  it("rejects department longer than 255 characters", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, department: "D".repeat(256) })
+    ).toThrow();
+  });
+
+  it("rejects role longer than 255 characters", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, role: "R".repeat(256) })
+    ).toThrow();
+  });
+
+  it("rejects group longer than 255 characters", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, group: "G".repeat(256) })
+    ).toThrow();
+  });
+
+  it("accepts fields at exactly 255 characters", () => {
+    const at255 = "X".repeat(255);
+    const result = buscaRecordSchema.parse({
+      ...validRecord,
+      deviceNumber: at255,
+      assignedTo: at255,
+      department: at255,
+      role: at255,
+      group: at255
+    });
+    expect(result.deviceNumber).toHaveLength(255);
+  });
 });
 
 describe("editableBuscaRecordSchema", () => {
@@ -130,6 +173,18 @@ describe("buscasDatasetSchema", () => {
         version: "1.0.0",
         records: [{ ...validRecord, shift: "bad-shift" }]
       })
+    ).toThrow();
+  });
+
+  it("rejects a version string other than 1.0.0", () => {
+    expect(() =>
+      buscasDatasetSchema.parse({ version: "2.0.0", records: [] })
+    ).toThrow();
+  });
+
+  it("rejects a missing version field", () => {
+    expect(() =>
+      buscasDatasetSchema.parse({ records: [] })
     ).toThrow();
   });
 });
