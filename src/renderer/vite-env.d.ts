@@ -17,6 +17,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact";
+import type { DuplicateDetectionResult } from "../shared/types/duplicate";
 
 declare global {
   interface Window {
@@ -37,6 +38,7 @@ declare global {
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
       exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
+      detectDuplicates: () => Promise<DuplicateDetectionResult>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

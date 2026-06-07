@@ -16,6 +16,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact.js";
+import type { DuplicateDetectionResult } from "../shared/types/duplicate.js";
 
 const api = {
   getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
@@ -42,6 +43,7 @@ const api = {
     ipcRenderer.invoke("contacts:get-audit-log", params) as Promise<AuditLogResult>,
   exportAuditLog: (params: AuditLogQueryParams) =>
     ipcRenderer.invoke("contacts:export-audit-log", params) as Promise<ExportAuditLogResult | null>,
+  detectDuplicates: () => ipcRenderer.invoke("contacts:detect-duplicates") as Promise<DuplicateDetectionResult>,
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
       listener(payload);

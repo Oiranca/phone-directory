@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
+import { DuplicateDetectionService } from "../services/duplicate-detection.service.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -22,7 +23,8 @@ const CHANNELS = {
   previewCsvImport: "contacts:preview-csv-import",
   importCsvDataset: "contacts:import-csv-dataset",
   getAuditLog: "contacts:get-audit-log",
-  exportAuditLog: "contacts:export-audit-log"
+  exportAuditLog: "contacts:export-audit-log",
+  detectDuplicates: "contacts:detect-duplicates"
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -242,6 +244,19 @@ export const registerContactsIpc = (service: AppDataService) => {
       console.error("[contacts:export-audit-log]", err);
       throw new Error("Internal server error");
     }
+  });
+
+  ipcMain.handle(CHANNELS.detectDuplicates, async () => {
+    const bootstrapData = await service.getBootstrapData();
+
+    if ("recovery" in bootstrapData) {
+      throw new Error("Cannot detect duplicates — contacts data is in recovery state");
+    }
+
+    const records = bootstrapData.contacts.records;
+    const duplicateService = new DuplicateDetectionService();
+
+    return duplicateService.detectDuplicates(records);
   });
 };
 
