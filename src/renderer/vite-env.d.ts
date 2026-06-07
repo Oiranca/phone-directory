@@ -4,6 +4,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
+  ContactRecord,
   CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
@@ -17,6 +18,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact";
+import type { DuplicateDetectionResult } from "../shared/types/duplicate";
 
 declare global {
   interface Window {
@@ -37,6 +39,8 @@ declare global {
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
       exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
+      detectDuplicates: () => Promise<DuplicateDetectionResult>;
+      mergeContacts: (req: { keepId: string; discardId: string }) => Promise<ContactRecord>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

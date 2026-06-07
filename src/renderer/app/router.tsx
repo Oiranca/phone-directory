@@ -1,6 +1,7 @@
 import { createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { ContactFormPage } from "../pages/ContactFormPage";
+import { DeduplicatePage } from "../pages/DeduplicatePage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { ImportExportPage } from "../pages/ImportExportPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -30,6 +31,10 @@ export const router = createHashRouter([
       {
         path: "settings",
         element: <SettingsPage />
+      },
+      {
+        path: "deduplicate",
+        element: <DeduplicatePage />
       },
       {
         path: "*",

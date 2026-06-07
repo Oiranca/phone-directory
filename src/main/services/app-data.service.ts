@@ -495,6 +495,62 @@ export class AppDataService {
     });
   }
 
+  async mergeDuplicates(keepId: string, discardId: string): Promise<ContactRecord> {
+    return this.enqueueWrite(async () => {
+    const settings = await this.readSettings(true);
+    const contacts = await this.readContacts(settings);
+    const now = new Date().toISOString();
+    const editorName = this.getEditorName(settings);
+
+    const keepRecord = contacts.records.find((r) => r.id === keepId);
+    const discardRecord = contacts.records.find((r) => r.id === discardId);
+
+    if (!keepRecord) {
+      throw new Error(`Contact not found: ${keepId}`);
+    }
+
+    if (!discardRecord) {
+      throw new Error(`Contact not found: ${discardId}`);
+    }
+
+    const existingPhoneNumbers = new Set(keepRecord.contactMethods.phones.map((p) => p.number));
+    const existingEmailAddresses = new Set(keepRecord.contactMethods.emails.map((e) => e.address));
+    const existingTags = new Set(keepRecord.tags);
+
+    const extraPhones = discardRecord.contactMethods.phones.filter(
+      (p) => !existingPhoneNumbers.has(p.number)
+    );
+    const extraEmails = discardRecord.contactMethods.emails.filter(
+      (e) => !existingEmailAddresses.has(e.address)
+    );
+    const extraTags = discardRecord.tags.filter((t) => !existingTags.has(t));
+
+    const mergedRecord = contactRecordSchema.parse({
+      ...keepRecord,
+      contactMethods: {
+        phones: normalizePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
+        emails: normalizePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails])
+      },
+      tags: [...keepRecord.tags, ...extraTags],
+      audit: {
+        ...keepRecord.audit,
+        updatedAt: now,
+        updatedBy: editorName
+      }
+    });
+
+    const nextRecords = contacts.records
+      .filter((r) => r.id !== discardId)
+      .map((r) => (r.id === keepId ? mergedRecord : r));
+
+    const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
+    await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
+    this.noteAutoBackupEligibleEdit();
+
+    return mergedRecord;
+    });
+  }
+
   private async fileExists(filePath: string) {
     try {
       await fs.access(filePath);
