@@ -48,6 +48,21 @@ rm -rf "$DIST_ROOT"
 log "Running typecheck"
 pnpm typecheck
 
+# Dependency audit gate (OIR-53)
+if [ "${SKIP_AUDIT}" = "1" ]; then
+  echo "⚠️  WARNING: Dependency audit skipped (SKIP_AUDIT=1). Only use this override when advisories are already being tracked."
+else
+  echo "Running dependency audit..."
+  if ! pnpm audit --audit-level=high; then
+    echo ""
+    echo "❌ Dependency audit failed: HIGH severity advisories found."
+    echo "   Fix: run 'pnpm audit' to see details, then update affected packages."
+    echo "   To skip (not recommended): set SKIP_AUDIT=1 before running this script."
+    exit 1
+  fi
+  echo "✅ Dependency audit passed."
+fi
+
 log "Running tests"
 pnpm test
 

@@ -29,6 +29,22 @@ version, and source commit. Linux packages may also include
 For the full packaging and operator handoff process, see
 [../docs/USB_RELEASE_HANDOFF_CHECKLIST.md](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
 
+## Environment Variables
+
+### `SKIP_AUDIT`
+
+Set `SKIP_AUDIT=1` to bypass the dependency audit gate in `release-usb.sh`.
+
+**Use only when:** you have already triaged the flagged advisories and have a tracked plan to fix them (e.g., waiting for an upstream patch).
+
+**Never use in production releases** without documented justification.
+
+Example:
+
+```bash
+SKIP_AUDIT=1 ./scripts/release-usb.sh
+```
+
 ## `extract_ods_to_csv.py`
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.
