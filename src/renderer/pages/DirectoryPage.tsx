@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
@@ -210,6 +210,90 @@ export const DirectoryPage = () => {
     }
   }, [currentPageRecords, selectedRecordId, setSelectedRecordId]);
 
+  const listRef = useRef<HTMLUListElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  const handleListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
+    if (currentPageRecords.length === 0) {
+      return;
+    }
+
+    // Derive starting index from the focused button (event.target) so Arrow keys move
+    // from the element the user actually has focused, not from the last clicked record.
+    let safeIndex: number;
+    if (event.target instanceof HTMLElement && event.target.hasAttribute("data-record-id")) {
+      const focusedId = event.target.getAttribute("data-record-id");
+      const focusedIndex = currentPageRecords.findIndex((r) => r.id === focusedId);
+      if (focusedIndex !== -1) {
+        safeIndex = focusedIndex;
+      } else {
+        // Focused button's ID not in current page — fall back to selectedRecordId.
+        const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
+        safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
+      }
+    } else {
+      // event.target is not a record button — fall back to selectedRecordId.
+      const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
+      safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextIndex = (safeIndex + 1) % currentPageRecords.length;
+      const nextRecord = currentPageRecords[nextIndex]!;
+      setSelectedRecordId(nextRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(nextRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const prevIndex = (safeIndex - 1 + currentPageRecords.length) % currentPageRecords.length;
+      const prevRecord = currentPageRecords[prevIndex]!;
+      setSelectedRecordId(prevRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(prevRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
+    } else if (event.key === "Enter") {
+      // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
+      // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
+      setTimeout(() => {
+        if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
+          detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }, 0);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      if (selectedRecordId !== null) {
+        const activeButton = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(selectedRecordId)}"]`
+        );
+        activeButton?.focus();
+      }
+    }
+  };
+
+  const handleDetailKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && selectedRecordId !== null) {
+      event.preventDefault();
+      const selectedButton = listRef.current?.querySelector<HTMLButtonElement>(
+        `[data-record-id="${CSS.escape(selectedRecordId)}"]`
+      );
+      selectedButton?.focus();
+    }
+  };
+
   if (bootstrapError) {
     return (
       <section className="rounded-3xl bg-white p-8 shadow-panel">
@@ -396,7 +480,7 @@ export const DirectoryPage = () => {
         
         {/* Left Column: Results List */}
         <div className="flex flex-col gap-3">
-          <ul aria-label="Resultados del directorio" className="flex flex-col gap-3">
+          <ul ref={listRef} onKeyDown={handleListKeyDown} aria-label="Resultados del directorio" className="flex flex-col gap-3">
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
@@ -406,6 +490,7 @@ export const DirectoryPage = () => {
               <li key={record.id}>
                 <button
                   type="button"
+                  data-record-id={record.id}
                   onClick={() => setSelectedRecordId(record.id)}
                   aria-pressed={isSelected}
                   className={[
@@ -512,7 +597,7 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <div className="lg:sticky lg:top-6">
+        <div ref={detailRef} onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
           <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
             <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Detalle del registro</h3>
             {selectedRecord ? (
