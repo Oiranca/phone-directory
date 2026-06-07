@@ -1,0 +1,135 @@
+import { describe, expect, it } from "vitest";
+import { buscaRecordSchema, buscasDatasetSchema, editableBuscaRecordSchema } from "./busca.schema";
+
+const validRecord = {
+  id: "bsc_abc123",
+  deviceNumber: "B-001",
+  assignedTo: "Ana García",
+  department: "Urgencias",
+  role: "Enfermera",
+  shift: "mañana" as const,
+  group: "Equipo A"
+};
+
+const validEditable = {
+  deviceNumber: "B-002",
+  assignedTo: "Luis Pérez",
+  department: "UCI",
+  role: "Médico",
+  shift: "tarde" as const
+};
+
+describe("buscaRecordSchema", () => {
+  it("parses a valid record", () => {
+    const result = buscaRecordSchema.parse(validRecord);
+    expect(result.deviceNumber).toBe("B-001");
+    expect(result.shift).toBe("mañana");
+    expect(result.group).toBe("Equipo A");
+  });
+
+  it("accepts an optional group field", () => {
+    const result = buscaRecordSchema.parse({ ...validRecord, group: undefined });
+    expect(result.group).toBeUndefined();
+  });
+
+  it("rejects an invalid shift value", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, shift: "mediodía" })
+    ).toThrow();
+  });
+
+  it("rejects missing required fields", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ id: "bsc_1", deviceNumber: "" })
+    ).toThrow();
+  });
+
+  it("rejects empty deviceNumber", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, deviceNumber: "" })
+    ).toThrow();
+  });
+
+  it("rejects empty assignedTo", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, assignedTo: "" })
+    ).toThrow();
+  });
+
+  it("rejects empty department", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, department: "" })
+    ).toThrow();
+  });
+
+  it("rejects empty role", () => {
+    expect(() =>
+      buscaRecordSchema.parse({ ...validRecord, role: "" })
+    ).toThrow();
+  });
+});
+
+describe("editableBuscaRecordSchema", () => {
+  it("parses a valid editable record", () => {
+    const result = editableBuscaRecordSchema.parse(validEditable);
+    expect(result.deviceNumber).toBe("B-002");
+    expect(result.shift).toBe("tarde");
+    expect(result.group).toBeUndefined();
+  });
+
+  it("trims whitespace from string fields", () => {
+    const result = editableBuscaRecordSchema.parse({
+      ...validEditable,
+      deviceNumber: "  B-003  ",
+      assignedTo: "  Juan  "
+    });
+    expect(result.deviceNumber).toBe("B-003");
+    expect(result.assignedTo).toBe("Juan");
+  });
+
+  it("transforms empty group string to undefined", () => {
+    const result = editableBuscaRecordSchema.parse({ ...validEditable, group: "" });
+    expect(result.group).toBeUndefined();
+  });
+
+  it("preserves non-empty group", () => {
+    const result = editableBuscaRecordSchema.parse({ ...validEditable, group: "Equipo B" });
+    expect(result.group).toBe("Equipo B");
+  });
+
+  it("rejects invalid shift enum", () => {
+    expect(() =>
+      editableBuscaRecordSchema.parse({ ...validEditable, shift: "madrugada" })
+    ).toThrow();
+  });
+
+  it("accepts all valid shift values", () => {
+    for (const shift of ["mañana", "tarde", "noche"] as const) {
+      const result = editableBuscaRecordSchema.parse({ ...validEditable, shift });
+      expect(result.shift).toBe(shift);
+    }
+  });
+});
+
+describe("buscasDatasetSchema", () => {
+  it("parses a valid dataset", () => {
+    const dataset = { version: "1.0.0", records: [validRecord] };
+    const result = buscasDatasetSchema.parse(dataset);
+    expect(result.records).toHaveLength(1);
+    expect(result.version).toBe("1.0.0");
+  });
+
+  it("accepts an empty records array", () => {
+    const result = buscasDatasetSchema.parse({ version: "1.0.0", records: [] });
+    expect(result.records).toHaveLength(0);
+  });
+
+  it("rejects records with invalid data", () => {
+    expect(() =>
+      buscasDatasetSchema.parse({
+        version: "1.0.0",
+        records: [{ ...validRecord, shift: "bad-shift" }]
+      })
+    ).toThrow();
+  });
+});
