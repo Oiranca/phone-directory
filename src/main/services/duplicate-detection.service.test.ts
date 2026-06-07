@@ -103,10 +103,12 @@ describe("DuplicateDetectionService", () => {
       const result = service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
-      // Accent-only differences are caught by the levenshtein signal (edit distance 1)
+      // Accent normalization makes García→Garcia an exact displayName match
       const reasons = result.pairs[0]?.reasons ?? [];
       expect(
-        reasons.includes("displayName:fuzzy") || reasons.includes("displayName:levenshtein")
+        reasons.includes("displayName") ||
+          reasons.includes("displayName:fuzzy") ||
+          reasons.includes("displayName:levenshtein")
       ).toBe(true);
       expect(result.pairs[0]?.score).toBeGreaterThanOrEqual(0.6);
     });

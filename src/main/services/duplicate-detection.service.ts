@@ -141,7 +141,12 @@ export class DuplicateDetectionService {
   }
 
   private normalizeDisplayName(name: string): string {
-    return name.trim().toLowerCase().replace(/\s+/g, " ");
+    return name
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/\s+/g, " ");
   }
 
   /**
