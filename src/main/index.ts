@@ -2,9 +2,11 @@ import { BrowserWindow, app, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
+import { registerBuscasIpc } from "./ipc/buscas.ipc.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
 import { AppDataService } from "./services/app-data.service.js";
+import { BuscasService } from "./services/buscas.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
 
@@ -92,7 +94,9 @@ const bootstrap = async () => {
     }
   });
   await service.ensureInitialFiles();
+  const buscasService = new BuscasService();
   registerContactsIpc(service);
+  registerBuscasIpc(buscasService);
   registerSettingsIpc(service);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const filteredHeaders = Object.fromEntries(

@@ -17,6 +17,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../shared/types/contact";
+import type { BuscaRecord, EditableBuscaRecord } from "../shared/schemas/busca.schema";
 
 declare global {
   interface Window {
@@ -37,6 +38,10 @@ declare global {
       browseForPath: (type: "dataFile" | "backupDirectory") => Promise<string | null>;
       getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
       exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
+      listBuscas: () => Promise<BuscaRecord[]>;
+      addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
+      updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
+      deleteBusca: (id: string) => Promise<void>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

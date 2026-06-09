@@ -1,5 +1,6 @@
 import { createHashRouter } from "react-router-dom";
 import { App } from "./App";
+import { BuscasPage } from "../pages/BuscasPage";
 import { ContactFormPage } from "../pages/ContactFormPage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { ImportExportPage } from "../pages/ImportExportPage";
@@ -30,6 +31,10 @@ export const router = createHashRouter([
       {
         path: "settings",
         element: <SettingsPage />
+      },
+      {
+        path: "buscas",
+        element: <BuscasPage />
       },
       {
         path: "*",
