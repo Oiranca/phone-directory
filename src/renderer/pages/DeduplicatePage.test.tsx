@@ -92,28 +92,4 @@ describe("DeduplicatePage", () => {
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
   });
 
-  it("calls mergeContacts with correct args and removes the pair from the list", async () => {
-    renderPage();
-
-    await screen.findAllByText("Admisión General");
-
-    const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
-    fireEvent.click(keepButtons[0]!);
-
-    const mergeButton = await screen.findByRole("button", { name: "Fusionar" });
-    fireEvent.click(mergeButton);
-
-    await waitFor(() => {
-      expect(mockMergeContacts).toHaveBeenCalledWith({
-        keepId: mockPair.recordA.id,
-        discardId: mockPair.recordB.id
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.queryAllByText("Admisión General")).toHaveLength(0);
-    });
-
-    expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
-  });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 
 interface PairState {
   pair: DuplicatePair;
@@ -10,15 +11,26 @@ interface PairState {
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
   const [mergingId, setMergingId] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    pairId: string;
+    keepRecord: { id: string; displayName: string };
+    discardRecord: { id: string; displayName: string };
+  } | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
         setIsLoading(true);
+        setLoadError(null);
         const result = await window.hospitalDirectory.detectDuplicates();
         setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
+      } catch (error) {
+        setLoadError(
+          error instanceof Error ? error.message : "No se pudo cargar duplicados"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -35,30 +47,61 @@ export const DeduplicatePage = () => {
     );
   };
 
-  const handleMerge = async (pairState: PairState) => {
+  const handleMergeClick = (pairState: PairState) => {
     if (!pairState.keepId) {
       return;
     }
 
-    const discardId =
+    const keepRecord =
       pairState.pair.recordA.id === pairState.keepId
-        ? pairState.pair.recordB.id
-        : pairState.pair.recordA.id;
+        ? pairState.pair.recordA
+        : pairState.pair.recordB;
+    const discardRecord =
+      pairState.pair.recordA.id === pairState.keepId
+        ? pairState.pair.recordB
+        : pairState.pair.recordA;
+
+    // Show confirmation dialog before merge
+    setConfirmState({
+      pairId: pairState.pair.id,
+      keepRecord: { id: keepRecord.id, displayName: keepRecord.displayName },
+      discardRecord: { id: discardRecord.id, displayName: discardRecord.displayName }
+    });
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!confirmState) return;
+
+    // Prevent concurrent merges (disable all buttons during merge)
+    if (mergingId) return;
 
     try {
-      setMergingId(pairState.pair.id);
+      setMergingId(confirmState.pairId);
       await window.hospitalDirectory.mergeContacts({
-        keepId: pairState.keepId,
-        discardId
+        keepId: confirmState.keepRecord.id,
+        discardId: confirmState.discardRecord.id
       });
+
+      // Remove merged pair and refresh detection to handle stale pairs
       setPairStates((current) =>
-        current.filter((ps) => ps.pair.id !== pairState.pair.id)
+        current.filter((ps) => ps.pair.id !== confirmState.pairId)
       );
+
+      // Optionally refresh all pairs to update global store
+      // This prevents stale pairs from remaining after merge
+      const result = await window.hospitalDirectory.detectDuplicates();
+      setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
+
       pushToast({ type: "success", message: "Duplicado fusionado correctamente" });
-    } catch {
-      pushToast({ type: "error", message: "No se pudo fusionar el duplicado. Inténtalo de nuevo." });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo fusionar el duplicado. Inténtalo de nuevo.";
+      pushToast({ type: "error", message });
     } finally {
       setMergingId(null);
+      setConfirmState(null);
     }
   };
 
@@ -70,6 +113,45 @@ export const DeduplicatePage = () => {
     );
   }
 
+  // Error state: detection failure
+  if (loadError) {
+    return (
+      <section
+        role="alert"
+        className="rounded-3xl border-2 border-red-200 bg-red-50 p-8 shadow-panel"
+      >
+        <div className="flex flex-col items-start gap-4">
+          <div className="flex items-start gap-3">
+            <svg
+              className="mt-1 h-6 w-6 flex-shrink-0 text-red-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4v2m0-10a8 8 0 110 16 8 8 0 010-16z"
+              />
+            </svg>
+            <div>
+              <p className="font-semibold text-red-900">No se pudo cargar duplicados</p>
+              <p className="mt-1 text-sm text-red-700">{loadError}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+          >
+            Reintentar
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // Empty state: no duplicates found
   if (pairStates.length === 0) {
     return (
       <section className="rounded-3xl bg-white p-8 shadow-panel">
@@ -154,7 +236,7 @@ export const DeduplicatePage = () => {
                       <button
                         type="button"
                         onClick={() => handleKeepSelect(pair.id, record.id)}
-                        disabled={isMerging}
+                        disabled={!!mergingId}
                         className={[
                           "focus-ring mt-4 w-full rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60",
                           isSelected
@@ -173,8 +255,8 @@ export const DeduplicatePage = () => {
                 <div className="mt-4 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => void handleMerge(pairState)}
-                    disabled={isMerging}
+                    onClick={() => handleMergeClick(pairState)}
+                    disabled={!!mergingId}
                     className="focus-ring rounded-2xl bg-scs-blue px-6 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
                   >
                     {isMerging ? "Fusionando…" : "Fusionar"}
@@ -185,6 +267,19 @@ export const DeduplicatePage = () => {
           );
         })}
       </div>
+
+      {confirmState && (
+        <ConfirmDialog
+          title="Confirmar fusión"
+          message={`¿Fusionar "${confirmState.discardRecord.displayName}" en "${confirmState.keepRecord.displayName}"? Esta acción no se puede deshacer.`}
+          confirmLabel="Fusionar"
+          cancelLabel="Cancelar"
+          onConfirm={() => void handleConfirmMerge()}
+          onCancel={() => setConfirmState(null)}
+          confirmDisabled={!!mergingId}
+          variant="destructive"
+        />
+      )}
     </section>
   );
 };
