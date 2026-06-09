@@ -34,6 +34,26 @@ describe("BuscasService", () => {
     expect(records).toEqual([]);
   });
 
+  it("readDataset — propagates non-ENOENT fs errors (e.g. EACCES)", async () => {
+    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    await fs.mkdir(path.dirname(buscasFilePath), { recursive: true });
+    await fs.writeFile(
+      buscasFilePath,
+      JSON.stringify({ version: "1.0.0", records: [] }),
+      "utf-8"
+    );
+
+    const accessError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    const readFileSpy = vi.spyOn(fs, "readFile").mockRejectedValueOnce(accessError);
+
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    await expect(service.list()).rejects.toThrow("permission denied");
+
+    readFileSpy.mockRestore();
+  });
+
   it("add → list round-trip — persists new record and returns it from list", async () => {
     const { BuscasService } = await import("./buscas.service.js");
     const service = new BuscasService();

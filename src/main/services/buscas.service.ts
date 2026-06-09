@@ -48,11 +48,13 @@ export class BuscasService {
   private async readDataset(): Promise<BuscasDataset> {
     const filePath = getBuscasFilePath();
     try {
-      await fs.access(filePath);
-    } catch {
-      return emptyDataset();
+      return buscasDatasetSchema.parse(await readJsonFile<BuscasDataset>(filePath));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        return emptyDataset();
+      }
+      throw err;
     }
-    return buscasDatasetSchema.parse(await readJsonFile<BuscasDataset>(filePath));
   }
 
   private async writeDataset(dataset: BuscasDataset): Promise<void> {
