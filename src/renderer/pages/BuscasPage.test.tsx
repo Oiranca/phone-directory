@@ -98,13 +98,38 @@ describe("BuscasPage", () => {
     });
   });
 
-  it("shows error message when listBuscas fails", async () => {
+  it("shows retryable error state when listBuscas fails — no empty state shown", async () => {
     setupWindowApi({
       listBuscas: vi.fn().mockRejectedValue(new Error("network error"))
     });
     renderPage();
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los registros de buscas.");
+    });
+    // Retry button must be present
+    expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    // Must NOT show the empty-dataset creation prompt
+    expect(screen.queryByText(/No hay buscas registradas/)).not.toBeInTheDocument();
+    // Must NOT show the "Nueva busca" button
+    expect(screen.queryByRole("button", { name: /nueva busca/i })).not.toBeInTheDocument();
+  });
+
+  it("retries load when Reintentar is clicked after a failure", async () => {
+    const listBuscasMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValueOnce(mockRecords);
+    setupWindowApi({ listBuscas: listBuscasMock });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("B-001")).toBeInTheDocument();
     });
   });
 

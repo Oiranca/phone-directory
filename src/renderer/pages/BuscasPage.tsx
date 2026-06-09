@@ -21,6 +21,7 @@ const emptyForm = (): EditableBuscaRecord => ({
 export const BuscasPage = () => {
   const [records, setRecords] = useState<BuscaRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -36,11 +37,12 @@ export const BuscasPage = () => {
   const loadBuscas = async () => {
     try {
       setIsLoading(true);
+      setLoadError(false);
       setError("");
       const data = await window.hospitalDirectory.listBuscas();
       setRecords(data);
     } catch {
-      setError("No se pudieron cargar los registros de buscas.");
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -143,6 +145,33 @@ export const BuscasPage = () => {
     return (
       <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">
         Cargando buscas…
+      </section>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <section aria-labelledby="buscas-page-title" className="flex flex-col gap-5">
+        <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+          <h2 id="buscas-page-title" className="text-xl font-semibold text-scs-blueDark">
+            Registro de Buscas
+          </h2>
+        </div>
+        <div
+          role="alert"
+          className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center shadow-panel"
+        >
+          <p className="mb-4 text-sm font-medium text-red-900">
+            No se pudieron cargar los registros de buscas.
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadBuscas()}
+            className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+          >
+            Reintentar
+          </button>
+        </div>
       </section>
     );
   }
