@@ -300,4 +300,73 @@ describe("BuscasService", () => {
       expect(id).toMatch(/^bsc_[0-9a-f]{8}$/);
     });
   });
+
+  it("unique ID generation — retries on collision and resolves to a unique ID", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    // Add a record that will hold the "colliding" UUID slot
+    const first = await service.add({
+      deviceNumber: "B-C01",
+      assignedTo: "Usuario A",
+      department: "Test",
+      role: "Rol",
+      shift: "mañana"
+    });
+
+    // Extract the 8 hex chars from the first record's ID to use as the colliding value
+    const collidingHex = first.id.slice(4); // "bsc_XXXXXXXX" → "XXXXXXXX"
+
+    // Simulate randomUUID returning the colliding value once, then a unique value
+    const uniqueHex = "deadbeef";
+    const uuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(`${collidingHex}-0000-0000-0000-000000000000` as `${string}-${string}-${string}-${string}-${string}`)
+      .mockReturnValueOnce(`${uniqueHex}-0000-0000-0000-000000000000` as `${string}-${string}-${string}-${string}-${string}`);
+
+    const second = await service.add({
+      deviceNumber: "B-C02",
+      assignedTo: "Usuario B",
+      department: "Test",
+      role: "Rol",
+      shift: "mañana"
+    });
+
+    expect(second.id).toBe(`bsc_${uniqueHex}`);
+    expect(uuidSpy).toHaveBeenCalledTimes(2);
+    uuidSpy.mockRestore();
+  });
+
+  it("unique ID generation — throws after 1000 exhausted attempts", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    // Add a record whose hex will be the permanently colliding value
+    const existing = await service.add({
+      deviceNumber: "B-X01",
+      assignedTo: "Usuario X",
+      department: "Test",
+      role: "Rol",
+      shift: "mañana"
+    });
+
+    const collidingHex = existing.id.slice(4);
+
+    // Every randomUUID call returns the same colliding UUID → exhaustion
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      `${collidingHex}-0000-0000-0000-000000000000` as `${string}-${string}-${string}-${string}-${string}`
+    );
+
+    await expect(
+      service.add({
+        deviceNumber: "B-X02",
+        assignedTo: "Usuario Y",
+        department: "Test",
+        role: "Rol",
+        shift: "mañana"
+      })
+    ).rejects.toThrow("No se pudo generar un ID único");
+
+    vi.restoreAllMocks();
+  });
 });
