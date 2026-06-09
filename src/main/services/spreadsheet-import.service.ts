@@ -9,6 +9,7 @@ import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImpor
 import type { CsvImportPreview, DirectoryDataset } from "../../shared/types/contact.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
 const MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS = 5_000;
 const IS_VITEST_RUNTIME = process.env.VITEST === "true";
 
@@ -1248,6 +1249,10 @@ export const buildSpreadsheetImportPreview = async (
   const normalized = IS_VITEST_RUNTIME
     ? normalizeWorkbookRowsFromFile(sourceFilePath)
     : await readWorkbookRowsInWorker(sourceFilePath);
+
+  if (normalized.rows.length > MAX_SPREADSHEET_IMPORT_ROWS) {
+    throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+  }
 
   return buildImportPreviewFromRows(normalized.rows, {
     sourceFilePath,
