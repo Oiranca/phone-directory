@@ -4,6 +4,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
+  ContactRecord,
   CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
@@ -18,6 +19,7 @@ import type {
   SaveContactResult
 } from "../shared/types/contact";
 import type { BuscaRecord, EditableBuscaRecord } from "../shared/schemas/busca.schema";
+import type { DuplicateDetectionResult } from "../shared/types/duplicate";
 
 declare global {
   interface Window {
@@ -42,6 +44,8 @@ declare global {
       addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
       updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
       deleteBusca: (id: string) => Promise<void>;
+      detectDuplicates: () => Promise<DuplicateDetectionResult>;
+      mergeContacts: (req: { keepId: string; discardId: string }) => Promise<ContactRecord>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

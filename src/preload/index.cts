@@ -3,6 +3,7 @@ import type {
   AutoBackupFailureEvent,
   BackupListItem,
   BootstrapResult,
+  ContactRecord,
   CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
   CsvImportResult,
@@ -17,6 +18,7 @@ import type {
   SaveContactResult
 } from "../shared/types/contact.js";
 import type { BuscaRecord, EditableBuscaRecord } from "../shared/schemas/busca.schema.js";
+import type { DuplicateDetectionResult } from "../shared/types/duplicate.js";
 
 const api = {
   getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
@@ -49,6 +51,10 @@ const api = {
   updateBusca: (id: string, record: EditableBuscaRecord) =>
     ipcRenderer.invoke("buscas:update", id, record) as Promise<BuscaRecord>,
   deleteBusca: (id: string) => ipcRenderer.invoke("buscas:delete", id) as Promise<void>,
+  detectDuplicates: () =>
+    ipcRenderer.invoke("contacts:detect-duplicates") as Promise<DuplicateDetectionResult>,
+  mergeContacts: (req: { keepId: string; discardId: string }) =>
+    ipcRenderer.invoke("contacts:merge-duplicates", req) as Promise<ContactRecord>,
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
       listener(payload);

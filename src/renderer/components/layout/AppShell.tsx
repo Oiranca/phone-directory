@@ -7,7 +7,8 @@ const navItems = [
   { to: "/contacts/new", label: "Nuevo registro" },
   { to: "/import-export", label: "Importar/Exportar" },
   { to: "/settings", label: "Configuración" },
-  { to: "/buscas", label: "Buscas" }
+  { to: "/buscas", label: "Buscas" },
+  { to: "/deduplicate", label: "Duplicados" }
 ];
 
 const shortcutRoutes: Record<string, string> = {
@@ -20,7 +21,9 @@ const shortcutRoutes: Record<string, string> = {
   Digit4: "/settings",
   Numpad4: "/settings",
   Digit5: "/buscas",
-  Numpad5: "/buscas"
+  Numpad5: "/buscas",
+  Digit6: "/deduplicate",
+  Numpad6: "/deduplicate"
 };
 
 const isTextEntryElement = (target: EventTarget | null) => {
