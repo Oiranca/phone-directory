@@ -268,18 +268,16 @@ export const DeduplicatePage = () => {
         })}
       </div>
 
-      {confirmState && (
-        <ConfirmDialog
-          title="Confirmar fusión"
-          message={`¿Fusionar "${confirmState.discardRecord.displayName}" en "${confirmState.keepRecord.displayName}"? Esta acción no se puede deshacer.`}
-          confirmLabel="Fusionar"
-          cancelLabel="Cancelar"
-          onConfirm={() => void handleConfirmMerge()}
-          onCancel={() => setConfirmState(null)}
-          confirmDisabled={!!mergingId}
-          variant="destructive"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={!!confirmState}
+        title="Confirmar fusión"
+        message={confirmState ? `¿Fusionar "${confirmState.discardRecord.displayName}" en "${confirmState.keepRecord.displayName}"? Esta acción no se puede deshacer.` : ""}
+        confirmLabel="Fusionar"
+        cancelLabel="Cancelar"
+        onConfirm={() => void handleConfirmMerge()}
+        onCancel={() => setConfirmState(null)}
+        isDestructive={true}
+      />
     </section>
   );
 };
