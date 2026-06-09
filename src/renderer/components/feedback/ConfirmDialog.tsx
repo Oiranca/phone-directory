@@ -9,6 +9,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   isDestructive?: boolean;
+  confirmDisabled?: boolean;
 }
 
 export function ConfirmDialog({
@@ -19,7 +20,8 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   onConfirm,
   onCancel,
-  isDestructive = false
+  isDestructive = false,
+  confirmDisabled = false
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -60,7 +62,8 @@ export function ConfirmDialog({
         <button
           type="button"
           onClick={onConfirm}
-          className={`px-4 py-2 text-sm font-medium text-white rounded-md focus-ring touch-target ${
+          disabled={confirmDisabled}
+          className={`px-4 py-2 text-sm font-medium text-white rounded-md focus-ring touch-target disabled:opacity-60 disabled:cursor-not-allowed ${
             isDestructive ? 'state-destructive' : 'bg-scs-blue hover:bg-scs-blueDark'
           }`}
         >

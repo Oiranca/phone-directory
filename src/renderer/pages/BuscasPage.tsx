@@ -29,6 +29,7 @@ export const BuscasPage = () => {
   const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; deviceNumber: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const deferredQuery = useDeferredValue(query);
 
@@ -120,7 +121,8 @@ export const BuscasPage = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!deleteConfirm) return;
+    if (!deleteConfirm || isDeleting) return;
+    setIsDeleting(true);
     try {
       await window.hospitalDirectory.deleteBusca(deleteConfirm.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteConfirm.id));
@@ -128,6 +130,8 @@ export const BuscasPage = () => {
     } catch {
       setError("Error al eliminar la busca.");
       setDeleteConfirm(null);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -397,11 +401,12 @@ export const BuscasPage = () => {
         isOpen={deleteConfirm !== null}
         title="Confirmar eliminación"
         message={`¿Estás seguro de que quieres eliminar la busca "${deleteConfirm?.deviceNumber ?? ""}"? Esta acción no se puede deshacer.`}
-        confirmLabel="Eliminar"
+        confirmLabel={isDeleting ? "Eliminando…" : "Eliminar"}
         cancelLabel="Cancelar"
         onConfirm={() => void handleDeleteConfirm()}
         onCancel={() => setDeleteConfirm(null)}
         isDestructive
+        confirmDisabled={isDeleting}
       />
     </section>
   );

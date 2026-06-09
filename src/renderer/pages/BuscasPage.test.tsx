@@ -258,4 +258,30 @@ describe("BuscasPage", () => {
       expect(screen.getByText("2 resultados")).toBeInTheDocument();
     });
   });
+
+  it("disables confirm button while deletion is in progress to prevent double-submit", async () => {
+    let resolveDelete!: () => void;
+    const slowDelete = new Promise<void>((resolve) => {
+      resolveDelete = resolve;
+    });
+    setupWindowApi({ deleteBusca: vi.fn().mockReturnValueOnce(slowDelete) });
+
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-001/i }));
+
+    const confirmButton = await screen.findByRole("button", { name: /^Eliminar$/i });
+    fireEvent.click(confirmButton);
+
+    // While the async delete is in flight the button must be disabled
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Eliminando/i })).toBeDisabled();
+    });
+
+    // Let the delete complete
+    resolveDelete();
+    await waitFor(() => {
+      expect(screen.queryByText("B-001")).not.toBeInTheDocument();
+    });
+  });
 });
