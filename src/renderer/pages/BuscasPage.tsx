@@ -94,6 +94,7 @@ export const BuscasPage = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSaving) return;
     setFormError("");
     setIsSaving(true);
     try {
@@ -228,7 +229,7 @@ export const BuscasPage = () => {
       {showForm && (
         <form
           data-keyboard-submit
-          onSubmit={(e) => void handleSubmit(e)}
+          onSubmit={(e) => { if (!isSaving) void handleSubmit(e); }}
           className="rounded-3xl bg-white p-6 shadow-panel"
           aria-label={editingId ? "Editar busca" : "Nueva busca"}
         >

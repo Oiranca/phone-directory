@@ -406,4 +406,56 @@ describe("BuscasPage", () => {
     // Controls must be re-enabled after save
     expect(screen.getByRole("button", { name: /nueva busca/i })).not.toBeDisabled();
   });
+
+  it("prevents double-submit on rapid form submit events", async () => {
+    let resolveSave!: (value: BuscaRecord) => void;
+    const newRecord: BuscaRecord = {
+      id: "bsc_004",
+      deviceNumber: "B-004",
+      assignedTo: "Carlos Díaz",
+      department: "Radiología",
+      role: "Técnico",
+      shift: "mañana"
+    };
+    const slowAdd = new Promise<BuscaRecord>((resolve) => {
+      resolveSave = resolve;
+    });
+    const addBuscaMock = vi.fn().mockReturnValueOnce(slowAdd);
+    setupWindowApi({ addBusca: addBuscaMock });
+
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+
+    // Open the create form
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    const form = screen.getByRole("form", { name: /Nueva busca/i });
+
+    // Fill required fields
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-004" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Carlos Díaz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Radiología" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Técnico" } });
+
+    // Fire two submit events in rapid succession
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+
+    // Wait for saving state to confirm first submit was processed
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Guardando/i })).toBeDisabled();
+    });
+
+    // Only one service call must have been made despite two submit events
+    expect(addBuscaMock).toHaveBeenCalledTimes(1);
+
+    // Resolve the save and confirm the record appears
+    resolveSave(newRecord);
+    await waitFor(() => {
+      expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
+      expect(screen.getByText("B-004")).toBeInTheDocument();
+    });
+
+    // addBusca must still have been called exactly once
+    expect(addBuscaMock).toHaveBeenCalledTimes(1);
+  });
 });
