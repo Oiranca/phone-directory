@@ -175,6 +175,50 @@ describe("registerBuscasIpc", () => {
     });
   });
 
+  describe("error mapping — toRendererError", () => {
+    it("maps ZodError to the first issue message (no internal paths leaked)", async () => {
+      // An invalid payload causes a ZodError; the handler must surface only the first issue message
+      const err = await invoke("buscas:add", {
+        deviceNumber: "",       // fails min(1) → "El número de busca es obligatorio."
+        assignedTo: "Ana",
+        department: "Urgencias",
+        role: "Enfermera",
+        shift: "mañana"
+      }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe("El número de busca es obligatorio.");
+    });
+
+    it("passes domain Error messages from service through unchanged", async () => {
+      serviceMock.add.mockRejectedValueOnce(new Error("El número de busca \"B-001\" ya está registrado."));
+
+      const err = await invoke("buscas:add", {
+        deviceNumber: "B-001",
+        assignedTo: "Ana",
+        department: "Urgencias",
+        role: "Enfermera",
+        shift: "mañana"
+      }).catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe("El número de busca \"B-001\" ya está registrado.");
+    });
+
+    it("converts non-Error throws to a generic message and logs to console.error", async () => {
+      serviceMock.remove.mockRejectedValueOnce("raw string rejection");
+
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      const err = await invoke("buscas:delete", "bsc_abc12345").catch((e: unknown) => e);
+
+      expect((err as Error).message).toContain("Error inesperado");
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("buscas:delete"),
+        "raw string rejection"
+      );
+      consoleSpy.mockRestore();
+    });
+  });
+
   describe("search channel — buscas:search", () => {
     it("coerces non-string query to empty string and calls service.search", async () => {
       serviceMock.search.mockResolvedValue([]);
