@@ -86,6 +86,7 @@ export const BuscasPage = () => {
   };
 
   const handleCancel = () => {
+    if (isSaving) return;
     setShowForm(false);
     setEditingId(null);
     setFormError("");
@@ -206,7 +207,8 @@ export const BuscasPage = () => {
             <button
               type="button"
               onClick={handleCreateNew}
-              className="focus-ring shrink-0 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+              disabled={isSaving}
+              className="focus-ring shrink-0 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
             >
               Nueva busca
             </button>
@@ -327,7 +329,8 @@ export const BuscasPage = () => {
               type="button"
               data-keyboard-cancel
               onClick={handleCancel}
-              className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              disabled={isSaving}
+              className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               Cancelar
             </button>
@@ -402,16 +405,18 @@ export const BuscasPage = () => {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => handleEdit(record)}
-                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-scs-blue transition hover:bg-scs-mist"
+                          onClick={() => !isSaving && handleEdit(record)}
+                          disabled={isSaving}
+                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
                           aria-label={`Editar busca ${record.deviceNumber}`}
                         >
                           Editar
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteClick(record)}
-                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                          onClick={() => !isSaving && handleDeleteClick(record)}
+                          disabled={isSaving}
+                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
                           aria-label={`Eliminar busca ${record.deviceNumber}`}
                         >
                           Eliminar

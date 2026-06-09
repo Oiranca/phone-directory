@@ -346,4 +346,64 @@ describe("BuscasPage", () => {
       expect(screen.queryByText("B-001")).not.toBeInTheDocument();
     });
   });
+
+  it("prevents Cancel and form dismissal while save is in-flight", async () => {
+    let resolveSave!: (value: BuscaRecord) => void;
+    const newRecord: BuscaRecord = {
+      id: "bsc_003",
+      deviceNumber: "B-003",
+      assignedTo: "Marta Ruiz",
+      department: "Planta 2",
+      role: "Auxiliar",
+      shift: "noche"
+    };
+    const slowAdd = new Promise<BuscaRecord>((resolve) => {
+      resolveSave = resolve;
+    });
+    setupWindowApi({ addBusca: vi.fn().mockReturnValueOnce(slowAdd) });
+
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+
+    // Open the create form
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    const form = screen.getByRole("form", { name: /Nueva busca/i });
+
+    // Fill out required fields
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+
+    // Submit — save is now in-flight
+    fireEvent.submit(form);
+
+    // While in-flight: Cancel button must be disabled
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Guardando/i })).toBeDisabled();
+    });
+    const cancelButton = screen.getByRole("button", { name: /^Cancelar$/i });
+    expect(cancelButton).toBeDisabled();
+
+    // Clicking the disabled Cancel button must not dismiss the form
+    fireEvent.click(cancelButton);
+    expect(screen.getByRole("form", { name: /Nueva busca/i })).toBeInTheDocument();
+
+    // "Nueva busca" header button must be disabled while saving
+    expect(screen.getByRole("button", { name: /nueva busca/i })).toBeDisabled();
+
+    // Table row action buttons must be disabled while saving
+    expect(screen.getByRole("button", { name: /editar busca B-001/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /eliminar busca B-001/i })).toBeDisabled();
+
+    // Let the save complete — form should close and record should appear
+    resolveSave(newRecord);
+    await waitFor(() => {
+      expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
+      expect(screen.getByText("B-003")).toBeInTheDocument();
+    });
+
+    // Controls must be re-enabled after save
+    expect(screen.getByRole("button", { name: /nueva busca/i })).not.toBeDisabled();
+  });
 });
