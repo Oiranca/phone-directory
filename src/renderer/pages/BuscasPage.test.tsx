@@ -309,4 +309,41 @@ describe("BuscasPage", () => {
       expect(screen.queryByText("B-001")).not.toBeInTheDocument();
     });
   });
+
+  it("prevents Cancel button and Escape from firing while delete is in-flight", async () => {
+    let resolveDelete!: () => void;
+    const slowDelete = new Promise<void>((resolve) => {
+      resolveDelete = resolve;
+    });
+    setupWindowApi({ deleteBusca: vi.fn().mockReturnValueOnce(slowDelete) });
+
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-001/i }));
+
+    const confirmButton = await screen.findByRole("button", { name: /^Eliminar$/i });
+    fireEvent.click(confirmButton);
+
+    // While in-flight: Cancel button must be disabled
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Eliminando/i })).toBeDisabled();
+    });
+    const cancelButton = screen.getByRole("button", { name: /^Cancelar$/i });
+    expect(cancelButton).toBeDisabled();
+
+    // Clicking the disabled Cancel button must not close the dialog
+    fireEvent.click(cancelButton);
+    expect(screen.getByText(/Confirmar eliminación/i)).toBeInTheDocument();
+
+    // Escape (dialog onCancel event) must not close the dialog while in-flight
+    const dialog = screen.getByRole("dialog");
+    fireEvent(dialog, new Event("cancel", { bubbles: false, cancelable: true }));
+    expect(screen.getByText(/Confirmar eliminación/i)).toBeInTheDocument();
+
+    // Let the delete complete — dialog should close naturally
+    resolveDelete();
+    await waitFor(() => {
+      expect(screen.queryByText("B-001")).not.toBeInTheDocument();
+    });
+  });
 });

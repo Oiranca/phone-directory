@@ -436,6 +436,7 @@ export const BuscasPage = () => {
         onCancel={() => setDeleteConfirm(null)}
         isDestructive
         confirmDisabled={isDeleting}
+        cancelDisabled={isDeleting}
       />
     </section>
   );

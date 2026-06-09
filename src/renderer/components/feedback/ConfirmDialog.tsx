@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   isDestructive?: boolean;
   confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
 }
 
 export function ConfirmDialog({
@@ -21,7 +22,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   isDestructive = false,
-  confirmDisabled = false
+  confirmDisabled = false,
+  cancelDisabled = false
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -43,7 +45,7 @@ export function ConfirmDialog({
       ref={dialogRef}
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+        if (!cancelDisabled) onCancel();
       }}
       className="backdrop:bg-gray-900/50 p-6 rounded-lg shadow-xl max-w-md w-full border-0 focus:outline-none"
       aria-labelledby={titleId}
@@ -54,8 +56,9 @@ export function ConfirmDialog({
       <div className="flex justify-end gap-3">
         <button
           type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus-ring touch-target"
+          onClick={() => { if (!cancelDisabled) onCancel(); }}
+          disabled={cancelDisabled}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus-ring touch-target disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {cancelLabel}
         </button>
