@@ -68,7 +68,6 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
       addBusca: vi.fn(),
       updateBusca: vi.fn(),
       deleteBusca: vi.fn(),
-      searchBuscas: vi.fn(),
       ...overrides
     }
   });

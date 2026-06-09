@@ -42,7 +42,6 @@ declare global {
       addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
       updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
       deleteBusca: (id: string) => Promise<void>;
-      searchBuscas: (query: string) => Promise<BuscaRecord[]>;
       onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;
     };
   }

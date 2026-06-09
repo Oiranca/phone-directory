@@ -49,7 +49,6 @@ const api = {
   updateBusca: (id: string, record: EditableBuscaRecord) =>
     ipcRenderer.invoke("buscas:update", id, record) as Promise<BuscaRecord>,
   deleteBusca: (id: string) => ipcRenderer.invoke("buscas:delete", id) as Promise<void>,
-  searchBuscas: (query: string) => ipcRenderer.invoke("buscas:search", query) as Promise<BuscaRecord[]>,
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
       listener(payload);

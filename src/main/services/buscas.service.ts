@@ -29,6 +29,10 @@ const createUniqueId = (records: BuscaRecord[]): string => {
   return candidate;
 };
 
+// NOTE: buscas.json is stored in the managed data directory alongside contacts.json but is
+// currently outside the backup/restore scope. AppDataService backups only cover contacts.json.
+// If backup coverage for pager-registry data is needed in the future, this service will need
+// to be wired into the backup pipeline (see OIR-93 for context).
 export class BuscasService {
   private writeQueue: Promise<void> = Promise.resolve();
 
