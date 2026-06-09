@@ -84,9 +84,11 @@ export class DuplicateDetectionService {
     }
 
     // 5. Levenshtein signal (score: 0.75)
-    if (normalizedA && normalizedB) {
+    // Length-aware threshold: reject short names (< 3 chars) to avoid false positives like Ana/Eva
+    if (normalizedA && normalizedB && normalizedA.length >= 3 && normalizedB.length >= 3) {
       const lev = this.levenshtein(normalizedA, normalizedB);
-      if (lev <= 2 && normalizedA !== normalizedB) {
+      const maxLev = Math.ceil(normalizedA.length * 0.2); // 20% of length, min 1
+      if (lev > 0 && lev <= maxLev && normalizedA !== normalizedB) {
         reasons.push("displayName:levenshtein");
         maxScore = Math.max(maxScore, 0.75);
       }

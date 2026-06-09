@@ -250,5 +250,28 @@ describe("DuplicateDetectionService", () => {
       const reasons = result.pairs.flatMap((p) => p.reasons);
       expect(reasons).not.toContain("dept+name");
     });
+
+    it("rejects short-name false positives (Ana/Eva)", () => {
+      // Ana vs Eva: both 3 chars, Levenshtein distance is 2, but should NOT match
+      const recordA = buildMinimalContact({ id: "a", displayName: "Ana" });
+      const recordB = buildMinimalContact({ id: "b", displayName: "Eva" });
+
+      const result = service.detectDuplicates([recordA, recordB]);
+
+      expect(result.pairCount).toBe(0);
+      const reasons = result.pairs.flatMap((p) => p.reasons);
+      expect(reasons).not.toContain("displayName:levenshtein");
+    });
+
+    it("accepts longer-name Levenshtein matches (John/Jon)", () => {
+      // John vs Jon: 4-5 chars, distance 1, should match (1 <= 1 char = 5*0.2)
+      const recordA = buildMinimalContact({ id: "a", displayName: "John Smith" });
+      const recordB = buildMinimalContact({ id: "b", displayName: "Jon Smith" });
+
+      const result = service.detectDuplicates([recordA, recordB]);
+
+      expect(result.pairCount).toBe(1);
+      expect(result.pairs[0]?.reasons).toContain("displayName:levenshtein");
+    });
   });
 });
