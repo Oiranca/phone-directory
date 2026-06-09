@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buscaRecordSchema, buscasDatasetSchema, editableBuscaRecordSchema } from "./busca.schema";
 
 const validRecord = {
-  id: "bsc_abc123",
+  id: "bsc_abc12345",
   deviceNumber: "B-001",
   assignedTo: "Ana García",
   department: "Urgencias",
@@ -40,8 +40,20 @@ describe("buscaRecordSchema", () => {
 
   it("rejects missing required fields", () => {
     expect(() =>
-      buscaRecordSchema.parse({ id: "bsc_1", deviceNumber: "" })
+      buscaRecordSchema.parse({ id: "bsc_abc12345", deviceNumber: "" })
     ).toThrow();
+  });
+
+  it("rejects IDs that do not match the bsc_ + 8 hex chars format", () => {
+    expect(() => buscaRecordSchema.parse({ ...validRecord, id: "bsc_abc123" })).toThrow();
+    expect(() => buscaRecordSchema.parse({ ...validRecord, id: "bsc_abc123456" })).toThrow();
+    expect(() => buscaRecordSchema.parse({ ...validRecord, id: "cnt_abc12345" })).toThrow();
+    expect(() => buscaRecordSchema.parse({ ...validRecord, id: "bsc_GGGGGGGG" })).toThrow();
+  });
+
+  it("accepts a valid bsc_ + 8 hex chars ID", () => {
+    const result = buscaRecordSchema.parse({ ...validRecord, id: "bsc_deadbeef" });
+    expect(result.id).toBe("bsc_deadbeef");
   });
 
   it("rejects empty deviceNumber", () => {
