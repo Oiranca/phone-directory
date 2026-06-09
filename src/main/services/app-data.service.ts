@@ -506,11 +506,11 @@ export class AppDataService {
     const discardRecord = contacts.records.find((r) => r.id === discardId);
 
     if (!keepRecord) {
-      throw new Error(`Contact not found: ${keepId}`);
+      throw new Error("Contact not found");
     }
 
     if (!discardRecord) {
-      throw new Error(`Contact not found: ${discardId}`);
+      throw new Error("Contact not found");
     }
 
     const existingPhoneNumbers = new Set(keepRecord.contactMethods.phones.map((p) => p.number));
