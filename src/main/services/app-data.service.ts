@@ -513,25 +513,69 @@ export class AppDataService {
       throw new Error("Contact not found");
     }
 
-    const existingPhoneNumbers = new Set(keepRecord.contactMethods.phones.map((p) => p.number));
-    const existingEmailAddresses = new Set(keepRecord.contactMethods.emails.map((e) => e.address));
-    const existingTags = new Set(keepRecord.tags);
+    // Normalize for deduplication: use same normalization as detector
+    const normalizePhoneNumber = (phone: string): string =>
+      phone.replace(/\D/g, "").slice(-9); // Last 9 digits, matches detector logic
+    const normalizeEmail = (email: string): string =>
+      email.trim().toLowerCase();
+    const normalizeTag = (tag: string): string =>
+      tag.trim().toLowerCase();
+
+    const existingPhoneNumbers = new Set(
+      keepRecord.contactMethods.phones.map((p) => normalizePhoneNumber(p.number))
+    );
+    const existingEmailAddresses = new Set(
+      keepRecord.contactMethods.emails.map((e) => normalizeEmail(e.address))
+    );
+    const existingTags = new Set(
+      keepRecord.tags.map((t) => normalizeTag(t))
+    );
 
     const extraPhones = discardRecord.contactMethods.phones.filter(
-      (p) => !existingPhoneNumbers.has(p.number)
+      (p) => !existingPhoneNumbers.has(normalizePhoneNumber(p.number))
     );
     const extraEmails = discardRecord.contactMethods.emails.filter(
-      (e) => !existingEmailAddresses.has(e.address)
+      (e) => !existingEmailAddresses.has(normalizeEmail(e.address))
     );
-    const extraTags = discardRecord.tags.filter((t) => !existingTags.has(t));
+    const extraTags = discardRecord.tags.filter(
+      (t) => !existingTags.has(normalizeTag(t))
+    );
+    const extraAliases = discardRecord.aliases.filter((a) => !keepRecord.aliases.includes(a));
 
     const mergedRecord = contactRecordSchema.parse({
       ...keepRecord,
+      // Copy externalId from discard if keeper doesn't have one
+      externalId: keepRecord.externalId || discardRecord.externalId,
+      // Merge person data: keep keeper's, add discard's missing parts
+      person: {
+        firstName: keepRecord.person?.firstName || discardRecord.person?.firstName,
+        lastName: keepRecord.person?.lastName || discardRecord.person?.lastName
+      },
+      // Merge organization: keep keeper's, add discard's missing parts
+      organization: {
+        department: keepRecord.organization.department || discardRecord.organization.department,
+        service: keepRecord.organization.service || discardRecord.organization.service,
+        area: keepRecord.organization.area || discardRecord.organization.area,
+        specialty: keepRecord.organization.specialty || discardRecord.organization.specialty
+      },
+      // Copy location from discard if keeper doesn't have one
+      location: keepRecord.location || discardRecord.location,
+      // Merge contact methods with deduplication
       contactMethods: {
         phones: normalizePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
         emails: normalizePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails])
       },
+      // Merge aliases
+      aliases: [...keepRecord.aliases, ...extraAliases],
+      // Merge tags
       tags: [...keepRecord.tags, ...extraTags],
+      // Copy notes from discard if keeper doesn't have any
+      notes: keepRecord.notes || discardRecord.notes,
+      // Copy source metadata from discard if keeper doesn't have one
+      source: keepRecord.source || discardRecord.source,
+      // Keep keeper's status
+      status: keepRecord.status,
+      // Update audit trail
       audit: {
         ...keepRecord.audit,
         updatedAt: now,
