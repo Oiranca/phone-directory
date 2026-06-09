@@ -11,6 +11,18 @@ const emptyDataset = (): BuscasDataset => ({
   records: []
 });
 
+const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
+
+const assertUniqueDeviceNumber = (records: BuscaRecord[], deviceNumber: string, excludeId?: string): void => {
+  const normalized = normalizeDeviceNumber(deviceNumber);
+  const conflict = records.find(
+    (r) => normalizeDeviceNumber(r.deviceNumber) === normalized && r.id !== excludeId
+  );
+  if (conflict) {
+    throw new Error(`El número de busca "${conflict.deviceNumber}" ya está registrado.`);
+  }
+};
+
 const createEntityId = () => `bsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
 
 const createUniqueId = (records: BuscaRecord[]): string => {
@@ -72,6 +84,7 @@ export class BuscasService {
     return this.enqueueWrite(async () => {
       const parsed = editableBuscaRecordSchema.parse(payload);
       const dataset = await this.readDataset();
+      assertUniqueDeviceNumber(dataset.records, parsed.deviceNumber);
       const id = createUniqueId(dataset.records);
       const newRecord = buscaRecordSchema.parse({ ...parsed, id });
       const nextDataset = buscasDatasetSchema.parse({
@@ -91,6 +104,7 @@ export class BuscasService {
       if (index === -1) {
         throw new Error("No se encontró la busca solicitada.");
       }
+      assertUniqueDeviceNumber(dataset.records, parsed.deviceNumber, id);
       const updatedRecord = buscaRecordSchema.parse({ ...parsed, id });
       const nextRecords = dataset.records.map((r, i) => (i === index ? updatedRecord : r));
       const nextDataset = buscasDatasetSchema.parse({ ...dataset, records: nextRecords });

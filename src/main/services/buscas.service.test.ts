@@ -167,6 +167,116 @@ describe("BuscasService", () => {
     );
   });
 
+  it("add — rejects duplicate deviceNumber (exact match)", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    await service.add({
+      deviceNumber: "B-101",
+      assignedTo: "Ana García",
+      department: "Urgencias",
+      role: "Enfermera",
+      shift: "mañana"
+    });
+
+    await expect(
+      service.add({
+        deviceNumber: "B-101",
+        assignedTo: "Otro Usuario",
+        department: "UCI",
+        role: "Médico",
+        shift: "tarde"
+      })
+    ).rejects.toThrow("ya está registrado");
+  });
+
+  it("add — rejects duplicate deviceNumber (case/whitespace variant)", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    await service.add({
+      deviceNumber: "B-101",
+      assignedTo: "Ana García",
+      department: "Urgencias",
+      role: "Enfermera",
+      shift: "mañana"
+    });
+
+    await expect(
+      service.add({
+        deviceNumber: "b-101",
+        assignedTo: "Otro Usuario",
+        department: "UCI",
+        role: "Médico",
+        shift: "tarde"
+      })
+    ).rejects.toThrow("ya está registrado");
+
+    await expect(
+      service.add({
+        deviceNumber: " B-101 ",
+        assignedTo: "Otro Usuario",
+        department: "UCI",
+        role: "Médico",
+        shift: "tarde"
+      })
+    ).rejects.toThrow("ya está registrado");
+  });
+
+  it("update — rejects deviceNumber collision with another record", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    await service.add({
+      deviceNumber: "B-101",
+      assignedTo: "Ana García",
+      department: "Urgencias",
+      role: "Enfermera",
+      shift: "mañana"
+    });
+    const second = await service.add({
+      deviceNumber: "B-102",
+      assignedTo: "Luis Pérez",
+      department: "UCI",
+      role: "Médico",
+      shift: "tarde"
+    });
+
+    await expect(
+      service.update(second.id, {
+        deviceNumber: "B-101",
+        assignedTo: "Luis Pérez",
+        department: "UCI",
+        role: "Médico",
+        shift: "tarde"
+      })
+    ).rejects.toThrow("ya está registrado");
+  });
+
+  it("update — allows keeping the same deviceNumber for the current record", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const service = new BuscasService();
+
+    const created = await service.add({
+      deviceNumber: "B-101",
+      assignedTo: "Ana García",
+      department: "Urgencias",
+      role: "Enfermera",
+      shift: "mañana"
+    });
+
+    // Updating only assignedTo while keeping same deviceNumber must not throw
+    const updated = await service.update(created.id, {
+      deviceNumber: "B-101",
+      assignedTo: "Ana García Actualizada",
+      department: "Urgencias",
+      role: "Enfermera",
+      shift: "mañana"
+    });
+
+    expect(updated.assignedTo).toBe("Ana García Actualizada");
+  });
+
   it("unique ID generation — IDs are unique across many adds", async () => {
     const { BuscasService } = await import("./buscas.service.js");
     const service = new BuscasService();
