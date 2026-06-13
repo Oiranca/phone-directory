@@ -282,11 +282,11 @@ rm -rf "$TMP6"
 # Valid-JSON pnpm error envelope (EAUDITNOLOCK) — no advisory container at all
 ERROR_ENVELOPE_JSON='{"error":{"code":"EAUDITNOLOCK"}}'
 
-# npm v7 vulnerabilities schema — non-allowlisted critical
-VULN_SCHEMA_CRITICAL_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad pkg vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}}}'
+# npm v7 vulnerabilities schema — non-allowlisted critical (real pnpm v7 always emits metadata)
+VULN_SCHEMA_CRITICAL_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad pkg vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
 
-# npm v7 vulnerabilities schema — only allowlisted advisories (all three from allowlist)
-VULN_SCHEMA_ALLOWLISTED_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false},"esbuild":{"name":"esbuild","severity":"high","via":[{"ghsaId":"GHSA-gv7w-rqvm-qjhr","title":"esbuild vuln","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}}}'
+# npm v7 vulnerabilities schema — only allowlisted advisories (real pnpm v7 always emits metadata)
+VULN_SCHEMA_ALLOWLISTED_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false},"esbuild":{"name":"esbuild","severity":"high","via":[{"ghsaId":"GHSA-gv7w-rqvm-qjhr","title":"esbuild vuln","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":1,"high":1}}}'
 
 # Test 7: Valid-JSON error envelope with non-zero pnpm exit → gate ABORTS (infra path)
 printf '\nTest 7: Valid-JSON error envelope (EAUDITNOLOCK) + non-zero exit → aborts safe\n'
@@ -972,6 +972,48 @@ else
   fail "genuine clean v7 exited non-zero — regression introduced by Fix 2"
 fi
 rm -rf "$TMP37"
+
+# --- v7 metadata-required guard (symmetry with v6 guard) ----------------------
+
+# Test 38: {"vulnerabilities":{}} with NO metadata → ABORTS (exit 3)
+# Mirrors the v6 guard: a v7 payload missing metadata.vulnerabilities is malformed.
+printf '\nTest 38: {"vulnerabilities":{}} (no metadata) → ABORTS (exit 3)\n'
+VULN_NO_METADATA_JSON='{"vulnerabilities":{}}'
+TMP38="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP38" "$VULN_NO_METADATA_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP38:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "vulnerabilities:{} + no metadata → aborts (exit 3), not passed"
+else
+  fail "vulnerabilities:{} + no metadata → silently passed — fail-open bug (v7 metadata guard missing)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "vulnerabilities:{} + no metadata prints inconsistency message"
+else
+  fail "vulnerabilities:{} + no metadata missing inconsistency message in stderr: $stderr_out"
+fi
+rm -rf "$TMP38"
+
+# Test 39: clean v7 WITH metadata → still PASSES (regression guard)
+printf '\nTest 39: clean v7 {"vulnerabilities":{},"metadata":{"vulnerabilities":{...0}}} still PASSES\n'
+CLEAN_V7_META_JSON='{"vulnerabilities":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP39="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP39" "$CLEAN_V7_META_JSON" 0
+if out="$(run_gate_in_subshell "$TMP39" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "clean v7 with metadata still PASSES after v7 metadata guard"
+  else
+    fail "clean v7 with metadata passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "clean v7 with metadata exited non-zero — regression introduced by v7 metadata guard"
+fi
+rm -rf "$TMP39"
 
 # --- summary -------------------------------------------------------------------
 

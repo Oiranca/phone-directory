@@ -138,6 +138,20 @@ process.stdin.on("end", () => {
     }
   }
 
+  // Mirror the same guard for the v7 schema: when vulnerabilities is the chosen
+  // advisory container, metadata.vulnerabilities must also be a plain object.
+  // Real pnpm v7 always emits it; a v7 response lacking it is malformed.
+  if (vulnerabilitiesIsPlainObj && !hasAdvisories) {
+    const mv = data.metadata ? data.metadata.vulnerabilities : undefined;
+    if (mv === null || mv === undefined || typeof mv !== "object" || Array.isArray(mv)) {
+      process.stderr.write(
+        "[audit-gate] vulnerabilities container present but metadata.vulnerabilities missing/null — " +
+        "inconsistent audit response (real pnpm always emits a vulnerabilities object in metadata).\n"
+      );
+      process.exit(3);
+    }
+  }
+
   // --- load allowlist -------------------------------------------------------
   const allowlistPath = process.argv[1];
   let allowlist = [];
