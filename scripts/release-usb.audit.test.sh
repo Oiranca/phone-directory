@@ -477,6 +477,70 @@ else
 fi
 rm -rf "$TMP15"
 
+# --- present-but-empty metadata.vulnerabilities guard (belt-and-suspenders) ---
+
+# Test 16: metadata present, vulnerabilities key absent, no advisories → ABORTS (exit 3)
+printf '\nTest 16: {"metadata":{}} with no advisories → ABORTS (exit 3)\n'
+META_NO_VULNS_JSON='{"metadata":{}}'
+TMP16="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP16" "$META_NO_VULNS_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP16:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "metadata present, vulnerabilities absent, no advisories → aborts (exit 3)"
+else
+  fail "metadata present, vulnerabilities absent, no advisories → silently passed (fail-open bug)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'metadata present but metadata.vulnerabilities missing/null'; then
+  pass "metadata-only with absent vulnerabilities prints expected error message"
+else
+  fail "metadata-only with absent vulnerabilities missing expected message in stderr: $stderr_out"
+fi
+rm -rf "$TMP16"
+
+# Test 17: advisories:{} present with metadata.vulnerabilities:null → ABORTS (exit 3)
+printf '\nTest 17: {"advisories":{},"metadata":{"vulnerabilities":null}} → ABORTS (exit 3)\n'
+ADVISORIES_META_NULL_JSON='{"advisories":{},"metadata":{"vulnerabilities":null}}'
+TMP17="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP17" "$ADVISORIES_META_NULL_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP17:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "advisories:{} with metadata.vulnerabilities:null → aborts (exit 3)"
+else
+  fail "advisories:{} with metadata.vulnerabilities:null → silently passed (fail-open bug)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "advisories:{} + metadata.vulnerabilities:null prints inconsistency message"
+else
+  fail "advisories:{} + metadata.vulnerabilities:null missing inconsistency message in stderr: $stderr_out"
+fi
+rm -rf "$TMP17"
+
+# Test 18: genuine clean — metadata.vulnerabilities all zeros → PASSES (do not regress)
+printf '\nTest 18: genuine clean {"advisories":{},"metadata":{"vulnerabilities":{"info":0,...}}} → PASSES\n'
+GENUINE_CLEAN_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP18="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP18" "$GENUINE_CLEAN_JSON" 0
+if out="$(run_gate_in_subshell "$TMP18" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "genuine clean audit with all-zero metadata.vulnerabilities still passes gate"
+  else
+    fail "genuine clean audit passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "genuine clean audit exited non-zero — regression: all-zero metadata.vulnerabilities was rejected"
+fi
+rm -rf "$TMP18"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

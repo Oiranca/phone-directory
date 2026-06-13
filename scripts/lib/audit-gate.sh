@@ -141,6 +141,26 @@ process.stdin.on("end", () => {
     }
   }
 
+  // Belt-and-suspenders: when metadata is present but metadata.vulnerabilities
+  // is absent, null, or not a plain object, the response is internally
+  // inconsistent — real pnpm always emits a populated metadata.vulnerabilities
+  // object (even on a fully clean tree it is an all-zeros object).
+  // Fire regardless of whether an advisory container key was present, because
+  // an empty advisories:{} alongside a null metadata.vulnerabilities is equally
+  // malformed.  We do NOT fire when a non-empty advisory container was the
+  // actual basis for a failure (failures.length > 0) — those follow exit 2
+  // regardless, and the metadata state is irrelevant there.
+  if (hasMetadata && failures.length === 0) {
+    const mv = data.metadata ? data.metadata.vulnerabilities : undefined;
+    if (mv === null || mv === undefined || typeof mv !== "object" || Array.isArray(mv)) {
+      process.stderr.write(
+        "[audit-gate] metadata present but metadata.vulnerabilities missing/null — " +
+        "inconsistent audit response (real pnpm always emits a vulnerabilities object in metadata).\n"
+      );
+      process.exit(3);
+    }
+  }
+
   // --- result ---------------------------------------------------------------
   if (failures.length === 0) {
     process.stdout.write("PASSED:" + allowlistCount + "\n");
