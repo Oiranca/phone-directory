@@ -1242,6 +1242,79 @@ else
 fi
 rm -rf "$TMP49"
 
+# --- Fix 3: whitespace-only SKIP_AUDIT_REASON rejection ----------------------
+
+# Test 50: SKIP_AUDIT=1 with spaces-only reason → ABORTS
+printf '\nTest 50: SKIP_AUDIT=1, SKIP_AUDIT_REASON="   " (spaces only) → ABORTS\n'
+TMP50="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP50" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP50:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="   " bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "SKIP_AUDIT_REASON spaces-only → gate ABORTS (exit non-zero)"
+else
+  fail "SKIP_AUDIT_REASON spaces-only → gate bypassed — whitespace-only reason accepted"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'empty\|whitespace\|SKIP_AUDIT_REASON'; then
+  pass "spaces-only reason prints rejection message"
+else
+  fail "spaces-only reason missing rejection message in stderr: $stderr_out"
+fi
+rm -rf "$TMP50"
+
+# Test 51: SKIP_AUDIT=1 with tabs-only reason → ABORTS
+printf '\nTest 51: SKIP_AUDIT=1, SKIP_AUDIT_REASON=$'"'"'\t\t'"'"' (tabs only) → ABORTS\n'
+TMP51="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP51" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP51:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$(printf '\t\t')" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "SKIP_AUDIT_REASON tabs-only → gate ABORTS (exit non-zero)"
+else
+  fail "SKIP_AUDIT_REASON tabs-only → gate bypassed — tabs-only reason accepted"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'empty\|whitespace\|SKIP_AUDIT_REASON'; then
+  pass "tabs-only reason prints rejection message"
+else
+  fail "tabs-only reason missing rejection message in stderr: $stderr_out"
+fi
+rm -rf "$TMP51"
+
+# Test 52: SKIP_AUDIT=1 with valid reason surrounded by spaces → BYPASSES, manifest records trimmed reason
+printf '\nTest 52: SKIP_AUDIT=1 with "  valid reason  " (padded) → BYPASSES, status records trimmed reason\n'
+TMP52="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52" "$NEW_CRITICAL_JSON" 1
+PADDED_REASON="  accepted per SECURITY.md  "
+if out="$(env PATH="$TMP52:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$PADDED_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)"; then
+  pass "padded valid reason → bypasses (exit 0)"
+  if printf '%s' "$out" | grep -q 'BYPASSED'; then
+    pass "padded valid reason → BYPASSED recorded in status line"
+  else
+    fail "padded valid reason → BYPASSED missing from status line: $out"
+  fi
+  if printf '%s' "$out" | grep -q 'accepted per SECURITY.md'; then
+    pass "padded valid reason → trimmed reason text in status line"
+  else
+    fail "padded valid reason → reason text missing from status line: $out"
+  fi
+else
+  fail "padded valid reason → unexpected non-zero exit"
+fi
+rm -rf "$TMP52"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
