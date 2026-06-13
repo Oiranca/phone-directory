@@ -5,6 +5,7 @@
     "severity": "critical",
     "reason": "shell-quote is a transitive dependency of 'concurrently', used only during local development (pnpm dev). It is never bundled into the Electron application or executed at runtime. The vulnerable code path (quote() with object .op tokens from untrusted input) is not reachable in this project because concurrently uses shell-quote internally for spawning fixed, developer-authored commands — no attacker-influenced input reaches quote(). Deployment model: local USB install on a controlled workstation with no external network attack surface.",
     "reviewDate": "2026-06-13",
+    "expires": "2026-12-13",
     "cve": "CVE-2026-9277",
     "remediationPath": "Update concurrently when a patched version of shell-quote (>=1.8.4) is pulled in transitively."
   },
@@ -14,6 +15,7 @@
     "severity": "high",
     "reason": "tmp is a transitive dependency via electron-builder > app-builder-lib > @malept/flatpak-bundler > tmp-promise > tmp. The flatpak bundler is not used in this deployment workflow (Windows/macOS/Linux USB distribution only — no Flatpak targets). The vulnerable path-traversal surface requires attacker-controlled prefix/postfix/dir options; in this build toolchain those values are hardcoded constants, not user-supplied input. Build tooling runs in a controlled local/CI environment only.",
     "reviewDate": "2026-06-13",
+    "expires": "2026-12-13",
     "cve": "CVE-2026-44705",
     "remediationPath": "Monitor electron-builder for an upstream fix that updates the tmp transitive dependency to >=0.2.6."
   },
@@ -23,6 +25,7 @@
     "severity": "high",
     "reason": "esbuild is a transitive dependency of vite (build tooling only, never in the Electron runtime bundle). The vulnerability affects the esbuild Deno module (lib/deno/mod.ts) which downloads native binaries without SHA-256 verification when NPM_CONFIG_REGISTRY is attacker-controlled. This project does not use the Deno distribution of esbuild — vite uses the Node.js npm package, which has integrity verification. The vulnerable Deno code path is not executed. Upgrading esbuild directly would conflict with vite's peer dependency constraints; the fix requires a vite release that vendors a patched esbuild.",
     "reviewDate": "2026-06-13",
+    "expires": "2026-12-13",
     "cve": null,
     "remediationPath": "Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking Node 20.11.1 compatibility."
   }

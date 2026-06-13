@@ -13,7 +13,9 @@
 # On return the caller can read:
 #   AUDIT_STATUS_LINE — human-readable status line for the release manifest
 
-AUDIT_ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
+# Allow callers (and tests) to override the allowlist path via AUDIT_ALLOWLIST.
+# If not already set, default to the standard location relative to REPO_ROOT.
+AUDIT_ALLOWLIST="${AUDIT_ALLOWLIST:-$REPO_ROOT/scripts/audit-allowlist.json}"
 
 # Node.js snippet that:
 #   1. Reads pnpm audit --json from stdin
@@ -130,6 +132,60 @@ process.stdin.on("end", () => {
     process.stderr.write("[audit-gate] Could not read allowlist at: " + allowlistPath + "\n");
     process.stderr.write(e.message + "\n");
     process.exit(1);
+  }
+
+  // Validate allowlist schema and enforce expiry.
+  // Required fields: id (non-empty string), package, severity, reason, expires (YYYY-MM-DD).
+  // Reject: malformed entries, duplicate GHSA ids, expired entries.
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const seenIds = new Set();
+  for (let i = 0; i < allowlist.length; i++) {
+    const entry = allowlist[i];
+    const idx = "[allowlist entry " + i + "]";
+
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      process.stderr.write("[audit-gate] " + idx + " is not an object — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    if (typeof entry.id !== "string" || entry.id.trim() === "") {
+      process.stderr.write("[audit-gate] " + idx + " missing or empty 'id' field — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    if (typeof entry.package !== "string" || entry.package.trim() === "") {
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'package' field — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    if (typeof entry.severity !== "string" || entry.severity.trim() === "") {
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'severity' field — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'reason' field — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    if (typeof entry.expires !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.expires.trim())) {
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or invalid 'expires' field (required: YYYY-MM-DD) — allowlist is malformed.\n");
+      process.exit(3);
+    }
+
+    // Duplicate GHSA id check.
+    if (seenIds.has(entry.id)) {
+      process.stderr.write("[audit-gate] Duplicate GHSA id '" + entry.id + "' in allowlist — allowlist is malformed.\n");
+      process.exit(3);
+    }
+    seenIds.add(entry.id);
+
+    // Expiry check: current date > expires date → this entry is expired.
+    const expiresDate = new Date(entry.expires.trim() + "T00:00:00Z");
+    if (today > expiresDate) {
+      process.stderr.write(
+        "[audit-gate] Allowlist entry '" + entry.id + "' (package: " + entry.package + ") expired on " +
+        entry.expires + " — review and either re-accept (update expires) or remediate before releasing.\n"
+      );
+      process.exit(3);
+    }
   }
 
   const allowedIds = new Set(allowlist.map(e => e.id));

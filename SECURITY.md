@@ -37,6 +37,9 @@ The following vulnerabilities have been addressed as of this release:
 > The audit gate in `scripts/release-usb.sh` reads this file at release time and filters out
 > allowlisted advisories before failing — any newly appearing high/critical advisory that is NOT
 > in the allowlist will still abort the release.
+> Each entry carries an `expires` date (YYYY-MM-DD). The gate enforces expiry at release time:
+> an entry whose `expires` date has passed causes the gate to abort, requiring the entry to be
+> re-reviewed and its `expires` date updated (or the advisory resolved) before a new release can proceed.
 > The entries below summarise each accepted risk; the allowlist JSON contains the full rationale.
 
 The following advisories are **accepted as low-risk** for this deployment model:

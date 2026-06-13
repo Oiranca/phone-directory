@@ -730,6 +730,148 @@ else
 fi
 rm -rf "$TMP26"
 
+# --- allowlist expiry and schema validation tests (Fix D) ---------------------
+# These use a temp allowlist file so the real allowlist is never mutated.
+
+# Helpers to write temp allowlists
+write_temp_allowlist() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  printf '%s' "$1" > "$tmpdir/allowlist.json"
+  printf '%s' "$tmpdir"
+}
+
+run_gate_with_allowlist() {
+  local bindir="$1"
+  local allowlist_file="$2"
+  shift 2
+  env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" "$@" bash -c "
+    set -euo pipefail
+    AUDIT_ALLOWLIST='$allowlist_file'
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+    printf '%s\n' \"\$AUDIT_STATUS_LINE\"
+  "
+}
+
+# Today + 1 year for a valid future expiry; yesterday for expired
+FUTURE_EXPIRES="$(date -u -v+1y +%Y-%m-%d 2>/dev/null || date -u -d '+1 year' +%Y-%m-%d)"
+PAST_EXPIRES="$(date -u -v-1d +%Y-%m-%d 2>/dev/null || date -u -d '-1 day' +%Y-%m-%d)"
+
+# Test 27: expired allowlist entry → advisory that was allowlisted now FAILS the gate
+printf '\nTest 27: expired allowlist entry → otherwise-allowlisted advisory now FAILS\n'
+EXPIRED_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$PAST_EXPIRES")"
+TMPD27_AL="$(write_temp_allowlist "$EXPIRED_ALLOWLIST")"
+TMP27="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP27" "$ALLOWLISTED_JSON" 1
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP27" "$TMPD27_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "expired allowlist entry → gate FAILS (advisory no longer accepted)"
+else
+  fail "expired allowlist entry → gate passed — expiry not enforced"
+fi
+if printf '%s' "$stderr_out" | grep -q 'expired'; then
+  pass "expired entry prints 'expired' message"
+else
+  fail "expired entry missing 'expired' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP27" "$TMPD27_AL"
+
+# Test 28: malformed allowlist entry (missing id) → gate ABORTS
+printf '\nTest 28: allowlist entry missing "id" field → ABORTS\n'
+MALFORMED_ALLOWLIST='[{"package":"shell-quote","severity":"critical","reason":"test","expires":"2026-12-31"}]'
+TMPD28_AL="$(write_temp_allowlist "$MALFORMED_ALLOWLIST")"
+TMP28="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP28" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP28" "$TMPD28_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist entry missing 'id' → gate ABORTS"
+else
+  fail "allowlist entry missing 'id' → gate passed — schema not validated"
+fi
+if printf '%s' "$stderr_out" | grep -q 'malformed'; then
+  pass "missing 'id' prints 'malformed' message"
+else
+  fail "missing 'id' missing 'malformed' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP28" "$TMPD28_AL"
+
+# Test 29: allowlist entry missing "expires" field → gate ABORTS
+printf '\nTest 29: allowlist entry missing "expires" field → ABORTS\n'
+NO_EXPIRES_ALLOWLIST='[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test"}]'
+TMPD29_AL="$(write_temp_allowlist "$NO_EXPIRES_ALLOWLIST")"
+TMP29="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP29" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP29" "$TMPD29_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist entry missing 'expires' → gate ABORTS"
+else
+  fail "allowlist entry missing 'expires' → gate passed — schema not validated"
+fi
+if printf '%s' "$stderr_out" | grep -q 'malformed'; then
+  pass "missing 'expires' prints 'malformed' message"
+else
+  fail "missing 'expires' missing 'malformed' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP29" "$TMPD29_AL"
+
+# Test 30: duplicate GHSA id in allowlist → gate ABORTS
+printf '\nTest 30: duplicate GHSA id in allowlist → ABORTS\n'
+DUPLICATE_ID_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"},{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"dup","expires":"%s"}]' "$FUTURE_EXPIRES" "$FUTURE_EXPIRES")"
+TMPD30_AL="$(write_temp_allowlist "$DUPLICATE_ID_ALLOWLIST")"
+TMP30="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP30" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP30" "$TMPD30_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "duplicate GHSA id in allowlist → gate ABORTS"
+else
+  fail "duplicate GHSA id in allowlist → gate passed — duplicate not detected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'duplicate\|malformed'; then
+  pass "duplicate id prints duplicate/malformed message"
+else
+  fail "duplicate id missing duplicate/malformed message in stderr: $stderr_out"
+fi
+rm -rf "$TMP30" "$TMPD30_AL"
+
+# Test 31: valid allowlist with future expiry → gate passes normally
+printf '\nTest 31: valid allowlist with future expiry → gate passes normally\n'
+VALID_FUTURE_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD31_AL="$(write_temp_allowlist "$VALID_FUTURE_ALLOWLIST")"
+TMP31="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP31" "$ALLOWLISTED_JSON" 1
+# Only GHSA-w7jw-789q-3m8p is allowlisted; the other two in ALLOWLISTED_JSON are not → should fail
+rc=0
+run_gate_with_allowlist "$TMP31" "$TMPD31_AL/allowlist.json" 2>/dev/null || rc=$?
+# We expect failure here because ALLOWLISTED_JSON has 3 advisories but only 1 is in allowlist
+if [[ $rc -ne 0 ]]; then
+  pass "partial allowlist (1 of 3 allowlisted) → gate correctly rejects non-allowlisted entries"
+else
+  fail "partial allowlist → gate passed when it should have rejected non-allowlisted entries"
+fi
+rm -rf "$TMP31" "$TMPD31_AL"
+
+# Test 32: clean audit with valid future-expiry allowlist → gate passes
+printf '\nTest 32: clean audit with valid future-expiry allowlist → gate passes\n'
+TMPD32_AL="$(write_temp_allowlist "$VALID_FUTURE_ALLOWLIST")"
+TMP32="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP32" "$CLEAN_JSON" 0
+if out="$(run_gate_with_allowlist "$TMP32" "$TMPD32_AL/allowlist.json" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "clean audit with valid future-expiry allowlist → passes and reports PASSED"
+  else
+    fail "clean audit with valid allowlist passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "clean audit with valid future-expiry allowlist → unexpected non-zero exit"
+fi
+rm -rf "$TMP32" "$TMPD32_AL"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

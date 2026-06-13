@@ -48,7 +48,20 @@ This is distinct from an advisory failure message, which lists `NON-ALLOWLISTED`
 
 #### Advisory allowlist
 
-`scripts/audit-allowlist.json` is the machine-readable source of truth for accepted risks. Each entry contains the GHSA ID, package name, severity, a deployment-model rationale, and a review date. The gate reads this file at runtime — adding an entry here is the correct way to accept a known advisory rather than using `SKIP_AUDIT=1`.
+`scripts/audit-allowlist.json` is the machine-readable source of truth for accepted risks. Each entry requires the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | GHSA advisory ID (non-empty, unique) |
+| `package` | string | Affected package name |
+| `severity` | string | Advisory severity (`high` or `critical`) |
+| `reason` | string | Rationale for acceptance (deployment context, unreachable code path, etc.) |
+| `expires` | string | Expiry date in `YYYY-MM-DD` format — the gate rejects entries past this date |
+| `reviewDate` | string | When the entry was last reviewed (informational) |
+
+The gate validates all required fields and rejects the run (exit 3) if any entry is malformed, contains a duplicate GHSA `id`, or is **expired** (current date > `expires`). An expired entry requires the advisory to be re-reviewed and the `expires` date updated — or the advisory resolved — before a new release can proceed.
+
+Adding an entry with a realistic `expires` date (typically 3–6 months from review) is the correct way to accept a known advisory rather than using `SKIP_AUDIT=1`.
 
 See `SECURITY.md → Accepted Risks` for a human-readable summary of each accepted advisory.
 
