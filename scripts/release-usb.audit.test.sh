@@ -1406,6 +1406,38 @@ else
 fi
 rm -rf "$TMP55" "$TMPD55_AL"
 
+# --- Fix 2 trap-restoration tests (success path) ------------------------------
+
+# Test 56: caller INT and TERM traps are preserved on the SUCCESS path
+# We install sentinel traps before sourcing the gate, run the gate through a
+# success path, then verify trap -p INT and trap -p TERM still show our handlers.
+printf '\nTest 56: success path → caller INT and TERM traps are restored after run_audit_gate\n'
+TMP56="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP56" "$CLEAN_JSON" 0
+trap_check_out="$(env PATH="$TMP56:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  set -euo pipefail
+  source '$GATE_SCRIPT'
+  # Install sentinel caller traps AFTER sourcing (gate is not yet called).
+  trap 'echo SENTINEL_INT'  INT
+  trap 'echo SENTINEL_TERM' TERM
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  # After the successful return, report what trap -p shows for INT and TERM.
+  trap -p INT
+  trap -p TERM
+" 2>/dev/null)"
+if printf '%s' "$trap_check_out" | grep -q 'SENTINEL_INT'; then
+  pass "success path → caller INT trap is restored (sentinel handler still registered)"
+else
+  fail "success path → caller INT trap was DESTROYED (sentinel handler missing); trap output: $trap_check_out"
+fi
+if printf '%s' "$trap_check_out" | grep -q 'SENTINEL_TERM'; then
+  pass "success path → caller TERM trap is restored (sentinel handler still registered)"
+else
+  fail "success path → caller TERM trap was DESTROYED (sentinel handler missing); trap output: $trap_check_out"
+fi
+rm -rf "$TMP56"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

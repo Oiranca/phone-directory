@@ -502,7 +502,9 @@ run_audit_gate() {
   # The EXIT trap is a belt-and-suspenders for the interruption path.
   rm -f "$_pnpm_stderr_file"
   trap - EXIT INT TERM
-  eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
+  eval "${_prev_trap_EXIT:-true}"  2>/dev/null || true
+  eval "${_prev_trap_INT:-true}"   2>/dev/null || true
+  eval "${_prev_trap_TERM:-true}"  2>/dev/null || true
 
   # Feed JSON through the Node filter
   local filter_output
