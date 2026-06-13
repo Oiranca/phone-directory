@@ -55,6 +55,44 @@ process.stdin.on("end", () => {
   const hasMetadata       = Object.prototype.hasOwnProperty.call(data, "metadata");
   const hasError          = Object.prototype.hasOwnProperty.call(data, "error");
 
+  // Strict container type checks — the advisory container must be a PLAIN
+  // OBJECT (not array, not string, not null).  Any other shape is a malformed
+  // or inconsistent payload; we must never pass it silently.
+  const advisoriesVal = data.advisories;
+  const vulnerabilitiesVal = data.vulnerabilities;
+  const advisoriesIsPlainObj = hasAdvisories &&
+    advisoriesVal !== null && typeof advisoriesVal === "object" && !Array.isArray(advisoriesVal);
+  const vulnerabilitiesIsPlainObj = hasVulnerabilities &&
+    vulnerabilitiesVal !== null && typeof vulnerabilitiesVal === "object" && !Array.isArray(vulnerabilitiesVal);
+
+  // Reject if the key is present but is not a plain object.
+  if (hasAdvisories && !advisoriesIsPlainObj) {
+    process.stderr.write(
+      "[audit-gate] pnpm audit response has 'advisories' but it is not a plain object (got: " +
+      (Array.isArray(advisoriesVal) ? "array" : typeof advisoriesVal) +
+      ") — malformed or inconsistent payload.\n"
+    );
+    process.exit(3);
+  }
+  if (hasVulnerabilities && !vulnerabilitiesIsPlainObj) {
+    process.stderr.write(
+      "[audit-gate] pnpm audit response has 'vulnerabilities' but it is not a plain object (got: " +
+      (Array.isArray(vulnerabilitiesVal) ? "array" : typeof vulnerabilitiesVal) +
+      ") — malformed or inconsistent payload.\n"
+    );
+    process.exit(3);
+  }
+
+  // Reject AMBIGUOUS/MIXED shapes: both advisory container keys present.
+  // A real pnpm audit uses one schema or the other — never both.
+  if (advisoriesIsPlainObj && vulnerabilitiesIsPlainObj) {
+    process.stderr.write(
+      "[audit-gate] pnpm audit response has BOTH 'advisories' and 'vulnerabilities' containers — " +
+      "ambiguous schema, cannot safely evaluate.\n"
+    );
+    process.exit(3);
+  }
+
   if (!hasAdvisories && !hasVulnerabilities && !hasMetadata) {
     // No recognisable advisory container — could be an error envelope or
     // totally unknown shape.  Either way it is not a confirmed clean audit.
@@ -63,6 +101,24 @@ process.stdin.on("end", () => {
       : "unrecognised response shape";
     process.stderr.write("[audit-gate] pnpm audit did not return a recognisable audit result (" + detail + ") — likely a network, lockfile, or registry error.\n");
     process.exit(3);
+  }
+
+  // For a PASS, require pnpm metadata: data.metadata.vulnerabilities must be a
+  // plain object.  A real pnpm audit (both clean and with findings) always
+  // emits it.  If the chosen advisory container is a valid empty object but
+  // metadata.vulnerabilities is missing/null/non-object, the payload is
+  // malformed — exit 3 so it can never silently pass.
+  // We apply this check early (before iterating advisories) so that an empty
+  // advisories:{} + pnpm exit 1 combo cannot sneak through as PASSED.
+  if (advisoriesIsPlainObj && !hasVulnerabilities) {
+    const mv = data.metadata ? data.metadata.vulnerabilities : undefined;
+    if (mv === null || mv === undefined || typeof mv !== "object" || Array.isArray(mv)) {
+      process.stderr.write(
+        "[audit-gate] advisories container present but metadata.vulnerabilities missing/null — " +
+        "inconsistent audit response (real pnpm always emits a vulnerabilities object in metadata).\n"
+      );
+      process.exit(3);
+    }
   }
 
   // --- load allowlist -------------------------------------------------------
@@ -83,8 +139,8 @@ process.stdin.on("end", () => {
   let iteratedHighCrit = 0;
 
   // --- v6 schema: data.advisories -------------------------------------------
-  if (hasAdvisories) {
-    const advisories = data.advisories || {};
+  if (advisoriesIsPlainObj) {
+    const advisories = advisoriesVal;
     for (const [, adv] of Object.entries(advisories)) {
       const sev = (adv.severity || "").toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;
@@ -98,8 +154,8 @@ process.stdin.on("end", () => {
   }
 
   // --- v7 schema: data.vulnerabilities --------------------------------------
-  if (hasVulnerabilities) {
-    const vulns = data.vulnerabilities || {};
+  if (vulnerabilitiesIsPlainObj) {
+    const vulns = vulnerabilitiesVal;
     for (const [pkgName, vuln] of Object.entries(vulns)) {
       const sev = (vuln.severity || "").toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;

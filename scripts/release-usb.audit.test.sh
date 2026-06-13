@@ -541,6 +541,124 @@ else
 fi
 rm -rf "$TMP18"
 
+# --- strict schema validation tests (Fix A — fail-open regression coverage) ---
+
+# Test 19: advisories is an ARRAY → ABORTS (exit 3), never PASSED
+printf '\nTest 19: {"advisories":[]} (array, not object) → ABORTS (exit 3)\n'
+ADVISORIES_ARRAY_JSON='{"advisories":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP19="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP19" "$ADVISORIES_ARRAY_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP19:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "advisories:[] (array) → aborts (exit 3), not passed"
+else
+  fail "advisories:[] (array) → silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'not a plain object'; then
+  pass "advisories:[] prints 'not a plain object' message"
+else
+  fail "advisories:[] missing 'not a plain object' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP19"
+
+# Test 20: advisories is a STRING → ABORTS (exit 3), never PASSED
+printf '\nTest 20: {"advisories":"corrupt"} (string) → ABORTS (exit 3)\n'
+ADVISORIES_STRING_JSON='{"advisories":"corrupt","metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP20="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP20" "$ADVISORIES_STRING_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP20:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "advisories:\"corrupt\" (string) → aborts (exit 3), not passed"
+else
+  fail "advisories:\"corrupt\" (string) → silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'not a plain object'; then
+  pass "advisories:\"corrupt\" prints 'not a plain object' message"
+else
+  fail "advisories:\"corrupt\" missing 'not a plain object' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP20"
+
+# Test 21: vulnerabilities key present as array → ABORTS (exit 3), never PASSED
+printf '\nTest 21: {"vulnerabilities":[]} (array, not object) → ABORTS (exit 3)\n'
+VULNERABILITIES_ARRAY_JSON='{"vulnerabilities":[]}'
+TMP21="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP21" "$VULNERABILITIES_ARRAY_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP21:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "vulnerabilities:[] (array) → aborts (exit 3), not passed"
+else
+  fail "vulnerabilities:[] (array) → silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'not a plain object'; then
+  pass "vulnerabilities:[] prints 'not a plain object' message"
+else
+  fail "vulnerabilities:[] missing 'not a plain object' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP21"
+
+# Test 22: advisories:{} with pnpm exit 1 and missing metadata → ABORTS (exit 3)
+# This is the specific "advisories:{} + pnpm exit 1" fail-open vector
+printf '\nTest 22: {"advisories":{}} with pnpm exit 1, no metadata → ABORTS (exit 3)\n'
+ADVISORIES_EMPTY_NO_META_JSON='{"advisories":{}}'
+TMP22="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP22" "$ADVISORIES_EMPTY_NO_META_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP22:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "advisories:{} + pnpm exit 1 + no metadata → aborts (exit 3), not passed"
+else
+  fail "advisories:{} + pnpm exit 1 + no metadata → silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "advisories:{} + no metadata prints inconsistency message"
+else
+  fail "advisories:{} + no metadata missing inconsistency message in stderr: $stderr_out"
+fi
+rm -rf "$TMP22"
+
+# Test 23: BOTH advisories AND vulnerabilities present → ABORTS (exit 3, ambiguous)
+printf '\nTest 23: both "advisories" and "vulnerabilities" present → ABORTS (exit 3, ambiguous)\n'
+BOTH_CONTAINERS_JSON='{"advisories":{},"vulnerabilities":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP23="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP23" "$BOTH_CONTAINERS_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP23:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "both advisories + vulnerabilities containers → aborts (exit 3, ambiguous)"
+else
+  fail "both advisories + vulnerabilities containers → silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'ambiguous'; then
+  pass "both containers present prints 'ambiguous' message"
+else
+  fail "both containers present missing 'ambiguous' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP23"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
