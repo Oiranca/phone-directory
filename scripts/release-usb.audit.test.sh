@@ -275,6 +275,127 @@ for val in "true" "yes" "2" "TRUE"; do
 done
 rm -rf "$TMP6"
 
+# --- new edge-case tests (fail-open bug coverage) ------------------------------
+
+# JSON payloads for new tests
+
+# Valid-JSON pnpm error envelope (EAUDITNOLOCK) — no advisory container at all
+ERROR_ENVELOPE_JSON='{"error":{"code":"EAUDITNOLOCK"}}'
+
+# npm v7 vulnerabilities schema — non-allowlisted critical
+VULN_SCHEMA_CRITICAL_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad pkg vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}}}'
+
+# npm v7 vulnerabilities schema — only allowlisted advisories (all three from allowlist)
+VULN_SCHEMA_ALLOWLISTED_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false},"esbuild":{"name":"esbuild","severity":"high","via":[{"ghsaId":"GHSA-gv7w-rqvm-qjhr","title":"esbuild vuln","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}}}'
+
+# Test 7: Valid-JSON error envelope with non-zero pnpm exit → gate ABORTS (infra path)
+printf '\nTest 7: Valid-JSON error envelope (EAUDITNOLOCK) + non-zero exit → aborts safe\n'
+TMP7="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP7" "$ERROR_ENVELOPE_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP7:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "valid-JSON error envelope causes non-zero exit (not a silent pass)"
+else
+  fail "valid-JSON error envelope was silently passed (exit 0) — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'non-advisory error'; then
+  pass "valid-JSON error envelope triggers infra-error message"
+else
+  fail "valid-JSON error envelope missing infra-error message in stderr: $stderr_out"
+fi
+if printf '%s' "$stderr_out" | grep -q 'PASSED'; then
+  fail "valid-JSON error envelope wrongly emitted PASSED"
+else
+  pass "valid-JSON error envelope does not emit PASSED"
+fi
+rm -rf "$TMP7"
+
+# Test 8: vulnerabilities-keyed schema with non-allowlisted critical → gate ABORTS
+printf '\nTest 8: npm v7 vulnerabilities schema — non-allowlisted critical → aborts\n'
+TMP8="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP8" "$VULN_SCHEMA_CRITICAL_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP8:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "vulnerabilities-schema non-allowlisted critical causes non-zero exit"
+else
+  fail "vulnerabilities-schema non-allowlisted critical was silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "vulnerabilities-schema prints NON-ALLOWLISTED message"
+else
+  fail "vulnerabilities-schema missing NON-ALLOWLISTED message: $stderr_out"
+fi
+rm -rf "$TMP8"
+
+# Test 9: vulnerabilities-keyed schema with only allowlisted advisories → passes
+printf '\nTest 9: npm v7 vulnerabilities schema — allowlisted-only advisories → passes\n'
+TMP9="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP9" "$VULN_SCHEMA_ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP9" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "vulnerabilities-schema allowlisted-only advisories pass the gate"
+  else
+    fail "vulnerabilities-schema allowlisted audit passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "vulnerabilities-schema allowlisted-only audit exited non-zero (expected pass)"
+fi
+rm -rf "$TMP9"
+
+# Test 10: bare null output → aborts safely with infra message (no crash / TypeError)
+printf '\nTest 10: bare null JSON output → aborts safely (no unhandled error)\n'
+TMP10="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP10" "null" 0
+rc=0
+stderr_out="$(env PATH="$TMP10:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "null JSON output causes non-zero exit"
+else
+  fail "null JSON output was silently passed or did not abort"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'typeerror\|cannot read propert'; then
+  fail "null JSON output produced an unhandled TypeError: $stderr_out"
+else
+  pass "null JSON output does not produce an unhandled TypeError"
+fi
+if printf '%s' "$stderr_out" | grep -q 'non-advisory error'; then
+  pass "null JSON output triggers infra-error message"
+else
+  fail "null JSON output missing infra-error message: $stderr_out"
+fi
+rm -rf "$TMP10"
+
+# Test 11: non-zero pnpm exit + empty stdout → aborts (no silent pass)
+printf '\nTest 11: non-zero pnpm exit + empty stdout → aborts\n'
+TMP11="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP11" "" 1
+rc=0
+stderr_out="$(env PATH="$TMP11:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "non-zero pnpm exit + empty output causes non-zero gate exit"
+else
+  fail "non-zero pnpm exit + empty output was silently passed — fail-open bug"
+fi
+rm -rf "$TMP11"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
