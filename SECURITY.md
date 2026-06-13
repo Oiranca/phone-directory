@@ -85,7 +85,7 @@ Files exceeding these limits will be rejected with an error message instructing 
 
 ### Pre-Release Audit Gate
 
-The USB release script (`scripts/release-usb.sh`) runs `pnpm audit --audit-level=high` automatically before every build. If high-severity or critical advisories are present the release is aborted with a non-zero exit code. No USB artifact will be produced until the gate passes.
+The USB release script (`scripts/release-usb.sh`) sources `scripts/lib/audit-gate.sh` and runs `pnpm audit --json` automatically before every build. The raw JSON output is filtered through `scripts/audit-allowlist.json`: advisories whose GHSA ID appears in the allowlist are accepted; any remaining high-severity or critical advisory that is **not** in the allowlist aborts the release with a non-zero exit code. Infrastructure errors (missing lockfile, registry unreachable, invalid output) also abort the release — the gate fails safe rather than fail-open. No USB artifact will be produced until the gate passes.
 
 ### Manual Update Cadence
 
