@@ -105,3 +105,25 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [14:17] Router + AppShell nav + keyboard shortcuts updated
 - [14:20] All tests passing: 772 pass, 2 skipped. Build + typecheck clean.
 - [14:21] ✅ Complete — pushed to feat/oir-60-build-duplicate-review-and-safe-merge-workflow
+
+#### [OIR-53] software-engineer — local dependency audit gate
+- [09:00] Task start: adding pnpm audit gate to release-usb.sh, documenting in SECURITY.md and scripts/README.md
+- [10:00] Edited scripts/release-usb.sh: added SKIP_AUDIT gate after typecheck step
+- [10:00] Edited SECURITY.md: added Dependency Update Cadence section
+- [10:00] Edited scripts/README.md: added audit gate note under release-usb.sh
+- [10:00] bash -n scripts/release-usb.sh — syntax OK
+- [10:00] pnpm run ci — 66 test files, 954 passed, 2 skipped, build passed
+- [10:00] Confirmed package.json and pnpm-lock.yaml unchanged
+- [10:00] ✅ Complete — 2 commits on feat/oir-53-local-dependency-audit (cf9edb5, ba5db1d)
+
+#### [oir-53-doc-polish] software-engineer — OIR-53 doc clarifications (SKIP_AUDIT + audit gate fail-safe)
+- [10:03] Task started — reading SECURITY.md and scripts/README.md
+- [10:04] Added SKIP_AUDIT=1 exactness note to SECURITY.md
+- [10:04] Added transient failure / safe-fail note to scripts/README.md Dependency Audit Gate section
+- [10:04] pnpm run ci: 66 test files, 954 passed, 2 skipped — typecheck clean, build clean
+- [10:05] ✅ Complete — committed 2ac573c on feat/oir-53-local-dependency-audit
+
+#### [OIR-53 PR#58] software-engineer — review-comment fixes
+- [10:26] Task start: 4 blocking reviewer comments to fix — allowlist, bypass traceability, infra error distinction, test coverage
+- [10:26] Advisories confirmed: GHSA-w7jw-789q-3m8p (shell-quote critical), GHSA-ph9p-34f9-6g65 (tmp high), GHSA-gv7w-rqvm-qjhr (esbuild high)
+- [10:27] Commit 1: creating scripts/audit-allowlist.json and scripts/lib/audit-gate.sh with allowlist-filtered logic

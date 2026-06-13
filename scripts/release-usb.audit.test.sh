@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+# release-usb.audit.test.sh — isolated stubbed-pnpm tests for the audit gate
+#
+# Run standalone:
+#   bash scripts/release-usb.audit.test.sh
+#
+# All tests use a fake 'pnpm' on PATH that emits canned JSON/exit codes.
+# The real pnpm binary is never invoked.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GATE_SCRIPT="$REPO_ROOT/scripts/lib/audit-gate.sh"
+ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
+
+# --- test infrastructure -------------------------------------------------------
+
+PASS_COUNT=0
+FAIL_COUNT=0
+FAILURES=()
+
+pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf '  PASS: %s\n' "$1"; }
+fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); FAILURES+=("$1"); printf '  FAIL: %s\n' "$1"; }
+
+assert_exit_0() {
+  local desc="$1"; shift
+  if env "$@" 2>/dev/null; then
+    pass "$desc"
+  else
+    fail "$desc (expected exit 0, got $?)"
+  fi
+}
+
+assert_exit_nonzero() {
+  local desc="$1"; shift
+  local rc=0
+  env "$@" 2>/dev/null || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    pass "$desc"
+  else
+    fail "$desc (expected non-zero exit, got 0)"
+  fi
+}
+
+assert_stderr_contains() {
+  local desc="$1"
+  local pattern="$2"
+  shift 2
+  local stderr_out
+  stderr_out="$(env "$@" 2>&1 >/dev/null)" || true
+  if printf '%s' "$stderr_out" | grep -qF "$pattern"; then
+    pass "$desc"
+  else
+    fail "$desc (expected stderr to contain: $pattern)"
+    printf '    actual stderr: %s\n' "$stderr_out"
+  fi
+}
+
+# Build a temporary directory with a fake pnpm on PATH
+setup_fake_pnpm() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  printf '%s' "$tmpdir"
+}
+
+write_fake_pnpm() {
+  local bindir="$1"
+  local json_output="$2"
+  local exit_code="${3:-0}"
+  cat > "$bindir/pnpm" <<STUB
+#!/usr/bin/env bash
+# Fake pnpm for audit gate tests
+if [[ "\${1:-}" == "audit" ]]; then
+  printf '%s' '${json_output}'
+  exit ${exit_code}
+fi
+# Pass through any other pnpm commands (unused in gate tests)
+exec pnpm-real "\$@"
+STUB
+  chmod +x "$bindir/pnpm"
+}
+
+# JSON payloads used across tests
+
+# No advisories at all
+CLEAN_JSON='{"actions":[],"advisories":{},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0},"dependencies":584}}'
+
+# Only advisories that ARE in the allowlist (shell-quote critical, tmp high, esbuild high)
+ALLOWLISTED_JSON='{"actions":[],"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":["CVE-2026-9277"]},"2":{"findings":[],"id":2,"severity":"high","module_name":"tmp","title":"tmp vuln","github_advisory_id":"GHSA-ph9p-34f9-6g65","vulnerable_versions":"<0.2.6","cves":["CVE-2026-44705"]},"3":{"findings":[],"id":3,"severity":"high","module_name":"esbuild","title":"esbuild vuln","github_advisory_id":"GHSA-gv7w-rqvm-qjhr","vulnerable_versions":"<0.28.1","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":2,"critical":1},"dependencies":584}}'
+
+# A brand-new non-allowlisted critical advisory
+NEW_CRITICAL_JSON='{"actions":[],"advisories":{"99":{"findings":[],"id":99,"severity":"critical","module_name":"some-pkg","title":"New unknown critical","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"critical":1},"dependencies":584}}'
+
+# Non-allowlisted high advisory
+NEW_HIGH_JSON='{"actions":[],"advisories":{"100":{"findings":[],"id":100,"severity":"high","module_name":"some-other-pkg","title":"New unknown high","github_advisory_id":"GHSA-aaaa-aaaa-aaaa","vulnerable_versions":"<2.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":1},"dependencies":584}}'
+
+# Unparseable output simulates infra/registry error
+INFRA_ERROR_OUTPUT='Error: ECONNREFUSED connect ECONNREFUSED 127.0.0.1:4873'
+
+# run_gate_in_subshell <bindir> [extra env vars...]
+# Sources the gate and calls run_audit_gate; returns its exit code.
+run_gate_in_subshell() {
+  local bindir="$1"; shift
+  env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" "$@" bash -c "
+    set -euo pipefail
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+    printf '%s\n' \"\$AUDIT_STATUS_LINE\"
+  "
+}
+
+# --- tests ---------------------------------------------------------------------
+
+printf '\nAudit gate tests\n'
+printf '================\n\n'
+
+# Test 1: Clean — no advisories at all → gate passes
+printf 'Test 1: No advisories → gate passes\n'
+TMP1="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP1" "$CLEAN_JSON" 0
+if out="$(run_gate_in_subshell "$TMP1" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "clean audit passes and reports PASSED status"
+  else
+    fail "clean audit passes but status line missing 'PASSED': $out"
+  fi
+else
+  fail "clean audit exited non-zero (expected pass)"
+fi
+rm -rf "$TMP1"
+
+# Test 2: Non-allowlisted advisory → non-zero exit; tests/build NOT executed
+printf '\nTest 2: Non-allowlisted critical advisory → gate aborts\n'
+TMP2="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP2" "$NEW_CRITICAL_JSON" 1
+rc=0
+run_gate_in_subshell "$TMP2" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "non-allowlisted critical advisory causes non-zero exit"
+else
+  fail "non-allowlisted critical advisory did not abort (exit was 0)"
+fi
+
+# Also verify advisory failure message on stderr
+stderr_out="$(env PATH="$TMP2:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || true
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "non-allowlisted advisory prints NON-ALLOWLISTED message"
+else
+  fail "non-allowlisted advisory missing NON-ALLOWLISTED in stderr: $stderr_out"
+fi
+
+# Verify the advisory failure message does NOT say "infra" / "network"
+if printf '%s' "$stderr_out" | grep -q 'non-advisory error'; then
+  fail "advisory failure wrongly printed infra-error message"
+else
+  pass "advisory failure does not print infra-error message"
+fi
+rm -rf "$TMP2"
+
+# Test 3: Only allowlisted advisories → gate passes
+printf '\nTest 3: Allowlisted-only advisories → gate passes\n'
+TMP3="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP3" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP3" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "all-allowlisted advisories pass the gate"
+  else
+    fail "all-allowlisted audit passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "all-allowlisted audit exited non-zero (expected pass)"
+fi
+rm -rf "$TMP3"
+
+# Test 4: Registry/network infra failure → fails safe with generic infra message
+printf '\nTest 4: Registry/network infra error → fails safe with infra message\n'
+TMP4="$(setup_fake_pnpm)"
+# Emit unparseable text (not JSON) and non-zero exit
+write_fake_pnpm "$TMP4" "$INFRA_ERROR_OUTPUT" 1
+rc=0
+stderr_out="$(env PATH="$TMP4:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "infra error causes non-zero exit (safe-fail)"
+else
+  fail "infra error did not cause non-zero exit"
+fi
+if printf '%s' "$stderr_out" | grep -q 'non-advisory error'; then
+  pass "infra error prints generic non-advisory-error message"
+else
+  fail "infra error missing 'non-advisory error' in stderr: $stderr_out"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  fail "infra error wrongly printed NON-ALLOWLISTED advisory message"
+else
+  pass "infra error does not print NON-ALLOWLISTED message"
+fi
+rm -rf "$TMP4"
+
+# Test 5a: SKIP_AUDIT=1 without SKIP_AUDIT_REASON → aborts
+printf '\nTest 5a: SKIP_AUDIT=1 without reason → aborts\n'
+TMP5a="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP5a" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP5a:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "SKIP_AUDIT=1 without reason aborts with non-zero exit"
+else
+  fail "SKIP_AUDIT=1 without reason did not abort"
+fi
+if printf '%s' "$stderr_out" | grep -q 'SKIP_AUDIT_REASON'; then
+  pass "SKIP_AUDIT=1 without reason prints SKIP_AUDIT_REASON guidance"
+else
+  fail "SKIP_AUDIT=1 without reason missing guidance in stderr: $stderr_out"
+fi
+rm -rf "$TMP5a"
+
+# Test 5b: SKIP_AUDIT=1 with SKIP_AUDIT_REASON → bypasses and records in status
+printf '\nTest 5b: SKIP_AUDIT=1 with reason → bypasses, sets status line\n'
+TMP5b="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP5b" "$NEW_CRITICAL_JSON" 1
+if out="$(env PATH="$TMP5b:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="accepted per SECURITY.md" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)"; then
+  pass "SKIP_AUDIT=1 with reason exits 0"
+  if printf '%s' "$out" | grep -q 'BYPASSED'; then
+    pass "bypass records BYPASSED in status line"
+  else
+    fail "bypass status line missing 'BYPASSED': $out"
+  fi
+  if printf '%s' "$out" | grep -q 'accepted per SECURITY.md'; then
+    pass "bypass status line includes the provided reason"
+  else
+    fail "bypass status line missing reason text: $out"
+  fi
+else
+  fail "SKIP_AUDIT=1 with reason exited non-zero"
+fi
+rm -rf "$TMP5b"
+
+# Test 6: SKIP_AUDIT=true / yes / 2 → gate still runs (strict == "1")
+printf '\nTest 6: SKIP_AUDIT=true/yes/2 → gate still runs (non-"1" values ignored)\n'
+TMP6="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP6" "$ALLOWLISTED_JSON" 1   # only allowlisted → should pass
+for val in "true" "yes" "2" "TRUE"; do
+  if out="$(env PATH="$TMP6:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT="$val" bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+    printf '%s' \"\$AUDIT_STATUS_LINE\"
+  " 2>/dev/null)"; then
+    if printf '%s' "$out" | grep -q 'PASSED'; then
+      pass "SKIP_AUDIT=$val → gate runs and passes (allowlisted advisories)"
+    else
+      fail "SKIP_AUDIT=$val → gate ran but status line unexpected: $out"
+    fi
+  else
+    fail "SKIP_AUDIT=$val → gate exited non-zero (should have run and passed)"
+  fi
+done
+rm -rf "$TMP6"
+
+# --- summary -------------------------------------------------------------------
+
+printf '\n================================\n'
+printf 'Results: %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
+if [[ $FAIL_COUNT -gt 0 ]]; then
+  printf '\nFailed tests:\n'
+  for f in "${FAILURES[@]}"; do
+    printf '  - %s\n' "$f"
+  done
+  exit 1
+fi
+printf 'All tests passed.\n'
