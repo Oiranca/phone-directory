@@ -105,6 +105,21 @@ process.stdin.on("end", () => {
     process.exit(3);
   }
 
+  // Require at least one advisory container key (advisories or vulnerabilities)
+  // for any PASS.  A payload that has ONLY metadata (e.g.
+  // {"metadata":{"vulnerabilities":{"high":0,"critical":0}}}) is malformed:
+  // real pnpm always emits an advisory container alongside metadata.
+  // Without this guard a metadata-only payload (all-zero counts) returns exit 0
+  // even though no advisory container was parsed — a fail-open.
+  if (!hasAdvisories && !hasVulnerabilities && hasMetadata) {
+    process.stderr.write(
+      "[audit-gate] pnpm audit response has 'metadata' but no advisory container " +
+      "('advisories' or 'vulnerabilities') — malformed or inconsistent payload " +
+      "(real pnpm always emits an advisory container alongside metadata).\n"
+    );
+    process.exit(3);
+  }
+
   // For a PASS, require pnpm metadata: data.metadata.vulnerabilities must be a
   // plain object.  A real pnpm audit (both clean and with findings) always
   // emits it.  If the chosen advisory container is a valid empty object but

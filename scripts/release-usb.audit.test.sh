@@ -495,7 +495,7 @@ if [[ $rc -ne 0 ]]; then
 else
   fail "metadata present, vulnerabilities absent, no advisories → silently passed (fail-open bug)"
 fi
-if printf '%s' "$stderr_out" | grep -q 'metadata present but metadata.vulnerabilities missing/null'; then
+if printf '%s' "$stderr_out" | grep -qi 'advisory container\|metadata present but metadata.vulnerabilities missing'; then
   pass "metadata-only with absent vulnerabilities prints expected error message"
 else
   fail "metadata-only with absent vulnerabilities missing expected message in stderr: $stderr_out"
@@ -913,6 +913,65 @@ else
   fail "roll-over expires missing malformed message in stderr: $stderr_out"
 fi
 rm -rf "$TMP34" "$TMPD34_AL"
+
+# --- Fix 2: metadata-only payload (no advisory container) → ABORTS (exit 3) ---
+
+# Test 35: payload with only metadata.vulnerabilities all-zero (no advisories key) → ABORTS (exit 3)
+printf '\nTest 35: {"metadata":{"vulnerabilities":{"high":0,"critical":0}}} (no advisory container) → ABORTS (exit 3)\n'
+META_ONLY_ALLZERO_JSON='{"metadata":{"vulnerabilities":{"high":0,"critical":0}}}'
+TMP35="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP35" "$META_ONLY_ALLZERO_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP35:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "metadata-only all-zero payload (no advisory container) → gate ABORTS (exit 3)"
+else
+  fail "metadata-only all-zero payload → gate PASSED — fail-open: advisory container required"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'advisory container\|malformed\|inconsistent'; then
+  pass "metadata-only payload prints advisory-container-required message"
+else
+  fail "metadata-only payload missing advisory-container message in stderr: $stderr_out"
+fi
+rm -rf "$TMP35"
+
+# Regression guards: genuine clean v6 and v7 still pass after Fix 2
+
+# Test 36: genuine clean v6 (advisories:{} + metadata all-zero) still PASSES
+printf '\nTest 36: genuine clean v6 {"advisories":{},"metadata":{"vulnerabilities":{...0}}} still PASSES\n'
+CLEAN_V6_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP36="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP36" "$CLEAN_V6_JSON" 0
+if out="$(run_gate_in_subshell "$TMP36" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "genuine clean v6 (advisories:{} + all-zero metadata) still PASSES after Fix 2"
+  else
+    fail "genuine clean v6 passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "genuine clean v6 exited non-zero — regression introduced by Fix 2"
+fi
+rm -rf "$TMP36"
+
+# Test 37: genuine clean v7 (vulnerabilities:{} + metadata) still PASSES
+printf '\nTest 37: genuine clean v7 {"vulnerabilities":{},"metadata":{...}} still PASSES\n'
+CLEAN_V7_JSON='{"vulnerabilities":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP37="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP37" "$CLEAN_V7_JSON" 0
+if out="$(run_gate_in_subshell "$TMP37" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "genuine clean v7 (vulnerabilities:{} + metadata) still PASSES after Fix 2"
+  else
+    fail "genuine clean v7 passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "genuine clean v7 exited non-zero — regression introduced by Fix 2"
+fi
+rm -rf "$TMP37"
 
 # --- summary -------------------------------------------------------------------
 
