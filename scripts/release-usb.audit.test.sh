@@ -872,6 +872,48 @@ else
 fi
 rm -rf "$TMP32" "$TMPD32_AL"
 
+# --- Fix 1: invalid expires date in allowlist (calendar-impossible dates) ------
+
+# Test 33: allowlist entry with impossible month (2026-13-40) → ABORTS (exit 3)
+printf '\nTest 33: allowlist entry expires:"2026-13-40" (impossible month) → ABORTS (exit 3)\n'
+INVALID_MONTH_ALLOWLIST='[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"2026-13-40"}]'
+TMPD33_AL="$(write_temp_allowlist "$INVALID_MONTH_ALLOWLIST")"
+TMP33="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP33" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP33" "$TMPD33_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist expires:\"2026-13-40\" (impossible month) → gate ABORTS (exit 3)"
+else
+  fail "allowlist expires:\"2026-13-40\" → gate passed — invalid date not rejected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'malformed\|valid calendar date'; then
+  pass "impossible-month expires prints malformed/invalid-date message"
+else
+  fail "impossible-month expires missing malformed message in stderr: $stderr_out"
+fi
+rm -rf "$TMP33" "$TMPD33_AL"
+
+# Test 34: allowlist entry with rolled-over date (2026-02-30 → JS rolls to Mar 2) → ABORTS (exit 3)
+printf '\nTest 34: allowlist entry expires:"2026-02-30" (roll-over date) → ABORTS (exit 3)\n'
+ROLLOVER_DATE_ALLOWLIST='[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"2026-02-30"}]'
+TMPD34_AL="$(write_temp_allowlist "$ROLLOVER_DATE_ALLOWLIST")"
+TMP34="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP34" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(run_gate_with_allowlist "$TMP34" "$TMPD34_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist expires:\"2026-02-30\" (roll-over) → gate ABORTS (exit 3)"
+else
+  fail "allowlist expires:\"2026-02-30\" → gate passed — rolled-over date not rejected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'malformed\|valid calendar date\|rolled over'; then
+  pass "roll-over expires prints malformed/rolled-over message"
+else
+  fail "roll-over expires missing malformed message in stderr: $stderr_out"
+fi
+rm -rf "$TMP34" "$TMPD34_AL"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

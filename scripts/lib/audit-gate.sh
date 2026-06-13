@@ -170,6 +170,37 @@ process.stdin.on("end", () => {
       process.exit(3);
     }
 
+    // Reject calendar-impossible dates that satisfy the regex but produce an
+    // Invalid Date or silently roll over to a different month/day in JS.
+    // Examples: "2026-13-40" → Invalid Date; "2026-02-30" → rolls to Mar 2.
+    // We construct the date early here (before the expiry check) so that an
+    // invalid date never reaches the `today > expiresDate` comparison, where
+    // `NaN > anything` evaluates to false (i.e. silently treats the entry as
+    // NOT expired, which is a fail-open).
+    const _expiresRaw = entry.expires.trim();
+    const _expiresDate = new Date(_expiresRaw + "T00:00:00Z");
+    if (isNaN(_expiresDate.getTime())) {
+      process.stderr.write(
+        "[audit-gate] " + idx + " (id: " + entry.id + ") 'expires' value \"" + _expiresRaw +
+        "\" is not a valid calendar date — allowlist is malformed.\n"
+      );
+      process.exit(3);
+    }
+    // Round-trip check: the parsed UTC year/month/day must equal the numbers
+    // in the input string.  This catches JS date roll-over (e.g. Feb 30 → Mar 2).
+    const _parsedY = _expiresDate.getUTCFullYear();
+    const _parsedM = _expiresDate.getUTCMonth() + 1; // getUTCMonth is 0-based
+    const _parsedD = _expiresDate.getUTCDate();
+    const [_inputY, _inputM, _inputD] = _expiresRaw.split("-").map(Number);
+    if (_parsedY !== _inputY || _parsedM !== _inputM || _parsedD !== _inputD) {
+      process.stderr.write(
+        "[audit-gate] " + idx + " (id: " + entry.id + ") 'expires' value \"" + _expiresRaw +
+        "\" is not a valid calendar date (parsed date rolled over to " +
+        _expiresDate.toISOString().slice(0, 10) + ") — allowlist is malformed.\n"
+      );
+      process.exit(3);
+    }
+
     // Duplicate GHSA id check.
     if (seenIds.has(entry.id)) {
       process.stderr.write("[audit-gate] Duplicate GHSA id '" + entry.id + "' in allowlist — allowlist is malformed.\n");
@@ -178,7 +209,8 @@ process.stdin.on("end", () => {
     seenIds.add(entry.id);
 
     // Expiry check: current date > expires date → this entry is expired.
-    const expiresDate = new Date(entry.expires.trim() + "T00:00:00Z");
+    // _expiresDate was validated above (not NaN, no roll-over); reuse it.
+    const expiresDate = _expiresDate;
     if (today > expiresDate) {
       process.stderr.write(
         "[audit-gate] Allowlist entry '" + entry.id + "' (package: " + entry.package + ") expired on " +
