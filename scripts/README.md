@@ -29,6 +29,18 @@ version, and source commit. Linux packages may also include
 For the full packaging and operator handoff process, see
 [../docs/USB_RELEASE_HANDOFF_CHECKLIST.md](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
 
+### Dependency Audit Gate
+
+The release script runs `pnpm audit --audit-level=high` early in the pipeline (after typecheck, before tests and build). If any high-severity or critical advisories are found the release exits immediately with a non-zero code and no artifact is produced.
+
+To bypass the gate when an advisory has been explicitly reviewed and accepted (see `SECURITY.md` → Accepted Risks):
+
+```bash
+SKIP_AUDIT=1 pnpm run release:usb
+```
+
+A warning line is printed to stderr when the override is active. Do not use `SKIP_AUDIT=1` to suppress uninvestigated advisories.
+
 ## `extract_ods_to_csv.py`
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.

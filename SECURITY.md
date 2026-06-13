@@ -64,6 +64,35 @@ To protect against resource exhaustion attacks, the following limits are enforce
 
 Files exceeding these limits will be rejected with an error message instructing the user to split the file and import in batches.
 
+## Dependency Update Cadence
+
+### Pre-Release Audit Gate
+
+The USB release script (`scripts/release-usb.sh`) runs `pnpm audit --audit-level=high` automatically before every build. If high-severity or critical advisories are present the release is aborted with a non-zero exit code. No USB artifact will be produced until the gate passes.
+
+### Manual Update Cadence
+
+Before each release:
+
+1. **Review and update Electron** — check the [Electron releases page](https://releases.electronjs.org/) for security releases. Update `electron` in `package.json` and validate the build passes.
+2. **Review critical dependencies** — check `react`, `react-router-dom`, `vite`, and any IPC/file-system utilities for known advisories.
+3. **Run `pnpm audit`** — review all reported advisories. Resolve high-severity and critical findings before producing USB artifacts. For advisories that cannot be patched (e.g. transitive dependency with no upstream fix), document them in the **Accepted Risks** section above with a clear mitigation rationale.
+4. **Document accepted risks** — any advisory explicitly accepted must be recorded in this file with severity, CVE/GHSA identifier, mitigation rationale, and remediation path.
+
+### SKIP_AUDIT Override
+
+The audit gate can be bypassed by setting `SKIP_AUDIT=1` before running the release script:
+
+```bash
+SKIP_AUDIT=1 pnpm run release:usb
+```
+
+**This override is for explicit, reviewed risk acceptance only.** Use it when:
+- A known advisory has already been documented and accepted in this file (e.g. the `vitest` and `tmp` entries above).
+- An upstream fix is not yet available and the risk has been assessed as acceptable for this deployment model.
+
+Do **not** use `SKIP_AUDIT=1` to suppress unknown or uninvestigated advisories. Any use of the override must be intentional and traceable.
+
 ## Future Distribution Recommendations
 
 If this application is ever distributed publicly (via GitHub releases, app stores, or direct download):
