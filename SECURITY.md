@@ -87,6 +87,8 @@ The audit gate can be bypassed by setting `SKIP_AUDIT=1` before running the rele
 SKIP_AUDIT=1 pnpm run release:usb
 ```
 
+The value must be exactly `1` — other values (`true`, `yes`, `2`, or empty string) are ignored and the gate remains active.
+
 **This override is for explicit, reviewed risk acceptance only.** Use it when:
 - A known advisory has already been documented and accepted in this file (e.g. the `vitest` and `tmp` entries above).
 - An upstream fix is not yet available and the risk has been assessed as acceptable for this deployment model.

@@ -33,6 +33,8 @@ For the full packaging and operator handoff process, see
 
 The release script runs `pnpm audit --audit-level=high` early in the pipeline (after typecheck, before tests and build). If any high-severity or critical advisories are found the release exits immediately with a non-zero code and no artifact is produced.
 
+The gate also aborts the release on transient `pnpm audit` failures (e.g. network or registry errors). This is intentional safe-fail behavior — re-run once connectivity is restored, or use `SKIP_AUDIT=1` for an explicit, reviewed bypass.
+
 To bypass the gate when an advisory has been explicitly reviewed and accepted (see `SECURITY.md` → Accepted Risks):
 
 ```bash
