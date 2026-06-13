@@ -127,3 +127,11 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [10:26] Task start: 4 blocking reviewer comments to fix — allowlist, bypass traceability, infra error distinction, test coverage
 - [10:26] Advisories confirmed: GHSA-w7jw-789q-3m8p (shell-quote critical), GHSA-ph9p-34f9-6g65 (tmp high), GHSA-gv7w-rqvm-qjhr (esbuild high)
 - [10:27] Commit 1: creating scripts/audit-allowlist.json and scripts/lib/audit-gate.sh with allowlist-filtered logic
+- [10:35] Commit 1 — 9873dbf: allowlist + gate + SECURITY.md
+- [10:36] Commit 2 — 3363fb8: bypass reason + manifest line in SECURITY.md
+- [10:37] Commit 3 — c02fb46: infra vs advisory error distinction in scripts/README.md
+- [10:38] Commit 4 — 683853a: stubbed-pnpm test harness (17/17 pass) + package.json test:audit-gate
+- [10:38] pnpm run ci: 33 test files, 477 passed, 1 skipped — typecheck clean, build clean
+- [10:38] bash -n: all 3 shell scripts syntax-clean
+- [10:38] pnpm-lock.yaml: 0 diff lines — unchanged
+- [10:38] ✅ Complete — 4 commits on feat/oir-53-local-dependency-audit
