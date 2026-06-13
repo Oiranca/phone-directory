@@ -32,19 +32,26 @@ The following vulnerabilities have been addressed as of this release:
 
 ### Accepted Risks
 
+> **Source of truth:** The machine-readable allowlist of explicitly accepted advisory IDs is
+> [`scripts/audit-allowlist.json`](scripts/audit-allowlist.json).
+> The audit gate in `scripts/release-usb.sh` reads this file at release time and filters out
+> allowlisted advisories before failing — any newly appearing high/critical advisory that is NOT
+> in the allowlist will still abort the release.
+> The entries below summarise each accepted risk; the allowlist JSON contains the full rationale.
+
 The following advisories are **accepted as low-risk** for this deployment model:
 
-#### 1. vitest (GHSA-5xrq-8626-4rwp — Critical)
-- **Status**: Vitest `3.2.6` (vulnerable version `<4.1.0`)
-- **Vulnerability**: Arbitrary file read/execution when Vitest UI server is listening
-- **Mitigation**: 
-  - Vitest UI is **not enabled** in this project (no `--ui` flag in scripts or CI)
-  - Application never runs vitest in production
-  - Upgrade to vitest `>=4.1.0` requires Node.js `>=22` (current: Node.js 20.11.1)
-- **Risk Assessment**: Low — vulnerable surface not exposed
-- **Remediation Path**: Upgrade Node.js to `>=22` when feasible, then upgrade vitest to `>=4.1.0`
+#### 1. shell-quote (GHSA-w7jw-789q-3m8p — Critical, CVE-2026-9277)
+- **Status**: `shell-quote <=1.8.3` (transitive via `concurrently > shell-quote`)
+- **Vulnerability**: `quote()` does not escape newline characters in object `.op` values, enabling shell command injection when attacker-controlled object tokens are passed to `quote()`.
+- **Mitigation**:
+  - `concurrently` is a **dev-only tool** used to run renderer/electron watchers during local development — it is never bundled into the Electron application or executed at runtime.
+  - `concurrently` uses `shell-quote` internally with fixed, developer-authored command strings. No attacker-influenced input reaches `quote()` in this project.
+  - Deployment model: local USB install on a controlled workstation with no external network attack surface.
+- **Risk Assessment**: Low — vulnerable code path not reachable in this project
+- **Remediation Path**: Update `concurrently` when a version transitively pulling `shell-quote >=1.8.4` becomes available.
 
-#### 2. tmp (GHSA-ph9p-34f9-6g65 — High)
+#### 2. tmp (GHSA-ph9p-34f9-6g65 — High, CVE-2026-44705)
 - **Status**: `tmp <0.2.6` (transitive dependency via `electron-builder > app-builder-lib > @malept/flatpak-bundler > tmp-promise > tmp`)
 - **Vulnerability**: Path traversal via unsanitized prefix/postfix enabling directory escape
 - **Mitigation**:
@@ -52,7 +59,17 @@ The following advisories are **accepted as low-risk** for this deployment model:
   - Build toolchain runs in controlled CI/local dev environment only
   - No patch available in current electron-builder chain
 - **Risk Assessment**: Low — flatpak packaging not part of release workflow
-- **Remediation Path**: Monitor electron-builder for upstream fix
+- **Remediation Path**: Monitor electron-builder for upstream fix that updates tmp to >=0.2.6.
+
+#### 3. esbuild (GHSA-gv7w-rqvm-qjhr — High)
+- **Status**: `esbuild >=0.17.0 <0.28.1` (transitive via `vite > esbuild`)
+- **Vulnerability**: Missing SHA-256 binary integrity verification in the **Deno module** (`lib/deno/mod.ts`) when `NPM_CONFIG_REGISTRY` is attacker-controlled, enabling arbitrary code execution.
+- **Mitigation**:
+  - This project uses esbuild via the **Node.js npm package** (through vite), not the Deno distribution. The vulnerable `lib/deno/mod.ts` code path is never executed.
+  - The Node.js npm package includes `binaryIntegrityCheck()` and is not affected.
+  - Upgrading esbuild directly would conflict with vite's peer dependency constraints.
+- **Risk Assessment**: Low — vulnerable Deno module code path not used
+- **Remediation Path**: Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking Node 20.11.1 compatibility.
 
 ## Import Rate Limiting
 

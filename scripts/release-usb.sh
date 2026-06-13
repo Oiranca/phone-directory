@@ -49,18 +49,11 @@ log "Running typecheck"
 pnpm typecheck
 
 log "Running dependency audit"
-if [[ "${SKIP_AUDIT:-0}" == "1" ]]; then
-  printf '[release-usb] ⚠️  SKIP_AUDIT=1 set — dependency audit bypassed\n' >&2
-else
-  audit_exit=0
-  pnpm audit --audit-level=high || audit_exit=$?
-  if [[ $audit_exit -ne 0 ]]; then
-    printf '[release-usb] ✗ Dependency audit found high-severity or critical advisories — release aborted.\n' >&2
-    printf '[release-usb]   Resolve the advisories or set SKIP_AUDIT=1 to bypass (explicit risk acceptance only).\n' >&2
-    exit $audit_exit
-  fi
-  log "Dependency audit passed"
-fi
+# shellcheck source=scripts/lib/audit-gate.sh
+source "$REPO_ROOT/scripts/lib/audit-gate.sh"
+AUDIT_STATUS_LINE=""
+run_audit_gate
+log "$AUDIT_STATUS_LINE"
 
 log "Running tests"
 pnpm test
@@ -138,6 +131,7 @@ Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Platform: $PLATFORM
 Version: $(node -p "require('./package.json').version")
 Source commit: $(git rev-parse --short HEAD)
+${AUDIT_STATUS_LINE}
 
 Copy the contents of this directory to the USB root.
 Data will be created under portable-data/ on first launch.
