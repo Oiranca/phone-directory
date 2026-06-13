@@ -31,17 +31,51 @@ For the full packaging and operator handoff process, see
 
 ### Dependency Audit Gate
 
-The release script runs `pnpm audit --audit-level=high` early in the pipeline (after typecheck, before tests and build). If any high-severity or critical advisories are found the release exits immediately with a non-zero code and no artifact is produced.
+The release script sources `scripts/lib/audit-gate.sh` and calls `run_audit_gate` early in the pipeline (after typecheck, before tests and build). The gate:
 
-The gate also aborts the release on transient `pnpm audit` failures (e.g. network or registry errors). This is intentional safe-fail behavior — re-run once connectivity is restored, or use `SKIP_AUDIT=1` for an explicit, reviewed bypass.
+1. Runs `pnpm audit --json` to collect the current advisory list.
+2. Filters out every advisory whose GHSA ID appears in `scripts/audit-allowlist.json` (explicitly accepted risks).
+3. **Fails the release** if any high-severity or critical advisory is _not_ in the allowlist.
+4. Records the result in `RELEASE_MANIFEST.txt` — either `Dependency audit: PASSED (allowlist N entries)` or `Dependency audit: BYPASSED — reason: <reason>`.
 
-To bypass the gate when an advisory has been explicitly reviewed and accepted (see `SECURITY.md` → Accepted Risks):
+If the gate fails because of a non-advisory error (network outage, registry unreachable) the message reads:
 
-```bash
-SKIP_AUDIT=1 pnpm run release:usb
+```
+[audit-gate] ✗ Dependency audit failed to complete (non-advisory error — check network/registry).
 ```
 
-A warning line is printed to stderr when the override is active. Do not use `SKIP_AUDIT=1` to suppress uninvestigated advisories.
+This is distinct from an advisory failure message, which lists `NON-ALLOWLISTED` advisories by package and GHSA ID.
+
+#### Advisory allowlist
+
+`scripts/audit-allowlist.json` is the machine-readable source of truth for accepted risks. Each entry contains the GHSA ID, package name, severity, a deployment-model rationale, and a review date. The gate reads this file at runtime — adding an entry here is the correct way to accept a known advisory rather than using `SKIP_AUDIT=1`.
+
+See `SECURITY.md → Accepted Risks` for a human-readable summary of each accepted advisory.
+
+#### Bypassing the gate
+
+`SKIP_AUDIT=1` skips the audit entirely. A non-empty `SKIP_AUDIT_REASON` is **required** — without it the release aborts:
+
+```bash
+SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks" \
+  pnpm run release:usb
+```
+
+The bypass reason is written to `RELEASE_MANIFEST.txt` so every produced artifact is traceable. The value must be exactly `"1"` — other values (`true`, `yes`, `2`, or empty) are ignored and the gate runs normally.
+
+Do not use `SKIP_AUDIT=1` to suppress uninvestigated advisories. Use the allowlist instead.
+
+#### Running the gate tests
+
+The gate logic is tested in isolation using a stubbed `pnpm` executable (no real network calls):
+
+```bash
+bash scripts/release-usb.audit.test.sh
+# or via npm script:
+pnpm run test:audit-gate
+```
+
+Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass, infra/network error, bypass with and without reason, and strict `SKIP_AUDIT=1` matching.
 
 ## `extract_ods_to_csv.py`
 
