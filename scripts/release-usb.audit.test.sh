@@ -1118,6 +1118,130 @@ else
 fi
 rm -rf "$TMP44"
 
+# --- Fix 2: allowlist identity matching (GHSA id + package + severity) --------
+
+# Helper: write a temp allowlist and run the gate with a specific pnpm JSON payload
+run_gate_allowlist_payload() {
+  local bindir="$1"
+  local allowlist_file="$2"
+  local payload_json="$3"
+  local pnpm_exit="${4:-1}"
+  write_fake_pnpm "$bindir" "$payload_json" "$pnpm_exit"
+  env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+    set -euo pipefail
+    AUDIT_ALLOWLIST='$allowlist_file'
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+    printf '%s\n' \"\$AUDIT_STATUS_LINE\"
+  "
+}
+
+# Test 45: allowlist entry with wrong package → live advisory NOT suppressed (gate FAILS exit 2)
+printf '\nTest 45: allowlist entry GHSA matches but wrong package → advisory NOT suppressed, gate FAILS\n'
+WRONG_PKG_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"not-shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD45_AL="$(write_temp_allowlist "$WRONG_PKG_ALLOWLIST")"
+TMP45="$(setup_fake_pnpm)"
+# Payload: GHSA-w7jw-789q-3m8p on shell-quote (critical) — allowlist has wrong package
+SHELL_QUOTE_CRIT_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":1}}}'
+rc=0
+stderr_out="$(run_gate_allowlist_payload "$TMP45" "$TMPD45_AL/allowlist.json" "$SHELL_QUOTE_CRIT_JSON" 1 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist wrong-package mismatch → advisory NOT suppressed, gate FAILS (exit 2)"
+else
+  fail "allowlist wrong-package mismatch → advisory was suppressed — allowlist identity bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "wrong-package mismatch prints NON-ALLOWLISTED message"
+else
+  fail "wrong-package mismatch missing NON-ALLOWLISTED message: $stderr_out"
+fi
+rm -rf "$TMP45" "$TMPD45_AL"
+
+# Test 46: allowlist entry severity "low" (invalid enum) → ABORTS (exit 3, malformed allowlist)
+printf '\nTest 46: allowlist entry severity:"low" (invalid enum, only high/critical allowed) → ABORTS\n'
+LOW_SEV_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"low","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD46_AL="$(write_temp_allowlist "$LOW_SEV_ALLOWLIST")"
+TMP46="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP46" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP46:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  set -euo pipefail
+  AUDIT_ALLOWLIST='$TMPD46_AL/allowlist.json'
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist severity:\"low\" (invalid) → gate ABORTS (exit 3)"
+else
+  fail "allowlist severity:\"low\" → gate passed — invalid severity enum not rejected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'malformed\|invalid severity\|must be.*high.*critical'; then
+  pass "invalid severity enum prints malformed/invalid-severity message"
+else
+  fail "invalid severity enum missing malformed message in stderr: $stderr_out"
+fi
+rm -rf "$TMP46" "$TMPD46_AL"
+
+# Test 47: allowlist entry id:"not-a-ghsa" (invalid format) → ABORTS (exit 3)
+printf '\nTest 47: allowlist entry id:"not-a-ghsa" (invalid GHSA format) → ABORTS (exit 3)\n'
+INVALID_ID_ALLOWLIST="$(printf '[{"id":"not-a-ghsa","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD47_AL="$(write_temp_allowlist "$INVALID_ID_ALLOWLIST")"
+TMP47="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP47" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP47:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  set -euo pipefail
+  AUDIT_ALLOWLIST='$TMPD47_AL/allowlist.json'
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "allowlist id:\"not-a-ghsa\" (invalid format) → gate ABORTS (exit 3)"
+else
+  fail "allowlist id:\"not-a-ghsa\" → gate passed — invalid GHSA format not rejected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'malformed\|GHSA format\|invalid.*id'; then
+  pass "invalid GHSA id format prints malformed message"
+else
+  fail "invalid GHSA id format missing malformed message in stderr: $stderr_out"
+fi
+rm -rf "$TMP47" "$TMPD47_AL"
+
+# Test 48: correct allowlist entry (id+package+severity all match) → still PASSES
+printf '\nTest 48: correct allowlist entry (id+package+severity match) → advisory suppressed, gate PASSES\n'
+CORRECT_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD48_AL="$(write_temp_allowlist "$CORRECT_ALLOWLIST")"
+TMP48="$(setup_fake_pnpm)"
+SHELL_QUOTE_ONLY_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":1}}}'
+if out="$(run_gate_allowlist_payload "$TMP48" "$TMPD48_AL/allowlist.json" "$SHELL_QUOTE_ONLY_JSON" 1 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "correct allowlist entry (id+package+severity) suppresses advisory → gate PASSES"
+  else
+    fail "correct allowlist entry: advisory suppressed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "correct allowlist entry → gate failed — correctly matching entry not honoured"
+fi
+rm -rf "$TMP48" "$TMPD48_AL"
+
+# Test 49: confirm the 3 real allowlist entries still pass with real allowlist
+printf '\nTest 49: real allowlist + all 3 allowlisted advisories → still PASSES\n'
+TMP49="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP49" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP49" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "real allowlist + 3 known advisories → still PASSES after Fix 2"
+  else
+    fail "real allowlist + 3 known advisories: status line missing 'PASSED': $out"
+  fi
+else
+  fail "real allowlist + 3 known advisories → exited non-zero — Fix 2 regression"
+fi
+rm -rf "$TMP49"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

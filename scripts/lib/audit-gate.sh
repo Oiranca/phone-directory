@@ -190,6 +190,28 @@ process.stdin.on("end", () => {
       process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'severity' field — allowlist is malformed.\n");
       process.exit(3);
     }
+    // Allowlist entries may only suppress high/critical advisories (those are
+    // the only severities the gate acts on).  Any other value is a malformed
+    // entry — reject it with exit 3 so a miscategorised entry cannot silently
+    // suppress a real vulnerability.
+    const normalizedEntrySev = entry.severity.trim().toLowerCase();
+    if (normalizedEntrySev !== "high" && normalizedEntrySev !== "critical") {
+      process.stderr.write(
+        "[audit-gate] " + idx + " (id: " + entry.id + ") 'severity' must be exactly \"high\" or \"critical\" " +
+        "(got: \"" + entry.severity + "\") — allowlist is malformed.\n"
+      );
+      process.exit(3);
+    }
+    // Validate GHSA id format: must match GHSA-[4 alphanumeric]-[4 alphanumeric]-[4 alphanumeric].
+    // This prevents free-form strings (e.g. "not-a-ghsa", CVE ids) from being
+    // used as allowlist keys, which would make the id-matching logic meaningless.
+    if (!/^GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}$/i.test(entry.id.trim())) {
+      process.stderr.write(
+        "[audit-gate] " + idx + " (id: " + entry.id + ") 'id' does not match GHSA format " +
+        "(expected: GHSA-xxxx-xxxx-xxxx) — allowlist is malformed.\n"
+      );
+      process.exit(3);
+    }
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
       process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'reason' field — allowlist is malformed.\n");
       process.exit(3);
@@ -249,7 +271,13 @@ process.stdin.on("end", () => {
     }
   }
 
-  const allowedIds = new Set(allowlist.map(e => e.id));
+  // Build a Map from GHSA id → { package, severity } so that suppression
+  // requires all three fields to match (id AND package AND severity).
+  // A Set of ids alone would let a bogus allowlist entry (wrong package or
+  // severity) silently suppress a live advisory with the same GHSA id.
+  const allowedMap = new Map(
+    allowlist.map(e => [e.id.trim(), { pkg: e.package.trim(), sev: e.severity.trim().toLowerCase() }])
+  );
   const allowlistCount = allowlist.length;
 
   const failures = [];
@@ -266,9 +294,15 @@ process.stdin.on("end", () => {
       if (sev !== "high" && sev !== "critical") continue;
       iteratedHighCrit++;
       const ghsa = adv.github_advisory_id || "";
+      const livePkg = String(adv.module_name || "").trim();
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
       // as a failure because we cannot confirm its identity.
-      if (ghsa && allowedIds.has(ghsa)) continue;
+      // When a GHSA id IS present, suppression requires the allowlist entry to
+      // also match on package name AND severity (not just the id).
+      if (ghsa && allowedMap.has(ghsa)) {
+        const entry = allowedMap.get(ghsa);
+        if (entry.pkg === livePkg && entry.sev === sev) continue;
+      }
       failures.push({ ghsa, severity: sev, package: adv.module_name, title: adv.title });
     }
   }
@@ -293,8 +327,13 @@ process.stdin.on("end", () => {
 
       for (const via of viaAdvisories) {
         const ghsa = via.ghsaId || via.github_advisory_id || "";
+        const livePkg = String(pkgName || "").trim();
         // A finding with no GHSA ID must NOT be silently allowlisted.
-        if (ghsa && allowedIds.has(ghsa)) continue;
+        // When a GHSA id IS present, suppression requires id + package + severity to match.
+        if (ghsa && allowedMap.has(ghsa)) {
+          const entry = allowedMap.get(ghsa);
+          if (entry.pkg === livePkg && entry.sev === sev) continue;
+        }
         failures.push({ ghsa, severity: sev, package: pkgName, title: via.title || pkgName });
       }
     }
