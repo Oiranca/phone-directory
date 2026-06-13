@@ -135,3 +135,13 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [10:38] bash -n: all 3 shell scripts syntax-clean
 - [10:38] pnpm-lock.yaml: 0 diff lines — unchanged
 - [10:38] ✅ Complete — 4 commits on feat/oir-53-local-dependency-audit
+#### [OIR-53 PR#58] software-engineer — fail-open fixes
+- [10:43] Task started — reading audit-gate.sh, test file, allowlist, SECURITY.md
+- [10:44] Verified 3 fail-open bugs live: EAUDITNOLOCK → exit 0 PASSED; vulnerabilities schema → exit 0 PASSED; null → TypeError
+- [10:45] Bug 1+2+3 fixed in _AUDIT_FILTER_SCRIPT and bash wrapper; bash -n syntax OK; all 17 existing tests green
+- [10:45] Committed fix: a92fec4 fix(oir-53): fail safe on valid-JSON audit error envelopes
+- [10:46] Added 5 new tests (Tests 7–11); 27/27 passed
+- [10:46] Committed tests: 6d0479a test(oir-53): cover audit gate fail-open edge cases
+- [10:47] Committed docs: e60a89c docs(oir-53): correct stale audit-level reference in SECURITY.md
+- [10:47] pnpm run ci: 477 tests passed, typecheck clean, build clean; pnpm-lock.yaml diff = 0 lines
+- [10:47] ✅ Complete — 3 commits on feat/oir-53-local-dependency-audit; no dep version changes
