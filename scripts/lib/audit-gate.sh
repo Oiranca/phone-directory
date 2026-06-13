@@ -80,6 +80,7 @@ process.stdin.on("end", () => {
   const allowlistCount = allowlist.length;
 
   const failures = [];
+  let iteratedHighCrit = 0;
 
   // --- v6 schema: data.advisories -------------------------------------------
   if (hasAdvisories) {
@@ -87,6 +88,7 @@ process.stdin.on("end", () => {
     for (const [, adv] of Object.entries(advisories)) {
       const sev = (adv.severity || "").toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;
+      iteratedHighCrit++;
       const ghsa = adv.github_advisory_id || "";
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
       // as a failure because we cannot confirm its identity.
@@ -101,6 +103,7 @@ process.stdin.on("end", () => {
     for (const [pkgName, vuln] of Object.entries(vulns)) {
       const sev = (vuln.severity || "").toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;
+      iteratedHighCrit++;
 
       // Extract GHSA IDs from the "via" array (may contain string dep-names or
       // advisory objects with a ghsaId field).
@@ -117,6 +120,24 @@ process.stdin.on("end", () => {
         if (ghsa && allowedIds.has(ghsa)) continue;
         failures.push({ ghsa, severity: sev, package: pkgName, title: via.title || pkgName });
       }
+    }
+  }
+
+  // --- metadata reconciliation ----------------------------------------------
+  // Cross-validate: if metadata.vulnerabilities reports high/critical counts
+  // that exceed what we actually iterated from the advisory container, the
+  // response is inconsistent (truncated, partially parsed, or malformed).
+  // This closes the fail-open where metadata alone acts as a success signal.
+  if (hasMetadata && data.metadata && data.metadata.vulnerabilities) {
+    const mv = data.metadata.vulnerabilities;
+    const metaHighCrit = ((mv.high || 0) + (mv.critical || 0));
+    if (metaHighCrit > iteratedHighCrit) {
+      process.stderr.write(
+        "[audit-gate] Metadata reports " + metaHighCrit + " high/critical advisory/ies " +
+        "but only " + iteratedHighCrit + " were found in the parsed advisory container — " +
+        "response is inconsistent (truncated, schema mismatch, or registry error).\n"
+      );
+      process.exit(3);
     }
   }
 
