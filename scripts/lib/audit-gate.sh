@@ -259,7 +259,10 @@ process.stdin.on("end", () => {
   if (advisoriesIsPlainObj) {
     const advisories = advisoriesVal;
     for (const [, adv] of Object.entries(advisories)) {
-      const sev = (adv.severity || "").toLowerCase();
+      // Normalize severity: trim whitespace and lowercase before classifying.
+      // This ensures "critical " (trailing space) or "CRITICAL" are correctly
+      // counted and not silently dropped as unrecognised severity values.
+      const sev = String(adv.severity || "").trim().toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;
       iteratedHighCrit++;
       const ghsa = adv.github_advisory_id || "";
@@ -274,7 +277,8 @@ process.stdin.on("end", () => {
   if (vulnerabilitiesIsPlainObj) {
     const vulns = vulnerabilitiesVal;
     for (const [pkgName, vuln] of Object.entries(vulns)) {
-      const sev = (vuln.severity || "").toLowerCase();
+      // Normalize severity before classifying (same as v6 path above).
+      const sev = String(vuln.severity || "").trim().toLowerCase();
       if (sev !== "high" && sev !== "critical") continue;
       iteratedHighCrit++;
 
@@ -301,9 +305,29 @@ process.stdin.on("end", () => {
   // that exceed what we actually iterated from the advisory container, the
   // response is inconsistent (truncated, partially parsed, or malformed).
   // This closes the fail-open where metadata alone acts as a success signal.
+  //
+  // Strict integer validation: each present severity count in
+  // metadata.vulnerabilities must be a non-negative integer.  Coercing a
+  // string count with (|| 0) silently does string concatenation in arithmetic
+  // contexts ("0" + "0" === "00"), which breaks the metaHighCrit comparison
+  // and allows the reconciliation check to be bypassed.
   if (hasMetadata && data.metadata && data.metadata.vulnerabilities) {
     const mv = data.metadata.vulnerabilities;
-    const metaHighCrit = ((mv.high || 0) + (mv.critical || 0));
+    const severityKeys = Object.keys(mv);
+    for (const key of severityKeys) {
+      const val = mv[key];
+      if (typeof val !== "number" || !Number.isInteger(val) || val < 0) {
+        process.stderr.write(
+          "[audit-gate] metadata.vulnerabilities." + key + " is not a non-negative integer " +
+          "(got: " + JSON.stringify(val) + ") — metadata is malformed.\n"
+        );
+        process.exit(3);
+      }
+    }
+    // Now safe to use integer arithmetic (no coercion needed — values validated above).
+    const metaHigh     = typeof mv.high     === "number" ? mv.high     : 0;
+    const metaCritical = typeof mv.critical === "number" ? mv.critical : 0;
+    const metaHighCrit = metaHigh + metaCritical;
     if (metaHighCrit > iteratedHighCrit) {
       process.stderr.write(
         "[audit-gate] Metadata reports " + metaHighCrit + " high/critical advisory/ies " +

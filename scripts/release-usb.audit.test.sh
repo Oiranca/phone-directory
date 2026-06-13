@@ -1015,6 +1015,109 @@ else
 fi
 rm -rf "$TMP39"
 
+# --- Fix 1: metadata count type validation and severity normalization ---------
+
+# Test 40: metadata counts as strings → ABORTS (exit 3, malformed metadata)
+printf '\nTest 40: metadata.vulnerabilities counts as strings → ABORTS (exit 3)\n'
+STRING_COUNTS_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"high":"0","critical":"0"}}}'
+TMP40="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP40" "$STRING_COUNTS_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP40:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "metadata counts as strings → gate ABORTS (exit 3)"
+else
+  fail "metadata counts as strings → gate passed — string-count coercion bug not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'not a non-negative integer\|malformed'; then
+  pass "string counts print malformed-metadata message"
+else
+  fail "string counts missing malformed-metadata message in stderr: $stderr_out"
+fi
+rm -rf "$TMP40"
+
+# Test 41: metadata counts with a negative value → ABORTS (exit 3)
+printf '\nTest 41: metadata.vulnerabilities.high:-1 (negative) → ABORTS (exit 3)\n'
+NEGATIVE_COUNT_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"high":-1,"critical":0}}}'
+TMP41="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP41" "$NEGATIVE_COUNT_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP41:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "metadata count -1 (negative) → gate ABORTS (exit 3)"
+else
+  fail "metadata count -1 → gate passed — negative count not rejected"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'not a non-negative integer\|malformed'; then
+  pass "negative count prints malformed-metadata message"
+else
+  fail "negative count missing malformed-metadata message in stderr: $stderr_out"
+fi
+rm -rf "$TMP41"
+
+# Test 42: advisory severity with trailing space "critical " → correctly fails gate (exit 2)
+# The advisory GHSA is not allowlisted, metadata reports critical:1.
+# After normalization "critical " → "critical", so it is counted and the gate must FAIL (exit 2).
+printf '\nTest 42: advisory severity "critical " (trailing space) + metadata critical:1 → gate FAILS (exit 2)\n'
+TRAILING_SEV_JSON='{"advisories":{"99":{"findings":[],"id":99,"severity":"critical ","module_name":"some-pkg","title":"Trailing space sev","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":1}}}'
+TMP42="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP42" "$TRAILING_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP42:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "advisory severity 'critical ' (trailing space) → gate correctly FAILS (exit 2), not bypassed"
+else
+  fail "advisory severity 'critical ' → gate passed — severity normalization not applied"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "trailing-space severity advisory prints NON-ALLOWLISTED message (correctly counted)"
+else
+  fail "trailing-space severity advisory missing NON-ALLOWLISTED message: $stderr_out"
+fi
+rm -rf "$TMP42"
+
+# Test 43: genuine clean with valid integer metadata counts → still PASSES (regression guard)
+printf '\nTest 43: genuine clean with integer metadata counts → still PASSES (regression guard)\n'
+TMP43="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP43" "$CLEAN_JSON" 0
+if out="$(run_gate_in_subshell "$TMP43" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "genuine clean with integer metadata counts still PASSES after Fix 1"
+  else
+    fail "genuine clean with integer metadata counts passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "genuine clean with integer metadata counts exited non-zero — Fix 1 regression"
+fi
+rm -rf "$TMP43"
+
+# Test 44: all-allowlisted advisories with integer metadata counts → still PASSES
+printf '\nTest 44: all-allowlisted advisories with integer metadata counts → still PASSES\n'
+TMP44="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP44" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP44" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "all-allowlisted with integer metadata counts still PASSES after Fix 1"
+  else
+    fail "all-allowlisted with integer metadata counts: status line missing 'PASSED': $out"
+  fi
+else
+  fail "all-allowlisted with integer metadata counts exited non-zero — Fix 1 regression"
+fi
+rm -rf "$TMP44"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
