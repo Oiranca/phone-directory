@@ -98,16 +98,32 @@ Before each release:
 
 ### SKIP_AUDIT Override
 
-The audit gate can be bypassed by setting `SKIP_AUDIT=1` before running the release script:
+The preferred way to handle a known advisory is to add it to `scripts/audit-allowlist.json` (see above). The gate will then pass without any bypass.
+
+When the allowlist cannot be updated in time (e.g. an emergency release), the gate can be bypassed with `SKIP_AUDIT=1`. A non-empty `SKIP_AUDIT_REASON` is **required** — the release aborts if the reason is missing:
 
 ```bash
-SKIP_AUDIT=1 pnpm run release:usb
+SKIP_AUDIT=1 \
+  SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks" \
+  pnpm run release:usb
 ```
 
 The value must be exactly `1` — other values (`true`, `yes`, `2`, or empty string) are ignored and the gate remains active.
 
+**Bypass status is recorded in `RELEASE_MANIFEST.txt`** inside the produced USB package, so every artifact is traceable:
+
+```
+Dependency audit: BYPASSED — reason: GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks
+```
+
+A normal audited release records:
+
+```
+Dependency audit: PASSED (allowlist 3 entries)
+```
+
 **This override is for explicit, reviewed risk acceptance only.** Use it when:
-- A known advisory has already been documented and accepted in this file (e.g. the `vitest` and `tmp` entries above).
+- A known advisory is already documented and accepted in this file and adding it to the allowlist is not yet possible.
 - An upstream fix is not yet available and the risk has been assessed as acceptable for this deployment model.
 
 Do **not** use `SKIP_AUDIT=1` to suppress unknown or uninvestigated advisories. Any use of the override must be intentional and traceable.
