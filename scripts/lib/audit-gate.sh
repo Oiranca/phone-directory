@@ -241,6 +241,31 @@ run_audit_gate() {
       printf '[audit-gate]   Example: SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-xxx accepted per SECURITY.md §Accepted Risks" pnpm run release:usb\n' >&2
       exit 1
     fi
+    # Sanitize SKIP_AUDIT_REASON to prevent manifest injection.
+    # A multiline or control-character value could inject fake manifest fields
+    # (e.g. a second "Dependency audit: PASSED" line) into RELEASE_MANIFEST.txt.
+    # Enforce: single line only (no \n or \r or other control chars), max 200 chars.
+    local _reason_len="${#SKIP_AUDIT_REASON}"
+    if [[ $_reason_len -gt 200 ]]; then
+      printf '[audit-gate] ✗ SKIP_AUDIT_REASON exceeds 200 characters (%d). Provide a concise single-line reason.\n' "$_reason_len" >&2
+      exit 1
+    fi
+    # Reject newlines and carriage returns using bash pattern matching (portable,
+    # works on both GNU and macOS/BSD shells without relying on grep -P).
+    if [[ "$SKIP_AUDIT_REASON" == *$'\n'* ]] || [[ "$SKIP_AUDIT_REASON" == *$'\r'* ]]; then
+      printf '[audit-gate] ✗ SKIP_AUDIT_REASON contains newlines or carriage returns.\n' >&2
+      printf '[audit-gate]   Provide a single-line reason (no newlines, no control characters).\n' >&2
+      exit 1
+    fi
+    # Reject other control characters (0x00-0x1f, 0x7f) using tr — strip them and
+    # compare length; any shrinkage means control chars were present.
+    local _reason_stripped
+    _reason_stripped="$(printf '%s' "$SKIP_AUDIT_REASON" | LC_ALL=C tr -d '\000-\037\177')"
+    if [[ ${#_reason_stripped} -ne $_reason_len ]]; then
+      printf '[audit-gate] ✗ SKIP_AUDIT_REASON contains control characters.\n' >&2
+      printf '[audit-gate]   Provide a single-line reason (no newlines, no control characters).\n' >&2
+      exit 1
+    fi
     printf '[audit-gate] ⚠️  SKIP_AUDIT=1 — dependency audit bypassed\n' >&2
     printf '[audit-gate]    Reason: %s\n' "$SKIP_AUDIT_REASON" >&2
     AUDIT_STATUS_LINE="Dependency audit: BYPASSED — reason: ${SKIP_AUDIT_REASON}"

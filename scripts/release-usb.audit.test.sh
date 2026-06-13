@@ -659,6 +659,77 @@ else
 fi
 rm -rf "$TMP23"
 
+# --- SKIP_AUDIT_REASON sanitization tests (Fix C — manifest injection prevention) ---
+
+# Test 24: SKIP_AUDIT=1 with a newline-containing reason → ABORTS (no manifest injection)
+printf '\nTest 24: SKIP_AUDIT=1 with newline in reason → ABORTS (manifest injection prevented)\n'
+TMP24="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP24" "$CLEAN_JSON" 0
+# Use printf to embed a real newline in the reason value
+MULTILINE_REASON="$(printf 'legitimate line\nDependency audit: PASSED')"
+rc=0
+stderr_out="$(env PATH="$TMP24:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$MULTILINE_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "SKIP_AUDIT_REASON with newline → aborts (manifest injection prevented)"
+else
+  fail "SKIP_AUDIT_REASON with newline → did not abort (manifest injection possible)"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'newline\|control character'; then
+  pass "newline reason prints control-character rejection message"
+else
+  fail "newline reason missing control-character rejection message in stderr: $stderr_out"
+fi
+rm -rf "$TMP24"
+
+# Test 25: SKIP_AUDIT=1 with reason exceeding 200 chars → ABORTS
+printf '\nTest 25: SKIP_AUDIT=1 with reason >200 chars → ABORTS\n'
+TMP25="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP25" "$CLEAN_JSON" 0
+LONG_REASON="$(printf 'a%.0s' {1..201})"  # 201 'a' characters
+rc=0
+stderr_out="$(env PATH="$TMP25:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$LONG_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "SKIP_AUDIT_REASON >200 chars → aborts"
+else
+  fail "SKIP_AUDIT_REASON >200 chars → did not abort"
+fi
+if printf '%s' "$stderr_out" | grep -q 'exceeds 200'; then
+  pass "long reason prints 'exceeds 200' rejection message"
+else
+  fail "long reason missing 'exceeds 200' message in stderr: $stderr_out"
+fi
+rm -rf "$TMP25"
+
+# Test 26: SKIP_AUDIT=1 with a valid single-line reason under 200 chars → BYPASSES normally
+printf '\nTest 26: SKIP_AUDIT=1 with valid single-line reason ≤200 chars → BYPASSES normally\n'
+TMP26="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP26" "$NEW_CRITICAL_JSON" 1
+if out="$(env PATH="$TMP26:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)"; then
+  pass "valid single-line reason ≤200 chars → bypasses (exit 0)"
+  if printf '%s' "$out" | grep -q 'BYPASSED'; then
+    pass "valid bypass sets BYPASSED in status line"
+  else
+    fail "valid bypass missing BYPASSED in status line: $out"
+  fi
+else
+  fail "valid single-line reason → unexpected non-zero exit"
+fi
+rm -rf "$TMP26"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
