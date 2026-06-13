@@ -466,14 +466,43 @@ run_audit_gate() {
 
   # Run pnpm audit and capture JSON stdout; capture stderr separately so we can
   # echo it to the operator when the gate aborts on an infra error.
+  #
+  # Temp-file cleanup: we install function-scoped EXIT/INT/TERM traps that save
+  # and restore any pre-existing traps set by the caller (this file is sourced
+  # into release-usb.sh which may have its own traps).  The temp file is always
+  # cleaned up before each exit/return path AND on interruption.
   local audit_json
   local pnpm_stderr
   local pnpm_exit=0
   local _pnpm_stderr_file
   _pnpm_stderr_file="$(mktemp)"
+
+  # Save caller's traps (may be empty strings if none set).
+  local _prev_trap_EXIT _prev_trap_INT _prev_trap_TERM
+  _prev_trap_EXIT="$(trap -p EXIT  2>/dev/null || true)"
+  _prev_trap_INT="$(trap  -p INT   2>/dev/null || true)"
+  _prev_trap_TERM="$(trap -p TERM  2>/dev/null || true)"
+
+  # Install cleanup traps.  The cleanup function removes the temp file and then
+  # restores the caller's original traps before re-raising the signal / exiting.
+  _audit_gate_cleanup() {
+    rm -f "$_pnpm_stderr_file" 2>/dev/null || true
+    # Restore caller traps (eval the saved trap string, which re-installs them).
+    trap - EXIT INT TERM
+    eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
+    eval "${_prev_trap_INT:-true}"  2>/dev/null || true
+    eval "${_prev_trap_TERM:-true}" 2>/dev/null || true
+  }
+  trap '_audit_gate_cleanup' EXIT INT TERM
+
   audit_json="$(pnpm audit --json 2>"$_pnpm_stderr_file")" || pnpm_exit=$?
   pnpm_stderr="$(cat "$_pnpm_stderr_file")"
+
+  # Remove the temp file immediately now that we have captured its contents.
+  # The EXIT trap is a belt-and-suspenders for the interruption path.
   rm -f "$_pnpm_stderr_file"
+  trap - EXIT INT TERM
+  eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
 
   # Feed JSON through the Node filter
   local filter_output

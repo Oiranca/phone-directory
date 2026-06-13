@@ -1315,6 +1315,37 @@ else
 fi
 rm -rf "$TMP52"
 
+# --- Fix 4: temp file cleanup after gate error/abort -------------------------
+
+# Test 53: pnpm command failure → no temp files left in system temp dir
+printf '\nTest 53: pnpm infra failure → audit temp stderr file is cleaned up (no leak)\n'
+# Create an isolated tmpdir that the fake pnpm will use as TMPDIR so we can
+# verify no files are left after the gate aborts.
+ISOLATED_TMPDIR="$(mktemp -d)"
+TMP53="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP53" "$INFRA_ERROR_OUTPUT" 1
+rc=0
+env PATH="$TMP53:$PATH" REPO_ROOT="$REPO_ROOT" TMPDIR="$ISOLATED_TMPDIR" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+# The gate must have exited non-zero (infra path)
+if [[ $rc -ne 0 ]]; then
+  pass "pnpm infra failure → gate exited non-zero (expected)"
+else
+  fail "pnpm infra failure → gate did not abort as expected"
+fi
+# Check that no stray temp files remain in the isolated TMPDIR
+remaining="$(find "$ISOLATED_TMPDIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
+if [[ "$remaining" == "0" ]]; then
+  pass "pnpm infra failure → no temp files leaked in TMPDIR"
+else
+  fail "pnpm infra failure → $remaining temp file(s) left in TMPDIR (leak detected)"
+  find "$ISOLATED_TMPDIR" -type f | while read -r f; do printf '    leaked: %s\n' "$f"; done
+fi
+rm -rf "$TMP53" "$ISOLATED_TMPDIR"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
