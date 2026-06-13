@@ -396,6 +396,87 @@ else
 fi
 rm -rf "$TMP11"
 
+# --- metadata reconciliation tests (residual fail-open coverage) --------------
+
+# Test 12: metadata reports high/critical but NO advisory container at all → ABORTS (exit 3)
+printf '\nTest 12: metadata reports critical:5 high:3 but no advisories key → ABORTS (exit 3)\n'
+META_ONLY_JSON='{"metadata":{"vulnerabilities":{"critical":5,"high":3}}}'
+TMP12="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP12" "$META_ONLY_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP12:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "metadata-only with critical:5 high:3 causes non-zero exit (not a silent pass)"
+else
+  fail "metadata-only with critical:5 high:3 was silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "metadata-only inconsistency prints reconciliation error message"
+else
+  fail "metadata-only inconsistency missing reconciliation message in stderr: $stderr_out"
+fi
+rm -rf "$TMP12"
+
+# Test 13: metadata reports critical:5 but advisories container is empty → ABORTS (exit 3)
+printf '\nTest 13: advisories:{} but metadata reports critical:5 → ABORTS (exit 3)\n'
+EMPTY_ADVISORIES_META_CRIT_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"critical":5}}}'
+TMP13="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP13" "$EMPTY_ADVISORIES_META_CRIT_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP13:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "empty advisories + metadata critical:5 causes non-zero exit"
+else
+  fail "empty advisories + metadata critical:5 was silently passed — fail-open bug"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "empty advisories + metadata inconsistency prints reconciliation error"
+else
+  fail "empty advisories + metadata inconsistency missing reconciliation message: $stderr_out"
+fi
+rm -rf "$TMP13"
+
+# Test 14: all-allowlisted advisories with matching metadata counts → PASSES
+# Allowlist has: GHSA-w7jw-789q-3m8p (critical), GHSA-ph9p-34f9-6g65 (high), GHSA-gv7w-rqvm-qjhr (high)
+# metadata critical:1 high:2 — matches iteratedHighCrit=3, reconciliation consistent, allowlist clears all
+printf '\nTest 14: allowlisted advisories with matching metadata counts → PASSES\n'
+TMP14="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP14" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP14" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "all-allowlisted with matching metadata counts passes gate"
+  else
+    fail "all-allowlisted with matching metadata passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "all-allowlisted with matching metadata exited non-zero (expected pass)"
+fi
+rm -rf "$TMP14"
+
+# Test 15: genuinely clean audit — metadata all zeros, empty advisories → PASSES
+printf '\nTest 15: genuinely clean audit (metadata all zeros, empty advisories) → PASSES\n'
+CLEAN_META_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}'
+TMP15="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP15" "$CLEAN_META_JSON" 0
+if out="$(run_gate_in_subshell "$TMP15" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "genuinely clean audit (all-zero metadata, empty advisories) passes gate"
+  else
+    fail "genuinely clean audit passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "genuinely clean audit exited non-zero (expected pass)"
+fi
+rm -rf "$TMP15"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
