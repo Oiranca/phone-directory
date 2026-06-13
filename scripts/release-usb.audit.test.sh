@@ -1346,6 +1346,66 @@ else
 fi
 rm -rf "$TMP53" "$ISOLATED_TMPDIR"
 
+# --- Fix 1 message-interpolation tests ----------------------------------------
+# These verify that the duplicate-id and expired-entry diagnostic messages
+# contain the actual GHSA id string (not collapsed JS concatenation text).
+
+# Test 54: duplicate GHSA id in allowlist → stderr message contains the actual GHSA id
+printf '\nTest 54: duplicate GHSA id in allowlist → stderr message contains actual GHSA id string\n'
+DUP_ID="GHSA-aaaa-bbbb-cccc"
+DUPLICATE_ID_ALLOWLIST_54="$(printf '[{"id":"%s","package":"some-pkg","severity":"critical","reason":"test","expires":"%s"},{"id":"%s","package":"some-pkg","severity":"critical","reason":"dup","expires":"%s"}]' \
+  "$DUP_ID" "$FUTURE_EXPIRES" "$DUP_ID" "$FUTURE_EXPIRES")"
+TMPD54_AL="$(write_temp_allowlist "$DUPLICATE_ID_ALLOWLIST_54")"
+TMP54="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP54" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP54:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  set -euo pipefail
+  AUDIT_ALLOWLIST='$TMPD54_AL/allowlist.json'
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "duplicate GHSA id → gate ABORTS (exit non-zero)"
+else
+  fail "duplicate GHSA id → gate passed — duplicate not detected"
+fi
+if printf '%s' "$stderr_out" | grep -qF "$DUP_ID"; then
+  pass "duplicate GHSA id → stderr message contains the actual GHSA id ($DUP_ID)"
+else
+  fail "duplicate GHSA id → stderr message MISSING the actual GHSA id ($DUP_ID); got: $stderr_out"
+fi
+rm -rf "$TMP54" "$TMPD54_AL"
+
+# Test 55: expired allowlist entry → stderr message contains the actual GHSA id
+printf '\nTest 55: expired allowlist entry → stderr message contains actual GHSA id string\n'
+EXPIRED_ID="GHSA-aaaa-bbbb-cccc"
+EXPIRED_ALLOWLIST_55="$(printf '[{"id":"%s","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' \
+  "$EXPIRED_ID" "$PAST_EXPIRES")"
+TMPD55_AL="$(write_temp_allowlist "$EXPIRED_ALLOWLIST_55")"
+TMP55="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP55" "$CLEAN_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP55:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  set -euo pipefail
+  AUDIT_ALLOWLIST='$TMPD55_AL/allowlist.json'
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "expired entry → gate ABORTS (exit non-zero)"
+else
+  fail "expired entry → gate passed — expiry not enforced"
+fi
+if printf '%s' "$stderr_out" | grep -qF "$EXPIRED_ID"; then
+  pass "expired entry → stderr message contains the actual GHSA id ($EXPIRED_ID)"
+else
+  fail "expired entry → stderr message MISSING the actual GHSA id ($EXPIRED_ID); got: $stderr_out"
+fi
+rm -rf "$TMP55" "$TMPD55_AL"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

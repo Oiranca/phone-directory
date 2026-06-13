@@ -254,7 +254,7 @@ process.stdin.on("end", () => {
 
     // Duplicate GHSA id check.
     if (seenIds.has(entry.id)) {
-      process.stderr.write("[audit-gate] Duplicate GHSA id '" + entry.id + "' in allowlist — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] Duplicate GHSA id (id: " + entry.id + ") in allowlist — allowlist is malformed.\n");
       process.exit(3);
     }
     seenIds.add(entry.id);
@@ -264,7 +264,7 @@ process.stdin.on("end", () => {
     const expiresDate = _expiresDate;
     if (today > expiresDate) {
       process.stderr.write(
-        "[audit-gate] Allowlist entry '" + entry.id + "' (package: " + entry.package + ") expired on " +
+        "[audit-gate] Allowlist entry (id: " + entry.id + ") (package: " + entry.package + ") expired on " +
         entry.expires + " — review and either re-accept (update expires) or remediate before releasing.\n"
       );
       process.exit(3);
