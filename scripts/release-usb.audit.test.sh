@@ -2902,6 +2902,125 @@ fi
 rm -f "$MARKER88"
 rm -rf "$TMP88"
 
+# --- Commit 2: end-to-end release-usb.sh wrapper smoke tests -------------------
+#
+# Every test above sources scripts/lib/audit-gate.sh directly; none shell through
+# scripts/release-usb.sh.  That is why a regression in the WRAPPER (e.g. unsetting
+# SKIP_AUDIT before sourcing the gate) could slip past the suite.  These tests
+# actually invoke scripts/release-usb.sh end-to-end inside a hermetic sandbox repo
+# with fake `pnpm`, `electron-builder`, and `git` on PATH, then assert the
+# Dependency-audit line written to the produced RELEASE_MANIFEST.txt.
+
+# Build a self-contained sandbox repo under TEST_FIXTURE_ROOT and echo its path.
+# The sandbox mirrors only what release-usb.sh needs: scripts/ (release script +
+# gate lib + allowlist), usb-launchers/, and a package.json.  release-usb.sh
+# computes REPO_ROOT from its own location, so running the sandbox copy keeps all
+# output (dist-portable/) inside the sandbox — never touching the real repo.
+build_sandbox_repo() {
+  local sandbox
+  sandbox="$(mktemp -d "$TEST_FIXTURE_ROOT/e2e-XXXXXX")"
+  mkdir -p "$sandbox/scripts/lib" "$sandbox/usb-launchers"
+  cp "$REPO_ROOT/scripts/release-usb.sh" "$sandbox/scripts/release-usb.sh"
+  cp "$REPO_ROOT/scripts/lib/audit-gate.sh" "$sandbox/scripts/lib/audit-gate.sh"
+  cp "$REPO_ROOT/scripts/audit-allowlist.json" "$sandbox/scripts/audit-allowlist.json"
+  cp "$REPO_ROOT/usb-launchers/launch.sh" "$sandbox/usb-launchers/launch.sh"
+  cp "$REPO_ROOT/usb-launchers/README.txt" "$sandbox/usb-launchers/README.txt"
+  # Minimal package.json — release-usb.sh reads only .version via `node -p`.
+  printf '{"name":"sandbox","version":"9.9.9"}\n' > "$sandbox/package.json"
+  printf '%s' "$sandbox"
+}
+
+# Write a fake `pnpm`, `electron-builder`, and `git` into a bin dir for the
+# wrapper to use.  The fake pnpm:
+#   - `pnpm audit --json` → emits the supplied audit JSON + exit code
+#   - `pnpm exec electron-builder ...` → creates the expected linux-unpacked dir
+#   - everything else (typecheck, test, run build) → no-op success
+write_sandbox_bin() {
+  local bindir="$1"
+  local sandbox="$2"
+  local audit_json="$3"
+  local audit_exit="${4:-0}"
+  cat > "$bindir/pnpm" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+  audit)
+    printf '%s' '${audit_json}'
+    exit ${audit_exit}
+    ;;
+  exec)
+    # pnpm exec electron-builder --linux --dir → fabricate the build artifact.
+    mkdir -p '${sandbox}/dist-portable/linux-unpacked'
+    printf 'fake binary\n' > '${sandbox}/dist-portable/linux-unpacked/phone-directory'
+    exit 0
+    ;;
+  *)
+    # typecheck / test / run build / anything else → succeed silently.
+    exit 0
+    ;;
+esac
+STUB
+  chmod +x "$bindir/pnpm"
+  # Stub git so `git rev-parse --short HEAD` returns a deterministic value
+  # without requiring the sandbox to be a real repo.
+  cat > "$bindir/git" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "rev-parse" ]]; then
+  printf 'deadbee\n'
+  exit 0
+fi
+exit 0
+STUB
+  chmod +x "$bindir/git"
+}
+
+# Test 89 (Commit2 e2e, audited PASS path): clean deps → manifest PASSED
+printf '\nTest 89 (Commit2 e2e): release-usb.sh with clean deps → RELEASE_MANIFEST.txt records PASSED\n'
+SANDBOX89="$(build_sandbox_repo)"
+BIN89="$(mktemp -d "$TEST_FIXTURE_ROOT/bin89-XXXXXX")"
+write_sandbox_bin "$BIN89" "$SANDBOX89" "$CLEAN_JSON" 0
+rc_89=0
+env PATH="$BIN89:$PATH" bash "$SANDBOX89/scripts/release-usb.sh" linux >/dev/null 2>&1 || rc_89=$?
+MANIFEST89="$SANDBOX89/dist-portable/usb-package/RELEASE_MANIFEST.txt"
+if [[ $rc_89 -eq 0 ]]; then
+  pass "Commit2 e2e audited: release-usb.sh completed (exit 0)"
+else
+  fail "Commit2 e2e audited: release-usb.sh exited non-zero ($rc_89)"
+fi
+if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST89"; then
+  pass "Commit2 e2e audited: RELEASE_MANIFEST.txt contains 'Dependency audit: PASSED'"
+else
+  fail "Commit2 e2e audited: manifest missing PASSED line (got: $(cat "$MANIFEST89" 2>/dev/null || echo MISSING))"
+fi
+rm -rf "$SANDBOX89" "$BIN89"
+
+# Test 90 (Commit2 e2e, BYPASS path): SKIP_AUDIT=1 + reason → manifest BYPASSED
+# This is the regression guard for Commit 1: if release-usb.sh ever unsets
+# SKIP_AUDIT/SKIP_AUDIT_REASON again, this test fails because the manifest would
+# record PASSED (gate ran) instead of BYPASSED.
+printf '\nTest 90 (Commit2 e2e): SKIP_AUDIT=1 + reason → RELEASE_MANIFEST.txt records BYPASSED — reason\n'
+SANDBOX90="$(build_sandbox_repo)"
+BIN90="$(mktemp -d "$TEST_FIXTURE_ROOT/bin90-XXXXXX")"
+# Audit JSON here would FAIL the gate if it ran — proving the bypass actually
+# skipped the audit rather than passing it.
+write_sandbox_bin "$BIN90" "$SANDBOX90" "$NEW_CRITICAL_JSON" 1
+BYPASS_REASON90="GHSA-w7jw-789q-3m8p accepted per SECURITY.md"
+rc_90=0
+env PATH="$BIN90:$PATH" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$BYPASS_REASON90" \
+  bash "$SANDBOX90/scripts/release-usb.sh" linux >/dev/null 2>&1 || rc_90=$?
+MANIFEST90="$SANDBOX90/dist-portable/usb-package/RELEASE_MANIFEST.txt"
+if [[ $rc_90 -eq 0 ]]; then
+  pass "Commit2 e2e bypass: release-usb.sh completed with SKIP_AUDIT=1 (exit 0)"
+else
+  fail "Commit2 e2e bypass: release-usb.sh exited non-zero with SKIP_AUDIT=1 ($rc_90) — bypass unreachable?"
+fi
+if [[ -f "$MANIFEST90" ]] && grep -qF "Dependency audit: BYPASSED — reason: $BYPASS_REASON90" "$MANIFEST90"; then
+  pass "Commit2 e2e bypass: RELEASE_MANIFEST.txt contains 'BYPASSED — reason: <reason>'"
+else
+  fail "Commit2 e2e bypass: manifest missing BYPASSED line (got: $(cat "$MANIFEST90" 2>/dev/null || echo MISSING))"
+fi
+rm -rf "$SANDBOX90" "$BIN90"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
