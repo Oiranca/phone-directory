@@ -52,3 +52,6 @@ docs/DECISIONS.md
 # Build artifacts and tool directories
 dist-portable/
 aia/
+
+# Audit-gate test harness fixtures (written under scripts/ by write_temp_allowlist)
+scripts/.test-*/

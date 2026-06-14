@@ -13,6 +13,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATE_SCRIPT="$REPO_ROOT/scripts/lib/audit-gate.sh"
 ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
 
+# Sweep any orphaned scripts/.test-* fixture dirs on exit (normal finish,
+# error abort under set -e, or Ctrl-C).  Individual tests already rm -rf their
+# own dirs, so this is belt-and-suspenders for mid-run interruption only.
+trap 'rm -rf "$REPO_ROOT"/scripts/.test-* 2>/dev/null || true' EXIT
+
 # --- test infrastructure -------------------------------------------------------
 
 PASS_COUNT=0
@@ -733,10 +738,14 @@ rm -rf "$TMP26"
 # --- allowlist expiry and schema validation tests (Fix D) ---------------------
 # These use a temp allowlist file so the real allowlist is never mutated.
 
-# Helpers to write temp allowlists
+# Helpers to write temp allowlists.
+# Allowlist fixtures MUST live inside $REPO_ROOT/scripts/ because the gate's
+# path-scope guard (belt-and-suspenders for Fix 1) only honours AUDIT_ALLOWLIST
+# overrides that resolve inside the scripts/ directory.  Using mktemp -d with a
+# template rooted there satisfies that constraint without touching real files.
 write_temp_allowlist() {
   local tmpdir
-  tmpdir="$(mktemp -d)"
+  tmpdir="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
   printf '%s' "$1" > "$tmpdir/allowlist.json"
   printf '%s' "$tmpdir"
 }
@@ -747,6 +756,7 @@ run_gate_with_allowlist() {
   shift 2
   env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" "$@" bash -c "
     set -euo pipefail
+    AUDIT_GATE_TEST_MODE=1
     AUDIT_ALLOWLIST='$allowlist_file'
     source '$GATE_SCRIPT'
     AUDIT_STATUS_LINE=''
@@ -1129,6 +1139,7 @@ run_gate_allowlist_payload() {
   write_fake_pnpm "$bindir" "$payload_json" "$pnpm_exit"
   env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
     set -euo pipefail
+    AUDIT_GATE_TEST_MODE=1
     AUDIT_ALLOWLIST='$allowlist_file'
     source '$GATE_SCRIPT'
     AUDIT_STATUS_LINE=''
@@ -1167,6 +1178,7 @@ write_fake_pnpm "$TMP46" "$CLEAN_JSON" 0
 rc=0
 stderr_out="$(env PATH="$TMP46:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
   set -euo pipefail
+  AUDIT_GATE_TEST_MODE=1
   AUDIT_ALLOWLIST='$TMPD46_AL/allowlist.json'
   source '$GATE_SCRIPT'
   AUDIT_STATUS_LINE=''
@@ -1193,6 +1205,7 @@ write_fake_pnpm "$TMP47" "$CLEAN_JSON" 0
 rc=0
 stderr_out="$(env PATH="$TMP47:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
   set -euo pipefail
+  AUDIT_GATE_TEST_MODE=1
   AUDIT_ALLOWLIST='$TMPD47_AL/allowlist.json'
   source '$GATE_SCRIPT'
   AUDIT_STATUS_LINE=''
@@ -1361,6 +1374,7 @@ write_fake_pnpm "$TMP54" "$CLEAN_JSON" 0
 rc=0
 stderr_out="$(env PATH="$TMP54:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
   set -euo pipefail
+  AUDIT_GATE_TEST_MODE=1
   AUDIT_ALLOWLIST='$TMPD54_AL/allowlist.json'
   source '$GATE_SCRIPT'
   AUDIT_STATUS_LINE=''
@@ -1389,6 +1403,7 @@ write_fake_pnpm "$TMP55" "$CLEAN_JSON" 0
 rc=0
 stderr_out="$(env PATH="$TMP55:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
   set -euo pipefail
+  AUDIT_GATE_TEST_MODE=1
   AUDIT_ALLOWLIST='$TMPD55_AL/allowlist.json'
   source '$GATE_SCRIPT'
   AUDIT_STATUS_LINE=''
@@ -1437,6 +1452,285 @@ else
   fail "success path → caller TERM trap was DESTROYED (sentinel handler missing); trap output: $trap_check_out"
 fi
 rm -rf "$TMP56"
+
+# --- Fix 1: AUDIT_ALLOWLIST env-bypass regression test ------------------------
+#
+# On the release path (AUDIT_GATE_TEST_MODE not set / not "1"), the gate must
+# IGNORE any AUDIT_ALLOWLIST env var and always use the repo-relative allowlist.
+# A permissive allowlist injected via env must not cause the gate to pass when
+# the repo allowlist does not cover the advisory.
+
+# Test 57: release path ignores AUDIT_ALLOWLIST env var — injected permissive
+# allowlist does NOT suppress a new critical that the repo allowlist lacks.
+printf '\nTest 57 (Fix 1): release path ignores AUDIT_ALLOWLIST env var — injected permissive allowlist is NOT honoured\n'
+# Build a permissive allowlist that accepts the new-critical GHSA-zzzz-zzzz-zzzz
+PERMISSIVE_ALLOWLIST_DIR="$(mktemp -d)"
+printf '[{"id":"GHSA-zzzz-zzzz-zzzz","package":"some-pkg","severity":"critical","reason":"evil bypass","expires":"%s"}]' \
+  "$FUTURE_EXPIRES" > "$PERMISSIVE_ALLOWLIST_DIR/evil.json"
+TMP57="$(setup_fake_pnpm)"
+# NEW_CRITICAL_JSON has GHSA-zzzz-zzzz-zzzz — not in real repo allowlist
+write_fake_pnpm "$TMP57" "$NEW_CRITICAL_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP57:$PATH" REPO_ROOT="$REPO_ROOT" \
+  AUDIT_ALLOWLIST="$PERMISSIVE_ALLOWLIST_DIR/evil.json" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix 1 release-path: AUDIT_ALLOWLIST env var ignored — live critical still fails gate (exit non-zero)"
+else
+  fail "Fix 1 release-path: AUDIT_ALLOWLIST env var was honoured on release path — env-bypass not closed"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Fix 1 release-path: gate reports NON-ALLOWLISTED (advisory not suppressed by injected allowlist)"
+else
+  fail "Fix 1 release-path: NON-ALLOWLISTED message missing; advisory may have been suppressed: $stderr_out"
+fi
+rm -rf "$TMP57" "$PERMISSIVE_ALLOWLIST_DIR"
+
+# Test 67: both AUDIT_GATE_TEST_MODE=1 AND AUDIT_ALLOWLIST=/tmp/evil.json set in
+# the inherited environment — the two-var attack must still be neutralized.
+# Defense-in-depth: release-usb.sh unsets both vars before sourcing; the gate's
+# path-scope guard rejects /tmp/... paths even if the sentinels somehow survive.
+# This test exercises the gate's own path-scope guard (no release-usb.sh unset
+# is involved here, because we source the gate directly — but the path outside
+# scripts/ is rejected by the belt-and-suspenders check in audit-gate.sh).
+printf '\nTest 67 (Fix 1 depth): AUDIT_GATE_TEST_MODE=1 + AUDIT_ALLOWLIST=/tmp/evil.json → still FAILS on live critical\n'
+PERMISSIVE_ALLOWLIST_DIR67="$(mktemp -d)"
+printf '[{"id":"GHSA-zzzz-zzzz-zzzz","package":"some-pkg","severity":"critical","reason":"evil bypass","expires":"%s"}]' \
+  "$FUTURE_EXPIRES" > "$PERMISSIVE_ALLOWLIST_DIR67/evil.json"
+TMP67="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67" "$NEW_CRITICAL_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP67:$PATH" REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$PERMISSIVE_ALLOWLIST_DIR67/evil.json" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix 1 depth: both sentinels set with /tmp path → live critical still fails gate (path-scope guard)"
+else
+  fail "Fix 1 depth: both sentinels + /tmp path → gate PASSED — two-var bypass not closed"
+fi
+if printf '%s' "$stderr_out" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Fix 1 depth: NON-ALLOWLISTED emitted — /tmp allowlist was not honoured"
+else
+  fail "Fix 1 depth: NON-ALLOWLISTED missing — advisory may have been suppressed: $stderr_out"
+fi
+rm -rf "$TMP67" "$PERMISSIVE_ALLOWLIST_DIR67"
+
+# --- Fix 2: exact metadata reconciliation (iteratedHighCrit !== metaHighCrit) -
+#
+# The prior check only caught metaHighCrit > iteratedHighCrit.  A payload with
+# an allowlisted critical advisory (iteratedHighCrit=1) and metadata reporting
+# critical:0 (metaHighCrit=0) passed silently — iteratedHighCrit > metaHighCrit
+# was accepted.  The fix requires strict equality in both directions.
+
+# Test 58: v6 schema — allowlisted critical advisory + metadata critical:0 → ABORTS (exit 3)
+# iteratedHighCrit=1 (counted before allowlist suppression), metaHighCrit=0 — mismatch
+printf '\nTest 58 (Fix 2, v6): allowlisted critical + metadata critical:0 → ABORTS (inconsistent)\n'
+# Payload: shell-quote critical (GHSA-w7jw-789q-3m8p — in real allowlist) but metadata says critical:0
+ALLOWLISTED_CRIT_META_ZERO_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":0}}}'
+TMP58="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP58" "$ALLOWLISTED_CRIT_META_ZERO_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP58" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix 2 v6: allowlisted critical + metadata critical:0 → gate ABORTS (iterated > meta)"
+else
+  fail "Fix 2 v6: allowlisted critical + metadata critical:0 → gate PASSED — fail-open (iterated > meta not caught)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix 2 v6: inconsistency message printed"
+else
+  fail "Fix 2 v6: inconsistency message missing in stderr: $stderr_out"
+fi
+rm -rf "$TMP58"
+
+# Test 59: v6 schema — allowlisted critical advisory + metadata critical:0,high:0 lower than iterated → ABORTS
+# Same as 58 but testing with a high advisory and metadata high:0 (iterated=1, meta=0)
+printf '\nTest 59 (Fix 2, v6): allowlisted high advisory + metadata high:0 → ABORTS (inconsistent)\n'
+# Payload: esbuild high (GHSA-gv7w-rqvm-qjhr — in real allowlist) but metadata says high:0
+ALLOWLISTED_HIGH_META_ZERO_JSON='{"advisories":{"3":{"findings":[],"id":3,"severity":"high","module_name":"esbuild","title":"esbuild vuln","github_advisory_id":"GHSA-gv7w-rqvm-qjhr","vulnerable_versions":"<0.28.1","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":0}}}'
+TMP59="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP59" "$ALLOWLISTED_HIGH_META_ZERO_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP59" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix 2 v6: allowlisted high + metadata high:0 → gate ABORTS (iterated > meta)"
+else
+  fail "Fix 2 v6: allowlisted high + metadata high:0 → gate PASSED — fail-open (iterated > meta not caught)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix 2 v6: inconsistency message printed"
+else
+  fail "Fix 2 v6: inconsistency message missing in stderr: $stderr_out"
+fi
+rm -rf "$TMP59"
+
+# Test 60: v7 schema — allowlisted critical advisory + metadata critical:0 → ABORTS (exit 3)
+# iteratedHighCrit=1 (shell-quote critical, allowlisted in real allowlist), metaHighCrit=0 — mismatch
+printf '\nTest 60 (Fix 2, v7): v7 allowlisted critical + metadata critical:0 → ABORTS (inconsistent)\n'
+VULN_ALLOWLISTED_META_ZERO_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":0,"high":0}}}'
+TMP60="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP60" "$VULN_ALLOWLISTED_META_ZERO_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP60" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix 2 v7: allowlisted critical + metadata critical:0 → gate ABORTS (iterated > meta)"
+else
+  fail "Fix 2 v7: allowlisted critical + metadata critical:0 → gate PASSED — fail-open (iterated > meta not caught)"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix 2 v7: inconsistency message printed"
+else
+  fail "Fix 2 v7: inconsistency message missing in stderr: $stderr_out"
+fi
+rm -rf "$TMP60"
+
+# Test 61: consistent v6 — allowlisted critical + metadata critical:1 (equal) → still PASSES
+# Regression guard: the fix must not break the legitimate all-allowlisted pass case
+printf '\nTest 61 (Fix 2, v6 regression): allowlisted critical + matching metadata critical:1 → still PASSES\n'
+TMP61="$(setup_fake_pnpm)"
+# Use the pre-existing ALLOWLISTED_JSON (critical:1, high:2 — all in real allowlist)
+write_fake_pnpm "$TMP61" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP61" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix 2 v6 regression: allowlisted advisories + consistent metadata → still PASSES"
+  else
+    fail "Fix 2 v6 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix 2 v6 regression: allowlisted advisories + consistent metadata exited non-zero — regression"
+fi
+rm -rf "$TMP61"
+
+# Test 62: consistent v7 — allowlisted advisories + matching metadata → still PASSES
+printf '\nTest 62 (Fix 2, v7 regression): v7 allowlisted advisories + matching metadata → still PASSES\n'
+TMP62="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP62" "$VULN_SCHEMA_ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP62" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix 2 v7 regression: v7 allowlisted advisories + consistent metadata → still PASSES"
+  else
+    fail "Fix 2 v7 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix 2 v7 regression: v7 allowlisted advisories + consistent metadata exited non-zero — regression"
+fi
+rm -rf "$TMP62"
+
+# --- Fix 3: INT/TERM signal propagation tests ---------------------------------
+#
+# Prior to Fix 3, the single _audit_gate_cleanup was installed on EXIT INT TERM.
+# When INT or TERM fired it cleaned up and restored caller traps but never
+# re-raised the signal — so run_audit_gate returned (or exited) with no signal
+# propagation and the caller continued on to the next step.
+#
+# Fix 3 installs separate _audit_gate_signal_INT / _audit_gate_signal_TERM
+# handlers that re-raise the signal via "kill -SIGNAL $$" after cleanup, so:
+#   a) the gate process terminates with signal-correct exit status
+#   b) any pre-existing caller TERM/INT handler executes
+#   c) the caller does NOT continue past run_audit_gate
+
+# Stub pnpm variant that sends a signal to a specific target PID read from the
+# AUDIT_TARGET_PID environment variable.  The caller sets this to $$ (its own
+# PID) so the signal reaches the process running run_audit_gate — not the
+# command-substitution subshell that is pnpm's direct parent.
+write_signal_pnpm() {
+  local bindir="$1"
+  local signame="$2"   # INT or TERM
+  cat > "$bindir/pnpm" <<STUB
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "audit" ]]; then
+  kill -${signame} "\${AUDIT_TARGET_PID:-\$PPID}"
+  exit 1
+fi
+exec pnpm-real "\$@"
+STUB
+  chmod +x "$bindir/pnpm"
+}
+
+# Test 63: TERM signal delivered to the gate process → caller does NOT continue
+# AUDIT_TARGET_PID=\$\$ is expanded at subshell creation so pnpm signals the
+# bash process running run_audit_gate (not the $(…) substitution child).
+printf '\nTest 63 (Fix 3): TERM signal to gate process → caller does NOT reach post-gate "continued" marker\n'
+TMP63="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP63" TERM
+continued_output="$(env PATH="$TMP63:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || true
+if printf '%s' "$continued_output" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix 3 TERM: caller continued past run_audit_gate after TERM signal — signal not propagated"
+else
+  pass "Fix 3 TERM: caller did NOT continue past run_audit_gate after TERM signal (signal propagated)"
+fi
+rm -rf "$TMP63"
+
+# Test 64: INT signal delivered to the gate process → caller does NOT continue
+printf '\nTest 64 (Fix 3): INT signal to gate process → caller does NOT reach post-gate "continued" marker\n'
+TMP64="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP64" INT
+continued_output="$(env PATH="$TMP64:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || true
+if printf '%s' "$continued_output" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix 3 INT: caller continued past run_audit_gate after INT signal — signal not propagated"
+else
+  pass "Fix 3 INT: caller did NOT continue past run_audit_gate after INT signal (signal propagated)"
+fi
+rm -rf "$TMP64"
+
+# Test 65: pre-existing caller TERM handler executes when gate receives TERM
+# The sentinel TERM handler writes a marker file then exits — both the handler
+# execution and signal-correct termination are verified.
+printf '\nTest 65 (Fix 3): pre-existing caller TERM handler executes when gate receives TERM\n'
+TMP65="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP65" TERM
+MARKER65="$(mktemp)"
+rm -f "$MARKER65"   # should not exist until handler runs
+env PATH="$TMP65:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf TERM_HANDLER_RAN > $MARKER65; exit 143' TERM
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate
+" 2>/dev/null || true
+if [[ -f "$MARKER65" ]] && grep -q 'TERM_HANDLER_RAN' "$MARKER65" 2>/dev/null; then
+  pass "Fix 3 TERM: pre-existing caller TERM handler executed (marker file written)"
+else
+  fail "Fix 3 TERM: pre-existing caller TERM handler did NOT execute (marker file missing or empty)"
+fi
+rm -f "$MARKER65"
+rm -rf "$TMP65"
+
+# Test 66: pre-existing caller INT handler executes when gate receives INT
+printf '\nTest 66 (Fix 3): pre-existing caller INT handler executes when gate receives INT\n'
+TMP66="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP66" INT
+MARKER66="$(mktemp)"
+rm -f "$MARKER66"
+env PATH="$TMP66:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf INT_HANDLER_RAN > $MARKER66; exit 130' INT
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate
+" 2>/dev/null || true
+if [[ -f "$MARKER66" ]] && grep -q 'INT_HANDLER_RAN' "$MARKER66" 2>/dev/null; then
+  pass "Fix 3 INT: pre-existing caller INT handler executed (marker file written)"
+else
+  fail "Fix 3 INT: pre-existing caller INT handler did NOT execute (marker file missing or empty)"
+fi
+rm -f "$MARKER66"
+rm -rf "$TMP66"
 
 # --- summary -------------------------------------------------------------------
 

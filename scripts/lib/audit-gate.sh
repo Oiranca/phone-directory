@@ -13,9 +13,39 @@
 # On return the caller can read:
 #   AUDIT_STATUS_LINE — human-readable status line for the release manifest
 
-# Allow callers (and tests) to override the allowlist path via AUDIT_ALLOWLIST.
-# If not already set, default to the standard location relative to REPO_ROOT.
-AUDIT_ALLOWLIST="${AUDIT_ALLOWLIST:-$REPO_ROOT/scripts/audit-allowlist.json}"
+# Resolve the allowlist path from the gate script's own directory so that an
+# operator cannot redirect the gate to an arbitrary allowlist by setting
+# AUDIT_ALLOWLIST in the environment before invoking release-usb.sh.
+#
+# In normal (release) use the path is always fixed to:
+#   <script_dir>/../audit-allowlist.json
+#
+# Test-only override: AUDIT_ALLOWLIST may be set to an alternate path ONLY when
+# AUDIT_GATE_TEST_MODE=1 is also set.  The real release-usb.sh never sets
+# AUDIT_GATE_TEST_MODE, so this bypass is unreachable from a production release.
+_AUDIT_GATE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${AUDIT_GATE_TEST_MODE:-0}" == "1" && -n "${AUDIT_ALLOWLIST:-}" ]]; then
+  # Test mode: honour the caller-supplied override ONLY when it resolves to a
+  # path inside the repo's scripts/ directory (i.e. inside _AUDIT_GATE_SCRIPT_DIR
+  # itself).  Any path that resolves outside — including /tmp/... or absolute
+  # paths in other trees — is silently ignored and the pinned repo allowlist is
+  # used instead.  This closes the two-var attack
+  #   AUDIT_GATE_TEST_MODE=1 AUDIT_ALLOWLIST=/tmp/evil.json pnpm run release:usb
+  # even if the caller forgot to unset the sentinels.
+  # _AUDIT_GATE_SCRIPT_DIR is scripts/lib/; the allowed scope is its parent
+  # (scripts/), so test fixtures written anywhere under scripts/ are accepted.
+  _AUDIT_SCRIPTS_DIR="$(cd "$_AUDIT_GATE_SCRIPT_DIR/.." && pwd)"
+  _AUDIT_OVERRIDE_REAL="$(cd "$(dirname "${AUDIT_ALLOWLIST}")" 2>/dev/null && pwd)" || _AUDIT_OVERRIDE_REAL=""
+  if [[ -n "$_AUDIT_OVERRIDE_REAL" && "$_AUDIT_OVERRIDE_REAL/" == "$_AUDIT_SCRIPTS_DIR/"* ]]; then
+    : # Override resolves inside scripts/ — honour it.
+  else
+    AUDIT_ALLOWLIST="$_AUDIT_GATE_SCRIPT_DIR/../audit-allowlist.json"
+  fi
+else
+  # Production path (or test mode without an override): always use the
+  # repo-relative allowlist, ignore any env value.
+  AUDIT_ALLOWLIST="$_AUDIT_GATE_SCRIPT_DIR/../audit-allowlist.json"
+fi
 
 # Node.js snippet that:
 #   1. Reads pnpm audit --json from stdin
