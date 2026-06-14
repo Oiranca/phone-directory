@@ -1967,6 +1967,126 @@ else
 fi
 rm -rf "$TMP77"
 
+
+# --- Fix B: per-severity metadata reconciliation ------------------------------
+#
+# Prior to Fix B, reconciliation compared only combined high+critical totals.
+# An allowlisted critical advisory (iteratedCritical=1, iteratedHigh=0) paired
+# with metadata {high:1, critical:0} (metaHighCrit=1 == iteratedHighCrit=1)
+# passed silently despite the per-severity mismatch.
+# Fix B tracks iteratedHigh and iteratedCritical separately and requires BOTH
+# metaHigh===iteratedHigh AND metaCritical===iteratedCritical.
+
+# Test 78 (Fix B, v6): allowlisted critical + metadata {high:1,critical:0} → ABORTS
+# iteratedHigh=0, iteratedCritical=1; metaHigh=1, metaCritical=0 — swapped
+printf '\nTest 78 (Fix B, v6): allowlisted critical + metadata high:1,critical:0 → ABORTS (severity swap)\n'
+ALLOWLISTED_CRIT_META_SWAP_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":1,"critical":0}}}'
+TMP78="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP78" "$ALLOWLISTED_CRIT_META_SWAP_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP78" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix B v6: allowlisted critical + metadata high:1,critical:0 → gate ABORTS (severity swap)"
+else
+  fail "Fix B v6: allowlisted critical + metadata high:1,critical:0 → gate PASSED — per-severity mismatch not caught"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix B v6: severity-swap prints inconsistency message"
+else
+  fail "Fix B v6: severity-swap missing inconsistency message: $stderr_out"
+fi
+rm -rf "$TMP78"
+
+# Test 79 (Fix B, v6): allowlisted high + metadata {high:0,critical:1} → ABORTS
+# iteratedHigh=1, iteratedCritical=0; metaHigh=0, metaCritical=1 — swapped other direction
+printf '\nTest 79 (Fix B, v6): allowlisted high + metadata high:0,critical:1 → ABORTS (severity swap)\n'
+ALLOWLISTED_HIGH_META_SWAP_JSON='{"advisories":{"3":{"findings":[],"id":3,"severity":"high","module_name":"esbuild","title":"esbuild vuln","github_advisory_id":"GHSA-gv7w-rqvm-qjhr","vulnerable_versions":"<0.28.1","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":1}}}'
+TMP79="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP79" "$ALLOWLISTED_HIGH_META_SWAP_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP79" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix B v6: allowlisted high + metadata high:0,critical:1 → gate ABORTS (severity swap)"
+else
+  fail "Fix B v6: allowlisted high + metadata high:0,critical:1 → gate PASSED — per-severity mismatch not caught"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix B v6: severity-swap (high→critical) prints inconsistency message"
+else
+  fail "Fix B v6: severity-swap (high→critical) missing inconsistency message: $stderr_out"
+fi
+rm -rf "$TMP79"
+
+# Test 80 (Fix B, v7): allowlisted critical + metadata {high:1,critical:0} → ABORTS
+printf '\nTest 80 (Fix B, v7): v7 allowlisted critical + metadata high:1,critical:0 → ABORTS (severity swap)\n'
+VULN_CRIT_META_SWAP_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"high":1,"critical":0}}}'
+TMP80="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP80" "$VULN_CRIT_META_SWAP_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP80" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix B v7: allowlisted critical + metadata high:1,critical:0 → gate ABORTS (severity swap)"
+else
+  fail "Fix B v7: allowlisted critical + metadata high:1,critical:0 → gate PASSED — per-severity mismatch not caught"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix B v7: severity-swap prints inconsistency message"
+else
+  fail "Fix B v7: severity-swap missing inconsistency message: $stderr_out"
+fi
+rm -rf "$TMP80"
+
+# Test 81 (Fix B, v7): allowlisted high + metadata {high:0,critical:1} → ABORTS
+printf '\nTest 81 (Fix B, v7): v7 allowlisted high + metadata high:0,critical:1 → ABORTS (severity swap)\n'
+VULN_HIGH_META_SWAP_JSON='{"vulnerabilities":{"esbuild":{"name":"esbuild","severity":"high","via":[{"ghsaId":"GHSA-gv7w-rqvm-qjhr","title":"esbuild vuln","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"high":0,"critical":1}}}'
+TMP81="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP81" "$VULN_HIGH_META_SWAP_JSON" 1
+rc=0
+stderr_out="$(run_gate_in_subshell "$TMP81" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix B v7: allowlisted high + metadata high:0,critical:1 → gate ABORTS (severity swap)"
+else
+  fail "Fix B v7: allowlisted high + metadata high:0,critical:1 → gate PASSED — per-severity mismatch not caught"
+fi
+if printf '%s' "$stderr_out" | grep -q 'inconsistent'; then
+  pass "Fix B v7: severity-swap (high→critical) prints inconsistency message"
+else
+  fail "Fix B v7: severity-swap (high→critical) missing inconsistency message: $stderr_out"
+fi
+rm -rf "$TMP81"
+
+# Test 82 (Fix B, v6 regression): consistent per-severity counts → still PASSES
+# ALLOWLISTED_JSON: critical:1 high:2 — all in real allowlist, metadata matches exactly
+printf '\nTest 82 (Fix B, v6 regression): consistent per-severity counts → still PASSES\n'
+TMP82="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP82" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP82" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix B v6 regression: consistent per-severity metadata → still PASSES"
+  else
+    fail "Fix B v6 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix B v6 regression: consistent per-severity metadata exited non-zero — regression"
+fi
+rm -rf "$TMP82"
+
+# Test 83 (Fix B, v7 regression): consistent per-severity counts → still PASSES
+# VULN_SCHEMA_ALLOWLISTED_JSON: critical:1 high:1 — allowlisted, metadata matches
+printf '\nTest 83 (Fix B, v7 regression): v7 consistent per-severity counts → still PASSES\n'
+TMP83="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP83" "$VULN_SCHEMA_ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP83" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix B v7 regression: v7 consistent per-severity metadata → still PASSES"
+  else
+    fail "Fix B v7 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix B v7 regression: v7 consistent per-severity metadata exited non-zero — regression"
+fi
+rm -rf "$TMP83"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

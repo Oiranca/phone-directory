@@ -311,7 +311,8 @@ process.stdin.on("end", () => {
   const allowlistCount = allowlist.length;
 
   const failures = [];
-  let iteratedHighCrit = 0;
+  let iteratedHigh     = 0;
+  let iteratedCritical = 0;
 
   // Documented pnpm audit severity enum values (all known severities).
   // Any advisory whose normalised severity is not in this set is malformed —
@@ -355,7 +356,7 @@ process.stdin.on("end", () => {
       }
       // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
-      iteratedHighCrit++;
+      if (sev === "high") iteratedHigh++; else iteratedCritical++;
       const ghsa = adv.github_advisory_id || "";
       const livePkg = String(adv.module_name || "").trim();
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
@@ -403,7 +404,7 @@ process.stdin.on("end", () => {
       }
       // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
-      iteratedHighCrit++;
+      if (sev === "high") iteratedHigh++; else iteratedCritical++;
 
       // Extract GHSA IDs from the "via" array (may contain string dep-names or
       // advisory objects with a ghsaId field).
@@ -455,12 +456,15 @@ process.stdin.on("end", () => {
     // Now safe to use integer arithmetic (no coercion needed — values validated above).
     const metaHigh     = typeof mv.high     === "number" ? mv.high     : 0;
     const metaCritical = typeof mv.critical === "number" ? mv.critical : 0;
-    const metaHighCrit = metaHigh + metaCritical;
-    if (metaHighCrit !== iteratedHighCrit) {
+    // Require per-severity equality (not just combined totals).
+    // A swapped-severity payload — e.g. an allowlisted critical advisory with
+    // metadata reporting {high:1, critical:0} — has the same combined total (1)
+    // but is internally inconsistent and must be rejected.
+    if (metaHigh !== iteratedHigh || metaCritical !== iteratedCritical) {
       process.stderr.write(
-        "[audit-gate] Metadata reports " + metaHighCrit + " high/critical advisory/ies " +
-        "but " + iteratedHighCrit + " were found in the parsed advisory container — " +
-        "response is inconsistent (truncated, duplicated, schema mismatch, or registry error).\n"
+        "[audit-gate] Metadata severity counts (high:" + metaHigh + " critical:" + metaCritical + ") " +
+        "do not match iterated advisory counts (high:" + iteratedHigh + " critical:" + iteratedCritical + ") — " +
+        "response is inconsistent (truncated, duplicated, severity mismatch, or registry error).\n"
       );
       process.exit(3);
     }
