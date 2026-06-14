@@ -576,7 +576,19 @@ process.stdin.on("end", () => {
   // structurally inconsistent — treat as an infra/registry error.
   // When pnpm exited non-zero AND we DID observe advisories (including fully
   // allowlisted ones), that is the expected behavior — continue normal logic.
-  const pnpmExitCode = parseInt(process.argv[2], 10) || 0;
+  //
+  // argv[2] MUST be a non-negative integer string supplied by the bash caller.
+  // A missing or non-numeric value is a caller bug — fail closed (exit 3)
+  // rather than defaulting to 0 (which would silently disable this check).
+  const pnpmExitArg = process.argv[2];
+  if (pnpmExitArg === undefined || pnpmExitArg === null || !/^\d+$/.test(pnpmExitArg)) {
+    process.stderr.write(
+      "[audit-gate] Internal error: pnpm exit code argument (argv[2]) is missing or non-numeric " +
+      "(got: " + JSON.stringify(pnpmExitArg) + ") — this is a bug in the gate caller.\n"
+    );
+    process.exit(3);
+  }
+  const pnpmExitCode = parseInt(pnpmExitArg, 10);
   if (pnpmExitCode !== 0 && failures.length === 0 && iteratedHigh === 0 && iteratedCritical === 0) {
     process.stderr.write(
       "[audit-gate] pnpm audit exited " + pnpmExitCode + " but no high/critical advisories were " +
