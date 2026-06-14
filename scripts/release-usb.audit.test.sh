@@ -1609,6 +1609,41 @@ else
 fi
 rm -rf "$TMP67" "$PERMISSIVE_ALLOWLIST_DIR67"
 
+# Test 67b (Commit3, symlink escape): a symlink under scripts/ targeting /tmp/evil.json
+# must be rejected — only the literal parent dir was canonicalized before, so the
+# symlink's parent IS inside scripts/ but its real target is outside.
+printf '\nTest 67b (Commit3): symlink under scripts/ targeting /tmp → scope guard rejects it\n'
+TMP67b="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67b" "$NEW_CRITICAL_JSON" 1
+# Create a permissive (empty) allowlist file in /tmp that would suppress everything.
+EVIL_ALLOWLIST="$(mktemp /tmp/evil-allowlist-XXXXXX.json)"
+printf '[]' > "$EVIL_ALLOWLIST"
+# Create a symlink under scripts/ pointing to the /tmp file.
+SYMLINK_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+ln -s "$EVIL_ALLOWLIST" "$SYMLINK_DIR/allowlist.json"
+rc=0
+stderr_67b="$(env PATH="$TMP67b:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$SYMLINK_DIR/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit3 symlink escape: symlink under scripts/ to /tmp → gate aborts (scope guard rejects)"
+else
+  fail "Commit3 symlink escape: symlink under scripts/ to /tmp → gate wrongly PASSED (symlink escape not blocked)"
+fi
+if printf '%s' "$stderr_67b" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Commit3 symlink escape: NON-ALLOWLISTED emitted — symlink allowlist was not honoured"
+else
+  fail "Commit3 symlink escape: NON-ALLOWLISTED missing — symlink allowlist may have been used: $stderr_67b"
+fi
+rm -f "$EVIL_ALLOWLIST"
+rm -rf "$SYMLINK_DIR" "$TMP67b"
+
 # --- Fix 2: exact metadata reconciliation (iteratedHighCrit !== metaHighCrit) -
 #
 # The prior check only caught metaHighCrit > iteratedHighCrit.  A payload with

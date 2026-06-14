@@ -35,8 +35,30 @@ if [[ "${AUDIT_GATE_TEST_MODE:-0}" == "1" && -n "${AUDIT_ALLOWLIST:-}" ]]; then
   # _AUDIT_GATE_SCRIPT_DIR is scripts/lib/; the allowed scope is its parent
   # (scripts/), so test fixtures written anywhere under scripts/ are accepted.
   _AUDIT_SCRIPTS_DIR="$(cd "$_AUDIT_GATE_SCRIPT_DIR/.." && pwd)"
+  # Canonicalize the PARENT DIR of the override (catches paths that escape via ..)
   _AUDIT_OVERRIDE_REAL="$(cd "$(dirname "${AUDIT_ALLOWLIST}")" 2>/dev/null && pwd)" || _AUDIT_OVERRIDE_REAL=""
-  if [[ -n "$_AUDIT_OVERRIDE_REAL" && "$_AUDIT_OVERRIDE_REAL/" == "$_AUDIT_SCRIPTS_DIR/"* ]]; then
+  # Also canonicalize the FILE TARGET ITSELF (catches symlinks under scripts/ that
+  # point outside — e.g. scripts/.test-x/al.json → /tmp/evil.json).
+  # Portable realpath: try realpath(1), then python3 -c os.path.realpath, then
+  # fall back to the parent-dir resolution (symlink escapes rejected by the
+  # _AUDIT_OVERRIDE_FILE_REAL check below defaulting to "").
+  _AUDIT_OVERRIDE_FILE_REAL=""
+  if command -v realpath >/dev/null 2>&1; then
+    _AUDIT_OVERRIDE_FILE_REAL="$(realpath "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
+  elif command -v python3 >/dev/null 2>&1; then
+    _AUDIT_OVERRIDE_FILE_REAL="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
+  fi
+  # Derive the real parent dir of the resolved file path (if resolution succeeded).
+  _AUDIT_OVERRIDE_FILE_DIR=""
+  if [[ -n "$_AUDIT_OVERRIDE_FILE_REAL" ]]; then
+    _AUDIT_OVERRIDE_FILE_DIR="$(dirname "$_AUDIT_OVERRIDE_FILE_REAL")"
+  fi
+  # Accept the override only when ALL of the following hold:
+  #   1. The parent dir of the literal path is inside scripts/  (catches .. escapes)
+  #   2. The real file target is also inside scripts/            (catches symlink escapes)
+  #      OR realpath was not available (fall back to parent-dir check only)
+  if [[ -n "$_AUDIT_OVERRIDE_REAL" && "$_AUDIT_OVERRIDE_REAL/" == "$_AUDIT_SCRIPTS_DIR/"* ]] && \
+     { [[ -z "$_AUDIT_OVERRIDE_FILE_REAL" ]] || [[ "$_AUDIT_OVERRIDE_FILE_DIR/" == "$_AUDIT_SCRIPTS_DIR/"* ]]; }; then
     : # Override resolves inside scripts/ — honour it.
   else
     AUDIT_ALLOWLIST="$_AUDIT_GATE_SCRIPT_DIR/../audit-allowlist.json"
