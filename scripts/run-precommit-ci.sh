@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Pre-commit verification — DELIBERATELY a lighter, faster variant of the full
+# pipeline: typecheck + test + audit-gate SMOKE subset + build.  It runs the
+# curated audit-gate smoke subset (~1.7s) instead of the exhaustive harness
+# (~25s) so small/docs commits are not penalized.
+#
+# The CANONICAL full pipeline is `pnpm run ci` (package.json scripts.ci), which
+# runs the EXHAUSTIVE audit-gate harness; scripts/ci-local.sh delegates to it.
+# The remaining difference between this script and `pnpm run ci` is intentional,
+# not configuration drift.
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$REPO_ROOT/tmp/ci"
 STATUS_FILE="$LOG_DIR/pre-commit-status.txt"
