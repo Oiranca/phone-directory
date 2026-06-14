@@ -2087,6 +2087,192 @@ else
 fi
 rm -rf "$TMP83"
 
+
+# --- Fix C: signal propagation when caller handler returns normally -----------
+#
+# Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,
+# if the caller's handler returned normally (no explicit exit), control returned
+# to the gate's signal handler which also returned, and execution continued —
+# the caller reached CONTINUED_AFTER_GATE with exit 0.
+# Fix C adds `exit 130` (INT) / `exit 143` (TERM) after the kill so that
+# continuation is impossible even when the caller's handler returns normally.
+
+# Test 84 (Fix C, TERM): caller TERM handler returns normally → caller NEVER
+# reaches the post-gate marker; process exits non-zero.
+printf '\nTest 84 (Fix C, TERM): caller TERM handler returns normally → caller does NOT continue\n'
+TMP84="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP84" TERM
+MARKER84="$(mktemp)"
+rm -f "$MARKER84"
+rc=0
+# The caller trap writes the marker and RETURNS (no exit) — before Fix C this
+# allowed execution to continue past run_audit_gate.
+continued_output="$(env PATH="$TMP84:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf TERM_HANDLER_RAN > $MARKER84' TERM
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || rc=$?
+if printf '%s' "$continued_output" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix C TERM: caller continued past run_audit_gate even though TERM handler returned normally"
+else
+  pass "Fix C TERM: caller did NOT continue past run_audit_gate (TERM handler returned normally)"
+fi
+if [[ -f "$MARKER84" ]] && grep -q 'TERM_HANDLER_RAN' "$MARKER84" 2>/dev/null; then
+  pass "Fix C TERM: caller TERM handler still ran (marker written) before forced exit"
+else
+  fail "Fix C TERM: caller TERM handler did NOT run (marker missing)"
+fi
+rm -f "$MARKER84"
+rm -rf "$TMP84"
+
+# Test 85 (Fix C, INT): caller INT handler returns normally → caller NEVER
+# reaches the post-gate marker; process exits non-zero.
+printf '\nTest 85 (Fix C, INT): caller INT handler returns normally → caller does NOT continue\n'
+TMP85="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP85" INT
+MARKER85="$(mktemp)"
+rm -f "$MARKER85"
+rc=0
+continued_output="$(env PATH="$TMP85:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf INT_HANDLER_RAN > $MARKER85' INT
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || rc=$?
+if printf '%s' "$continued_output" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix C INT: caller continued past run_audit_gate even though INT handler returned normally"
+else
+  pass "Fix C INT: caller did NOT continue past run_audit_gate (INT handler returned normally)"
+fi
+if [[ -f "$MARKER85" ]] && grep -q 'INT_HANDLER_RAN' "$MARKER85" 2>/dev/null; then
+  pass "Fix C INT: caller INT handler still ran (marker written) before forced exit"
+else
+  fail "Fix C INT: caller INT handler did NOT run (marker missing)"
+fi
+rm -f "$MARKER85"
+rm -rf "$TMP85"
+
+# Test 86 (Fix C cross-platform): body extraction works for both Linux bare name
+# and macOS SIG-prefixed name formats using the eval-assign decode approach.
+# The extraction: strip "trap -- " prefix, strip trailing " <SIGNAME>" token via
+# sed, then eval-assign the remaining shell-quoted word into a plain variable.
+# This test runs entirely in bash (no pnpm stub) so it guards the cross-platform
+# path on a macOS CI host without requiring Linux hardware.
+printf '\nTest 86 (Fix C cross-platform): eval-assign body extraction — Linux bare INT/TERM and macOS SIGINT/SIGTERM\n'
+
+_t86_decode_body() {
+  # Replicates the extraction logic from audit-gate.sh for testing purposes.
+  local _trap_out="$1"
+  local _body=""
+  if [[ -n "${_trap_out}" ]]; then
+    local _rest _quoted
+    _rest="${_trap_out#trap -- }"
+    _quoted="$(printf '%s' "${_rest}" | sed "s/ \(SIG\)\{0,1\}[A-Z][A-Z]*$//" 2>/dev/null || true)"
+    eval "_body=${_quoted}" 2>/dev/null || _body=""
+  fi
+  printf '%s' "${_body}"
+}
+
+# Linux bare-name format
+_t86_r="$(_t86_decode_body "trap -- 'printf LINUX_INT_BODY' INT")"
+if [[ "$_t86_r" == "printf LINUX_INT_BODY" ]]; then
+  pass "Fix C cross-platform: Linux bare INT — body decoded correctly"
+else
+  fail "Fix C cross-platform: Linux bare INT — got: '$_t86_r' (expected: 'printf LINUX_INT_BODY')"
+fi
+
+_t86_r="$(_t86_decode_body "trap -- 'printf LINUX_TERM_BODY' TERM")"
+if [[ "$_t86_r" == "printf LINUX_TERM_BODY" ]]; then
+  pass "Fix C cross-platform: Linux bare TERM — body decoded correctly"
+else
+  fail "Fix C cross-platform: Linux bare TERM — got: '$_t86_r' (expected: 'printf LINUX_TERM_BODY')"
+fi
+
+# macOS SIG-prefixed format
+_t86_r="$(_t86_decode_body "trap -- 'printf MAC_INT_BODY' SIGINT")"
+if [[ "$_t86_r" == "printf MAC_INT_BODY" ]]; then
+  pass "Fix C cross-platform: macOS SIGINT — body decoded correctly"
+else
+  fail "Fix C cross-platform: macOS SIGINT — got: '$_t86_r' (expected: 'printf MAC_INT_BODY')"
+fi
+
+_t86_r="$(_t86_decode_body "trap -- 'printf MAC_TERM_BODY' SIGTERM")"
+if [[ "$_t86_r" == "printf MAC_TERM_BODY" ]]; then
+  pass "Fix C cross-platform: macOS SIGTERM — body decoded correctly"
+else
+  fail "Fix C cross-platform: macOS SIGTERM — got: '$_t86_r' (expected: 'printf MAC_TERM_BODY')"
+fi
+
+# Verify a decoded body actually executes via eval (full call path).
+_t86_eval_result="$(eval "$(_t86_decode_body "trap -- 'printf LINUX_INT_BODY' INT")" 2>/dev/null || true)"
+if [[ "$_t86_eval_result" == "LINUX_INT_BODY" ]]; then
+  pass "Fix C cross-platform: eval of Linux-format decoded body executes correctly"
+else
+  fail "Fix C cross-platform: eval of Linux-format decoded body got: '$_t86_eval_result' (expected: 'LINUX_INT_BODY')"
+fi
+
+unset -f _t86_decode_body
+unset _t86_r _t86_eval_result
+
+# Test 87 (Fix C embedded apostrophe, INT): caller INT handler whose body contains
+# an embedded single quote — the '\'' shell quoting idiom must survive the
+# eval-assign decode so the handler body actually runs.
+printf '\nTest 87 (Fix C embedded apostrophe, INT): caller INT handler with embedded single quote runs correctly\n'
+TMP87="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP87" INT
+MARKER87="$(mktemp)"
+rm -f "$MARKER87"
+# The handler body is:  printf "it's here" > MARKER87
+# trap -p will encode the apostrophe as '\'' inside the body string.
+continued_output87="$(env PATH="$TMP87:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf \"it'\''s here\" > $MARKER87' INT
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || true
+if printf '%s' "$continued_output87" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix C apostrophe INT: caller continued past run_audit_gate (apostrophe body, INT)"
+else
+  pass "Fix C apostrophe INT: caller did NOT continue past run_audit_gate"
+fi
+if [[ -f "$MARKER87" ]] && grep -qF "it's here" "$MARKER87" 2>/dev/null; then
+  pass "Fix C apostrophe INT: handler body with embedded apostrophe executed correctly (marker contains apostrophe text)"
+else
+  fail "Fix C apostrophe INT: handler body did NOT execute or marker missing/wrong (got: '$(cat "$MARKER87" 2>/dev/null || echo MISSING)')"
+fi
+rm -f "$MARKER87"
+rm -rf "$TMP87"
+
+# Test 88 (Fix C embedded apostrophe, TERM): same for TERM signal.
+printf '\nTest 88 (Fix C embedded apostrophe, TERM): caller TERM handler with embedded single quote runs correctly\n'
+TMP88="$(setup_fake_pnpm)"
+write_signal_pnpm "$TMP88" TERM
+MARKER88="$(mktemp)"
+rm -f "$MARKER88"
+continued_output88="$(env PATH="$TMP88:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  trap 'printf \"it'\''s done\" > $MARKER88' TERM
+  AUDIT_STATUS_LINE=''
+  AUDIT_TARGET_PID=\$\$ run_audit_gate || true
+  printf 'CONTINUED_AFTER_GATE\n'
+" 2>/dev/null)" || true
+if printf '%s' "$continued_output88" | grep -q 'CONTINUED_AFTER_GATE'; then
+  fail "Fix C apostrophe TERM: caller continued past run_audit_gate (apostrophe body, TERM)"
+else
+  pass "Fix C apostrophe TERM: caller did NOT continue past run_audit_gate"
+fi
+if [[ -f "$MARKER88" ]] && grep -qF "it's done" "$MARKER88" 2>/dev/null; then
+  pass "Fix C apostrophe TERM: handler body with embedded apostrophe executed correctly (marker contains apostrophe text)"
+else
+  fail "Fix C apostrophe TERM: handler body did NOT execute or marker missing/wrong (got: '$(cat "$MARKER88" 2>/dev/null || echo MISSING)')"
+fi
+rm -f "$MARKER88"
+rm -rf "$TMP88"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

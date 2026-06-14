@@ -438,8 +438,8 @@ process.stdin.on("end", () => {
   // Strict integer validation: each present severity count in
   // metadata.vulnerabilities must be a non-negative integer.  Coercing a
   // string count with (|| 0) silently does string concatenation in arithmetic
-  // contexts ("0" + "0" === "00"), which breaks the metaHighCrit comparison
-  // and allows the reconciliation check to be bypassed.
+  // contexts ("0" + "0" === "00"), which breaks the per-severity equality
+  // check and allows the reconciliation check to be bypassed.
   if (hasMetadata && data.metadata && data.metadata.vulnerabilities) {
     const mv = data.metadata.vulnerabilities;
     const severityKeys = Object.keys(mv);
@@ -571,10 +571,54 @@ run_audit_gate() {
   _pnpm_stderr_file="$(mktemp)"
 
   # Save caller's traps (may be empty strings if none set).
+  # Also decode the handler BODY from each saved trap string at save time, so
+  # signal handlers can invoke it directly without re-parsing at signal time.
+  #
+  # `trap -p INT` format:
+  #   macOS bash 3.2: "trap -- 'BODY' SIGINT"  (SIG-prefixed name)
+  #   Linux bash 4/5: "trap -- 'BODY' INT"      (bare name, no SIG prefix)
+  #
+  # The body word uses shell quoting — embedded single quotes appear as '\''
+  # (close-quote, literal apostrophe, reopen-quote).  We must NOT strip those
+  # surrounding quotes via sed: that would leave a broken '\'' sequence that
+  # causes eval to hit an "unexpected EOF" error, which || true silently swallows
+  # — the caller's handler body would never run.
+  #
+  # Correct approach (three steps):
+  #   1. Strip the "trap -- " prefix, leaving the shell-quoted body word(s)
+  #      followed by a space and the signal name token.
+  #   2. Strip the trailing " <SIGNAME>" token (last whitespace-delimited word).
+  #      The BRE \(SIG\)\{0,1\}[A-Z][A-Z]* matches both SIGINT and INT.
+  #   3. eval-assign the REMAINING QUOTED word into a plain variable — bash
+  #      decodes the shell quoting (including '\'') into the raw body text.
+  #
+  # If no handler was set, trap -p emits nothing → all steps produce "" → the
+  # :-true fallback in eval "${_prev_body_INT:-true}" makes it a no-op.
   local _prev_trap_EXIT _prev_trap_INT _prev_trap_TERM
+  local _prev_body_INT _prev_body_TERM
   _prev_trap_EXIT="$(trap -p EXIT  2>/dev/null || true)"
-  _prev_trap_INT="$(trap  -p INT   2>/dev/null || true)"
+  _prev_trap_INT="$( trap -p INT   2>/dev/null || true)"
   _prev_trap_TERM="$(trap -p TERM  2>/dev/null || true)"
+
+  # Decode INT body: strip prefix, strip trailing signal-name token, eval-assign.
+  if [[ -n "${_prev_trap_INT}" ]]; then
+    local _int_rest _int_quoted
+    _int_rest="${_prev_trap_INT#trap -- }"
+    _int_quoted="$(printf '%s' "${_int_rest}" | sed "s/ \(SIG\)\{0,1\}[A-Z][A-Z]*$//" 2>/dev/null || true)"
+    eval "_prev_body_INT=${_int_quoted}" 2>/dev/null || _prev_body_INT=""
+  else
+    _prev_body_INT=""
+  fi
+
+  # Decode TERM body: same approach.
+  if [[ -n "${_prev_trap_TERM}" ]]; then
+    local _term_rest _term_quoted
+    _term_rest="${_prev_trap_TERM#trap -- }"
+    _term_quoted="$(printf '%s' "${_term_rest}" | sed "s/ \(SIG\)\{0,1\}[A-Z][A-Z]*$//" 2>/dev/null || true)"
+    eval "_prev_body_TERM=${_term_quoted}" 2>/dev/null || _prev_body_TERM=""
+  else
+    _prev_body_TERM=""
+  fi
 
   # Install cleanup traps.
   #
@@ -591,30 +635,41 @@ run_audit_gate() {
   }
   trap '_audit_gate_cleanup_exit' EXIT
 
-  # INT/TERM traps: SEPARATE from EXIT so we can propagate the signal correctly.
-  # Standard idiom: clean up, restore the caller's original handler for that
-  # signal, then re-raise — the process terminates with signal-correct exit
-  # status (128+N) and any pre-existing caller handler executes.
-  # We must NOT continue after re-raising, so the subshell running pnpm never
-  # resumes and the caller does not reach the "release proceeded" code path.
+  # INT/TERM signal handlers.
+  #
+  # Design: invoke the caller's handler BODY inline (directly, not via re-raise)
+  # so it runs regardless of whether it exits or returns normally.  After the
+  # body runs (or if there was no body), we always force-exit with the
+  # signal-correct status (130 for INT, 143 for TERM).  This ensures:
+  #   a) any pre-existing caller cleanup/handler executes, AND
+  #   b) continuation past run_audit_gate is impossible even when the caller's
+  #      handler returns normally without calling exit.
+  #
+  # Why inline instead of re-raise (kill -SIG $$)?
+  # Bash masks a signal while its own handler for that signal is running, so
+  # kill -INT $$ from within _audit_gate_signal_INT queues rather than delivers
+  # the signal immediately.  When our handler subsequently calls exit 130, the
+  # process terminates before the queued signal is delivered — the caller's
+  # handler never runs.  Invoking the body directly avoids this masking.
   _audit_gate_signal_INT() {
     rm -f "$_pnpm_stderr_file" 2>/dev/null || true
     trap - EXIT INT TERM
     eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
     eval "${_prev_trap_TERM:-true}" 2>/dev/null || true
-    # Restore the caller's INT handler then re-raise so the caller's handler
-    # runs (or the default action terminates the process).
-    eval "${_prev_trap_INT:-trap - INT}" 2>/dev/null || true
-    kill -INT "$$"
+    # Run the caller's INT handler body inline (no-op if caller had none).
+    eval "${_prev_body_INT:-true}" 2>/dev/null || true
+    # Always terminate with signal-correct status; the caller cannot continue.
+    exit 130
   }
   _audit_gate_signal_TERM() {
     rm -f "$_pnpm_stderr_file" 2>/dev/null || true
     trap - EXIT INT TERM
     eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
     eval "${_prev_trap_INT:-true}"  2>/dev/null || true
-    # Restore the caller's TERM handler then re-raise.
-    eval "${_prev_trap_TERM:-trap - TERM}" 2>/dev/null || true
-    kill -TERM "$$"
+    # Run the caller's TERM handler body inline (no-op if caller had none).
+    eval "${_prev_body_TERM:-true}" 2>/dev/null || true
+    # Always terminate with signal-correct status; the caller cannot continue.
+    exit 143
   }
   trap '_audit_gate_signal_INT'  INT
   trap '_audit_gate_signal_TERM' TERM
