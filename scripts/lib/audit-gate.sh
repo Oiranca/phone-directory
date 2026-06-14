@@ -206,13 +206,22 @@ process.stdin.on("end", () => {
 
   // --- load allowlist -------------------------------------------------------
   const allowlistPath = process.argv[1];
-  let allowlist = [];
+  let allowlist;
   try {
     allowlist = JSON.parse(fs.readFileSync(allowlistPath, "utf8"));
   } catch (e) {
     process.stderr.write("[audit-gate] Could not read allowlist at: " + allowlistPath + "\n");
     process.stderr.write(e.message + "\n");
     process.exit(1);
+  }
+  // Allowlist top-level must be a JSON array — null, objects, and primitives
+  // would cause an uncontrolled TypeError at allowlist.length or the for-loop.
+  if (!Array.isArray(allowlist)) {
+    process.stderr.write(
+      "[audit-gate] Allowlist at " + allowlistPath + " is not a JSON array " +
+      "(got: " + (allowlist === null ? "null" : typeof allowlist) + ") — allowlist is malformed.\n"
+    );
+    process.exit(3);
   }
 
   // Validate allowlist schema and enforce expiry.
@@ -443,6 +452,16 @@ process.stdin.on("end", () => {
 
       // Extract GHSA IDs from the "via" array (may contain string dep-names or
       // advisory objects with a ghsaId field).
+      // via must be an array, null, or undefined — any other type (object, string,
+      // number, boolean) is a malformed payload and must exit 3, not silently
+      // be treated as empty (which would suppress the advisory as no-GHSA).
+      if (vuln.via !== null && vuln.via !== undefined && !Array.isArray(vuln.via)) {
+        process.stderr.write(
+          "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "].via is not an array " +
+          "(got: " + typeof vuln.via + ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
       const viaAdvisories = (vuln.via || []).filter(v => v && typeof v === "object");
       if (viaAdvisories.length === 0) {
         // No advisory objects in via — treat as no-GHSA failure (cannot allowlist).

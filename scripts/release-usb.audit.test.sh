@@ -2352,6 +2352,100 @@ else
 fi
 rm -rf "$TMP83h"
 
+# --- Commit 5: controlled errors for malformed via and non-array allowlist ---
+
+# Test 83i: v7, via is a plain object {} → ABORTS (exit 3, not silently empty)
+printf '\nTest 83i (Commit5, v7): via is {} (object, not array) → ABORTS\n'
+TMP83i="$(setup_fake_pnpm)"
+VIA_OBJ_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":{},"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":1}}'
+write_fake_pnpm "$TMP83i" "$VIA_OBJ_JSON" 1
+rc=0
+stderr_83i="$(env PATH="$TMP83i:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit5: via is object {} → gate aborts (not silently empty)"
+else
+  fail "Commit5: via is object {} → gate wrongly returned 0 (FAIL-OPEN: advisory suppressed)"
+fi
+if printf '%s' "$stderr_83i" | grep -q 'via is not an array'; then
+  pass "Commit5: via is object {} → malformed payload message emitted"
+else
+  fail "Commit5: via is object {} → wrong stderr: $stderr_83i"
+fi
+rm -rf "$TMP83i"
+
+# Test 83j: v7, via is true (boolean) → ABORTS (exit 3)
+printf '\nTest 83j (Commit5, v7): via is true (boolean) → ABORTS\n'
+TMP83j="$(setup_fake_pnpm)"
+VIA_BOOL_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":true,"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":1}}'
+write_fake_pnpm "$TMP83j" "$VIA_BOOL_JSON" 1
+rc=0
+env PATH="$TMP83j:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit5: via is boolean true → gate aborts"
+else
+  fail "Commit5: via is boolean true → gate wrongly returned 0"
+fi
+rm -rf "$TMP83j"
+
+# Test 83k: non-array allowlist (null top-level) → ABORTS (exit 3, not TypeError)
+printf '\nTest 83k (Commit5): allowlist top-level is null → ABORTS with controlled message\n'
+TMP83k="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP83k" "$CLEAN_JSON" 0
+NULL_AL_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+printf 'null' > "$NULL_AL_DIR/allowlist.json"
+rc=0
+stderr_83k="$(env PATH="$TMP83k:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$NULL_AL_DIR/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit5: null allowlist → gate aborts with non-zero exit"
+else
+  fail "Commit5: null allowlist → gate wrongly returned 0"
+fi
+if printf '%s' "$stderr_83k" | grep -q 'not a JSON array'; then
+  pass "Commit5: null allowlist → controlled error message emitted (not V8 TypeError)"
+else
+  fail "Commit5: null allowlist → wrong stderr: $stderr_83k"
+fi
+rm -rf "$NULL_AL_DIR" "$TMP83k"
+
+# Test 83l: non-array allowlist (object {}) → ABORTS (exit 3)
+printf '\nTest 83l (Commit5): allowlist top-level is {} (object) → ABORTS\n'
+TMP83l="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP83l" "$CLEAN_JSON" 0
+OBJ_AL_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+printf '{}' > "$OBJ_AL_DIR/allowlist.json"
+rc=0
+env PATH="$TMP83l:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$OBJ_AL_DIR/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit5: object allowlist → gate aborts"
+else
+  fail "Commit5: object allowlist → gate wrongly returned 0"
+fi
+rm -rf "$OBJ_AL_DIR" "$TMP83l"
+
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
 # Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,
