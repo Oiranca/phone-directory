@@ -3502,6 +3502,57 @@ else
 fi
 rm -rf "$TMP83w"
 
+# --- CommitB: composite key collision hardening (GHSA format validation) ------
+#
+# A crafted live advisory ghsaId containing a space could collide with a
+# different legitimate composite key when the separator is a plain space.
+# CommitB validates live ghsaIds against the GHSA format regex before using
+# them as the composite key first half; non-matching ids are treated as absent
+# (no-GHSA path). The separator was also changed from " " to NUL ("\x00").
+
+# Test 83x (CommitB): live advisory with malformed ghsaId containing a space
+# must NOT be suppressed by any allowlist entry — it cannot match the format
+# regex so it is treated as no-GHSA and flows to the advisory-block path.
+printf '\nTest 83x (CommitB): live advisory with malformed ghsaId (contains space) → NOT suppressed by allowlist, BLOCKS\n'
+TMP83x="$(setup_fake_pnpm)"
+# Allowlist entry for "GHSA-aaaa-aaaa aa" package "evil-pkg" — this is
+# what an attacker might try to inject to collide with a real allowlist entry.
+# But "GHSA-aaaa-aaaa aa" is not a valid GHSA id (contains a space), so after
+# CommitB it is stripped to "" before the map lookup and cannot be suppressed.
+MALFORMED_GHSA_ALLOWLIST="$(printf '[{"id":"GHSA-aaaa-aaaa-aaaa","package":"evil-pkg","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD83x_AL="$(write_temp_allowlist "$MALFORMED_GHSA_ALLOWLIST")"
+# v6 payload: github_advisory_id contains a space — malformed, not canonical GHSA
+MALFORMED_GHSA_PAYLOAD='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"evil-pkg","title":"crafted advisory","github_advisory_id":"GHSA-aaaa-aaaa aaaa","vulnerable_versions":"*","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+rc=0
+stderr_83x="$(run_gate_allowlist_payload "$TMP83x" "$TMPD83x_AL/allowlist.json" "$MALFORMED_GHSA_PAYLOAD" 1 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "CommitB: malformed ghsaId not suppressed by allowlist — correctly blocks"
+else
+  fail "CommitB: malformed ghsaId was suppressed by allowlist — composite key collision (rc=$rc)"
+fi
+if printf '%s' "$stderr_83x" | grep -qi 'NON-ALLOWLISTED\|non-allowlisted'; then
+  pass "CommitB: block message confirms the advisory was not allowlisted"
+else
+  fail "CommitB: expected NON-ALLOWLISTED message missing: $stderr_83x"
+fi
+rm -rf "$TMP83x" "$TMPD83x_AL"
+
+# Test 83y (CommitB): a valid GHSA id is still matched correctly by the regex
+# and can be suppressed by an exact allowlist entry — regression for C2 behavior.
+printf '\nTest 83y (CommitB): valid GHSA id still matches allowlist after format validation → PASSES (C2 regression)\n'
+TMP83y="$(setup_fake_pnpm)"
+VALID_GHSA_ALLOWLIST="$(printf '[{"id":"GHSA-abcd-efgh-1234","package":"some-lib","severity":"high","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD83y_AL="$(write_temp_allowlist "$VALID_GHSA_ALLOWLIST")"
+VALID_GHSA_V6_PAYLOAD='{"advisories":{"1":{"findings":[],"id":1,"severity":"high","module_name":"some-lib","title":"valid advisory","github_advisory_id":"GHSA-abcd-efgh-1234","vulnerable_versions":"*","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0}}}'
+rc=0
+out_83y="$(run_gate_allowlist_payload "$TMP83y" "$TMPD83y_AL/allowlist.json" "$VALID_GHSA_V6_PAYLOAD" 1 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_83y" | grep -q 'PASSED'; then
+  pass "CommitB: valid GHSA id still matched and suppressed by allowlist → PASSED"
+else
+  fail "CommitB: valid GHSA id not suppressed — format validation broke allowlist lookup (rc=$rc)"
+fi
+rm -rf "$TMP83y" "$TMPD83y_AL"
+
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
 # Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,

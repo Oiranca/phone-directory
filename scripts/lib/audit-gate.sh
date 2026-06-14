@@ -339,7 +339,7 @@ process.stdin.on("end", () => {
     // allowedMap keys use the identical composite normalization below.
     const _normalizedId = entry.id.trim().toLowerCase();
     const _normalizedPkg = entry.package.trim();
-    const _identityKey = _normalizedId + " " + _normalizedPkg;
+    const _identityKey = _normalizedId + "\x00" + _normalizedPkg;
     if (seenIds.has(_identityKey)) {
       process.stderr.write(
         "[audit-gate] Duplicate allowlist identity (id: " + entry.id +
@@ -361,7 +361,7 @@ process.stdin.on("end", () => {
     }
   }
 
-  // Build a Map from COMPOSITE identity "<ghsa> <package>" → { severity } so that
+  // Build a Map from COMPOSITE identity "<ghsa>\x00<package>" → { severity } so that
   // suppression requires GHSA id AND package to match (and severity below).
   // Keying by GHSA alone would let a bogus entry (wrong package) suppress a live
   // advisory with the same GHSA id; keying by composite also lets one GHSA cover
@@ -369,9 +369,13 @@ process.stdin.on("end", () => {
   // The GHSA half is lowercased so advisory GHSA ids in any case (GHSA-xxxx vs
   // ghsa-xxxx) match regardless of capitalisation.  The package half preserves
   // case (package names are case-sensitive) but is trimmed.
+  // NUL ("\x00") is used as the separator because it cannot appear in a valid
+  // GHSA id (format: GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}) or in a package
+  // name — preventing any crafted live ghsaId or package name from colliding
+  // with a different allowlist composite key via separator injection.
   const allowedMap = new Map(
     allowlist.map(e => [
-      e.id.trim().toLowerCase() + " " + e.package.trim(),
+      e.id.trim().toLowerCase() + "\x00" + e.package.trim(),
       { sev: e.severity.trim().toLowerCase() }
     ])
   );
@@ -394,6 +398,16 @@ process.stdin.on("end", () => {
   // we must abort rather than silently skip, to prevent a typo like "critcal"
   // from being treated as below-threshold and letting a critical advisory pass.
   const KNOWN_SEVERITIES = new Set(["info", "low", "moderate", "high", "critical"]);
+
+  // GHSA advisory ID format: GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}
+  // Used to validate LIVE advisory ghsaIds before using them as composite
+  // allowlist key halves. A live ghsaId that does not match this format is
+  // treated as absent (cannot be allowlisted) rather than used as-is — this
+  // prevents a crafted ghsaId containing a space (or the NUL separator) from
+  // colliding with a different legitimate composite key.
+  // Allowlist entry ids are validated at load time (schema check above),
+  // so this guard only needs to cover the live advisory side.
+  const GHSA_FORMAT_RE = /^ghsa-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}$/;
 
   // --- v6 schema: data.advisories -------------------------------------------
   if (advisoriesIsPlainObj) {
@@ -434,7 +448,12 @@ process.stdin.on("end", () => {
       // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
       if (sev === "high") iteratedHigh++; else iteratedCritical++;
-      const ghsa = (adv.github_advisory_id || "").trim().toLowerCase();
+      // Validate live ghsaId against the canonical GHSA format before using it
+      // as the first half of the composite allowlist key. A malformed id (e.g.
+      // one containing a space or the NUL separator) cannot match any allowlist
+      // entry and must be treated as absent to prevent composite key collision.
+      const _rawGhsa = (adv.github_advisory_id || "").trim().toLowerCase();
+      const ghsa = GHSA_FORMAT_RE.test(_rawGhsa) ? _rawGhsa : "";
       // module_name MUST be a plain string — String() coercion would silently
       // accept an array (["tmp"] → "tmp") and allow suppression via allowlist.
       if (typeof adv.module_name !== "string") {
@@ -448,10 +467,10 @@ process.stdin.on("end", () => {
       const livePkg = adv.module_name.trim();
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
       // as a failure because we cannot confirm its identity.
-      // When a GHSA id IS present, suppression requires an allowlist entry whose
-      // composite identity (GHSA id + package) matches AND whose severity matches.
-      // The GHSA half of the key is lowercased (case-insensitive match).
-      const _identityKey = ghsa + " " + livePkg;
+      // When a GHSA id IS present (and format-validated), suppression requires an
+      // allowlist entry whose composite identity (GHSA id + package) matches AND
+      // whose severity matches. NUL separator prevents key collision.
+      const _identityKey = ghsa + "\x00" + livePkg;
       if (ghsa && allowedMap.has(_identityKey)) {
         const entry = allowedMap.get(_identityKey);
         if (entry.sev === sev) continue;
@@ -582,16 +601,20 @@ process.stdin.on("end", () => {
         // Only high/critical via advisories can block (policy is high/critical-only).
         if (viaSev !== "high" && viaSev !== "critical") continue;
 
-        // Normalize ghsa id to lowercase for case-insensitive allowlist lookup.
-        const ghsa = (via.ghsaId || via.github_advisory_id || "").trim().toLowerCase();
+        // Validate live ghsaId against the canonical GHSA format before using it
+        // as the first half of the composite allowlist key. A malformed id (e.g.
+        // one containing a space or the NUL separator) cannot match any allowlist
+        // entry and must be treated as absent to prevent composite key collision.
+        const _rawGhsa = (via.ghsaId || via.github_advisory_id || "").trim().toLowerCase();
+        const ghsa = GHSA_FORMAT_RE.test(_rawGhsa) ? _rawGhsa : "";
         // pkgName is the v7 outer key (always a string — object key cannot be non-string).
         const livePkg = pkgName.trim();
         // A finding with no GHSA ID must NOT be silently allowlisted.
-        // When a GHSA id IS present, suppression requires an allowlist entry whose
-        // composite identity (GHSA id + package) matches AND whose severity matches
-        // the via advisory OWN severity (viaSev), not the node max.
-        // The GHSA half of the key is lowercased (case-insensitive match).
-        const _identityKey = ghsa + " " + livePkg;
+        // When a GHSA id IS present (and format-validated), suppression requires an
+        // allowlist entry whose composite identity (GHSA id + package) matches AND
+        // whose severity matches the via advisory OWN severity (viaSev), not the
+        // node max. NUL separator prevents key collision.
+        const _identityKey = ghsa + "\x00" + livePkg;
         if (ghsa && allowedMap.has(_identityKey)) {
           const entry = allowedMap.get(_identityKey);
           if (entry.sev === viaSev) continue;
