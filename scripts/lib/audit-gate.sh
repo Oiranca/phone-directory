@@ -453,9 +453,26 @@ process.stdin.on("end", () => {
         process.exit(3);
       }
     }
+    // Require BOTH high and critical as own non-negative integer properties.
+    // Defaulting an absent key to 0 would allow a payload that omits "high"
+    // entirely to pass reconciliation — a missing key is a malformed payload.
+    if (!Object.prototype.hasOwnProperty.call(mv, "high")) {
+      process.stderr.write(
+        "[audit-gate] metadata.vulnerabilities.high is missing — " +
+        "malformed metadata (real pnpm always emits both high and critical).\n"
+      );
+      process.exit(3);
+    }
+    if (!Object.prototype.hasOwnProperty.call(mv, "critical")) {
+      process.stderr.write(
+        "[audit-gate] metadata.vulnerabilities.critical is missing — " +
+        "malformed metadata (real pnpm always emits both high and critical).\n"
+      );
+      process.exit(3);
+    }
     // Now safe to use integer arithmetic (no coercion needed — values validated above).
-    const metaHigh     = typeof mv.high     === "number" ? mv.high     : 0;
-    const metaCritical = typeof mv.critical === "number" ? mv.critical : 0;
+    const metaHigh     = mv.high;
+    const metaCritical = mv.critical;
     // Require per-severity equality (not just combined totals).
     // A swapped-severity payload — e.g. an allowlisted critical advisory with
     // metadata reporting {high:1, critical:0} — has the same combined total (1)

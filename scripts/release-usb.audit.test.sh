@@ -93,11 +93,11 @@ CLEAN_JSON='{"actions":[],"advisories":{},"muted":[],"metadata":{"vulnerabilitie
 # Only advisories that ARE in the allowlist (shell-quote critical, tmp high, esbuild high)
 ALLOWLISTED_JSON='{"actions":[],"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":["CVE-2026-9277"]},"2":{"findings":[],"id":2,"severity":"high","module_name":"tmp","title":"tmp vuln","github_advisory_id":"GHSA-ph9p-34f9-6g65","vulnerable_versions":"<0.2.6","cves":["CVE-2026-44705"]},"3":{"findings":[],"id":3,"severity":"high","module_name":"esbuild","title":"esbuild vuln","github_advisory_id":"GHSA-gv7w-rqvm-qjhr","vulnerable_versions":"<0.28.1","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":2,"critical":1},"dependencies":584}}'
 
-# A brand-new non-allowlisted critical advisory
-NEW_CRITICAL_JSON='{"actions":[],"advisories":{"99":{"findings":[],"id":99,"severity":"critical","module_name":"some-pkg","title":"New unknown critical","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"critical":1},"dependencies":584}}'
+# A brand-new non-allowlisted critical advisory (both high+critical present in metadata)
+NEW_CRITICAL_JSON='{"actions":[],"advisories":{"99":{"findings":[],"id":99,"severity":"critical","module_name":"some-pkg","title":"New unknown critical","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":584}}'
 
-# Non-allowlisted high advisory
-NEW_HIGH_JSON='{"actions":[],"advisories":{"100":{"findings":[],"id":100,"severity":"high","module_name":"some-other-pkg","title":"New unknown high","github_advisory_id":"GHSA-aaaa-aaaa-aaaa","vulnerable_versions":"<2.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":1},"dependencies":584}}'
+# Non-allowlisted high advisory (both high+critical present in metadata)
+NEW_HIGH_JSON='{"actions":[],"advisories":{"100":{"findings":[],"id":100,"severity":"high","module_name":"some-other-pkg","title":"New unknown high","github_advisory_id":"GHSA-aaaa-aaaa-aaaa","vulnerable_versions":"<2.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0},"dependencies":584}}'
 
 # Unparseable output simulates infra/registry error
 INFRA_ERROR_OUTPUT='Error: ECONNREFUSED connect ECONNREFUSED 127.0.0.1:4873'
@@ -515,7 +515,7 @@ rm -rf "$TMP12"
 
 # Test 13: metadata reports critical:5 but advisories container is empty → ABORTS (exit 3)
 printf '\nTest 13: advisories:{} but metadata reports critical:5 → ABORTS (exit 3)\n'
-EMPTY_ADVISORIES_META_CRIT_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"critical":5}}}'
+EMPTY_ADVISORIES_META_CRIT_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":5}}}'
 TMP13="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP13" "$EMPTY_ADVISORIES_META_CRIT_JSON" 0
 rc=0
@@ -2174,6 +2174,88 @@ else
 fi
 rm -rf "$TMP83"
 
+# --- Commit 2: required metadata keys ----------------------------------------
+# metadata.vulnerabilities must have BOTH high AND critical as own properties.
+# Defaulting absent keys to 0 allows a payload that omits "high" to pass.
+
+# Test 83b: v6, metadata missing "high" key → ABORTS
+printf '\nTest 83b (Commit2, v6): metadata missing high key → ABORTS\n'
+TMP83b="$(setup_fake_pnpm)"
+META_NO_HIGH_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"critical":0},"dependencies":0}}'
+write_fake_pnpm "$TMP83b" "$META_NO_HIGH_JSON" 0
+rc=0
+stderr_83b="$(env PATH="$TMP83b:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit2 v6: metadata missing high key → gate aborts"
+else
+  fail "Commit2 v6: metadata missing high key → gate wrongly returned 0 (FAIL-OPEN)"
+fi
+if printf '%s' "$stderr_83b" | grep -q 'high is missing'; then
+  pass "Commit2 v6: metadata missing high key → error message emitted"
+else
+  fail "Commit2 v6: metadata missing high key → wrong stderr: $stderr_83b"
+fi
+rm -rf "$TMP83b"
+
+# Test 83c: v6, metadata missing "critical" key → ABORTS
+printf '\nTest 83c (Commit2, v6): metadata missing critical key → ABORTS\n'
+TMP83c="$(setup_fake_pnpm)"
+META_NO_CRIT_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0},"dependencies":0}}'
+write_fake_pnpm "$TMP83c" "$META_NO_CRIT_JSON" 0
+rc=0
+stderr_83c="$(env PATH="$TMP83c:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit2 v6: metadata missing critical key → gate aborts"
+else
+  fail "Commit2 v6: metadata missing critical key → gate wrongly returned 0 (FAIL-OPEN)"
+fi
+if printf '%s' "$stderr_83c" | grep -q 'critical is missing'; then
+  pass "Commit2 v6: metadata missing critical key → error message emitted"
+else
+  fail "Commit2 v6: metadata missing critical key → wrong stderr: $stderr_83c"
+fi
+rm -rf "$TMP83c"
+
+# Test 83d: v6, metadata missing BOTH high and critical → ABORTS
+printf '\nTest 83d (Commit2, v6): metadata missing both high and critical keys → ABORTS\n'
+TMP83d="$(setup_fake_pnpm)"
+META_NO_HC_JSON='{"advisories":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0},"dependencies":0}}'
+write_fake_pnpm "$TMP83d" "$META_NO_HC_JSON" 0
+rc=0
+env PATH="$TMP83d:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit2 v6: metadata missing both high+critical → gate aborts"
+else
+  fail "Commit2 v6: metadata missing both high+critical → gate wrongly returned 0 (FAIL-OPEN)"
+fi
+rm -rf "$TMP83d"
+
+# Test 83e: v6, metadata has both high AND critical present → still PASSES (regression)
+printf '\nTest 83e (Commit2, regression): v6 metadata has both high and critical → still PASSES\n'
+TMP83e="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP83e" "$CLEAN_JSON" 0
+if out="$(run_gate_in_subshell "$TMP83e" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Commit2 regression: both high+critical present → still PASSES"
+  else
+    fail "Commit2 regression: both present → passed but missing PASSED token: $out"
+  fi
+else
+  fail "Commit2 regression: both high+critical present → wrongly aborted"
+fi
+rm -rf "$TMP83e"
 
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
