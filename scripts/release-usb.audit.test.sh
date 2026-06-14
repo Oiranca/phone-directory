@@ -1715,6 +1715,50 @@ fi
 rm -f "$EVIL_ALLOWLIST"
 rm -rf "$SYMLINK_DIR" "$TMP67b"
 
+# Test 67b2 (CommitA): no-resolver path — override is REJECTED (fail-closed).
+# When neither realpath nor python3 can resolve the file target,
+# _AUDIT_OVERRIDE_FILE_REAL stays empty. The fix removes the old -z fallback
+# branch that accepted the override on the parent-dir check alone; now an
+# empty resolution means REJECTED regardless. The override below points to a
+# permissive allowlist that IS inside scripts/ (literal parent-dir check would
+# pass) — the only guard against it is the file-target resolution.
+# NOTE: this test requires realpath or python3 to be present on the HOST so
+# that the stubs-on-PATH trick actually shadows real tools. On a host where
+# neither exists natively, the gate already rejects by the same empty-resolution
+# logic; the stubs are belt-and-suspenders for hosts where the tools DO exist.
+printf '\nTest 67b2 (CommitA): no-resolver (stubs shadow realpath+python3) → override NOT honoured (fail-closed)\n'
+TMP67b2_BIN="$(mktemp -d "$TEST_FIXTURE_ROOT/bin-XXXXXX")"
+# Stubs exit non-zero — command -v finds them but resolution fails → empty result.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b2_BIN/realpath"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b2_BIN/python3"
+chmod +x "$TMP67b2_BIN/realpath" "$TMP67b2_BIN/python3"
+PERMISSIVE_DIR_67b2="$(mktemp -d "$TEST_FIXTURE_ROOT/al-XXXXXX")"
+printf '[{"id":"GHSA-zzzz-zzzz-zzzz","package":"some-pkg","severity":"critical","reason":"evil bypass","expires":"%s"}]' \
+  "$FUTURE_EXPIRES" > "$PERMISSIVE_DIR_67b2/allowlist.json"
+TMP67b2_PNPM="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67b2_PNPM" "$NEW_CRITICAL_JSON" 1
+rc=0
+stderr_67b2="$(env PATH="$TMP67b2_BIN:$TMP67b2_PNPM:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$PERMISSIVE_DIR_67b2/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "CommitA no-resolver: override rejected when file target unresolvable → gate aborts on live critical"
+else
+  fail "CommitA no-resolver: override ACCEPTED despite unresolvable file target (fail-OPEN — permissive allowlist used)"
+fi
+if printf '%s' "$stderr_67b2" | grep -q 'NON-ALLOWLISTED'; then
+  pass "CommitA no-resolver: NON-ALLOWLISTED emitted — permissive allowlist was NOT loaded"
+else
+  fail "CommitA no-resolver: NON-ALLOWLISTED missing — permissive allowlist may have been used: $stderr_67b2"
+fi
+rm -rf "$TMP67b2_BIN" "$PERMISSIVE_DIR_67b2" "$TMP67b2_PNPM"
+
 # --- Commit 7: release-usb.sh unsets SKIP_AUDIT + SKIP_AUDIT_REASON ----------
 
 # Test 67c: SKIP_AUDIT=1 inherited in env — the release path unsets it before

@@ -39,26 +39,31 @@ if [[ "${AUDIT_GATE_TEST_MODE:-0}" == "1" && -n "${AUDIT_ALLOWLIST:-}" ]]; then
   _AUDIT_OVERRIDE_REAL="$(cd "$(dirname "${AUDIT_ALLOWLIST}")" 2>/dev/null && pwd)" || _AUDIT_OVERRIDE_REAL=""
   # Also canonicalize the FILE TARGET ITSELF (catches symlinks under scripts/ that
   # point outside — e.g. scripts/.test-x/al.json → /tmp/evil.json).
-  # Portable realpath: try realpath(1), then python3 -c os.path.realpath, then
-  # fall back to the parent-dir resolution (symlink escapes rejected by the
-  # _AUDIT_OVERRIDE_FILE_REAL check below defaulting to "").
+  # Portable realpath: try realpath(1), then python3 -c os.path.realpath.
+  # FAIL-CLOSED: if neither resolver is available (or canonicalization fails),
+  # _AUDIT_OVERRIDE_FILE_REAL is left empty AND we treat that as REJECTED —
+  # we do NOT fall back to accepting the override on the parent-dir check alone.
+  # An unresolvable file target could be a symlink to anywhere; the only safe
+  # default is to use the pinned repo allowlist.
+  # Prerequisite for test mode: realpath(1) or python3 must be present.
   _AUDIT_OVERRIDE_FILE_REAL=""
   if command -v realpath >/dev/null 2>&1; then
     _AUDIT_OVERRIDE_FILE_REAL="$(realpath "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
   elif command -v python3 >/dev/null 2>&1; then
     _AUDIT_OVERRIDE_FILE_REAL="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
   fi
-  # Derive the real parent dir of the resolved file path (if resolution succeeded).
+  # Derive the real parent dir of the resolved file path (only when resolution succeeded).
   _AUDIT_OVERRIDE_FILE_DIR=""
   if [[ -n "$_AUDIT_OVERRIDE_FILE_REAL" ]]; then
     _AUDIT_OVERRIDE_FILE_DIR="$(dirname "$_AUDIT_OVERRIDE_FILE_REAL")"
   fi
   # Accept the override only when ALL of the following hold:
   #   1. The parent dir of the literal path is inside scripts/  (catches .. escapes)
-  #   2. The real file target is also inside scripts/            (catches symlink escapes)
-  #      OR realpath was not available (fall back to parent-dir check only)
+  #   2. The real file target resolved successfully AND is also inside scripts/
+  #      (catches symlink escapes; empty _AUDIT_OVERRIDE_FILE_REAL = no resolver
+  #       available = REJECTED, fail-closed)
   if [[ -n "$_AUDIT_OVERRIDE_REAL" && "$_AUDIT_OVERRIDE_REAL/" == "$_AUDIT_SCRIPTS_DIR/"* ]] && \
-     { [[ -z "$_AUDIT_OVERRIDE_FILE_REAL" ]] || [[ "$_AUDIT_OVERRIDE_FILE_DIR/" == "$_AUDIT_SCRIPTS_DIR/"* ]]; }; then
+     [[ -n "$_AUDIT_OVERRIDE_FILE_REAL" && "$_AUDIT_OVERRIDE_FILE_DIR/" == "$_AUDIT_SCRIPTS_DIR/"* ]]; then
     : # Override resolves inside scripts/ — honour it.
   else
     AUDIT_ALLOWLIST="$_AUDIT_GATE_SCRIPT_DIR/../audit-allowlist.json"
