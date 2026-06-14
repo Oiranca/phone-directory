@@ -176,6 +176,27 @@ case "\${1:-}" in
     ;;
   exec)
     # pnpm exec electron-builder --<platform> --dir → fabricate build artifact(s).
+    # First VALIDATE the real argv release-usb.sh passed: it must invoke
+    # electron-builder with the EXPECTED platform flag (--<expected-platform>)
+    # and --dir.  If the wrapper used the wrong builder target (e.g. --linux on
+    # the win branch) or dropped --dir, FAIL here (non-zero, diagnostic) BEFORE
+    # fabricating any artifacts so the e2e test goes red.  Without this, the stub
+    # would fabricate artifacts from the injected platform regardless of argv and
+    # mask a wrong/dropped builder target.
+    shift  # drop the leading "exec"
+    eb_argv="\$*"
+    if [[ "\${1:-}" != "electron-builder" ]]; then
+      printf 'FAKE-PNPM: expected "exec electron-builder ..." but got: exec %s\n' "\$eb_argv" >&2
+      exit 90
+    fi
+    if ! printf '%s' "\$eb_argv" | grep -qw -- '--${platform}'; then
+      printf 'FAKE-PNPM: electron-builder missing expected --${platform} flag (argv: %s)\n' "\$eb_argv" >&2
+      exit 91
+    fi
+    if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
+      printf 'FAKE-PNPM: electron-builder missing --dir flag (argv: %s)\n' "\$eb_argv" >&2
+      exit 92
+    fi
     case "${platform}" in
       win)
         mkdir -p '${sandbox}/dist-portable/win-unpacked'
