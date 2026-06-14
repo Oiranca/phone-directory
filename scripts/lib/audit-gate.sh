@@ -397,11 +397,11 @@ process.stdin.on("end", () => {
     const metaHigh     = typeof mv.high     === "number" ? mv.high     : 0;
     const metaCritical = typeof mv.critical === "number" ? mv.critical : 0;
     const metaHighCrit = metaHigh + metaCritical;
-    if (metaHighCrit > iteratedHighCrit) {
+    if (metaHighCrit !== iteratedHighCrit) {
       process.stderr.write(
         "[audit-gate] Metadata reports " + metaHighCrit + " high/critical advisory/ies " +
-        "but only " + iteratedHighCrit + " were found in the parsed advisory container — " +
-        "response is inconsistent (truncated, schema mismatch, or registry error).\n"
+        "but " + iteratedHighCrit + " were found in the parsed advisory container — " +
+        "response is inconsistent (truncated, duplicated, schema mismatch, or registry error).\n"
       );
       process.exit(3);
     }
