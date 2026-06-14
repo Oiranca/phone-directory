@@ -490,6 +490,22 @@ process.stdin.on("end", () => {
     }
   }
 
+  // --- non-zero pnpm exit with zero advisories is an infra error ------------
+  // Real pnpm exits non-zero ONLY when it found vulnerabilities.  If pnpm
+  // exited non-zero but we observed ZERO advisory objects in the container
+  // (empty advisories:{} or empty vulnerabilities:{}), the payload is
+  // structurally inconsistent — treat as an infra/registry error.
+  // When pnpm exited non-zero AND we DID observe advisories (including fully
+  // allowlisted ones), that is the expected behavior — continue normal logic.
+  const pnpmExitCode = parseInt(process.argv[2], 10) || 0;
+  if (pnpmExitCode !== 0 && failures.length === 0 && iteratedHigh === 0 && iteratedCritical === 0) {
+    process.stderr.write(
+      "[audit-gate] pnpm audit exited " + pnpmExitCode + " but no high/critical advisories were " +
+      "observed in the advisory container — inconsistent result (infra/registry error).\n"
+    );
+    process.exit(3);
+  }
+
   // --- result ---------------------------------------------------------------
   if (failures.length === 0) {
     process.stdout.write("PASSED:" + allowlistCount + "\n");
@@ -685,10 +701,12 @@ run_audit_gate() {
   eval "${_prev_trap_INT:-true}"   2>/dev/null || true
   eval "${_prev_trap_TERM:-true}"  2>/dev/null || true
 
-  # Feed JSON through the Node filter
+  # Feed JSON through the Node filter.
+  # Pass pnpm_exit as a second CLI arg so the filter can detect the
+  # structurally-clean-but-non-zero case (non-zero+empty advisory container).
   local filter_output
   local filter_exit=0
-  filter_output="$(printf '%s' "$audit_json" | node -e "$_AUDIT_FILTER_SCRIPT" "$AUDIT_ALLOWLIST" 2>&1)" || filter_exit=$?
+  filter_output="$(printf '%s' "$audit_json" | node -e "$_AUDIT_FILTER_SCRIPT" "$AUDIT_ALLOWLIST" "$pnpm_exit" 2>&1)" || filter_exit=$?
 
   # Separate stderr lines (errors) from the PASSED:N stdout token
   # Node writes advisory failures to stderr and PASSED:N to stdout.
@@ -698,11 +716,9 @@ run_audit_gate() {
   status_token="$(printf '%s' "$filter_output" | grep '^PASSED:' | head -1)" || true
   error_lines="$(printf '%s' "$filter_output" | grep -v '^PASSED:')" || true
 
-  # A non-zero pnpm exit that did NOT produce a parseable advisory result must
-  # never pass.  If the filter already flagged it (exit 3) this branch handles
-  # that; but also guard the case where filter_exit==0 despite pnpm_exit!=0
-  # (e.g. empty output that somehow reached PASSED — belt-and-suspenders).
-  if [[ $filter_exit -eq 0 && $pnpm_exit -ne 0 && -z "$status_token" ]]; then
+  # Belt-and-suspenders: if the filter exited 0 but produced no PASSED token,
+  # the output is unrecognisable — treat as infra error regardless of pnpm_exit.
+  if [[ $filter_exit -eq 0 && -z "$status_token" ]]; then
     filter_exit=3
   fi
 

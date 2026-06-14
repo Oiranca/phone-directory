@@ -210,6 +210,93 @@ else
 fi
 rm -rf "$TMP4"
 
+# Test 4b: non-zero pnpm exit + clean JSON (empty advisories, all-zero meta) → aborts
+# Fail-open before fix: pnpm exits 1, advisory container is empty, metadata is
+# all-zero → filter saw no advisories → emitted PASSED → gate returned 0.
+printf '\nTest 4b: non-zero pnpm exit + clean JSON → gate ABORTS (infra inconsistency)\n'
+TMP4b="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP4b" "$CLEAN_JSON" 1
+rc=0
+stderr_4b="$(env PATH="$TMP4b:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit1: non-zero pnpm exit + clean JSON → gate aborts"
+else
+  fail "Commit1: non-zero pnpm exit + clean JSON → gate wrongly returned 0 (FAIL-OPEN)"
+fi
+if printf '%s' "$stderr_4b" | grep -q 'inconsistent'; then
+  pass "Commit1: non-zero pnpm exit + clean JSON → inconsistency message emitted"
+else
+  fail "Commit1: inconsistency message missing from stderr: $stderr_4b"
+fi
+rm -rf "$TMP4b"
+
+# Test 4c: non-zero pnpm exit + all-zero metadata + empty advisories → aborts
+# (Same shape as 4b but explicit all-zero metadata object)
+printf '\nTest 4c: non-zero pnpm exit + all-zero metadata → gate ABORTS\n'
+ALLZERO_META_JSON='{"actions":[],"advisories":{},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0},"dependencies":0}}'
+TMP4c="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP4c" "$ALLZERO_META_JSON" 1
+rc=0
+env PATH="$TMP4c:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit1: non-zero pnpm exit + all-zero metadata → gate aborts"
+else
+  fail "Commit1: non-zero pnpm exit + all-zero metadata → gate wrongly returned 0 (FAIL-OPEN)"
+fi
+rm -rf "$TMP4c"
+
+# Test 4d: non-zero pnpm exit + fully allowlisted findings → still PASSES
+# When pnpm exits 1 AND advisories are present (all allowlisted), the gate
+# must still pass — that is legitimate behavior.
+printf '\nTest 4d: non-zero pnpm exit + all-allowlisted advisories → gate still PASSES\n'
+TMP4d="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP4d" "$ALLOWLISTED_JSON" 1
+if out="$(run_gate_in_subshell "$TMP4d" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Commit1: non-zero pnpm exit + allowlisted advisories → still PASSES"
+  else
+    fail "Commit1: non-zero pnpm exit + allowlisted advisories → passed but missing PASSED token: $out"
+  fi
+else
+  fail "Commit1: non-zero pnpm exit + allowlisted advisories → wrongly aborted"
+fi
+rm -rf "$TMP4d"
+
+# Test 4e: pnpm_exit=0 but filter emits no PASSED token → aborts (belt-and-suspenders)
+# This covers the bash-layer guard: filter_exit==0 && -z status_token → exit 3.
+printf '\nTest 4e: filter_exit=0 but no PASSED token → gate ABORTS\n'
+TMP4e="$(setup_fake_pnpm)"
+# Emit JSON that causes filter to exit 0 without writing PASSED (empty output hack):
+# Use a payload missing ALL recognized keys so filter exits 3 before PASSED —
+# actually we want filter_exit=0 with no PASSED token.  The only way to get that
+# is a bug in the filter, which we cannot inject.  Instead, test the bash guard
+# by simulating the case directly: write a pnpm stub that emits valid JSON but
+# we'll rely on the upstream empty-output guard.
+# Practical test: empty JSON object (no advisories, no metadata, no vulnerabilities key)
+# hits the "no recognisable advisory container" path → exit 3 → bash layer aborts.
+EMPTY_OBJ_JSON='{}'
+write_fake_pnpm "$TMP4e" "$EMPTY_OBJ_JSON" 0
+rc=0
+env PATH="$TMP4e:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit1: no-PASSED-token path → gate aborts"
+else
+  fail "Commit1: no-PASSED-token path → gate wrongly returned 0"
+fi
+rm -rf "$TMP4e"
+
 # Test 5a: SKIP_AUDIT=1 without SKIP_AUDIT_REASON → aborts
 printf '\nTest 5a: SKIP_AUDIT=1 without reason → aborts\n'
 TMP5a="$(setup_fake_pnpm)"
