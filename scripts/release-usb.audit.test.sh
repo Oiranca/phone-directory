@@ -1732,6 +1732,241 @@ fi
 rm -f "$MARKER66"
 rm -rf "$TMP66"
 
+# --- Fix A: unknown advisory severity validation --------------------------------
+#
+# Prior to Fix A, any severity value other than "high" or "critical" (after
+# normalisation) was silently skipped.  A typo like "critcal" was treated as
+# below-threshold, the advisory was not counted, and the gate exited 0/PASSED.
+# Fix A validates every advisory entry strictly: the entry must be a plain
+# object, its severity must be a string, and its normalised value must be one
+# of the five documented audit enums (info, low, moderate, high, critical).
+# Anything outside that set → exit 3 (malformed payload).
+
+# v6 payloads for Fix A tests
+# misspelled severity "critcal" — not in enum
+V6_MISSPELLED_SEV_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critcal","module_name":"some-pkg","title":"Bad","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+# missing severity field (undefined → not a string)
+V6_MISSING_SEV_JSON='{"advisories":{"1":{"findings":[],"id":1,"module_name":"some-pkg","title":"Bad","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+# non-string severity (number 9)
+V6_NUMERIC_SEV_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":9,"module_name":"some-pkg","title":"Bad","github_advisory_id":"GHSA-zzzz-zzzz-zzzz","vulnerable_versions":"<1.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+# null advisory entry
+V6_NULL_ENTRY_JSON='{"advisories":{"1":null},"muted":[],"metadata":{"vulnerabilities":{"critical":0,"high":0}}}'
+# legitimate info/low/moderate only — must still PASS
+V6_BELOW_THRESHOLD_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"low","module_name":"some-pkg","title":"Low sev","github_advisory_id":"GHSA-aaaa-aaaa-aaaa","vulnerable_versions":"<1.0.0","cves":[]},"2":{"findings":[],"id":2,"severity":"moderate","module_name":"other-pkg","title":"Moderate sev","github_advisory_id":"GHSA-bbbb-bbbb-bbbb","vulnerable_versions":"<2.0.0","cves":[]},"3":{"findings":[],"id":3,"severity":"info","module_name":"info-pkg","title":"Info sev","github_advisory_id":"GHSA-cccc-cccc-cccc","vulnerable_versions":"<3.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":1,"low":1,"moderate":1,"high":0,"critical":0}}}'
+
+# v7 payloads for Fix A tests
+V7_MISSPELLED_SEV_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critcal","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad","severity":"critcal"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+V7_MISSING_SEV_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+V7_NUMERIC_SEV_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":9,"via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"Bad","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":1,"high":0}}}'
+V7_NULL_ENTRY_JSON='{"vulnerabilities":{"some-pkg":null},"metadata":{"vulnerabilities":{"critical":0,"high":0}}}'
+V7_BELOW_THRESHOLD_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"low","via":[{"ghsaId":"GHSA-aaaa-aaaa-aaaa","title":"Low sev","severity":"low"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false},"other-pkg":{"name":"other-pkg","severity":"moderate","via":[{"ghsaId":"GHSA-bbbb-bbbb-bbbb","title":"Moderate sev","severity":"moderate"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":1,"moderate":1,"high":0,"critical":0}}}'
+
+# Test 68 (Fix A, v6): misspelled severity "critcal" → ABORTS exit 3
+printf '\nTest 68 (Fix A, v6): severity:"critcal" (typo) → ABORTS (exit 3, unknown severity)\n'
+TMP68="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP68" "$V6_MISSPELLED_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP68:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v6: misspelled severity 'critcal' → gate ABORTS (exit 3)"
+else
+  fail "Fix A v6: misspelled severity 'critcal' → gate PASSED — unknown severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'unknown severity\|malformed advisory'; then
+  pass "Fix A v6: misspelled severity prints malformed-advisory message"
+else
+  fail "Fix A v6: misspelled severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP68"
+
+# Test 69 (Fix A, v6): missing severity field → ABORTS exit 3
+printf '\nTest 69 (Fix A, v6): missing severity field → ABORTS (exit 3)\n'
+TMP69="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP69" "$V6_MISSING_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP69:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v6: missing severity field → gate ABORTS (exit 3)"
+else
+  fail "Fix A v6: missing severity field → gate PASSED — missing severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'severity is not a string\|malformed advisory'; then
+  pass "Fix A v6: missing severity prints malformed-advisory message"
+else
+  fail "Fix A v6: missing severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP69"
+
+# Test 70 (Fix A, v6): non-string severity (number 9) → ABORTS exit 3
+printf '\nTest 70 (Fix A, v6): severity:9 (number, not string) → ABORTS (exit 3)\n'
+TMP70="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP70" "$V6_NUMERIC_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP70:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v6: numeric severity → gate ABORTS (exit 3)"
+else
+  fail "Fix A v6: numeric severity → gate PASSED — non-string severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'severity is not a string\|malformed advisory'; then
+  pass "Fix A v6: numeric severity prints malformed-advisory message"
+else
+  fail "Fix A v6: numeric severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP70"
+
+# Test 71 (Fix A, v6): null advisory entry → ABORTS exit 3
+printf '\nTest 71 (Fix A, v6): advisories:{"1":null} (null entry) → ABORTS (exit 3)\n'
+TMP71="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP71" "$V6_NULL_ENTRY_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP71:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v6: null advisory entry → gate ABORTS (exit 3)"
+else
+  fail "Fix A v6: null advisory entry → gate PASSED — null entry not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'not a plain object\|malformed advisory'; then
+  pass "Fix A v6: null entry prints malformed-advisory message"
+else
+  fail "Fix A v6: null entry missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP71"
+
+# Test 72 (Fix A, v6): info/low/moderate only → still PASSES (legitimate below-threshold)
+printf '\nTest 72 (Fix A, v6 regression): info/low/moderate-only advisories → still PASSES\n'
+TMP72="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP72" "$V6_BELOW_THRESHOLD_JSON" 0
+if out="$(run_gate_in_subshell "$TMP72" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix A v6 regression: info/low/moderate-only payload → gate PASSES (below threshold, valid enum)"
+  else
+    fail "Fix A v6 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix A v6 regression: info/low/moderate-only payload exited non-zero — regression"
+fi
+rm -rf "$TMP72"
+
+# Test 73 (Fix A, v7): misspelled severity "critcal" → ABORTS exit 3
+printf '\nTest 73 (Fix A, v7): severity:"critcal" (typo) → ABORTS (exit 3)\n'
+TMP73="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP73" "$V7_MISSPELLED_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP73:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v7: misspelled severity 'critcal' → gate ABORTS (exit 3)"
+else
+  fail "Fix A v7: misspelled severity 'critcal' → gate PASSED — unknown severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'unknown severity\|malformed advisory'; then
+  pass "Fix A v7: misspelled severity prints malformed-advisory message"
+else
+  fail "Fix A v7: misspelled severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP73"
+
+# Test 74 (Fix A, v7): missing severity field → ABORTS exit 3
+printf '\nTest 74 (Fix A, v7): missing severity field → ABORTS (exit 3)\n'
+TMP74="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP74" "$V7_MISSING_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP74:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v7: missing severity field → gate ABORTS (exit 3)"
+else
+  fail "Fix A v7: missing severity field → gate PASSED — missing severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'severity is not a string\|malformed advisory'; then
+  pass "Fix A v7: missing severity prints malformed-advisory message"
+else
+  fail "Fix A v7: missing severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP74"
+
+# Test 75 (Fix A, v7): non-string severity (number 9) → ABORTS exit 3
+printf '\nTest 75 (Fix A, v7): severity:9 (number, not string) → ABORTS (exit 3)\n'
+TMP75="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP75" "$V7_NUMERIC_SEV_JSON" 1
+rc=0
+stderr_out="$(env PATH="$TMP75:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v7: numeric severity → gate ABORTS (exit 3)"
+else
+  fail "Fix A v7: numeric severity → gate PASSED — non-string severity not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'severity is not a string\|malformed advisory'; then
+  pass "Fix A v7: numeric severity prints malformed-advisory message"
+else
+  fail "Fix A v7: numeric severity missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP75"
+
+# Test 76 (Fix A, v7): null vulnerability entry → ABORTS exit 3
+printf '\nTest 76 (Fix A, v7): vulnerabilities:{"some-pkg":null} (null entry) → ABORTS (exit 3)\n'
+TMP76="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP76" "$V7_NULL_ENTRY_JSON" 0
+rc=0
+stderr_out="$(env PATH="$TMP76:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Fix A v7: null vulnerability entry → gate ABORTS (exit 3)"
+else
+  fail "Fix A v7: null vulnerability entry → gate PASSED — null entry not caught"
+fi
+if printf '%s' "$stderr_out" | grep -qi 'not a plain object\|malformed advisory'; then
+  pass "Fix A v7: null entry prints malformed-advisory message"
+else
+  fail "Fix A v7: null entry missing malformed-advisory message: $stderr_out"
+fi
+rm -rf "$TMP76"
+
+# Test 77 (Fix A, v7): info/low/moderate only → still PASSES
+printf '\nTest 77 (Fix A, v7 regression): info/low/moderate-only vulnerabilities → still PASSES\n'
+TMP77="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP77" "$V7_BELOW_THRESHOLD_JSON" 0
+if out="$(run_gate_in_subshell "$TMP77" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Fix A v7 regression: info/low/moderate-only v7 payload → gate PASSES"
+  else
+    fail "Fix A v7 regression: gate passed but status line missing 'PASSED': $out"
+  fi
+else
+  fail "Fix A v7 regression: info/low/moderate-only v7 payload exited non-zero — regression"
+fi
+rm -rf "$TMP77"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

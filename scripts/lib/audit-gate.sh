@@ -313,14 +313,47 @@ process.stdin.on("end", () => {
   const failures = [];
   let iteratedHighCrit = 0;
 
+  // Documented pnpm audit severity enum values (all known severities).
+  // Any advisory whose normalised severity is not in this set is malformed —
+  // we must abort rather than silently skip, to prevent a typo like "critcal"
+  // from being treated as below-threshold and letting a critical advisory pass.
+  const KNOWN_SEVERITIES = new Set(["info", "low", "moderate", "high", "critical"]);
+
   // --- v6 schema: data.advisories -------------------------------------------
   if (advisoriesIsPlainObj) {
     const advisories = advisoriesVal;
-    for (const [, adv] of Object.entries(advisories)) {
-      // Normalize severity: trim whitespace and lowercase before classifying.
+    for (const [advKey, adv] of Object.entries(advisories)) {
+      // Each advisory entry must be a plain object (not null / array / primitive).
+      if (adv === null || typeof adv !== "object" || Array.isArray(adv)) {
+        process.stderr.write(
+          "[audit-gate] advisories[" + JSON.stringify(advKey) + "] is not a plain object " +
+          "(got: " + (adv === null ? "null" : Array.isArray(adv) ? "array" : typeof adv) +
+          ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
+      // Severity must be a non-null string; normalise then validate against enum.
+      if (typeof adv.severity !== "string") {
+        process.stderr.write(
+          "[audit-gate] advisories[" + JSON.stringify(advKey) + "] severity is not a string " +
+          "(got: " + (adv.severity === null ? "null" : typeof adv.severity) +
+          ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
+      // Normalize: trim whitespace and lowercase before classifying.
       // This ensures "critical " (trailing space) or "CRITICAL" are correctly
       // counted and not silently dropped as unrecognised severity values.
-      const sev = String(adv.severity || "").trim().toLowerCase();
+      const sev = adv.severity.trim().toLowerCase();
+      if (!KNOWN_SEVERITIES.has(sev)) {
+        process.stderr.write(
+          "[audit-gate] advisories[" + JSON.stringify(advKey) + "] has unknown severity " +
+          JSON.stringify(adv.severity) + " — malformed advisory payload " +
+          "(expected one of: info, low, moderate, high, critical).\n"
+        );
+        process.exit(3);
+      }
+      // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
       iteratedHighCrit++;
       const ghsa = adv.github_advisory_id || "";
@@ -341,8 +374,34 @@ process.stdin.on("end", () => {
   if (vulnerabilitiesIsPlainObj) {
     const vulns = vulnerabilitiesVal;
     for (const [pkgName, vuln] of Object.entries(vulns)) {
-      // Normalize severity before classifying (same as v6 path above).
-      const sev = String(vuln.severity || "").trim().toLowerCase();
+      // Each vulnerability entry must be a plain object.
+      if (vuln === null || typeof vuln !== "object" || Array.isArray(vuln)) {
+        process.stderr.write(
+          "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "] is not a plain object " +
+          "(got: " + (vuln === null ? "null" : Array.isArray(vuln) ? "array" : typeof vuln) +
+          ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
+      // Severity must be a non-null string; normalise then validate against enum.
+      if (typeof vuln.severity !== "string") {
+        process.stderr.write(
+          "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "] severity is not a string " +
+          "(got: " + (vuln.severity === null ? "null" : typeof vuln.severity) +
+          ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
+      const sev = vuln.severity.trim().toLowerCase();
+      if (!KNOWN_SEVERITIES.has(sev)) {
+        process.stderr.write(
+          "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "] has unknown severity " +
+          JSON.stringify(vuln.severity) + " — malformed advisory payload " +
+          "(expected one of: info, low, moderate, high, critical).\n"
+        );
+        process.exit(3);
+      }
+      // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
       iteratedHighCrit++;
 
