@@ -2292,6 +2292,66 @@ else
 fi
 rm -rf "$TMP83e"
 
+# --- Commit 4: package identity — array coercion + GHSA case -----------------
+
+# Test 83f: v6, module_name is a single-element array → ABORTS (exit 3)
+# String(["tmp"]) === "tmp" — coercion would have allowed allowlist suppression.
+printf '\nTest 83f (Commit4, v6): module_name is array ["tmp"] → ABORTS (not suppressed)\n'
+TMP83f="$(setup_fake_pnpm)"
+# Advisory has module_name as array; GHSA matches allowlist entry for "tmp" high.
+ARRAY_PKG_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"high","module_name":["tmp"],"title":"tmp vuln","github_advisory_id":"GHSA-ph9p-34f9-6g65","vulnerable_versions":"<0.2.6","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0},"dependencies":1}}'
+write_fake_pnpm "$TMP83f" "$ARRAY_PKG_JSON" 1
+rc=0
+stderr_83f="$(env PATH="$TMP83f:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit4 v6: module_name array → gate aborts (not coerced to string)"
+else
+  fail "Commit4 v6: module_name array → gate wrongly PASSED (coercion suppressed advisory)"
+fi
+if printf '%s' "$stderr_83f" | grep -q 'module_name is not a string'; then
+  pass "Commit4 v6: module_name array → malformed payload message emitted"
+else
+  fail "Commit4 v6: module_name array → wrong stderr: $stderr_83f"
+fi
+rm -rf "$TMP83f"
+
+# Test 83g: v6, GHSA id in advisory is uppercase but allowlist entry is lowercase → still MATCHES
+printf '\nTest 83g (Commit4, v6): GHSA uppercase in advisory, lowercase in allowlist → still PASSES\n'
+TMP83g="$(setup_fake_pnpm)"
+# Use the real allowlist GHSA id in uppercase in the advisory payload.
+UPPER_GHSA_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-W7JW-789Q-3M8P","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":1}}'
+write_fake_pnpm "$TMP83g" "$UPPER_GHSA_JSON" 1
+if out="$(run_gate_in_subshell "$TMP83g" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Commit4 v6: uppercase GHSA in advisory matches lowercase allowlist entry → PASSES"
+  else
+    fail "Commit4 v6: uppercase GHSA → passed but missing PASSED token: $out"
+  fi
+else
+  fail "Commit4 v6: uppercase GHSA → wrongly aborted (case mismatch blocked valid allowlist entry)"
+fi
+rm -rf "$TMP83g"
+
+# Test 83h: v7, GHSA id in via is uppercase but allowlist entry is lowercase → still MATCHES
+printf '\nTest 83h (Commit4, v7): GHSA uppercase in v7 via, lowercase in allowlist → still PASSES\n'
+TMP83h="$(setup_fake_pnpm)"
+UPPER_GHSA_V7_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-W7JW-789Q-3M8P","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":1}}'
+write_fake_pnpm "$TMP83h" "$UPPER_GHSA_V7_JSON" 1
+if out="$(run_gate_in_subshell "$TMP83h" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'PASSED'; then
+    pass "Commit4 v7: uppercase GHSA in via matches lowercase allowlist entry → PASSES"
+  else
+    fail "Commit4 v7: uppercase GHSA → passed but missing PASSED token: $out"
+  fi
+else
+  fail "Commit4 v7: uppercase GHSA → wrongly aborted (case mismatch blocked valid allowlist entry)"
+fi
+rm -rf "$TMP83h"
+
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
 # Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,

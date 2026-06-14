@@ -327,8 +327,10 @@ process.stdin.on("end", () => {
   // requires all three fields to match (id AND package AND severity).
   // A Set of ids alone would let a bogus allowlist entry (wrong package or
   // severity) silently suppress a live advisory with the same GHSA id.
+  // Key is lowercased so advisory GHSA ids in any case (GHSA-xxxx vs ghsa-xxxx)
+  // match allowlist entries regardless of capitalisation differences.
   const allowedMap = new Map(
-    allowlist.map(e => [e.id.trim(), { pkg: e.package.trim(), sev: e.severity.trim().toLowerCase() }])
+    allowlist.map(e => [e.id.trim().toLowerCase(), { pkg: e.package.trim(), sev: e.severity.trim().toLowerCase() }])
   );
   const allowlistCount = allowlist.length;
 
@@ -379,12 +381,23 @@ process.stdin.on("end", () => {
       // Legitimately below threshold — skip without error.
       if (sev !== "high" && sev !== "critical") continue;
       if (sev === "high") iteratedHigh++; else iteratedCritical++;
-      const ghsa = adv.github_advisory_id || "";
-      const livePkg = String(adv.module_name || "").trim();
+      const ghsa = (adv.github_advisory_id || "").trim().toLowerCase();
+      // module_name MUST be a plain string — String() coercion would silently
+      // accept an array (["tmp"] → "tmp") and allow suppression via allowlist.
+      if (typeof adv.module_name !== "string") {
+        process.stderr.write(
+          "[audit-gate] advisories[" + JSON.stringify(advKey) + "] module_name is not a string " +
+          "(got: " + (Array.isArray(adv.module_name) ? "array" : typeof adv.module_name) +
+          ") — malformed advisory payload.\n"
+        );
+        process.exit(3);
+      }
+      const livePkg = adv.module_name.trim();
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
       // as a failure because we cannot confirm its identity.
       // When a GHSA id IS present, suppression requires the allowlist entry to
       // also match on package name AND severity (not just the id).
+      // GHSA id comparison is case-insensitive (allowedMap keys are lowercased).
       if (ghsa && allowedMap.has(ghsa)) {
         const entry = allowedMap.get(ghsa);
         if (entry.pkg === livePkg && entry.sev === sev) continue;
@@ -438,10 +451,13 @@ process.stdin.on("end", () => {
       }
 
       for (const via of viaAdvisories) {
-        const ghsa = via.ghsaId || via.github_advisory_id || "";
-        const livePkg = String(pkgName || "").trim();
+        // Normalize ghsa id to lowercase for case-insensitive allowlist lookup.
+        const ghsa = (via.ghsaId || via.github_advisory_id || "").trim().toLowerCase();
+        // pkgName is the v7 outer key (always a string — object key cannot be non-string).
+        const livePkg = pkgName.trim();
         // A finding with no GHSA ID must NOT be silently allowlisted.
         // When a GHSA id IS present, suppression requires id + package + severity to match.
+        // GHSA id comparison is case-insensitive (allowedMap keys are lowercased).
         if (ghsa && allowedMap.has(ghsa)) {
           const entry = allowedMap.get(ghsa);
           if (entry.pkg === livePkg && entry.sev === sev) continue;
