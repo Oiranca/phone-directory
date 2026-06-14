@@ -3194,6 +3194,117 @@ else
 fi
 rm -rf "$SANDBOX90" "$BIN90"
 
+# --- Commit 2 (win + mac coverage): per-platform wrapper e2e -------------------
+#
+# Tests 89/90 only exercised `release-usb.sh linux`, leaving the win and mac
+# branches (launch.bat copy; launch.command copy + chmod; dual mac / mac-arm64
+# bundle handling) hidden behind a green Linux-only suite.  Tests 91–93 invoke
+# release-usb.sh win and mac with the same hermetic stubs, asserting both the
+# Dependency-audit manifest line AND the platform-specific launcher/bundle output
+# produced in the sandboxed usb-package staging dir.
+
+# Test 91 (Commit2 e2e, win audited PASS): clean deps → manifest PASSED + win-unpacked + launch.bat
+printf '\nTest 91 (Commit2 e2e win): release-usb.sh win → manifest PASSED, win-unpacked + launch.bat staged\n'
+SANDBOX91="$(build_sandbox_repo)"
+BIN91="$(mktemp -d "$TEST_FIXTURE_ROOT/bin91-XXXXXX")"
+write_sandbox_bin "$BIN91" "$SANDBOX91" "$CLEAN_JSON" 0 win
+rc_91=0
+env PATH="$BIN91:$PATH" bash "$SANDBOX91/scripts/release-usb.sh" win >/dev/null 2>&1 || rc_91=$?
+PKG91="$SANDBOX91/dist-portable/usb-package"
+MANIFEST91="$PKG91/RELEASE_MANIFEST.txt"
+if [[ $rc_91 -eq 0 ]]; then
+  pass "Commit2 e2e win: release-usb.sh win completed (exit 0)"
+else
+  fail "Commit2 e2e win: release-usb.sh win exited non-zero ($rc_91)"
+fi
+if [[ -f "$MANIFEST91" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST91"; then
+  pass "Commit2 e2e win: RELEASE_MANIFEST.txt contains 'Dependency audit: PASSED'"
+else
+  fail "Commit2 e2e win: manifest missing PASSED line (got: $(cat "$MANIFEST91" 2>/dev/null || echo MISSING))"
+fi
+if [[ -f "$MANIFEST91" ]] && grep -q '^Platform: win$' "$MANIFEST91"; then
+  pass "Commit2 e2e win: manifest records Platform: win"
+else
+  fail "Commit2 e2e win: manifest missing 'Platform: win'"
+fi
+if [[ -d "$PKG91/win-unpacked" ]]; then
+  pass "Commit2 e2e win: win-unpacked/ bundle staged into usb-package"
+else
+  fail "Commit2 e2e win: win-unpacked/ missing from usb-package"
+fi
+if [[ -f "$PKG91/launch.bat" ]]; then
+  pass "Commit2 e2e win: launch.bat launcher staged into usb-package"
+else
+  fail "Commit2 e2e win: launch.bat missing from usb-package"
+fi
+rm -rf "$SANDBOX91" "$BIN91"
+
+# Test 92 (Commit2 e2e, mac audited PASS): clean deps → manifest PASSED + dual mac bundles + launch.command (executable)
+printf '\nTest 92 (Commit2 e2e mac): release-usb.sh mac → manifest PASSED, mac + mac-arm64 + launch.command staged\n'
+SANDBOX92="$(build_sandbox_repo)"
+BIN92="$(mktemp -d "$TEST_FIXTURE_ROOT/bin92-XXXXXX")"
+write_sandbox_bin "$BIN92" "$SANDBOX92" "$CLEAN_JSON" 0 mac
+rc_92=0
+env PATH="$BIN92:$PATH" bash "$SANDBOX92/scripts/release-usb.sh" mac >/dev/null 2>&1 || rc_92=$?
+PKG92="$SANDBOX92/dist-portable/usb-package"
+MANIFEST92="$PKG92/RELEASE_MANIFEST.txt"
+if [[ $rc_92 -eq 0 ]]; then
+  pass "Commit2 e2e mac: release-usb.sh mac completed (exit 0)"
+else
+  fail "Commit2 e2e mac: release-usb.sh mac exited non-zero ($rc_92)"
+fi
+if [[ -f "$MANIFEST92" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST92"; then
+  pass "Commit2 e2e mac: RELEASE_MANIFEST.txt contains 'Dependency audit: PASSED'"
+else
+  fail "Commit2 e2e mac: manifest missing PASSED line (got: $(cat "$MANIFEST92" 2>/dev/null || echo MISSING))"
+fi
+if [[ -d "$PKG92/mac" ]]; then
+  pass "Commit2 e2e mac: mac/ bundle (x64) staged into usb-package"
+else
+  fail "Commit2 e2e mac: mac/ bundle missing from usb-package"
+fi
+if [[ -d "$PKG92/mac-arm64" ]]; then
+  pass "Commit2 e2e mac: mac-arm64/ bundle (arm64) staged into usb-package"
+else
+  fail "Commit2 e2e mac: mac-arm64/ bundle missing from usb-package"
+fi
+if [[ -f "$PKG92/launch.command" ]] && [[ -x "$PKG92/launch.command" ]]; then
+  pass "Commit2 e2e mac: launch.command staged and is executable (chmod +x ran)"
+else
+  fail "Commit2 e2e mac: launch.command missing or not executable in usb-package"
+fi
+rm -rf "$SANDBOX92" "$BIN92"
+
+# Test 93 (Commit2 e2e, win BYPASS path): SKIP_AUDIT=1 + reason → manifest BYPASSED on the win branch
+# Cheap per-platform BYPASS variant: proves the documented operator bypass also
+# survives the win branch (audit JSON would FAIL the gate if it ran).
+printf '\nTest 93 (Commit2 e2e win bypass): SKIP_AUDIT=1 + reason → win manifest records BYPASSED — reason\n'
+SANDBOX93="$(build_sandbox_repo)"
+BIN93="$(mktemp -d "$TEST_FIXTURE_ROOT/bin93-XXXXXX")"
+write_sandbox_bin "$BIN93" "$SANDBOX93" "$NEW_CRITICAL_JSON" 1 win
+BYPASS_REASON93="GHSA-w7jw-789q-3m8p accepted per SECURITY.md"
+rc_93=0
+env PATH="$BIN93:$PATH" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$BYPASS_REASON93" \
+  bash "$SANDBOX93/scripts/release-usb.sh" win >/dev/null 2>&1 || rc_93=$?
+PKG93="$SANDBOX93/dist-portable/usb-package"
+MANIFEST93="$PKG93/RELEASE_MANIFEST.txt"
+if [[ $rc_93 -eq 0 ]]; then
+  pass "Commit2 e2e win bypass: release-usb.sh win completed with SKIP_AUDIT=1 (exit 0)"
+else
+  fail "Commit2 e2e win bypass: release-usb.sh win exited non-zero with SKIP_AUDIT=1 ($rc_93)"
+fi
+if [[ -f "$MANIFEST93" ]] && grep -qF "Dependency audit: BYPASSED — reason: $BYPASS_REASON93" "$MANIFEST93"; then
+  pass "Commit2 e2e win bypass: RELEASE_MANIFEST.txt contains 'BYPASSED — reason: <reason>'"
+else
+  fail "Commit2 e2e win bypass: manifest missing BYPASSED line (got: $(cat "$MANIFEST93" 2>/dev/null || echo MISSING))"
+fi
+if [[ -f "$PKG93/launch.bat" ]]; then
+  pass "Commit2 e2e win bypass: launch.bat still staged on the bypassed win path"
+else
+  fail "Commit2 e2e win bypass: launch.bat missing from usb-package"
+fi
+rm -rf "$SANDBOX93" "$BIN93"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
