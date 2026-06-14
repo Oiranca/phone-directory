@@ -3140,6 +3140,75 @@ else
 fi
 rm -rf "$OBJ_AL_DIR" "$TMP83l"
 
+# --- Commit 2: allowlist identity by GHSA + package (multi-package GHSA) ------
+#
+# The allowlist identity is the COMPOSITE of GHSA id + package, so a single GHSA
+# may cover more than one package (e.g. GHSA-2j2x-hqr9-3h42 on both react-router
+# and react-router-dom).  Only an EXACT duplicate identity (same GHSA AND same
+# package) is rejected as malformed; entries sharing a GHSA but differing in
+# package are valid distinct identities.  Suppression requires GHSA + package +
+# severity to all match.
+
+# Test 83q (Commit2): two allowlist entries, same GHSA, DIFFERENT packages → a
+# payload carrying that GHSA on BOTH packages → both suppressed (PASS).
+printf '\nTest 83q (Commit2): same GHSA on two different packages (both allowlisted) → both suppressed, PASSES\n'
+TMP83q="$(setup_fake_pnpm)"
+MULTI_PKG_ALLOWLIST="$(printf '[{"id":"GHSA-2j2x-hqr9-3h42","package":"react-router","severity":"high","reason":"multi-pkg test","expires":"%s"},{"id":"GHSA-2j2x-hqr9-3h42","package":"react-router-dom","severity":"high","reason":"multi-pkg test","expires":"%s"}]' "$FUTURE_EXPIRES" "$FUTURE_EXPIRES")"
+TMPD83q_AL="$(write_temp_allowlist "$MULTI_PKG_ALLOWLIST")"
+# v6 payload: same GHSA on both packages, both high. metadata high:2,critical:0.
+MULTI_PKG_PAYLOAD='{"advisories":{"1":{"findings":[],"id":1,"severity":"high","module_name":"react-router","title":"open redirect","github_advisory_id":"GHSA-2j2x-hqr9-3h42","vulnerable_versions":"<6.30.4","cves":[]},"2":{"findings":[],"id":2,"severity":"high","module_name":"react-router-dom","title":"open redirect","github_advisory_id":"GHSA-2j2x-hqr9-3h42","vulnerable_versions":"<6.30.4","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":2,"critical":0}}}'
+rc=0
+out_83q="$(run_gate_allowlist_payload "$TMP83q" "$TMPD83q_AL/allowlist.json" "$MULTI_PKG_PAYLOAD" 1 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_83q" | grep -q 'PASSED'; then
+  pass "Commit2: same GHSA on two packages, both allowlisted → both suppressed, PASSES"
+else
+  fail "Commit2: multi-package GHSA not both suppressed (rc=$rc, out=$out_83q)"
+fi
+rm -rf "$TMP83q" "$TMPD83q_AL"
+
+# Test 83r (Commit2): exact duplicate identity (same GHSA AND same package twice)
+# → still rejected (exit 3, malformed).
+printf '\nTest 83r (Commit2): exact duplicate identity (same GHSA + same package) → ABORTS (malformed)\n'
+TMP83r="$(setup_fake_pnpm)"
+EXACT_DUP_ALLOWLIST="$(printf '[{"id":"GHSA-2j2x-hqr9-3h42","package":"react-router","severity":"high","reason":"first","expires":"%s"},{"id":"GHSA-2j2x-hqr9-3h42","package":"react-router","severity":"high","reason":"dup","expires":"%s"}]' "$FUTURE_EXPIRES" "$FUTURE_EXPIRES")"
+TMPD83r_AL="$(write_temp_allowlist "$EXACT_DUP_ALLOWLIST")"
+write_fake_pnpm "$TMP83r" "$CLEAN_JSON" 0
+rc=0
+stderr_83r="$(run_gate_with_allowlist "$TMP83r" "$TMPD83r_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit2: exact duplicate identity (GHSA + package) → gate ABORTS (exit 3)"
+else
+  fail "Commit2: exact duplicate identity → gate passed — duplicate identity not rejected"
+fi
+if printf '%s' "$stderr_83r" | grep -qi 'duplicate\|malformed'; then
+  pass "Commit2: exact duplicate identity → duplicate/malformed message emitted"
+else
+  fail "Commit2: exact duplicate identity → message missing: $stderr_83r"
+fi
+rm -rf "$TMP83r" "$TMPD83r_AL"
+
+# Test 83s (Commit2): same GHSA, package A allowlisted but advisory is on package
+# B (not listed) → NOT suppressed (exit 2). Identity must match on package too.
+printf '\nTest 83s (Commit2): GHSA allowlisted for package A, advisory on package B → NOT suppressed, BLOCKS (exit 2)\n'
+TMP83s="$(setup_fake_pnpm)"
+PKG_A_ALLOWLIST="$(printf '[{"id":"GHSA-2j2x-hqr9-3h42","package":"react-router","severity":"high","reason":"only pkg A","expires":"%s"}]' "$FUTURE_EXPIRES")"
+TMPD83s_AL="$(write_temp_allowlist "$PKG_A_ALLOWLIST")"
+# Advisory carries the same GHSA but on react-router-dom (package B, NOT listed).
+PKG_B_PAYLOAD='{"advisories":{"1":{"findings":[],"id":1,"severity":"high","module_name":"react-router-dom","title":"open redirect","github_advisory_id":"GHSA-2j2x-hqr9-3h42","vulnerable_versions":"<6.30.4","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0}}}'
+rc=0
+stderr_83s="$(run_gate_allowlist_payload "$TMP83s" "$TMPD83s_AL/allowlist.json" "$PKG_B_PAYLOAD" 1 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit2: GHSA on unlisted package B → NOT suppressed, gate BLOCKS (exit non-zero)"
+else
+  fail "Commit2: GHSA on unlisted package B → wrongly suppressed (composite identity not enforced)"
+fi
+if printf '%s' "$stderr_83s" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Commit2: GHSA on unlisted package B → NON-ALLOWLISTED message emitted"
+else
+  fail "Commit2: GHSA on unlisted package B → NON-ALLOWLISTED message missing: $stderr_83s"
+fi
+rm -rf "$TMP83s" "$TMPD83s_AL"
+
 # --- Commit 1: v7 per-via own-severity classification ------------------------
 #
 # In the v7 schema, vuln.severity is the package-wide MAXIMUM severity. Prior to

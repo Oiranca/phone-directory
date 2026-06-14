@@ -40,6 +40,12 @@ The following vulnerabilities have been addressed as of this release:
 > Each entry carries an `expires` date (YYYY-MM-DD). The gate enforces expiry at release time:
 > an entry whose `expires` date has passed causes the gate to abort, requiring the entry to be
 > re-reviewed and its `expires` date updated (or the advisory resolved) before a new release can proceed.
+>
+> The accepted identity of an entry is the composite of its GHSA `id` **and** `package`. A single
+> advisory affecting more than one package (e.g. `GHSA-2j2x-hqr9-3h42` on both `react-router` and
+> `react-router-dom`) is recorded as one entry per package, all sharing the same `id`; the gate
+> rejects only an exact duplicate identity (same GHSA id **and** same package). A live advisory is
+> suppressed only when its GHSA id, package, and severity all match an accepted identity.
 > The entries below summarise each accepted risk; the allowlist JSON contains the full rationale.
 
 The following advisories are **accepted as low-risk** for this deployment model:

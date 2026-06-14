@@ -52,14 +52,16 @@ This is distinct from an advisory failure message, which lists `NON-ALLOWLISTED`
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | GHSA advisory ID (non-empty, unique) |
+| `id` | string | GHSA advisory ID (non-empty) |
 | `package` | string | Affected package name |
 | `severity` | string | Advisory severity (`high` or `critical`) |
 | `reason` | string | Rationale for acceptance (deployment context, unreachable code path, etc.) |
 | `expires` | string | Expiry date in `YYYY-MM-DD` format — the gate rejects entries past this date |
 | `reviewDate` | string | When the entry was last reviewed (informational) |
 
-The gate validates all required fields and rejects the run (exit 3) if any entry is malformed, contains a duplicate GHSA `id`, or is **expired** (current date > `expires`). An expired entry requires the advisory to be re-reviewed and the `expires` date updated — or the advisory resolved — before a new release can proceed.
+The accepted **identity** of an entry is the composite of its GHSA `id` **and** `package`. A single GHSA advisory that affects more than one package (e.g. `GHSA-2j2x-hqr9-3h42` covering both `react-router` and `react-router-dom`) is therefore represented as one allowlist entry per package, all sharing the same `id`. A live advisory is suppressed only when its GHSA id, package name, and normalized severity all match an accepted identity.
+
+The gate validates all required fields and rejects the run (exit 3) if any entry is malformed, contains a duplicate **identity** (the same GHSA `id` **and** the same `package`), or is **expired** (current date > `expires`). An expired entry requires the advisory to be re-reviewed and the `expires` date updated — or the advisory resolved — before a new release can proceed.
 
 Adding an entry with a realistic `expires` date (typically 3–6 months from review) is the correct way to accept a known advisory rather than using `SKIP_AUDIT=1`.
 

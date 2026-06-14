@@ -330,16 +330,24 @@ process.stdin.on("end", () => {
       process.exit(3);
     }
 
-    // Duplicate GHSA id check — normalized to lowercase so a case-variant
-    // duplicate (e.g. GHSA-xxxx and ghsa-xxxx) is detected the same way as
-    // an exact duplicate.  allowedMap keys are already lowercased; seenIds
-    // must use the same normalization or the second entry silently wins.
+    // Duplicate IDENTITY check — identity is the COMPOSITE of GHSA id + package,
+    // so the same GHSA may legitimately appear on more than one package (e.g. a
+    // single advisory covering both react-router and react-router-dom).  Only an
+    // EXACT duplicate identity (same GHSA AND same package) is malformed.
+    // Both halves are normalized to lowercase so a case-variant duplicate
+    // (e.g. GHSA-xxxx and ghsa-xxxx on the same package) is still detected.
+    // allowedMap keys use the identical composite normalization below.
     const _normalizedId = entry.id.trim().toLowerCase();
-    if (seenIds.has(_normalizedId)) {
-      process.stderr.write("[audit-gate] Duplicate GHSA id (id: " + entry.id + ") in allowlist — allowlist is malformed.\n");
+    const _normalizedPkg = entry.package.trim();
+    const _identityKey = _normalizedId + " " + _normalizedPkg;
+    if (seenIds.has(_identityKey)) {
+      process.stderr.write(
+        "[audit-gate] Duplicate allowlist identity (id: " + entry.id +
+        ", package: " + entry.package + ") — allowlist is malformed.\n"
+      );
       process.exit(3);
     }
-    seenIds.add(_normalizedId);
+    seenIds.add(_identityKey);
 
     // Expiry check: current date > expires date → this entry is expired.
     // _expiresDate was validated above (not NaN, no roll-over); reuse it.
@@ -353,14 +361,19 @@ process.stdin.on("end", () => {
     }
   }
 
-  // Build a Map from GHSA id → { package, severity } so that suppression
-  // requires all three fields to match (id AND package AND severity).
-  // A Set of ids alone would let a bogus allowlist entry (wrong package or
-  // severity) silently suppress a live advisory with the same GHSA id.
-  // Key is lowercased so advisory GHSA ids in any case (GHSA-xxxx vs ghsa-xxxx)
-  // match allowlist entries regardless of capitalisation differences.
+  // Build a Map from COMPOSITE identity "<ghsa> <package>" → { severity } so that
+  // suppression requires GHSA id AND package to match (and severity below).
+  // Keying by GHSA alone would let a bogus entry (wrong package) suppress a live
+  // advisory with the same GHSA id; keying by composite also lets one GHSA cover
+  // multiple packages (distinct identities) while still rejecting exact dupes.
+  // The GHSA half is lowercased so advisory GHSA ids in any case (GHSA-xxxx vs
+  // ghsa-xxxx) match regardless of capitalisation.  The package half preserves
+  // case (package names are case-sensitive) but is trimmed.
   const allowedMap = new Map(
-    allowlist.map(e => [e.id.trim().toLowerCase(), { pkg: e.package.trim(), sev: e.severity.trim().toLowerCase() }])
+    allowlist.map(e => [
+      e.id.trim().toLowerCase() + " " + e.package.trim(),
+      { sev: e.severity.trim().toLowerCase() }
+    ])
   );
   const allowlistCount = allowlist.length;
 
@@ -435,12 +448,13 @@ process.stdin.on("end", () => {
       const livePkg = adv.module_name.trim();
       // A finding with no GHSA ID must NOT be silently allowlisted — it counts
       // as a failure because we cannot confirm its identity.
-      // When a GHSA id IS present, suppression requires the allowlist entry to
-      // also match on package name AND severity (not just the id).
-      // GHSA id comparison is case-insensitive (allowedMap keys are lowercased).
-      if (ghsa && allowedMap.has(ghsa)) {
-        const entry = allowedMap.get(ghsa);
-        if (entry.pkg === livePkg && entry.sev === sev) continue;
+      // When a GHSA id IS present, suppression requires an allowlist entry whose
+      // composite identity (GHSA id + package) matches AND whose severity matches.
+      // The GHSA half of the key is lowercased (case-insensitive match).
+      const _identityKey = ghsa + " " + livePkg;
+      if (ghsa && allowedMap.has(_identityKey)) {
+        const entry = allowedMap.get(_identityKey);
+        if (entry.sev === sev) continue;
       }
       failures.push({ ghsa, severity: sev, package: adv.module_name, title: adv.title });
     }
@@ -549,12 +563,14 @@ process.stdin.on("end", () => {
         // pkgName is the v7 outer key (always a string — object key cannot be non-string).
         const livePkg = pkgName.trim();
         // A finding with no GHSA ID must NOT be silently allowlisted.
-        // When a GHSA id IS present, suppression requires id + package + severity to
-        // match — using the via advisory OWN severity (viaSev), not the node max.
-        // GHSA id comparison is case-insensitive (allowedMap keys are lowercased).
-        if (ghsa && allowedMap.has(ghsa)) {
-          const entry = allowedMap.get(ghsa);
-          if (entry.pkg === livePkg && entry.sev === viaSev) continue;
+        // When a GHSA id IS present, suppression requires an allowlist entry whose
+        // composite identity (GHSA id + package) matches AND whose severity matches
+        // the via advisory OWN severity (viaSev), not the node max.
+        // The GHSA half of the key is lowercased (case-insensitive match).
+        const _identityKey = ghsa + " " + livePkg;
+        if (ghsa && allowedMap.has(_identityKey)) {
+          const entry = allowedMap.get(_identityKey);
+          if (entry.sev === viaSev) continue;
         }
         failures.push({ ghsa, severity: viaSev, package: pkgName, title: via.title || pkgName });
       }
