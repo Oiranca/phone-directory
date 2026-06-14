@@ -752,18 +752,23 @@ run_audit_gate() {
       printf '[audit-gate]   Provide a single-line reason (no newlines, no control characters).\n' >&2
       exit 1
     fi
-    # Reject non-ASCII bytes (0x80–0xff) — this covers Unicode line separators
-    # (U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR, U+0085 NEL) whose
-    # UTF-8 encodings are multi-byte sequences that pass the \n/\r and
-    # tr '\000-\037\177' checks above.  A Unicode-aware manifest parser or
-    # viewer could treat these codepoints as line breaks, allowing a spoofed
-    # "Dependency audit: PASSED" line to be injected into RELEASE_MANIFEST.txt.
-    # Enforce ASCII-only: strip all bytes > 0x7f and reject if anything is removed.
-    local _reason_ascii
-    _reason_ascii="$(printf '%s' "$_reason_trimmed" | LC_ALL=C tr -d '\200-\377')"
-    if [[ ${#_reason_ascii} -ne $_reason_len ]]; then
-      printf '[audit-gate] ✗ SKIP_AUDIT_REASON contains non-ASCII characters (including possible Unicode line separators).\n' >&2
-      printf '[audit-gate]   Provide an ASCII-only single-line reason.\n' >&2
+    # Reject ONLY the Unicode line/paragraph separators that a line-aware manifest
+    # parser or viewer could treat as a line break — these multi-byte UTF-8
+    # sequences pass the \n/\r and tr '\000-\037\177' checks above and could be
+    # used to inject a spoofed "Dependency audit: PASSED" line into
+    # RELEASE_MANIFEST.txt:
+    #   U+0085 NEL                  → UTF-8  C2 85
+    #   U+2028 LINE SEPARATOR       → UTF-8  E2 80 A8
+    #   U+2029 PARAGRAPH SEPARATOR  → UTF-8  E2 80 A9
+    # Ordinary printable non-ASCII (e.g. "§", used in the documented bypass
+    # examples in SECURITY.md / scripts/README.md) is ALLOWED.  We match the exact
+    # byte sequences under LC_ALL=C with fixed-string (-F) patterns so detection is
+    # encoding-agnostic (works under C and C.UTF-8) and portable across GNU and
+    # macOS/BSD grep (no \| alternation).  grep -q returns 0 if any of the three
+    # sequences is present.
+    if printf '%s' "$_reason_trimmed" | LC_ALL=C grep -qF -e $'\xc2\x85' -e $'\xe2\x80\xa8' -e $'\xe2\x80\xa9'; then
+      printf '[audit-gate] ✗ SKIP_AUDIT_REASON contains a Unicode line/paragraph separator (U+0085, U+2028, or U+2029).\n' >&2
+      printf '[audit-gate]   Provide a single-line reason without Unicode line separators.\n' >&2
       exit 1
     fi
     printf '[audit-gate] ⚠️  SKIP_AUDIT=1 — dependency audit bypassed\n' >&2

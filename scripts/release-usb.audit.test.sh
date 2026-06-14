@@ -1832,8 +1832,8 @@ if [[ $rc -ne 0 ]]; then
 else
   fail "Commit6: U+2028 in SKIP_AUDIT_REASON → gate wrongly bypassed (manifest injection possible)"
 fi
-if printf '%s' "$stderr_52b" | grep -qi 'non-ASCII\|non.ascii'; then
-  pass "Commit6: U+2028 → non-ASCII rejection message emitted"
+if printf '%s' "$stderr_52b" | grep -qi 'line/paragraph separator\|U+2028'; then
+  pass "Commit6: U+2028 → line/paragraph separator rejection message emitted"
 else
   fail "Commit6: U+2028 → wrong stderr: $stderr_52b"
 fi
@@ -1876,6 +1876,123 @@ else
   fail "Commit6 regression: plain ASCII reason → wrongly aborted"
 fi
 rm -rf "$TMP52d"
+
+# --- Commit 3: printable non-ASCII allowed; only U+0085/U+2028/U+2029 blocked --
+#
+# The validator previously rejected EVERY non-ASCII byte, which broke the
+# documented bypass command (SECURITY.md / scripts/README.md) whose reason string
+# contains a "§" character.  The fix narrows the check to reject only the Unicode
+# line/paragraph separators a line-aware manifest parser treats as breaks
+# (U+0085 NEL, U+2028 LS, U+2029 PS) while allowing ordinary printable non-ASCII.
+
+# Test 52e (Commit3): the EXACT documented bypass reason (contains "§") → ACCEPTED,
+# recorded in the status line verbatim.  This guards the real documented contract.
+DOCUMENTED_BYPASS_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks"
+printf '\nTest 52e (Commit3): documented reason containing "§" → ACCEPTED, recorded verbatim\n'
+TMP52e="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52e" "$NEW_CRITICAL_JSON" 1
+rc=0
+out_52e="$(env PATH="$TMP52e:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$DOCUMENTED_BYPASS_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_52e" | grep -qF "BYPASSED — reason: $DOCUMENTED_BYPASS_REASON"; then
+  pass "Commit3: documented '§' reason → bypass accepted and recorded verbatim in status line"
+else
+  fail "Commit3: documented '§' reason → rejected or not recorded verbatim (rc=$rc, out=$out_52e)"
+fi
+rm -rf "$TMP52e"
+
+# Test 52f (Commit3): U+0085 (NEL, UTF-8 C2 85) → still REJECTED.
+printf '\nTest 52f (Commit3): SKIP_AUDIT_REASON with U+0085 NEL → ABORTS\n'
+TMP52f="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52f" "$CLEAN_JSON" 0
+U0085_REASON="$(printf 'accepted\xc2\x85injected')"
+rc=0
+stderr_52f="$(env PATH="$TMP52f:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$U0085_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit3: U+0085 NEL in SKIP_AUDIT_REASON → gate aborts"
+else
+  fail "Commit3: U+0085 NEL → gate wrongly bypassed (manifest injection possible)"
+fi
+if printf '%s' "$stderr_52f" | grep -qi 'line/paragraph separator\|U+0085'; then
+  pass "Commit3: U+0085 → line/paragraph separator rejection message emitted"
+else
+  fail "Commit3: U+0085 → wrong stderr: $stderr_52f"
+fi
+rm -rf "$TMP52f"
+
+# Test 52g (Commit3): a plain printable non-ASCII reason (no separators) →
+# ACCEPTED. Confirms the validator no longer rejects all non-ASCII.
+printf '\nTest 52g (Commit3): printable non-ASCII reason (accents, no separators) → ACCEPTED\n'
+TMP52g="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52g" "$NEW_CRITICAL_JSON" 1
+ACCENT_REASON="$(printf 'aceptado seg\xc3\xban revisi\xc3\xb3n')"  # "aceptado según revisión"
+rc=0
+out_52g="$(env PATH="$TMP52g:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$ACCENT_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_52g" | grep -q 'BYPASSED'; then
+  pass "Commit3: printable non-ASCII (accented) reason → bypass accepted"
+else
+  fail "Commit3: printable non-ASCII reason → wrongly rejected (rc=$rc, out=$out_52g)"
+fi
+rm -rf "$TMP52g"
+
+# Test 52h (Commit3): ASCII control char (0x01) → still REJECTED (regression).
+printf '\nTest 52h (Commit3): SKIP_AUDIT_REASON with ASCII control char (0x01) → ABORTS\n'
+TMP52h="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52h" "$CLEAN_JSON" 0
+CTRL_REASON="$(printf 'accepted\x01injected')"
+rc=0
+stderr_52h="$(env PATH="$TMP52h:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$CTRL_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit3: ASCII control char → gate aborts"
+else
+  fail "Commit3: ASCII control char → gate wrongly bypassed"
+fi
+if printf '%s' "$stderr_52h" | grep -qi 'control character'; then
+  pass "Commit3: ASCII control char → control-character rejection message emitted"
+else
+  fail "Commit3: ASCII control char → wrong stderr: $stderr_52h"
+fi
+rm -rf "$TMP52h"
+
+# Test 52i (Commit3): a reason of printable non-ASCII >200 chars → still REJECTED.
+printf '\nTest 52i (Commit3): printable non-ASCII reason >200 chars → ABORTS\n'
+TMP52i="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52i" "$CLEAN_JSON" 0
+LONG_NONASCII_REASON="$(printf '\xc2\xa7%.0s' {1..201})"  # 201 "§" chars
+rc=0
+stderr_52i="$(env PATH="$TMP52i:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$LONG_NONASCII_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit3: printable non-ASCII reason >200 chars → gate aborts"
+else
+  fail "Commit3: printable non-ASCII reason >200 chars → wrongly bypassed"
+fi
+if printf '%s' "$stderr_52i" | grep -q 'exceeds 200'; then
+  pass "Commit3: long non-ASCII reason → 'exceeds 200' message emitted"
+else
+  fail "Commit3: long non-ASCII reason → wrong stderr: $stderr_52i"
+fi
+rm -rf "$TMP52i"
 
 # --- Fix 4: temp file cleanup after gate error/abort -------------------------
 
@@ -3528,7 +3645,9 @@ BIN90="$(mktemp -d "$TEST_FIXTURE_ROOT/bin90-XXXXXX")"
 # Audit JSON here would FAIL the gate if it ran — proving the bypass actually
 # skipped the audit rather than passing it.
 write_sandbox_bin "$BIN90" "$SANDBOX90" "$NEW_CRITICAL_JSON" 1 linux
-BYPASS_REASON90="GHSA-w7jw-789q-3m8p accepted per SECURITY.md"
+# Use the EXACT reason string documented in SECURITY.md / scripts/README.md
+# (contains "§") so this e2e guards the real documented bypass contract.
+BYPASS_REASON90="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks"
 rc_90=0
 env PATH="$BIN90:$PATH" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$BYPASS_REASON90" \
   bash "$SANDBOX90/scripts/release-usb.sh" linux >/dev/null 2>&1 || rc_90=$?
@@ -3633,7 +3752,8 @@ printf '\nTest 93 (Commit2 e2e win bypass): SKIP_AUDIT=1 + reason → win manife
 SANDBOX93="$(build_sandbox_repo)"
 BIN93="$(mktemp -d "$TEST_FIXTURE_ROOT/bin93-XXXXXX")"
 write_sandbox_bin "$BIN93" "$SANDBOX93" "$NEW_CRITICAL_JSON" 1 win
-BYPASS_REASON93="GHSA-w7jw-789q-3m8p accepted per SECURITY.md"
+# Exact documented reason (contains "§") — guards the documented bypass contract.
+BYPASS_REASON93="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks"
 rc_93=0
 env PATH="$BIN93:$PATH" SKIP_AUDIT=1 SKIP_AUDIT_REASON="$BYPASS_REASON93" \
   bash "$SANDBOX93/scripts/release-usb.sh" win >/dev/null 2>&1 || rc_93=$?
