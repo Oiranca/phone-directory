@@ -39,18 +39,30 @@ if [[ "${AUDIT_GATE_TEST_MODE:-0}" == "1" && -n "${AUDIT_ALLOWLIST:-}" ]]; then
   _AUDIT_OVERRIDE_REAL="$(cd "$(dirname "${AUDIT_ALLOWLIST}")" 2>/dev/null && pwd)" || _AUDIT_OVERRIDE_REAL=""
   # Also canonicalize the FILE TARGET ITSELF (catches symlinks under scripts/ that
   # point outside — e.g. scripts/.test-x/al.json → /tmp/evil.json).
-  # Portable realpath: try realpath(1), then python3 -c os.path.realpath.
-  # FAIL-CLOSED: if neither resolver is available (or canonicalization fails),
-  # _AUDIT_OVERRIDE_FILE_REAL is left empty AND we treat that as REJECTED —
-  # we do NOT fall back to accepting the override on the parent-dir check alone.
-  # An unresolvable file target could be a symlink to anywhere; the only safe
-  # default is to use the pinned repo allowlist.
-  # Prerequisite for test mode: realpath(1) or python3 must be present.
+  # Portable realpath: try realpath(1), then python3 -c os.path.realpath, then
+  # node fs.realpathSync.native.  Node is a hard repo dependency, so this third
+  # fallback keeps the test path portable on minimal environments that lack both
+  # realpath(1) and python3.
+  # FAIL-CLOSED: if NONE of the resolvers is available (or canonicalization
+  # fails everywhere), _AUDIT_OVERRIDE_FILE_REAL is left empty AND we treat that
+  # as REJECTED — we do NOT fall back to accepting the override on the parent-dir
+  # check alone.  An unresolvable file target could be a symlink to anywhere; the
+  # only safe default is to use the pinned repo allowlist.
+  # Prerequisite for test mode: realpath(1), python3, OR node must be present.
+  # Try each resolver in order and FALL THROUGH on an empty/failed result, not
+  # merely when the tool is absent: a resolver that is present but fails (exits
+  # non-zero, or prints nothing) must not short-circuit the chain.  This keeps
+  # the node fallback reachable even on a host where realpath/python3 exist but
+  # cannot resolve the path.
   _AUDIT_OVERRIDE_FILE_REAL=""
   if command -v realpath >/dev/null 2>&1; then
     _AUDIT_OVERRIDE_FILE_REAL="$(realpath "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
-  elif command -v python3 >/dev/null 2>&1; then
+  fi
+  if [[ -z "$_AUDIT_OVERRIDE_FILE_REAL" ]] && command -v python3 >/dev/null 2>&1; then
     _AUDIT_OVERRIDE_FILE_REAL="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
+  fi
+  if [[ -z "$_AUDIT_OVERRIDE_FILE_REAL" ]] && command -v node >/dev/null 2>&1; then
+    _AUDIT_OVERRIDE_FILE_REAL="$(node -e 'process.stdout.write(require("fs").realpathSync.native(process.argv[1]))' "${AUDIT_ALLOWLIST}" 2>/dev/null)" || _AUDIT_OVERRIDE_FILE_REAL=""
   fi
   # Derive the real parent dir of the resolved file path (only when resolution succeeded).
   _AUDIT_OVERRIDE_FILE_DIR=""

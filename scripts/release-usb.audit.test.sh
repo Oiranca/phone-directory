@@ -2107,22 +2107,37 @@ rm -f "$EVIL_ALLOWLIST"
 rm -rf "$SYMLINK_DIR" "$TMP67b"
 
 # Test 67b2 (CommitA): no-resolver path — override is REJECTED (fail-closed).
-# When neither realpath nor python3 can resolve the file target,
-# _AUDIT_OVERRIDE_FILE_REAL stays empty. The fix removes the old -z fallback
-# branch that accepted the override on the parent-dir check alone; now an
-# empty resolution means REJECTED regardless. The override below points to a
+# When NONE of the resolvers (realpath, python3, node) can resolve the file
+# target, _AUDIT_OVERRIDE_FILE_REAL stays empty. The fix removes the old -z
+# fallback branch that accepted the override on the parent-dir check alone; now
+# an empty resolution means REJECTED regardless. The override below points to a
 # permissive allowlist that IS inside scripts/ (literal parent-dir check would
 # pass) — the only guard against it is the file-target resolution.
-# NOTE: this test requires realpath or python3 to be present on the HOST so
-# that the stubs-on-PATH trick actually shadows real tools. On a host where
-# neither exists natively, the gate already rejects by the same empty-resolution
-# logic; the stubs are belt-and-suspenders for hosts where the tools DO exist.
-printf '\nTest 67b2 (CommitA): no-resolver (stubs shadow realpath+python3) → override NOT honoured (fail-closed)\n'
+# NOTE: this test stubs ALL THREE resolvers (realpath, python3, node) so the
+# fail-closed property is exercised regardless of which tools the host has.  Node
+# is a third fallback (Commit3), so it too must be shadowed here to genuinely
+# leave the resolution empty.
+printf '\nTest 67b2 (CommitA): no-resolver (stubs shadow realpath+python3+node) → override NOT honoured (fail-closed)\n'
 TMP67b2_BIN="$(mktemp -d "$TEST_FIXTURE_ROOT/bin-XXXXXX")"
-# Stubs exit non-zero — command -v finds them but resolution fails → empty result.
+# realpath/python3 stubs exit non-zero — command -v finds them but resolution
+# fails → empty result.
 printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b2_BIN/realpath"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b2_BIN/python3"
 chmod +x "$TMP67b2_BIN/realpath" "$TMP67b2_BIN/python3"
+# node stub: fail ONLY for the realpath-resolution invocation (its inline script
+# contains "realpathSync"); pass through every other node call (the gate also
+# runs node to execute the advisory filter, which must still work).
+_REAL_NODE_67b2="$(command -v node)"
+cat > "$TMP67b2_BIN/node" <<STUB
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    *realpathSync*) exit 1 ;;
+  esac
+done
+exec '${_REAL_NODE_67b2}' "\$@"
+STUB
+chmod +x "$TMP67b2_BIN/node"
 PERMISSIVE_DIR_67b2="$(mktemp -d "$TEST_FIXTURE_ROOT/al-XXXXXX")"
 printf '[{"id":"GHSA-zzzz-zzzz-zzzz","package":"some-pkg","severity":"critical","reason":"evil bypass","expires":"%s"}]' \
   "$FUTURE_EXPIRES" > "$PERMISSIVE_DIR_67b2/allowlist.json"
@@ -2149,6 +2164,90 @@ else
   fail "CommitA no-resolver: NON-ALLOWLISTED missing — permissive allowlist may have been used: $stderr_67b2"
 fi
 rm -rf "$TMP67b2_BIN" "$PERMISSIVE_DIR_67b2" "$TMP67b2_PNPM"
+
+# Test 67b3 (Commit3, Node fallback resolves a legit symlink): when realpath(1)
+# and python3 both FAIL to resolve (shadowed by non-zero stubs on PATH), the
+# resolver chain must fall through to the third Node fallback.  A symlink under
+# scripts/ that targets an allowlist file ALSO under scripts/ must be HONOURED —
+# proving the Node resolver resolved the symlink to an in-scope target.
+# CRITICAL: the override allowlist suppresses an advisory (GHSA-aaaa-aaaa-aaaa,
+# the NEW_HIGH_JSON finding) that is NOT in the pinned repo allowlist.  So a PASS
+# is only possible if the override was honoured via the Node resolver — if the
+# node branch is missing, resolution stays empty, the pinned allowlist is used,
+# and the gate FAILS on that non-allowlisted high (which the mutation test must
+# catch).
+printf '\nTest 67b3 (Commit3): realpath+python3 fail → Node fallback resolves in-scope symlink → override honoured (PASS)\n'
+TMP67b3_BIN="$(mktemp -d "$TEST_FIXTURE_ROOT/bin-XXXXXX")"
+# Stubs are present (command -v finds them) but exit non-zero → empty result →
+# chain falls through to node.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b3_BIN/realpath"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b3_BIN/python3"
+chmod +x "$TMP67b3_BIN/realpath" "$TMP67b3_BIN/python3"
+# Allowlist target (suppresses the NEW_HIGH advisory, absent from the pinned
+# repo allowlist) + symlink, both inside scripts/ (under TEST_FIXTURE_ROOT).
+AL_TARGET_DIR_67b3="$(mktemp -d "$TEST_FIXTURE_ROOT/altgt-XXXXXX")"
+printf '[{"id":"GHSA-aaaa-aaaa-aaaa","package":"some-other-pkg","severity":"high","reason":"node-fallback test override","expires":"%s"}]' \
+  "$FUTURE_EXPIRES" > "$AL_TARGET_DIR_67b3/real-allowlist.json"
+AL_LINK_DIR_67b3="$(mktemp -d "$TEST_FIXTURE_ROOT/allink-XXXXXX")"
+ln -s "$AL_TARGET_DIR_67b3/real-allowlist.json" "$AL_LINK_DIR_67b3/allowlist.json"
+TMP67b3_PNPM="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67b3_PNPM" "$NEW_HIGH_JSON" 1
+rc=0
+out_67b3="$(env PATH="$TMP67b3_BIN:$TMP67b3_PNPM:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$AL_LINK_DIR_67b3/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+    printf '%s\n' \"\$AUDIT_STATUS_LINE\"
+  " 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_67b3" | grep -q 'PASSED'; then
+  pass "Commit3 Node fallback: in-scope symlink resolved by node → override honoured, gate PASSES"
+else
+  fail "Commit3 Node fallback: in-scope symlink NOT honoured via node resolver (rc=$rc, out=$out_67b3)"
+fi
+rm -rf "$TMP67b3_BIN" "$AL_TARGET_DIR_67b3" "$AL_LINK_DIR_67b3" "$TMP67b3_PNPM"
+
+# Test 67b4 (Commit3, Node fallback still rejects an out-of-scripts symlink):
+# with realpath+python3 failing, the Node resolver must canonicalize a symlink
+# under scripts/ that targets /tmp and the scope guard must still REJECT it
+# (resolved target is outside scripts/).  This proves the Node fallback adds
+# portability WITHOUT reintroducing a fail-open via the resolved path.
+printf '\nTest 67b4 (Commit3): realpath+python3 fail → Node fallback rejects out-of-scripts symlink (fail-closed)\n'
+TMP67b4_BIN="$(mktemp -d "$TEST_FIXTURE_ROOT/bin-XXXXXX")"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b4_BIN/realpath"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP67b4_BIN/python3"
+chmod +x "$TMP67b4_BIN/realpath" "$TMP67b4_BIN/python3"
+EVIL_ALLOWLIST_67b4="$(mktemp /tmp/evil-allowlist-XXXXXX.json)"
+printf '[]' > "$EVIL_ALLOWLIST_67b4"
+SYMLINK_DIR_67b4="$(mktemp -d "$TEST_FIXTURE_ROOT/symlink-XXXXXX")"
+ln -s "$EVIL_ALLOWLIST_67b4" "$SYMLINK_DIR_67b4/allowlist.json"
+TMP67b4_PNPM="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67b4_PNPM" "$NEW_CRITICAL_JSON" 1
+rc=0
+stderr_67b4="$(env PATH="$TMP67b4_BIN:$TMP67b4_PNPM:$PATH" \
+  REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$SYMLINK_DIR_67b4/allowlist.json" \
+  bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit3 Node fallback: out-of-scripts symlink resolved by node → scope guard rejects (gate aborts)"
+else
+  fail "Commit3 Node fallback: out-of-scripts symlink wrongly honoured via node resolver (fail-OPEN)"
+fi
+if printf '%s' "$stderr_67b4" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Commit3 Node fallback: NON-ALLOWLISTED emitted — out-of-scripts symlink allowlist not used"
+else
+  fail "Commit3 Node fallback: NON-ALLOWLISTED missing — symlink allowlist may have been used: $stderr_67b4"
+fi
+rm -f "$EVIL_ALLOWLIST_67b4"
+rm -rf "$TMP67b4_BIN" "$SYMLINK_DIR_67b4" "$TMP67b4_PNPM"
 
 # --- Commit 1: release-usb.sh preserves the documented SKIP_AUDIT bypass ------
 #
