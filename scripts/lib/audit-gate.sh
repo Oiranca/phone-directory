@@ -100,7 +100,7 @@ process.stdin.on("end", () => {
   // Reject if the key is present but is not a plain object.
   if (hasAdvisories && !advisoriesIsPlainObj) {
     process.stderr.write(
-      "[audit-gate] pnpm audit response has 'advisories' but it is not a plain object (got: " +
+      "[audit-gate] pnpm audit response has advisories but it is not a plain object (got: " +
       (Array.isArray(advisoriesVal) ? "array" : typeof advisoriesVal) +
       ") — malformed or inconsistent payload.\n"
     );
@@ -108,7 +108,7 @@ process.stdin.on("end", () => {
   }
   if (hasVulnerabilities && !vulnerabilitiesIsPlainObj) {
     process.stderr.write(
-      "[audit-gate] pnpm audit response has 'vulnerabilities' but it is not a plain object (got: " +
+      "[audit-gate] pnpm audit response has vulnerabilities but it is not a plain object (got: " +
       (Array.isArray(vulnerabilitiesVal) ? "array" : typeof vulnerabilitiesVal) +
       ") — malformed or inconsistent payload.\n"
     );
@@ -119,7 +119,7 @@ process.stdin.on("end", () => {
   // A real pnpm audit uses one schema or the other — never both.
   if (advisoriesIsPlainObj && vulnerabilitiesIsPlainObj) {
     process.stderr.write(
-      "[audit-gate] pnpm audit response has BOTH 'advisories' and 'vulnerabilities' containers — " +
+      "[audit-gate] pnpm audit response has BOTH advisories and vulnerabilities containers — " +
       "ambiguous schema, cannot safely evaluate.\n"
     );
     process.exit(3);
@@ -143,8 +143,8 @@ process.stdin.on("end", () => {
   // even though no advisory container was parsed — a fail-open.
   if (!hasAdvisories && !hasVulnerabilities && hasMetadata) {
     process.stderr.write(
-      "[audit-gate] pnpm audit response has 'metadata' but no advisory container " +
-      "('advisories' or 'vulnerabilities') — malformed or inconsistent payload " +
+      "[audit-gate] pnpm audit response has metadata but no advisory container " +
+      "(advisories or vulnerabilities) — malformed or inconsistent payload " +
       "(real pnpm always emits an advisory container alongside metadata).\n"
     );
     process.exit(3);
@@ -209,15 +209,15 @@ process.stdin.on("end", () => {
       process.exit(3);
     }
     if (typeof entry.id !== "string" || entry.id.trim() === "") {
-      process.stderr.write("[audit-gate] " + idx + " missing or empty 'id' field — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] " + idx + " missing or empty id field — allowlist is malformed.\n");
       process.exit(3);
     }
     if (typeof entry.package !== "string" || entry.package.trim() === "") {
-      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'package' field — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty package field — allowlist is malformed.\n");
       process.exit(3);
     }
     if (typeof entry.severity !== "string" || entry.severity.trim() === "") {
-      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'severity' field — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty severity field — allowlist is malformed.\n");
       process.exit(3);
     }
     // Allowlist entries may only suppress high/critical advisories (those are
@@ -227,7 +227,7 @@ process.stdin.on("end", () => {
     const normalizedEntrySev = entry.severity.trim().toLowerCase();
     if (normalizedEntrySev !== "high" && normalizedEntrySev !== "critical") {
       process.stderr.write(
-        "[audit-gate] " + idx + " (id: " + entry.id + ") 'severity' must be exactly \"high\" or \"critical\" " +
+        "[audit-gate] " + idx + " (id: " + entry.id + ") severity must be exactly \"high\" or \"critical\" " +
         "(got: \"" + entry.severity + "\") — allowlist is malformed.\n"
       );
       process.exit(3);
@@ -237,17 +237,17 @@ process.stdin.on("end", () => {
     // used as allowlist keys, which would make the id-matching logic meaningless.
     if (!/^GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}$/i.test(entry.id.trim())) {
       process.stderr.write(
-        "[audit-gate] " + idx + " (id: " + entry.id + ") 'id' does not match GHSA format " +
+        "[audit-gate] " + idx + " (id: " + entry.id + ") id does not match GHSA format " +
         "(expected: GHSA-xxxx-xxxx-xxxx) — allowlist is malformed.\n"
       );
       process.exit(3);
     }
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
-      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty 'reason' field — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or empty reason field — allowlist is malformed.\n");
       process.exit(3);
     }
     if (typeof entry.expires !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.expires.trim())) {
-      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or invalid 'expires' field (required: YYYY-MM-DD) — allowlist is malformed.\n");
+      process.stderr.write("[audit-gate] " + idx + " (id: " + entry.id + ") missing or invalid expires field (required: YYYY-MM-DD) — allowlist is malformed.\n");
       process.exit(3);
     }
 
@@ -262,7 +262,7 @@ process.stdin.on("end", () => {
     const _expiresDate = new Date(_expiresRaw + "T00:00:00Z");
     if (isNaN(_expiresDate.getTime())) {
       process.stderr.write(
-        "[audit-gate] " + idx + " (id: " + entry.id + ") 'expires' value \"" + _expiresRaw +
+        "[audit-gate] " + idx + " (id: " + entry.id + ") expires value \"" + _expiresRaw +
         "\" is not a valid calendar date — allowlist is malformed.\n"
       );
       process.exit(3);
@@ -275,7 +275,7 @@ process.stdin.on("end", () => {
     const [_inputY, _inputM, _inputD] = _expiresRaw.split("-").map(Number);
     if (_parsedY !== _inputY || _parsedM !== _inputM || _parsedD !== _inputD) {
       process.stderr.write(
-        "[audit-gate] " + idx + " (id: " + entry.id + ") 'expires' value \"" + _expiresRaw +
+        "[audit-gate] " + idx + " (id: " + entry.id + ") expires value \"" + _expiresRaw +
         "\" is not a valid calendar date (parsed date rolled over to " +
         _expiresDate.toISOString().slice(0, 10) + ") — allowlist is malformed.\n"
       );
