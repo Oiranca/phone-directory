@@ -987,6 +987,28 @@ else
 fi
 rm -rf "$TMP30" "$TMPD30_AL"
 
+# Test 30b: case-variant duplicate GHSA id → gate ABORTS (same as exact duplicate)
+# Before the fix, seenIds used raw entry.id while allowedMap keys were lowercased,
+# so GHSA-w7jw-789q-3m8p and ghsa-w7jw-789q-3m8p were NOT detected as duplicates.
+printf '\nTest 30b: case-variant duplicate GHSA id (upper+lower) → ABORTS\n'
+CASE_DUP_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"first","expires":"%s"},{"id":"ghsa-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"case-dup","expires":"%s"}]' "$FUTURE_EXPIRES" "$FUTURE_EXPIRES")"
+TMP30b_AL="$(write_temp_allowlist "$CASE_DUP_ALLOWLIST")"
+TMP30b="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP30b" "$CLEAN_JSON" 0
+rc=0
+stderr_30b="$(run_gate_with_allowlist "$TMP30b" "$TMP30b_AL/allowlist.json" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "case-variant duplicate GHSA id → gate ABORTS"
+else
+  fail "case-variant duplicate GHSA id → gate passed (duplicate not detected — fail-open)"
+fi
+if printf '%s' "$stderr_30b" | grep -qi 'duplicate\|malformed'; then
+  pass "case-variant duplicate id → duplicate/malformed message emitted"
+else
+  fail "case-variant duplicate id → message missing from stderr: $stderr_30b"
+fi
+rm -rf "$TMP30b" "$TMP30b_AL"
+
 # Test 31: valid allowlist with future expiry → gate passes normally
 printf '\nTest 31: valid allowlist with future expiry → gate passes normally\n'
 VALID_FUTURE_ALLOWLIST="$(printf '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"

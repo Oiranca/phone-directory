@@ -318,12 +318,16 @@ process.stdin.on("end", () => {
       process.exit(3);
     }
 
-    // Duplicate GHSA id check.
-    if (seenIds.has(entry.id)) {
+    // Duplicate GHSA id check — normalized to lowercase so a case-variant
+    // duplicate (e.g. GHSA-xxxx and ghsa-xxxx) is detected the same way as
+    // an exact duplicate.  allowedMap keys are already lowercased; seenIds
+    // must use the same normalization or the second entry silently wins.
+    const _normalizedId = entry.id.trim().toLowerCase();
+    if (seenIds.has(_normalizedId)) {
       process.stderr.write("[audit-gate] Duplicate GHSA id (id: " + entry.id + ") in allowlist — allowlist is malformed.\n");
       process.exit(3);
     }
-    seenIds.add(entry.id);
+    seenIds.add(_normalizedId);
 
     // Expiry check: current date > expires date → this entry is expired.
     // _expiresDate was validated above (not NaN, no roll-over); reuse it.
