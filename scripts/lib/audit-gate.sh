@@ -529,6 +529,25 @@ process.stdin.on("end", () => {
       //     release. A via advisory is a blocking finding ONLY if its own (or fallback)
       //     severity is high/critical AND its GHSA+package is not allowlisted.
       //     low/moderate via advisories never block (high/critical-only policy).
+      //
+      // CONSISTENCY ASSERTION (severity-laundering prevention):
+      //   In real npm/pnpm v7 output, vuln.severity is always the MAX of its via
+      //   advisory severities. A payload where the node claims high/critical but
+      //   ALL via advisory objects carry only low/moderate severities is inconsistent
+      //   and indicates either a forged payload or a malformed registry response.
+      //   We MUST reject it (exit 3) rather than silently produce zero failures and
+      //   record PASSED — that would be a fail-open: an attacker who controls pnpm
+      //   output could hide real advisories as low/moderate to dodge the gate.
+      //
+      //   Assertion: if the node severity is high/critical and there is at least one
+      //   via advisory OBJECT (not a string dep-reference), then at least one of
+      //   those objects must have an own (or fallback) severity that is >= the node
+      //   severity bucket. If none reach the node severity bucket → exit 3.
+      //
+      //   Pure-string via (transitive dep references, no advisory objects): handled
+      //   above by the viaAdvisories.length === 0 branch, which pushes a no-GHSA
+      //   failure. The assertion below only runs when viaAdvisories.length > 0.
+      let _maxViaSev = "";  // tracks the highest via advisory severity seen
       for (const via of viaAdvisories) {
         // Classify by the via advisory OWN severity. If the via object has no
         // severity field, fall back to the node severity (sev). Validate against
@@ -555,6 +574,11 @@ process.stdin.on("end", () => {
             process.exit(3);
           }
         }
+        // Track max via severity for the consistency assertion below.
+        const _SEV_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
+        if (_maxViaSev === "" || _SEV_RANK[viaSev] > _SEV_RANK[_maxViaSev]) {
+          _maxViaSev = viaSev;
+        }
         // Only high/critical via advisories can block (policy is high/critical-only).
         if (viaSev !== "high" && viaSev !== "critical") continue;
 
@@ -573,6 +597,26 @@ process.stdin.on("end", () => {
           if (entry.sev === viaSev) continue;
         }
         failures.push({ ghsa, severity: viaSev, package: pkgName, title: via.title || pkgName });
+      }
+      // Consistency assertion: node severity (sev) must be reachable by at least
+      // one via advisory object. A node claiming high/critical whose every via
+      // advisory object carries only low/moderate severities is inconsistent —
+      // this is exactly the severity-laundering vector: all low/moderate via
+      // advisories are skipped above, producing zero failures, but the node itself
+      // is counted as high/critical for reconciliation — PASSED when it must NOT be.
+      // Reject such payloads as malformed rather than letting them pass silently.
+      if (_maxViaSev !== "" && sev !== _maxViaSev) {
+        const _SEV_RANK2 = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
+        if (_SEV_RANK2[sev] > _SEV_RANK2[_maxViaSev]) {
+          process.stderr.write(
+            "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "] node severity " +
+            JSON.stringify(sev) + " exceeds max via advisory severity " +
+            JSON.stringify(_maxViaSev) + " — payload is inconsistent (severity-laundering " +
+            "or malformed registry response). Real npm/pnpm v7 node severity is always " +
+            "the max of its via advisory severities.\n"
+          );
+          process.exit(3);
+        }
       }
     }
   }

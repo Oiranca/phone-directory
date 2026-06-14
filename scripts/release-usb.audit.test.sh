@@ -3417,6 +3417,91 @@ else
 fi
 rm -rf "$TMP83p"
 
+# --- CommitA: severity-laundering consistency assertion -----------------------
+#
+# A v7 node whose severity is high/critical but whose ALL via advisory objects
+# carry only low/moderate severities must ABORT (exit 3), not silently PASS.
+# This is the exact repro from the adversarial review:
+#   {"vulnerabilities":{"evil":{"severity":"critical","via":[
+#     {"ghsaId":"GHSA-cccc-cccc-cccc","severity":"low"},
+#     {"ghsaId":"GHSA-dddd-dddd-dddd","severity":"moderate"}
+#   ]}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}
+# Before CommitA this PASSED. After CommitA it must exit 3.
+
+# Test 83t (CommitA): node severity=critical, all via=low/moderate → ABORTS (non-zero, infra path)
+# The gate shell function maps filter exit 3 (malformed payload) to exit 1 via the
+# "non-advisory error" infra path — so we check rc -ne 0 and the specific error
+# message to distinguish an abort from a normal advisory block.
+printf '\nTest 83t (CommitA): node severity=critical but all via advisories are low/moderate → ABORTS (inconsistent payload)\n'
+TMP83t="$(setup_fake_pnpm)"
+LAUNDERING_PAYLOAD='{"vulnerabilities":{"evil":{"name":"evil","severity":"critical","via":[{"ghsaId":"GHSA-cccc-cccc-cccc","title":"low via","severity":"low"},{"ghsaId":"GHSA-dddd-dddd-dddd","title":"moderate via","severity":"moderate"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83t" "$LAUNDERING_PAYLOAD" 1
+rc=0
+stderr_83t="$(run_gate_in_subshell "$TMP83t" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "CommitA: severity-laundering payload correctly aborted (non-zero exit, was PASSED before fix)"
+else
+  fail "CommitA: severity-laundering payload still PASSED — fail-open NOT closed (rc=$rc)"
+fi
+if printf '%s' "$stderr_83t" | grep -qi 'inconsistent\|laundering'; then
+  pass "CommitA: abort message mentions inconsistent/laundering"
+else
+  fail "CommitA: abort message missing inconsistent/laundering: $stderr_83t"
+fi
+rm -rf "$TMP83t"
+
+# Test 83u (CommitA): node severity=high, all via=low/moderate → ABORTS
+printf '\nTest 83u (CommitA): node severity=high but all via advisories are low/moderate → ABORTS (inconsistent)\n'
+TMP83u="$(setup_fake_pnpm)"
+LAUNDERING_HIGH_PAYLOAD='{"vulnerabilities":{"pkg2":{"name":"pkg2","severity":"high","via":[{"ghsaId":"GHSA-eeee-eeee-eeee","title":"low via","severity":"low"},{"ghsaId":"GHSA-ffff-ffff-ffff","title":"moderate via","severity":"moderate"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0}}}'
+write_fake_pnpm "$TMP83u" "$LAUNDERING_HIGH_PAYLOAD" 1
+rc=0
+stderr_83u="$(run_gate_in_subshell "$TMP83u" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "CommitA: high-node/low-via laundering correctly aborted (non-zero exit)"
+else
+  fail "CommitA: high-node/low-via laundering still PASSED — fail-open NOT closed (rc=$rc)"
+fi
+if printf '%s' "$stderr_83u" | grep -qi 'inconsistent\|laundering'; then
+  pass "CommitA: high-node abort message mentions inconsistent/laundering"
+else
+  fail "CommitA: high-node abort message missing inconsistent/laundering: $stderr_83u"
+fi
+rm -rf "$TMP83u"
+
+# Test 83v (CommitA): node critical + via critical (allowlisted) + via low → PASSES
+# This is the original test 83m case — must NOT be broken by the assertion.
+# The node severity (critical) IS consistent with at least one via (critical),
+# so the assertion does not fire; the critical via is allowlisted; low via skipped.
+printf '\nTest 83v (CommitA): node critical + via critical (allowlisted) + via low → PASSES (regression: 83m case unbroken)\n'
+TMP83v="$(setup_fake_pnpm)"
+CRIT_ALLOW_LOW_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote crit vuln","severity":"critical"},{"ghsaId":"GHSA-low9-low9-low9","title":"shell-quote low vuln","severity":"low"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83v" "$CRIT_ALLOW_LOW_JSON" 1
+rc=0
+out_83v="$(run_gate_in_subshell "$TMP83v" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_83v" | grep -q 'PASSED'; then
+  pass "CommitA: node critical + allowlisted critical via + low via → PASSED (assertion does not false-abort)"
+else
+  fail "CommitA: node critical + allowlisted critical via + low via wrongly blocked/aborted (rc=$rc)"
+fi
+rm -rf "$TMP83v"
+
+# Test 83w (CommitA): node critical + one via critical (non-allowlisted) → BLOCKS
+# The node severity (critical) is consistent with the via (critical), so no abort.
+# The via is not in the allowlist → advisory block (exit 2 from filter → exit 1 from gate).
+printf '\nTest 83w (CommitA): node critical + non-allowlisted critical via → BLOCKS (non-zero, advisory block)\n'
+TMP83w="$(setup_fake_pnpm)"
+CRIT_NON_ALLOW_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":[{"ghsaId":"GHSA-zzzz-zzzz-zzzz","title":"unallowlisted crit","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83w" "$CRIT_NON_ALLOW_JSON" 1
+rc=0
+stderr_83w="$(run_gate_in_subshell "$TMP83w" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]] && printf '%s' "$stderr_83w" | grep -q 'NON-ALLOWLISTED CRITICAL'; then
+  pass "CommitA: non-allowlisted critical via correctly blocks (advisory block, not abort)"
+else
+  fail "CommitA: non-allowlisted critical via rc=$rc, stderr=$stderr_83w"
+fi
+rm -rf "$TMP83w"
+
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
 # Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,
