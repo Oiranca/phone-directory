@@ -508,6 +508,77 @@ else
 fi
 rm -rf "$TMP4d"
 
+# Test 4i: non-zero pnpm exit + LOW/MODERATE-ONLY advisories → gate does NOT block, records PASSED
+# A tree whose only findings are low/moderate (high=0, critical=0, container
+# NON-empty) can exit non-zero when audit runs without --audit-level filtering.
+# Policy is high/critical-only, so these advisories must NOT block AND must NOT
+# be misread as an infra inconsistency.  The container is non-empty (advisories
+# were observed), so the non-zero exit is "trustworthy" → gate proceeds → PASS.
+printf '\nTest 4i (Commit1): non-zero pnpm exit + low/moderate-only advisories → gate does NOT block (PASSED)\n'
+LOWMOD_ONLY_JSON='{"actions":[],"advisories":{"7":{"findings":[],"id":7,"severity":"low","module_name":"low-pkg","title":"low sev vuln","github_advisory_id":"GHSA-low1-low1-low1","vulnerable_versions":"<1.0.0","cves":[]},"8":{"findings":[],"id":8,"severity":"moderate","module_name":"mod-pkg","title":"moderate sev vuln","github_advisory_id":"GHSA-mod1-mod1-mod1","vulnerable_versions":"<2.0.0","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":1,"moderate":1,"high":0,"critical":0},"dependencies":584}}'
+TMP4i="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP4i" "$LOWMOD_ONLY_JSON" 1
+rc=0
+out="$(run_gate_in_subshell "$TMP4i" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out" | grep -q 'PASSED'; then
+  pass "Commit1: non-zero exit + low/moderate-only → gate does NOT block, records PASSED"
+else
+  fail "Commit1: non-zero exit + low/moderate-only → expected PASS (rc=$rc, out=$out)"
+fi
+# It must NOT be treated as an infra inconsistency.
+stderr_4i="$(env PATH="$TMP4i:$PATH" REPO_ROOT="$REPO_ROOT" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || true
+if printf '%s' "$stderr_4i" | grep -q 'inconsistent'; then
+  fail "Commit1: low/moderate-only non-zero exit wrongly flagged as infra inconsistency: $stderr_4i"
+else
+  pass "Commit1: low/moderate-only non-zero exit is NOT flagged as infra inconsistency"
+fi
+rm -rf "$TMP4i"
+
+# Test 4j: non-zero pnpm exit + v7 low/moderate-only advisories → gate does NOT block (PASSED)
+# Same property under the npm v7 vulnerabilities schema.
+printf '\nTest 4j (Commit1): non-zero pnpm exit + v7 low/moderate-only advisories → gate does NOT block (PASSED)\n'
+LOWMOD_V7_JSON='{"vulnerabilities":{"low-pkg":{"name":"low-pkg","severity":"low","via":[{"ghsaId":"GHSA-low2-low2-low2","title":"low vuln","severity":"low"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false},"mod-pkg":{"name":"mod-pkg","severity":"moderate","via":[{"ghsaId":"GHSA-mod2-mod2-mod2","title":"mod vuln","severity":"moderate"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":1,"moderate":1,"high":0,"critical":0}}}'
+TMP4j="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP4j" "$LOWMOD_V7_JSON" 1
+rc=0
+out="$(run_gate_in_subshell "$TMP4j" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out" | grep -q 'PASSED'; then
+  pass "Commit1: non-zero exit + v7 low/moderate-only → gate does NOT block, records PASSED"
+else
+  fail "Commit1: non-zero exit + v7 low/moderate-only → expected PASS (rc=$rc, out=$out)"
+fi
+rm -rf "$TMP4j"
+
+# Test 4k: real pnpm invocation carries --audit-level=high
+# Use a recording pnpm stub that writes its argv to a file, then assert the gate
+# passed it the --audit-level=high flag.  This locks in the policy-correct flag
+# so a regression that drops it (re-introducing low/moderate noise + spurious
+# non-zero exits) is caught.
+printf '\nTest 4k (Commit1): real pnpm invocation carries --audit-level=high\n'
+TMP4k="$(setup_fake_pnpm)"
+ARGV_LOG="$TMP4k/argv.log"
+cat > "$TMP4k/pnpm" <<STUB
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "audit" ]]; then
+  printf '%s\n' "\$@" > '${ARGV_LOG}'
+  printf '%s' '${CLEAN_JSON}'
+  exit 0
+fi
+exec pnpm-real "\$@"
+STUB
+chmod +x "$TMP4k/pnpm"
+run_gate_in_subshell "$TMP4k" >/dev/null 2>&1 || true
+if [[ -f "$ARGV_LOG" ]] && grep -q -- '--audit-level=high' "$ARGV_LOG"; then
+  pass "Commit1: gate invokes pnpm audit with --audit-level=high"
+else
+  fail "Commit1: gate did NOT invoke pnpm audit with --audit-level=high (argv: $(cat "$ARGV_LOG" 2>/dev/null || echo MISSING))"
+fi
+rm -rf "$TMP4k"
+
 # Test 4e: pnpm_exit=0 but filter emits no PASSED token → aborts (belt-and-suspenders)
 # This covers the bash-layer guard: filter_exit==0 && -z status_token → exit 3.
 printf '\nTest 4e: filter_exit=0 but no PASSED token → gate ABORTS\n'

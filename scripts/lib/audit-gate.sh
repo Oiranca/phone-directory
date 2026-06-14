@@ -355,6 +355,14 @@ process.stdin.on("end", () => {
   const failures = [];
   let iteratedHigh     = 0;
   let iteratedCritical = 0;
+  // Count EVERY advisory entry we observe, regardless of severity (info, low,
+  // moderate, high, critical, including allowlisted ones).  This is the signal
+  // used to decide whether a non-zero pnpm exit is "trustworthy": pnpm exiting
+  // non-zero is explained by the presence of ANY advisory entry, even when none
+  // are high/critical (e.g. low/moderate-only trees, or runs without
+  // --audit-level filtering).  Only a completely empty advisory container
+  // alongside a non-zero exit indicates an infra/registry inconsistency.
+  let observedAdvisories = 0;
 
   // Documented pnpm audit severity enum values (all known severities).
   // Any advisory whose normalised severity is not in this set is malformed —
@@ -375,6 +383,8 @@ process.stdin.on("end", () => {
         );
         process.exit(3);
       }
+      // A valid advisory entry was observed (any severity).
+      observedAdvisories++;
       // Severity must be a non-null string; normalise then validate against enum.
       if (typeof adv.severity !== "string") {
         process.stderr.write(
@@ -437,6 +447,8 @@ process.stdin.on("end", () => {
         );
         process.exit(3);
       }
+      // A valid vulnerability entry was observed (any severity).
+      observedAdvisories++;
       // Severity must be a non-null string; normalise then validate against enum.
       if (typeof vuln.severity !== "string") {
         process.stderr.write(
@@ -573,13 +585,21 @@ process.stdin.on("end", () => {
     }
   }
 
-  // --- non-zero pnpm exit with zero advisories is an infra error ------------
-  // Real pnpm exits non-zero ONLY when it found vulnerabilities.  If pnpm
-  // exited non-zero but we observed ZERO advisory objects in the container
-  // (empty advisories:{} or empty vulnerabilities:{}), the payload is
-  // structurally inconsistent — treat as an infra/registry error.
-  // When pnpm exited non-zero AND we DID observe advisories (including fully
-  // allowlisted ones), that is the expected behavior — continue normal logic.
+  // --- non-zero pnpm exit with an EMPTY advisory container is an infra error -
+  // Real pnpm exits non-zero ONLY when it found vulnerabilities.  A non-zero
+  // exit is therefore "trustworthy" (explained) when the parser observed ANY
+  // advisory entry of ANY severity — low, moderate, high, critical, including
+  // allowlisted ones.  In that case we continue with normal logic.
+  //
+  // The infra-error abort fires ONLY when pnpm exited non-zero AND the advisory
+  // container was completely EMPTY (zero entries of any severity).  That is the
+  // structurally-inconsistent shape that signals an infra/registry error.
+  //
+  // We must NOT abort merely because zero high/critical were observed: a tree
+  // with only low/moderate advisories can legitimately produce a non-zero exit
+  // (when audit is run without --audit-level filtering) while carrying real
+  // advisory entries.  Policy is high/critical-only, so those low/moderate
+  // advisories do not block — and they must not be misread as an infra error.
   //
   // argv[2] MUST be a non-negative integer string supplied by the bash caller.
   // A missing or non-numeric value is a caller bug — fail closed (exit 3)
@@ -593,9 +613,9 @@ process.stdin.on("end", () => {
     process.exit(3);
   }
   const pnpmExitCode = parseInt(pnpmExitArg, 10);
-  if (pnpmExitCode !== 0 && failures.length === 0 && iteratedHigh === 0 && iteratedCritical === 0) {
+  if (pnpmExitCode !== 0 && observedAdvisories === 0) {
     process.stderr.write(
-      "[audit-gate] pnpm audit exited " + pnpmExitCode + " but no high/critical advisories were " +
+      "[audit-gate] pnpm audit exited " + pnpmExitCode + " but no advisories of any severity were " +
       "observed in the advisory container — inconsistent result (infra/registry error).\n"
     );
     process.exit(3);
@@ -799,7 +819,13 @@ run_audit_gate() {
   trap '_audit_gate_signal_INT'  INT
   trap '_audit_gate_signal_TERM' TERM
 
-  audit_json="$(pnpm audit --json 2>"$_pnpm_stderr_file")" || pnpm_exit=$?
+  # --audit-level=high makes pnpm's exit code AND printed advisories reflect only
+  # advisories at or above "high" severity.  A tree whose only findings are
+  # low/moderate then exits 0 and reports those low/moderate advisories without
+  # treating them as a failure — matching this gate's policy of acting on
+  # high/critical only.  Low/moderate advisories therefore never block a release
+  # and never trip the non-zero-exit infra-inconsistency check below.
+  audit_json="$(pnpm audit --json --audit-level=high 2>"$_pnpm_stderr_file")" || pnpm_exit=$?
   pnpm_stderr="$(cat "$_pnpm_stderr_file")"
 
   # Remove the temp file immediately now that we have captured its contents.
