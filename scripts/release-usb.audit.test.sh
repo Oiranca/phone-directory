@@ -1415,6 +1415,71 @@ else
 fi
 rm -rf "$TMP52"
 
+# --- Commit 6: non-ASCII line separators in SKIP_AUDIT_REASON ----------------
+
+# Test 52b: SKIP_AUDIT_REASON contains U+2028 (LINE SEPARATOR, UTF-8: E2 80 A8) → ABORTS
+# U+2028 passes \n/\r pattern check and tr '\000-\037\177' (it's > 0x7f, multi-byte UTF-8).
+printf '\nTest 52b (Commit6): SKIP_AUDIT_REASON with U+2028 LINE SEPARATOR → ABORTS\n'
+TMP52b="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52b" "$CLEAN_JSON" 0
+# U+2028 in UTF-8 is the three-byte sequence E2 80 A8; embed via printf octal.
+U2028_REASON="$(printf 'accepted per SECURITY.md\xe2\x80\xa8spoofed line')"
+rc=0
+stderr_52b="$(env PATH="$TMP52b:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$U2028_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit6: U+2028 in SKIP_AUDIT_REASON → gate aborts"
+else
+  fail "Commit6: U+2028 in SKIP_AUDIT_REASON → gate wrongly bypassed (manifest injection possible)"
+fi
+if printf '%s' "$stderr_52b" | grep -qi 'non-ASCII\|non.ascii'; then
+  pass "Commit6: U+2028 → non-ASCII rejection message emitted"
+else
+  fail "Commit6: U+2028 → wrong stderr: $stderr_52b"
+fi
+rm -rf "$TMP52b"
+
+# Test 52c: SKIP_AUDIT_REASON contains U+2029 (PARAGRAPH SEPARATOR, UTF-8: E2 80 A9) → ABORTS
+printf '\nTest 52c (Commit6): SKIP_AUDIT_REASON with U+2029 PARAGRAPH SEPARATOR → ABORTS\n'
+TMP52c="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52c" "$CLEAN_JSON" 0
+U2029_REASON="$(printf 'accepted\xe2\x80\xa9injected')"
+rc=0
+env PATH="$TMP52c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 "SKIP_AUDIT_REASON=$U2029_REASON" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit6: U+2029 in SKIP_AUDIT_REASON → gate aborts"
+else
+  fail "Commit6: U+2029 in SKIP_AUDIT_REASON → gate wrongly bypassed (manifest injection possible)"
+fi
+rm -rf "$TMP52c"
+
+# Test 52d: plain ASCII SKIP_AUDIT_REASON → still PASSES (regression)
+printf '\nTest 52d (Commit6, regression): plain ASCII SKIP_AUDIT_REASON → still bypasses\n'
+TMP52d="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP52d" "$CLEAN_JSON" 0
+if out="$(env PATH="$TMP52d:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)"; then
+  if printf '%s' "$out" | grep -q 'BYPASSED'; then
+    pass "Commit6 regression: plain ASCII reason → bypass accepted (BYPASSED in status)"
+  else
+    fail "Commit6 regression: plain ASCII reason → bypass accepted but BYPASSED missing: $out"
+  fi
+else
+  fail "Commit6 regression: plain ASCII reason → wrongly aborted"
+fi
+rm -rf "$TMP52d"
+
 # --- Fix 4: temp file cleanup after gate error/abort -------------------------
 
 # Test 53: pnpm command failure → no temp files left in system temp dir

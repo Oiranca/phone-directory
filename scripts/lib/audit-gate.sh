@@ -641,6 +641,20 @@ run_audit_gate() {
       printf '[audit-gate]   Provide a single-line reason (no newlines, no control characters).\n' >&2
       exit 1
     fi
+    # Reject non-ASCII bytes (0x80–0xff) — this covers Unicode line separators
+    # (U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR, U+0085 NEL) whose
+    # UTF-8 encodings are multi-byte sequences that pass the \n/\r and
+    # tr '\000-\037\177' checks above.  A Unicode-aware manifest parser or
+    # viewer could treat these codepoints as line breaks, allowing a spoofed
+    # "Dependency audit: PASSED" line to be injected into RELEASE_MANIFEST.txt.
+    # Enforce ASCII-only: strip all bytes > 0x7f and reject if anything is removed.
+    local _reason_ascii
+    _reason_ascii="$(printf '%s' "$_reason_trimmed" | LC_ALL=C tr -d '\200-\377')"
+    if [[ ${#_reason_ascii} -ne $_reason_len ]]; then
+      printf '[audit-gate] ✗ SKIP_AUDIT_REASON contains non-ASCII characters (including possible Unicode line separators).\n' >&2
+      printf '[audit-gate]   Provide an ASCII-only single-line reason.\n' >&2
+      exit 1
+    fi
     printf '[audit-gate] ⚠️  SKIP_AUDIT=1 — dependency audit bypassed\n' >&2
     printf '[audit-gate]    Reason: %s\n' "$_reason_trimmed" >&2
     AUDIT_STATUS_LINE="Dependency audit: BYPASSED — reason: ${_reason_trimmed}"
