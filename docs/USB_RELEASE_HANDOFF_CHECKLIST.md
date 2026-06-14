@@ -31,11 +31,36 @@ pnpm run release:usb -- linux
 
 The release script runs:
 
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm run build`
-- `electron-builder --dir` for the selected platform
-- USB package staging under `dist-portable/usb-package/`
+1. `pnpm typecheck`
+2. **Dependency audit gate** (`pnpm audit --json` filtered against `scripts/audit-allowlist.json`)
+3. `pnpm test`
+4. `pnpm run build`
+5. `electron-builder --dir` for the selected platform
+6. USB package staging under `dist-portable/usb-package/`
+
+The audit gate exits non-zero (aborting the release) if any high- or
+critical-severity advisory is not covered by an unexpired allowlist entry.
+The result is recorded in `RELEASE_MANIFEST.txt` as one of:
+
+```
+Dependency audit: PASSED (allowlist N entries)
+Dependency audit: BYPASSED — reason: <reason>
+```
+
+Verify the audit status line in `RELEASE_MANIFEST.txt` after the build:
+
+- **PASSED** — all advisories accounted for; release is clean.
+- **BYPASSED** — the audit was skipped intentionally; confirm the reason is
+  documented and accepted before handing off the USB.
+
+If the release is blocked by a `NON-ALLOWLISTED` advisory:
+
+1. Review the advisory: `pnpm audit` (human-readable output).
+2. Either resolve it (update the dependency) or add an entry to
+   `scripts/audit-allowlist.json` with a GHSA id, package, severity, reason,
+   and an expiry date; then re-run `pnpm run release:usb`.
+3. Do not use `SKIP_AUDIT=1` unless the advisory is confirmed accepted and a
+   reason is recorded.
 
 ## 3. Copy to the USB drive
 
