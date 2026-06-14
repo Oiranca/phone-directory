@@ -41,11 +41,13 @@ run_check "typecheck" pnpm typecheck
 TYPECHECK_EXIT=$?
 run_check "test" pnpm test
 TEST_EXIT=$?
+run_check "audit-gate" pnpm run test:audit-gate
+AUDIT_GATE_EXIT=$?
 run_check "build" pnpm run build
 BUILD_EXIT=$?
 set -e
 
-if [[ $TYPECHECK_EXIT -eq 0 && $TEST_EXIT -eq 0 && $BUILD_EXIT -eq 0 ]]; then
+if [[ $TYPECHECK_EXIT -eq 0 && $TEST_EXIT -eq 0 && $AUDIT_GATE_EXIT -eq 0 && $BUILD_EXIT -eq 0 ]]; then
   echo "Pre-commit CI passed." | tee -a "$REPORT_FILE"
   exit 0
 fi
