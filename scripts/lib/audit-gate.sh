@@ -498,23 +498,65 @@ process.stdin.on("end", () => {
       const viaAdvisories = (vuln.via || []).filter(v => v && typeof v === "object");
       if (viaAdvisories.length === 0) {
         // No advisory objects in via — treat as no-GHSA failure (cannot allowlist).
+        // Use the node severity here (no per-via severity is available).
         failures.push({ ghsa: "", severity: sev, package: pkgName, title: vuln.title || pkgName });
         continue;
       }
 
+      // DECOUPLED CLASSIFICATION:
+      //   • iteratedHigh/iteratedCritical above are counted PER NODE (by vuln.severity,
+      //     the package-wide max) so they reconcile against metadata, which buckets
+      //     vulnerability NODES by their max severity. Changing them to per-via would
+      //     false-abort on multi-advisory nodes.
+      //   • The BLOCK / allowlist decision below classifies EACH via advisory by its
+      //     OWN severity. vuln.severity is the package-wide MAXIMUM; applying it to
+      //     every via advisory would promote a low/moderate via that merely shares a
+      //     package with an allowlisted critical to critical and wrongly BLOCK the
+      //     release. A via advisory is a blocking finding ONLY if its own (or fallback)
+      //     severity is high/critical AND its GHSA+package is not allowlisted.
+      //     low/moderate via advisories never block (high/critical-only policy).
       for (const via of viaAdvisories) {
+        // Classify by the via advisory OWN severity. If the via object has no
+        // severity field, fall back to the node severity (sev). Validate against
+        // the documented enum using the same normalization as elsewhere.
+        let viaSev;
+        if (via.severity === undefined || via.severity === null) {
+          // No own severity — fall back to the node severity (already validated).
+          viaSev = sev;
+        } else {
+          if (typeof via.severity !== "string") {
+            process.stderr.write(
+              "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "].via severity is not a string " +
+              "(got: " + typeof via.severity + ") — malformed advisory payload.\n"
+            );
+            process.exit(3);
+          }
+          viaSev = via.severity.trim().toLowerCase();
+          if (!KNOWN_SEVERITIES.has(viaSev)) {
+            process.stderr.write(
+              "[audit-gate] vulnerabilities[" + JSON.stringify(pkgName) + "].via has unknown severity " +
+              JSON.stringify(via.severity) + " — malformed advisory payload " +
+              "(expected one of: info, low, moderate, high, critical).\n"
+            );
+            process.exit(3);
+          }
+        }
+        // Only high/critical via advisories can block (policy is high/critical-only).
+        if (viaSev !== "high" && viaSev !== "critical") continue;
+
         // Normalize ghsa id to lowercase for case-insensitive allowlist lookup.
         const ghsa = (via.ghsaId || via.github_advisory_id || "").trim().toLowerCase();
         // pkgName is the v7 outer key (always a string — object key cannot be non-string).
         const livePkg = pkgName.trim();
         // A finding with no GHSA ID must NOT be silently allowlisted.
-        // When a GHSA id IS present, suppression requires id + package + severity to match.
+        // When a GHSA id IS present, suppression requires id + package + severity to
+        // match — using the via advisory OWN severity (viaSev), not the node max.
         // GHSA id comparison is case-insensitive (allowedMap keys are lowercased).
         if (ghsa && allowedMap.has(ghsa)) {
           const entry = allowedMap.get(ghsa);
-          if (entry.pkg === livePkg && entry.sev === sev) continue;
+          if (entry.pkg === livePkg && entry.sev === viaSev) continue;
         }
-        failures.push({ ghsa, severity: sev, package: pkgName, title: via.title || pkgName });
+        failures.push({ ghsa, severity: viaSev, package: pkgName, title: via.title || pkgName });
       }
     }
   }

@@ -3140,6 +3140,97 @@ else
 fi
 rm -rf "$OBJ_AL_DIR" "$TMP83l"
 
+# --- Commit 1: v7 per-via own-severity classification ------------------------
+#
+# In the v7 schema, vuln.severity is the package-wide MAXIMUM severity. Prior to
+# this fix the via loop classified EVERY via advisory object by that node max, so
+# a low/moderate via sharing a package with an allowlisted critical via was
+# promoted to critical and wrongly BLOCKED the release. The fix decouples the two
+# concerns: per-NODE counting (iteratedHigh/iteratedCritical) still buckets by
+# node severity for metadata reconciliation, while the BLOCK / allowlist decision
+# classifies each via advisory by its OWN severity (fallback to node severity when
+# a via object has no severity field). low/moderate via advisories never block.
+
+# Test 83m (Commit1, v7): allowlisted critical via + non-allowlisted LOW via on
+# the SAME package → PASS. The low via must NOT be promoted to the node's critical
+# severity and must NOT block. Node severity = critical; metadata critical:1,high:0.
+printf '\nTest 83m (Commit1, v7): allowlisted critical via + non-allowlisted LOW via, same package → PASSES (low not promoted)\n'
+TMP83m="$(setup_fake_pnpm)"
+# shell-quote node: critical via (GHSA-w7jw-789q-3m8p, in real allowlist) + low via
+# (GHSA-low9-low9-low9, NOT allowlisted). Node max severity is "critical".
+CRIT_PLUS_LOW_VIA_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote crit vuln","severity":"critical"},{"ghsaId":"GHSA-low9-low9-low9","title":"shell-quote low vuln","severity":"low"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83m" "$CRIT_PLUS_LOW_VIA_JSON" 1
+rc=0
+out_83m="$(run_gate_in_subshell "$TMP83m" 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_83m" | grep -q 'PASSED'; then
+  pass "Commit1 v7: allowlisted critical via + non-allowlisted LOW via (same pkg) → PASSES (low not promoted)"
+else
+  fail "Commit1 v7: low via wrongly blocked (promoted to node max) (rc=$rc, out=$out_83m)"
+fi
+rm -rf "$TMP83m"
+
+# Test 83n (Commit1, v7): allowlisted critical via + non-allowlisted HIGH via on
+# the SAME package → BLOCK (exit 2). The high via classifies by its OWN high
+# severity and is not allowlisted, so it must still block. Node severity=critical;
+# metadata critical:1,high:0 (per-node bucketing — the node is bucketed by its max).
+printf '\nTest 83n (Commit1, v7): allowlisted critical via + non-allowlisted HIGH via, same package → BLOCKS (exit 2)\n'
+TMP83n="$(setup_fake_pnpm)"
+CRIT_PLUS_HIGH_VIA_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote crit vuln","severity":"critical"},{"ghsaId":"GHSA-hgh9-hgh9-hgh9","title":"shell-quote high vuln","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83n" "$CRIT_PLUS_HIGH_VIA_JSON" 1
+rc=0
+stderr_83n="$(run_gate_in_subshell "$TMP83n" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit1 v7: non-allowlisted HIGH via (own severity) → still BLOCKS (exit non-zero)"
+else
+  fail "Commit1 v7: non-allowlisted HIGH via → gate wrongly PASSED (fail-open)"
+fi
+if printf '%s' "$stderr_83n" | grep -q 'NON-ALLOWLISTED HIGH'; then
+  pass "Commit1 v7: non-allowlisted HIGH via prints NON-ALLOWLISTED HIGH (classified by own severity)"
+else
+  fail "Commit1 v7: non-allowlisted HIGH via missing NON-ALLOWLISTED HIGH message: $stderr_83n"
+fi
+rm -rf "$TMP83n"
+
+# Test 83o (Commit1, v7): multi-via node with the right node severity still
+# reconciles (no false exit 3). Two high vias on one node → node severity=high →
+# iteratedHigh=1 (per-node), metadata high:1,critical:0. Both vias are allowlisted
+# so the gate PASSES — proving per-node counting is unchanged and reconciliation
+# does NOT count per-via (which would give iteratedHigh=2 and false-abort).
+printf '\nTest 83o (Commit1, v7): multi-via node, per-node reconciliation intact → PASSES (no false exit 3)\n'
+TMP83o="$(setup_fake_pnpm)"
+TMPD83o_AL="$(write_temp_allowlist "$(printf '[{"id":"GHSA-mva1-mva1-mva1","package":"multi-pkg","severity":"high","reason":"test","expires":"%s"},{"id":"GHSA-mva2-mva2-mva2","package":"multi-pkg","severity":"high","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES" "$FUTURE_EXPIRES")")"
+MULTI_VIA_HIGH_JSON='{"vulnerabilities":{"multi-pkg":{"name":"multi-pkg","severity":"high","via":[{"ghsaId":"GHSA-mva1-mva1-mva1","title":"high vuln 1","severity":"high"},{"ghsaId":"GHSA-mva2-mva2-mva2","title":"high vuln 2","severity":"high"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":1,"critical":0}}}'
+rc=0
+out_83o="$(run_gate_allowlist_payload "$TMP83o" "$TMPD83o_AL/allowlist.json" "$MULTI_VIA_HIGH_JSON" 1 2>/dev/null)" || rc=$?
+if [[ $rc -eq 0 ]] && printf '%s' "$out_83o" | grep -q 'PASSED'; then
+  pass "Commit1 v7: multi-via node reconciles per-node (iteratedHigh=1==metaHigh) → PASSES, no false exit 3"
+else
+  fail "Commit1 v7: multi-via node wrongly aborted — reconciliation counted per-via (rc=$rc, out=$out_83o)"
+fi
+rm -rf "$TMP83o" "$TMPD83o_AL"
+
+# Test 83p (Commit1, v7): via object lacking a severity field falls back to the
+# NODE severity and still blocks if that fallback is high/critical and not
+# allowlisted. Node severity=critical, via has no severity → fallback critical →
+# non-allowlisted → BLOCK (exit 2).
+printf '\nTest 83p (Commit1, v7): via without severity → falls back to node severity → still BLOCKS if non-allowlisted high/critical\n'
+TMP83p="$(setup_fake_pnpm)"
+VIA_NO_SEV_FALLBACK_JSON='{"vulnerabilities":{"some-pkg":{"name":"some-pkg","severity":"critical","via":[{"ghsaId":"GHSA-nsv1-nsv1-nsv1","title":"no-sev via"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
+write_fake_pnpm "$TMP83p" "$VIA_NO_SEV_FALLBACK_JSON" 1
+rc=0
+stderr_83p="$(run_gate_in_subshell "$TMP83p" 2>&1 >/dev/null)" || rc=$?
+if [[ $rc -ne 0 ]]; then
+  pass "Commit1 v7: via without severity → falls back to node critical → BLOCKS (exit non-zero)"
+else
+  fail "Commit1 v7: via without severity → gate wrongly PASSED (fallback not applied — fail-open)"
+fi
+if printf '%s' "$stderr_83p" | grep -q 'NON-ALLOWLISTED CRITICAL'; then
+  pass "Commit1 v7: no-severity via reports NON-ALLOWLISTED CRITICAL (node-severity fallback)"
+else
+  fail "Commit1 v7: no-severity via missing NON-ALLOWLISTED CRITICAL message: $stderr_83p"
+fi
+rm -rf "$TMP83p"
+
 # --- Fix C: signal propagation when caller handler returns normally -----------
 #
 # Prior to Fix C, after restoring the caller's handler and kill -SIGNAL $$,
