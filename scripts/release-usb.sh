@@ -53,7 +53,7 @@ log "Running dependency audit"
 # operator's environment.  AUDIT_GATE_TEST_MODE=1 would allow AUDIT_ALLOWLIST
 # to redirect the gate to an arbitrary allowlist file; unsetting both here
 # ensures the real release path always uses the pinned repo allowlist.
-unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST
+unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST SKIP_AUDIT SKIP_AUDIT_REASON
 # shellcheck source=scripts/lib/audit-gate.sh
 source "$REPO_ROOT/scripts/lib/audit-gate.sh"
 AUDIT_STATUS_LINE=""

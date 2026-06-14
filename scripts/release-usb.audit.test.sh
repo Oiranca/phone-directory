@@ -1709,6 +1709,50 @@ fi
 rm -f "$EVIL_ALLOWLIST"
 rm -rf "$SYMLINK_DIR" "$TMP67b"
 
+# --- Commit 7: release-usb.sh unsets SKIP_AUDIT + SKIP_AUDIT_REASON ----------
+
+# Test 67c: SKIP_AUDIT=1 inherited in env — the release path unsets it before
+# sourcing the gate, so the audit still runs and fails on a live critical.
+# This test directly sources the gate (not release-usb.sh) but simulates the
+# environment AFTER release-usb.sh's unset — i.e. SKIP_AUDIT and
+# SKIP_AUDIT_REASON are pre-unset and the gate must still run normally.
+# A separate sub-test verifies that when SKIP_AUDIT=1 is inherited but NOT
+# unset (old behavior), the gate would bypass — confirming the unset matters.
+printf '\nTest 67c (Commit7): inherited SKIP_AUDIT=1 without unset → gate bypassed (demonstrates the risk)\n'
+TMP67c="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67c" "$NEW_CRITICAL_JSON" 1
+# Without the unset, SKIP_AUDIT=1 bypasses the gate even on the release path.
+# This confirms the fix in release-usb.sh is load-bearing.
+rc_bypass=0
+env PATH="$TMP67c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="inherited reason" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc_bypass=$?
+# The gate exits 0 (bypass) — that's the fail-open this commit closes at the
+# release-usb.sh layer.  We assert exit 0 to prove the bypass works without the unset.
+if [[ $rc_bypass -eq 0 ]]; then
+  pass "Commit7: SKIP_AUDIT=1 without unset → bypass works (confirming unset is load-bearing)"
+else
+  fail "Commit7: SKIP_AUDIT=1 without unset → expected bypass (exit 0), got non-zero"
+fi
+
+printf '\nTest 67d (Commit7): inherited SKIP_AUDIT=1 after unset → gate runs audit (not bypassed)\n'
+# Simulate the unset that release-usb.sh performs before sourcing the gate.
+rc_guarded=0
+env PATH="$TMP67c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="inherited reason" bash -c "
+  unset SKIP_AUDIT SKIP_AUDIT_REASON
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>/dev/null || rc_guarded=$?
+if [[ $rc_guarded -ne 0 ]]; then
+  pass "Commit7: inherited SKIP_AUDIT=1 after unset → audit runs and fails on live critical"
+else
+  fail "Commit7: inherited SKIP_AUDIT=1 after unset → gate wrongly bypassed (unset did not clear the var)"
+fi
+rm -rf "$TMP67c"
+
 # --- Fix 2: exact metadata reconciliation (iteratedHighCrit !== metaHighCrit) -
 #
 # The prior check only caught metaHighCrit > iteratedHighCrit.  A payload with
