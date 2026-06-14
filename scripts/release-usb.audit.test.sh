@@ -121,6 +121,124 @@ run_gate_in_subshell() {
   "
 }
 
+# --- smoke subset (AUDIT_GATE_SMOKE=1) -----------------------------------------
+#
+# A curated, fast subset of the most critical fail-closed behaviors, used by the
+# pre-commit check (run-precommit-ci.sh) so small/docs commits are not penalized
+# by the full ~200-assertion harness.  The EXHAUSTIVE suite (everything below)
+# remains the canonical gate run via `pnpm run test:audit-gate` and release
+# validation.
+#
+# This subset genuinely exercises the gate's core logic — a regression in any of
+# the covered fail-closed paths will fail it:
+#   1. clean audit                     → PASS
+#   2. non-allowlisted critical        → FAIL (gate aborts)
+#   3. non-allowlisted high            → FAIL (gate aborts)
+#   4. allowlisted-only advisories     → PASS
+#   5. malformed / empty-object JSON   → abort (no recognisable advisory container)
+#   6. SKIP_AUDIT=1 without reason     → abort (bypass requires a reason)
+run_smoke_suite() {
+  printf '\nAudit gate SMOKE subset\n'
+  printf '=======================\n\n'
+
+  local smoke_empty_obj_json='{}'
+
+  # 1. clean → PASS
+  printf 'Smoke 1: clean audit → PASS\n'
+  local s1 out1
+  s1="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s1" "$CLEAN_JSON" 0
+  if out1="$(run_gate_in_subshell "$s1" 2>/dev/null)" && printf '%s' "$out1" | grep -q 'PASSED'; then
+    pass "smoke: clean audit passes and reports PASSED"
+  else
+    fail "smoke: clean audit did not PASS (out: $out1)"
+  fi
+  rm -rf "$s1"
+
+  # 2. non-allowlisted critical → FAIL
+  printf '\nSmoke 2: non-allowlisted critical → gate aborts\n'
+  local s2 rc2=0
+  s2="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s2" "$NEW_CRITICAL_JSON" 1
+  run_gate_in_subshell "$s2" >/dev/null 2>&1 || rc2=$?
+  if [[ $rc2 -ne 0 ]]; then
+    pass "smoke: non-allowlisted critical aborts (non-zero exit)"
+  else
+    fail "smoke: non-allowlisted critical did NOT abort (fail-open)"
+  fi
+  rm -rf "$s2"
+
+  # 3. non-allowlisted high → FAIL
+  printf '\nSmoke 3: non-allowlisted high → gate aborts\n'
+  local s3 rc3=0
+  s3="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s3" "$NEW_HIGH_JSON" 1
+  run_gate_in_subshell "$s3" >/dev/null 2>&1 || rc3=$?
+  if [[ $rc3 -ne 0 ]]; then
+    pass "smoke: non-allowlisted high aborts (non-zero exit)"
+  else
+    fail "smoke: non-allowlisted high did NOT abort (fail-open)"
+  fi
+  rm -rf "$s3"
+
+  # 4. allowlisted-only → PASS
+  printf '\nSmoke 4: allowlisted-only advisories → PASS\n'
+  local s4 out4
+  s4="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s4" "$ALLOWLISTED_JSON" 1
+  if out4="$(run_gate_in_subshell "$s4" 2>/dev/null)" && printf '%s' "$out4" | grep -q 'PASSED'; then
+    pass "smoke: allowlisted-only advisories pass the gate"
+  else
+    fail "smoke: allowlisted-only advisories did not PASS (out: $out4)"
+  fi
+  rm -rf "$s4"
+
+  # 5. malformed / empty-object JSON → abort
+  printf '\nSmoke 5: empty-object JSON (no advisory container) → gate aborts\n'
+  local s5 rc5=0
+  s5="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s5" "$smoke_empty_obj_json" 0
+  run_gate_in_subshell "$s5" >/dev/null 2>&1 || rc5=$?
+  if [[ $rc5 -ne 0 ]]; then
+    pass "smoke: empty-object JSON aborts (no recognisable advisory container)"
+  else
+    fail "smoke: empty-object JSON did NOT abort (fail-open)"
+  fi
+  rm -rf "$s5"
+
+  # 6. SKIP_AUDIT=1 without reason → abort
+  printf '\nSmoke 6: SKIP_AUDIT=1 without reason → gate aborts\n'
+  local s6 rc6=0
+  s6="$(setup_fake_pnpm)"
+  write_fake_pnpm "$s6" "$CLEAN_JSON" 0
+  env PATH="$s6:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="" bash -c "
+    source '$GATE_SCRIPT'
+    AUDIT_STATUS_LINE=''
+    run_audit_gate
+  " >/dev/null 2>&1 || rc6=$?
+  if [[ $rc6 -ne 0 ]]; then
+    pass "smoke: SKIP_AUDIT=1 without reason aborts (bypass requires a reason)"
+  else
+    fail "smoke: SKIP_AUDIT=1 without reason did NOT abort (fail-open)"
+  fi
+  rm -rf "$s6"
+}
+
+if [[ "${AUDIT_GATE_SMOKE:-0}" == "1" ]]; then
+  run_smoke_suite
+  printf '\n================================\n'
+  printf 'Smoke results: %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
+  if [[ $FAIL_COUNT -gt 0 ]]; then
+    printf '\nFailed smoke tests:\n'
+    for f in "${FAILURES[@]}"; do
+      printf '  - %s\n' "$f"
+    done
+    exit 1
+  fi
+  printf 'All smoke tests passed.\n'
+  exit 0
+fi
+
 # --- tests ---------------------------------------------------------------------
 
 printf '\nAudit gate tests\n'

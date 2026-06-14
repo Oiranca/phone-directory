@@ -41,7 +41,11 @@ run_check "typecheck" pnpm typecheck
 TYPECHECK_EXIT=$?
 run_check "test" pnpm test
 TEST_EXIT=$?
-run_check "audit-gate" pnpm run test:audit-gate
+# Pre-commit runs the FAST audit-gate SMOKE subset (a curated set of the most
+# critical fail-closed behaviors) rather than the full ~200-assertion harness, so
+# small/docs commits are not penalized.  The EXHAUSTIVE harness still runs in the
+# canonical `pnpm run ci` and in release validation (scripts/ci-local.sh).
+run_check "audit-gate-smoke" pnpm run test:audit-gate:smoke
 AUDIT_GATE_EXIT=$?
 run_check "build" pnpm run build
 BUILD_EXIT=$?
