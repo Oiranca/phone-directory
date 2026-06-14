@@ -13,10 +13,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATE_SCRIPT="$REPO_ROOT/scripts/lib/audit-gate.sh"
 ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
 
-# Sweep any orphaned scripts/.test-* fixture dirs on exit (normal finish,
-# error abort under set -e, or Ctrl-C).  Individual tests already rm -rf their
-# own dirs, so this is belt-and-suspenders for mid-run interruption only.
-trap 'rm -rf "$REPO_ROOT"/scripts/.test-* 2>/dev/null || true' EXIT
+# Per-process fixture root under scripts/ — named with the current PID so that
+# two concurrent test runs cannot delete each other's fixture directories.
+# All fixture dirs created by this run live under TEST_FIXTURE_ROOT; the EXIT
+# trap removes only this run's subtree (scripts/.test-$$-*), not a glob that
+# would match sibling runs' directories (scripts/.test-<other-pid>-*).
+TEST_FIXTURE_ROOT="$(mktemp -d "$REPO_ROOT/scripts/.test-$$-XXXXXX")"
+trap 'rm -rf "$TEST_FIXTURE_ROOT" 2>/dev/null || true' EXIT
 
 # --- test infrastructure -------------------------------------------------------
 
@@ -61,10 +64,13 @@ assert_stderr_contains() {
   fi
 }
 
-# Build a temporary directory with a fake pnpm on PATH
+# Build a temporary directory with a fake pnpm on PATH.
+# Dirs are created under TEST_FIXTURE_ROOT (inside scripts/) so the path-scope
+# guard in audit-gate.sh accepts allowlist overrides written here, and so that
+# the EXIT trap cleans up only this run's fixtures (not sibling runs').
 setup_fake_pnpm() {
   local tmpdir
-  tmpdir="$(mktemp -d)"
+  tmpdir="$(mktemp -d "$TEST_FIXTURE_ROOT/pnpm-XXXXXX")"
   printf '%s' "$tmpdir"
 }
 
@@ -832,7 +838,7 @@ rm -rf "$TMP26"
 # template rooted there satisfies that constraint without touching real files.
 write_temp_allowlist() {
   local tmpdir
-  tmpdir="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+  tmpdir="$(mktemp -d "$TEST_FIXTURE_ROOT/al-XXXXXX")"
   printf '%s' "$1" > "$tmpdir/allowlist.json"
   printf '%s' "$tmpdir"
 }
@@ -1684,7 +1690,7 @@ write_fake_pnpm "$TMP67b" "$NEW_CRITICAL_JSON" 1
 EVIL_ALLOWLIST="$(mktemp /tmp/evil-allowlist-XXXXXX.json)"
 printf '[]' > "$EVIL_ALLOWLIST"
 # Create a symlink under scripts/ pointing to the /tmp file.
-SYMLINK_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+SYMLINK_DIR="$(mktemp -d "$TEST_FIXTURE_ROOT/symlink-XXXXXX")"
 ln -s "$EVIL_ALLOWLIST" "$SYMLINK_DIR/allowlist.json"
 rc=0
 stderr_67b="$(env PATH="$TMP67b:$PATH" \
@@ -2508,7 +2514,7 @@ rm -rf "$TMP83j"
 printf '\nTest 83k (Commit5): allowlist top-level is null → ABORTS with controlled message\n'
 TMP83k="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP83k" "$CLEAN_JSON" 0
-NULL_AL_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+NULL_AL_DIR="$(mktemp -d "$TEST_FIXTURE_ROOT/al-XXXXXX")"
 printf 'null' > "$NULL_AL_DIR/allowlist.json"
 rc=0
 stderr_83k="$(env PATH="$TMP83k:$PATH" \
@@ -2536,7 +2542,7 @@ rm -rf "$NULL_AL_DIR" "$TMP83k"
 printf '\nTest 83l (Commit5): allowlist top-level is {} (object) → ABORTS\n'
 TMP83l="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP83l" "$CLEAN_JSON" 0
-OBJ_AL_DIR="$(mktemp -d "$REPO_ROOT/scripts/.test-XXXXXX")"
+OBJ_AL_DIR="$(mktemp -d "$TEST_FIXTURE_ROOT/al-XXXXXX")"
 printf '{}' > "$OBJ_AL_DIR/allowlist.json"
 rc=0
 env PATH="$TMP83l:$PATH" \
