@@ -1826,49 +1826,94 @@ else
 fi
 rm -rf "$TMP67b2_BIN" "$PERMISSIVE_DIR_67b2" "$TMP67b2_PNPM"
 
-# --- Commit 7: release-usb.sh unsets SKIP_AUDIT + SKIP_AUDIT_REASON ----------
+# --- Commit 1: release-usb.sh preserves the documented SKIP_AUDIT bypass ------
+#
+# Contract: the operator-initiated bypass
+#   SKIP_AUDIT=1 SKIP_AUDIT_REASON="..." pnpm run release:usb
+# MUST remain reachable on the real release path (see SECURITY.md, scripts/README.md,
+# docs/USB_RELEASE_HANDOFF_CHECKLIST.md).  release-usb.sh therefore clears ONLY the
+# test-only sentinels (AUDIT_GATE_TEST_MODE, AUDIT_ALLOWLIST) before sourcing the
+# gate — it does NOT unset SKIP_AUDIT / SKIP_AUDIT_REASON.  The bypass stays safe
+# because it is fully traceable: the gate requires a validated non-empty reason and
+# records "BYPASSED — reason: <reason>" in RELEASE_MANIFEST.txt.
 
-# Test 67c: SKIP_AUDIT=1 inherited in env — the release path unsets it before
-# sourcing the gate, so the audit still runs and fails on a live critical.
-# This test directly sources the gate (not release-usb.sh) but simulates the
-# environment AFTER release-usb.sh's unset — i.e. SKIP_AUDIT and
-# SKIP_AUDIT_REASON are pre-unset and the gate must still run normally.
-# A separate sub-test verifies that when SKIP_AUDIT=1 is inherited but NOT
-# unset (old behavior), the gate would bypass — confirming the unset matters.
-printf '\nTest 67c (Commit7): inherited SKIP_AUDIT=1 without unset → gate bypassed (demonstrates the risk)\n'
+# Test 67c: inherited SKIP_AUDIT=1 WITH a valid SKIP_AUDIT_REASON → reachable
+# bypass that records a BYPASSED status line (the documented contract).
+printf '\nTest 67c (Commit1): inherited SKIP_AUDIT=1 + valid reason → reachable bypass, records BYPASSED\n'
 TMP67c="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP67c" "$NEW_CRITICAL_JSON" 1
-# Without the unset, SKIP_AUDIT=1 bypasses the gate even on the release path.
-# This confirms the fix in release-usb.sh is load-bearing.
 rc_bypass=0
-env PATH="$TMP67c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="inherited reason" bash -c "
+out_67c="$(env PATH="$TMP67c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="inherited reason" bash -c "
   source '$GATE_SCRIPT'
   AUDIT_STATUS_LINE=''
   run_audit_gate
-" 2>/dev/null || rc_bypass=$?
-# The gate exits 0 (bypass) — that's the fail-open this commit closes at the
-# release-usb.sh layer.  We assert exit 0 to prove the bypass works without the unset.
+  printf '%s' \"\$AUDIT_STATUS_LINE\"
+" 2>/dev/null)" || rc_bypass=$?
 if [[ $rc_bypass -eq 0 ]]; then
-  pass "Commit7: SKIP_AUDIT=1 without unset → bypass works (confirming unset is load-bearing)"
+  pass "Commit1: SKIP_AUDIT=1 + valid reason → bypass succeeds (reachable contract preserved)"
 else
-  fail "Commit7: SKIP_AUDIT=1 without unset → expected bypass (exit 0), got non-zero"
+  fail "Commit1: SKIP_AUDIT=1 + valid reason → expected bypass (exit 0), got non-zero"
 fi
-
-printf '\nTest 67d (Commit7): inherited SKIP_AUDIT=1 after unset → gate runs audit (not bypassed)\n'
-# Simulate the unset that release-usb.sh performs before sourcing the gate.
-rc_guarded=0
-env PATH="$TMP67c:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="inherited reason" bash -c "
-  unset SKIP_AUDIT SKIP_AUDIT_REASON
-  source '$GATE_SCRIPT'
-  AUDIT_STATUS_LINE=''
-  run_audit_gate
-" 2>/dev/null || rc_guarded=$?
-if [[ $rc_guarded -ne 0 ]]; then
-  pass "Commit7: inherited SKIP_AUDIT=1 after unset → audit runs and fails on live critical"
+if printf '%s' "$out_67c" | grep -q 'BYPASSED — reason: inherited reason'; then
+  pass "Commit1: bypass records 'BYPASSED — reason: <reason>' in the status line"
 else
-  fail "Commit7: inherited SKIP_AUDIT=1 after unset → gate wrongly bypassed (unset did not clear the var)"
+  fail "Commit1: bypass status line missing recorded reason: $out_67c"
 fi
 rm -rf "$TMP67c"
+
+# Test 67d: inherited SKIP_AUDIT=1 but NO reason → still aborts (bypass requires
+# a documented reason even though the var itself is not unset).
+printf '\nTest 67d (Commit1): inherited SKIP_AUDIT=1 without reason → aborts (reason required)\n'
+TMP67d="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67d" "$NEW_CRITICAL_JSON" 1
+rc_noreason=0
+stderr_67d="$(env PATH="$TMP67d:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT=1 SKIP_AUDIT_REASON="" bash -c "
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc_noreason=$?
+if [[ $rc_noreason -ne 0 ]]; then
+  pass "Commit1: SKIP_AUDIT=1 without reason → aborts (reason is mandatory)"
+else
+  fail "Commit1: SKIP_AUDIT=1 without reason → wrongly bypassed (exit 0)"
+fi
+if printf '%s' "$stderr_67d" | grep -q 'SKIP_AUDIT_REASON'; then
+  pass "Commit1: missing-reason abort prints SKIP_AUDIT_REASON guidance"
+else
+  fail "Commit1: missing-reason abort missing SKIP_AUDIT_REASON guidance: $stderr_67d"
+fi
+rm -rf "$TMP67d"
+
+# Test 67e: the real release path STILL clears the test-only sentinels.  Simulate
+# release-usb.sh's unset (AUDIT_GATE_TEST_MODE + AUDIT_ALLOWLIST only) and confirm
+# an injected permissive allowlist is NOT honoured — a live critical still fails.
+printf '\nTest 67e (Commit1): release-path unset clears AUDIT_GATE_TEST_MODE/AUDIT_ALLOWLIST → injected allowlist ignored\n'
+TMP67e="$(setup_fake_pnpm)"
+write_fake_pnpm "$TMP67e" "$NEW_CRITICAL_JSON" 1
+PERMISSIVE_DIR_67e="$(mktemp -d "$TEST_FIXTURE_ROOT/al67e-XXXXXX")"
+printf '[{"id":"GHSA-zzzz-zzzz-zzzz","package":"some-pkg","severity":"critical","reason":"evil bypass","expires":"%s"}]' \
+  "$FUTURE_EXPIRES" > "$PERMISSIVE_DIR_67e/allowlist.json"
+rc_67e=0
+stderr_67e="$(env PATH="$TMP67e:$PATH" REPO_ROOT="$REPO_ROOT" \
+  AUDIT_GATE_TEST_MODE=1 \
+  AUDIT_ALLOWLIST="$PERMISSIVE_DIR_67e/allowlist.json" bash -c "
+  # Mirror release-usb.sh: clear ONLY the test-only sentinels.
+  unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST
+  source '$GATE_SCRIPT'
+  AUDIT_STATUS_LINE=''
+  run_audit_gate
+" 2>&1 >/dev/null)" || rc_67e=$?
+if [[ $rc_67e -ne 0 ]]; then
+  pass "Commit1: release-path unset → injected permissive allowlist ignored, live critical fails"
+else
+  fail "Commit1: release-path unset → injected allowlist was honoured (sentinels not cleared)"
+fi
+if printf '%s' "$stderr_67e" | grep -q 'NON-ALLOWLISTED'; then
+  pass "Commit1: release-path unset → NON-ALLOWLISTED emitted (advisory not suppressed)"
+else
+  fail "Commit1: release-path unset → NON-ALLOWLISTED missing: $stderr_67e"
+fi
+rm -rf "$TMP67e" "$PERMISSIVE_DIR_67e"
 
 # --- Fix 2: exact metadata reconciliation (iteratedHighCrit !== metaHighCrit) -
 #

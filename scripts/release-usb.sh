@@ -49,11 +49,19 @@ log "Running typecheck"
 pnpm typecheck
 
 log "Running dependency audit"
-# Neutralize any test-mode sentinels that may have been inherited from the
+# Neutralize ONLY the test-only sentinels that may have been inherited from the
 # operator's environment.  AUDIT_GATE_TEST_MODE=1 would allow AUDIT_ALLOWLIST
 # to redirect the gate to an arbitrary allowlist file; unsetting both here
 # ensures the real release path always uses the pinned repo allowlist.
-unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST SKIP_AUDIT SKIP_AUDIT_REASON
+#
+# Do NOT unset SKIP_AUDIT / SKIP_AUDIT_REASON: the documented operator-initiated
+# bypass (SKIP_AUDIT=1 SKIP_AUDIT_REASON="..." pnpm run release:usb) MUST remain
+# reachable on the real release path — see SECURITY.md §SKIP_AUDIT Override,
+# scripts/README.md, and docs/USB_RELEASE_HANDOFF_CHECKLIST.md.  The bypass is
+# safe because it is fully traceable: the gate requires a non-empty validated
+# SKIP_AUDIT_REASON and records "Dependency audit: BYPASSED — reason: <reason>"
+# in RELEASE_MANIFEST.txt for every produced artifact.
+unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST
 # shellcheck source=scripts/lib/audit-gate.sh
 source "$REPO_ROOT/scripts/lib/audit-gate.sh"
 AUDIT_STATUS_LINE=""
