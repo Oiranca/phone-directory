@@ -513,17 +513,48 @@ run_audit_gate() {
   _prev_trap_INT="$(trap  -p INT   2>/dev/null || true)"
   _prev_trap_TERM="$(trap -p TERM  2>/dev/null || true)"
 
-  # Install cleanup traps.  The cleanup function removes the temp file and then
-  # restores the caller's original traps before re-raising the signal / exiting.
-  _audit_gate_cleanup() {
+  # Install cleanup traps.
+  #
+  # EXIT trap: removes the temp file on any normal exit from the function
+  # (belt-and-suspenders for paths where rm -f below might not be reached).
+  # It restores all three of the caller's original traps before returning so
+  # that the caller's own EXIT handler is not clobbered on the normal path.
+  _audit_gate_cleanup_exit() {
     rm -f "$_pnpm_stderr_file" 2>/dev/null || true
-    # Restore caller traps (eval the saved trap string, which re-installs them).
     trap - EXIT INT TERM
     eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
     eval "${_prev_trap_INT:-true}"  2>/dev/null || true
     eval "${_prev_trap_TERM:-true}" 2>/dev/null || true
   }
-  trap '_audit_gate_cleanup' EXIT INT TERM
+  trap '_audit_gate_cleanup_exit' EXIT
+
+  # INT/TERM traps: SEPARATE from EXIT so we can propagate the signal correctly.
+  # Standard idiom: clean up, restore the caller's original handler for that
+  # signal, then re-raise — the process terminates with signal-correct exit
+  # status (128+N) and any pre-existing caller handler executes.
+  # We must NOT continue after re-raising, so the subshell running pnpm never
+  # resumes and the caller does not reach the "release proceeded" code path.
+  _audit_gate_signal_INT() {
+    rm -f "$_pnpm_stderr_file" 2>/dev/null || true
+    trap - EXIT INT TERM
+    eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
+    eval "${_prev_trap_TERM:-true}" 2>/dev/null || true
+    # Restore the caller's INT handler then re-raise so the caller's handler
+    # runs (or the default action terminates the process).
+    eval "${_prev_trap_INT:-trap - INT}" 2>/dev/null || true
+    kill -INT "$$"
+  }
+  _audit_gate_signal_TERM() {
+    rm -f "$_pnpm_stderr_file" 2>/dev/null || true
+    trap - EXIT INT TERM
+    eval "${_prev_trap_EXIT:-true}" 2>/dev/null || true
+    eval "${_prev_trap_INT:-true}"  2>/dev/null || true
+    # Restore the caller's TERM handler then re-raise.
+    eval "${_prev_trap_TERM:-trap - TERM}" 2>/dev/null || true
+    kill -TERM "$$"
+  }
+  trap '_audit_gate_signal_INT'  INT
+  trap '_audit_gate_signal_TERM' TERM
 
   audit_json="$(pnpm audit --json 2>"$_pnpm_stderr_file")" || pnpm_exit=$?
   pnpm_stderr="$(cat "$_pnpm_stderr_file")"
