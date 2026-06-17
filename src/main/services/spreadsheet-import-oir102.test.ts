@@ -640,6 +640,53 @@ describe("Bug 1 — empty/blank displayName records stay as separate records", (
     const result = normalizeWorkbookRowsFromFile(filePath);
     expect(result.rows).toHaveLength(2);
   });
+
+  it("direct: two NormalizedImportRows with empty/whitespace displayName are NOT merged (empty-key guard)", async () => {
+    // This test directly exercises the guard at spreadsheet-import.service.ts:1420
+    // (the `if (!key) { continue; }` block that prevents records whose displayName
+    // normalizes to "" from all collapsing into one merged record).
+    //
+    // Both rows carry a phones JSON field (so they are candidates for the merge
+    // pipeline), but their displayName is empty / whitespace-only.  The normalized
+    // key therefore resolves to "".  The guard must emit each as an individual
+    // passthrough rather than collapsing them into a single merged record.
+    const { mergeRecordsByDisplayName } = await import("./spreadsheet-import.service.js");
+
+    const validPhonesA = JSON.stringify([
+      { number: "11111", label: "L1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+    ]);
+    const validPhonesB = JSON.stringify([
+      { number: "22222", label: "L2", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+    ]);
+
+    const recordA = {
+      externalId: "empty-name-a",
+      type: "service",
+      displayName: "",
+      phones: validPhonesA,
+      notes: ""
+    } as Record<string, string>;
+
+    const recordB = {
+      externalId: "empty-name-b",
+      type: "service",
+      displayName: "   ",
+      phones: validPhonesB,
+      notes: ""
+    } as Record<string, string>;
+
+    const merged = mergeRecordsByDisplayName([recordA, recordB]);
+
+    // Without the guard, both would share the normalized key "" and collapse to
+    // 1 merged record.  With the guard, each is emitted as a separate passthrough.
+    expect(merged).toHaveLength(2);
+
+    // Each output record retains its own distinct phone number.
+    const phonesA = JSON.parse(merged.find((r) => r.externalId === "empty-name-a")!.phones!) as Array<{ number: string }>;
+    const phonesB = JSON.parse(merged.find((r) => r.externalId === "empty-name-b")!.phones!) as Array<{ number: string }>;
+    expect(phonesA.map((p) => p.number)).toContain("11111");
+    expect(phonesB.map((p) => p.number)).toContain("22222");
+  });
 });
 
 // ---------------------------------------------------------------------------
