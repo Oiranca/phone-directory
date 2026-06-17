@@ -28,10 +28,9 @@ export class AuditLogIntegrityError extends Error {
     cause: unknown;
   }) {
     super(
-      `Audit log integrity error: the file at "${opts.logFilePath}" is corrupt or unreadable. ` +
-        (opts.quarantineFilePath
-          ? `Original bytes preserved at "${opts.quarantineFilePath}".`
-          : "Quarantine of the original bytes failed — manual recovery required.")
+      opts.quarantineFilePath
+        ? "Audit log integrity error: the file is corrupt or unreadable. Original bytes preserved in quarantine sidecar."
+        : "Audit log integrity error: the file is corrupt or unreadable. Quarantine of the original bytes failed — manual recovery required."
     );
     this.name = "AuditLogIntegrityError";
     this.logFilePath = opts.logFilePath;
@@ -137,19 +136,23 @@ export class AuditLogService {
 
   /**
    * Copy `bytes` to a timestamped sidecar next to `originalFilePath`.
-   * Returns the sidecar path on success, `null` on failure (never throws).
-   * The original file is NOT modified.
+   * Returns the sidecar path on success, `null` on failure or when bytes are
+   * unavailable (e.g. the file was unreadable — there is nothing to preserve).
+   * Never throws.  The original file is NOT modified.
    */
   private async quarantine(originalFilePath: string, bytes: Buffer | undefined): Promise<string | null> {
+    if (bytes === undefined) {
+      // No bytes to preserve (file was unreadable before we could read it).
+      return null;
+    }
     try {
       const safeTs = new Date().toISOString().replace(/[:.]/g, "-");
       const dir = path.dirname(originalFilePath);
       const base = path.basename(originalFilePath, ".json");
       const sidecar = path.join(dir, `${base}.corrupt-${safeTs}.json`);
       await ensureDirectory(dir);
-      // Write exactly the original bytes (even if empty) so the sidecar is
-      // a faithful copy of what was on disk.
-      await fs.writeFile(sidecar, bytes ?? Buffer.alloc(0));
+      // Write exactly the original bytes — faithful copy of what was on disk.
+      await fs.writeFile(sidecar, bytes);
       return sidecar;
     } catch {
       return null;
@@ -181,8 +184,16 @@ export class AuditLogService {
    * surfaces as a thrown `AuditLogIntegrityError` rather than silently
    * returning an empty result set, so callers can distinguish "no entries"
    * from "log is damaged".
+   *
+   * Symmetrical with `append()`: if an integrity error has already been cached
+   * on this instance, short-circuit immediately without re-reading the file.
+   * This prevents repeated quarantine sidecar proliferation on every query.
    */
   async query(params: AuditLogQueryParams): Promise<AuditLogResult> {
+    if (this.integrityError !== null) {
+      throw this.integrityError;
+    }
+
     const filePath = this.getFilePath();
     const entries = await this.readEntries(filePath);
 
@@ -225,18 +236,22 @@ export class AuditLogService {
    * method deliberately (after reviewing the quarantine sidecar) to clear the
    * integrity-error state and start a fresh, empty audit log.
    *
+   * The write is enqueued so it cannot race any already-queued append on the
+   * same `.tmp` path.  `this.integrityError` is cleared only after the atomic
+   * write succeeds, so a failed recovery write leaves the service still blocked
+   * and retryable.
+   *
    * The quarantine sidecar produced during the corruption detection is NOT
    * deleted here — it must be removed by the operator.
-   *
-   * Throws if writing the fresh file fails; the integrity-error state is then
-   * preserved so a retry is possible.
    */
   async recoverFromIntegrityError(): Promise<void> {
-    const filePath = this.getFilePath();
-    await ensureDirectory(path.dirname(filePath));
-    await writeJsonFile(filePath, []);
-    // Only clear the error state once the write has succeeded atomically.
-    this.integrityError = null;
+    return this.enqueueWrite(async () => {
+      const filePath = this.getFilePath();
+      await ensureDirectory(path.dirname(filePath));
+      await writeJsonFile(filePath, []);
+      // Only clear the error state once the write has succeeded atomically.
+      this.integrityError = null;
+    });
   }
 
   toCsv(entries: AuditLogEntry[]): string {

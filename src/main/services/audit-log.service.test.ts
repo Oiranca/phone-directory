@@ -274,6 +274,31 @@ describe("AuditLogService", () => {
         /audit-log\.corrupt-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/
       );
     });
+
+    it("second query() on a corrupt file throws cached error and does NOT create an additional sidecar", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+      await fs.mkdir(dataDir, { recursive: true });
+      await fs.writeFile(auditLogPath, "bad json", "utf-8");
+
+      // First query — triggers quarantine, writes one sidecar.
+      await expect(service.query({})).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      const sidecarsAfterFirst = (await fs.readdir(dataDir)).filter((f) =>
+        f.includes(".corrupt-")
+      );
+      expect(sidecarsAfterFirst).toHaveLength(1);
+
+      // Second query — must re-throw the cached error without quarantining again.
+      await expect(service.query({})).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      const sidecarsAfterSecond = (await fs.readdir(dataDir)).filter((f) =>
+        f.includes(".corrupt-")
+      );
+      expect(sidecarsAfterSecond).toHaveLength(1);
+    });
   });
 
   describe("corruption handling — append", () => {
@@ -353,6 +378,31 @@ describe("AuditLogService", () => {
 
       expect(integrityError).toBeInstanceOf(AuditLogIntegrityError);
       // Quarantine sidecar write failed — path must be null, not a string.
+      expect(integrityError.quarantineFilePath).toBeNull();
+    });
+
+    it("throws AuditLogIntegrityError when the file exists but is unreadable (chmod 0o000), quarantineFilePath is null (no bytes to preserve)", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "[]", "utf-8");
+
+      // Make the file itself unreadable (distinct from read-only-dir test).
+      await fs.chmod(auditLogPath, 0o000);
+
+      let integrityError!: InstanceType<typeof AuditLogIntegrityError>;
+      try {
+        await service.query({});
+      } catch (err) {
+        integrityError = err as InstanceType<typeof AuditLogIntegrityError>;
+      } finally {
+        // Restore so afterEach can clean up.
+        await fs.chmod(auditLogPath, 0o644);
+      }
+
+      expect(integrityError).toBeInstanceOf(AuditLogIntegrityError);
+      // No bytes were read, so no sidecar can be written — quarantineFilePath must be null.
       expect(integrityError.quarantineFilePath).toBeNull();
     });
   });
