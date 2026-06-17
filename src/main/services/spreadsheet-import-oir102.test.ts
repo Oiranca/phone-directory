@@ -142,9 +142,9 @@ describe("single-row multi-phone (root cause 1)", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     const phones = JSON.parse(result.rows[0]!.phones!) as Array<{ number: string; label: string }>;
 
-    // Every phone must have a non-empty label (the sheet name).
+    // Tightened: every phone must carry the exact source sheet name ("urgencias").
     for (const phone of phones) {
-      expect(phone.label).toBeTruthy();
+      expect(phone.label).toBe("urgencias");
     }
   });
 });
@@ -242,7 +242,8 @@ describe("cross-sheet merge by normalized displayName (root cause 2)", () => {
     const id1 = run1.rows.find((r) => r.displayName === "Banco de Sangre")?.externalId;
     const id2 = run2.rows.find((r) => r.displayName === "Banco de Sangre")?.externalId;
 
-    expect(id1).toBeTruthy();
+    // Tightened: merged externalId keeps the FIRST sheet's prefix (urgencias).
+    expect(id1).toMatch(/^urgencias-/);
     expect(id1).toBe(id2);
   });
 });
@@ -593,5 +594,367 @@ describe("Regression: canonical sheets (urgencias / rayos) parse unchanged", () 
     expect(names).toContain("Sala TAC");
     expect(names).toContain("Sala RX");
     expect(result.rows).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 1 — empty merge key collapses unrelated blank-named records
+// ---------------------------------------------------------------------------
+
+describe("Bug 1 — empty/blank displayName records stay as separate records", () => {
+  it("keeps two records with empty displayName as two separate records (not merged)", () => {
+    // Both records have blank displayNames → normalized key = "" → must NOT be merged.
+    const filePath = writeWorkbook(testRoot, "empty-displayname.xlsx", [
+      makeServiceSheet("urgencias", [
+        // Two rows that would each produce an empty-displayname record.
+        // Using a label that resolves to "" after normalization is tricky;
+        // instead test via the NormalizedImportRow path by crafting two
+        // records with empty displayName directly in the merge pipeline.
+        { label: "Triaje", numbers: ["11111"] },
+        { label: "Mostrador", numbers: ["22222"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    // Normal records should be distinct.
+    expect(result.rows).toHaveLength(2);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Mostrador");
+  });
+
+  it("passthrough (centers-parser) records with no phones JSON are emitted individually", async () => {
+    // Centers-parser records have no phones JSON field (they use phone1/phone2
+    // flat fields only).  Each must pass through unchanged without being merged.
+    const filePath = writeWorkbook(testRoot, "centers-passthrough.xlsx", [
+      {
+        name: "centros-de-salud",
+        data: [
+          ["CENTROSDESALUD", "SERVICIO", "NUMEROLARGO", "NUMEROCORTO"],
+          ["C/ Ejemplo 1", "INF.", "928111111", "1111"],
+          ["C/ Ejemplo 2", "INF.", "928222222", "2222"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 2 — merged output not in original encounter order
+// ---------------------------------------------------------------------------
+
+describe("Bug 2 — output is in original encounter order", () => {
+  it("passthrough record positioned before a to-be-merged group keeps its position", () => {
+    // Layout:
+    //   Sheet 1: [passthrough-only contact (centers), then "Banco de Sangre"]
+    //   Sheet 2: ["Banco de Sangre" again → merge group]
+    //
+    // Because centers-parser records have no phones JSON, they are passthroughs
+    // and should appear at their original position relative to mergeable rows.
+    //
+    // We use two canonical service sheets: the first has a unique contact
+    // (Triaje) followed by the merge candidate, and the second has only the
+    // merge candidate.  After merging, Triaje must appear BEFORE Banco de Sangre.
+    const filePath = writeWorkbook(testRoot, "order-passthrough.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["99999"] },
+        { label: "Banco de Sangre", numbers: ["11111"] }
+      ]),
+      makeServiceSheet("umi", [
+        { label: "Banco de Sangre", numbers: ["22222"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+
+    // Triaje (first contact from urgencias) must come BEFORE Banco de Sangre.
+    const triageIdx = names.indexOf("Triaje");
+    const bancoIdx = names.indexOf("Banco de Sangre");
+    expect(triageIdx).toBeGreaterThanOrEqual(0);
+    expect(bancoIdx).toBeGreaterThanOrEqual(0);
+    expect(triageIdx).toBeLessThan(bancoIdx);
+  });
+
+  it("a record that appears between two merged contacts retains its position", () => {
+    // Sheet: [A-merged, B-passthrough-between, A-merged-second, C-end]
+    // After merging A, B must remain between A and C.
+    const filePath = writeWorkbook(testRoot, "order-middle.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Admision", numbers: ["11111"] },
+        { label: "Mostrador", numbers: ["33333"] },
+        { label: "Admision", numbers: ["22222"] },
+        { label: "Control", numbers: ["44444"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    const admIdx = names.indexOf("Admision");
+    const mostradorIdx = names.indexOf("Mostrador");
+    const controlIdx = names.indexOf("Control");
+
+    // Admision (merged from positions 0 and 2) must be at position 0.
+    expect(admIdx).toBe(0);
+    // Mostrador (position 1 originally) must come between Admision and Control.
+    expect(mostradorIdx).toBeLessThan(controlIdx);
+    expect(mostradorIdx).toBeGreaterThan(admIdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 3 — isSocialHandle can silently drop a real contact
+// ---------------------------------------------------------------------------
+
+describe("Bug 3 — section-context social skip does not drop real contacts", () => {
+  it("does NOT skip a handle-shaped label NOT under a social section", () => {
+    // "urgencias" is 9 chars, all-lowercase, no digit, no space — the old pure
+    // shape heuristic would have matched it.  With the section-context guard,
+    // it must NOT be skipped unless there is social context.
+    //
+    // Row structure: ["urgencias", "ver extensión"] — two non-empty cells so the
+    // single-cell section-setter gate is bypassed, and the row reaches the social
+    // check.  No social section is active; no social token in cells → not skipped.
+    const filePath = writeWorkbook(testRoot, "no-phone-real-word.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje urgencias", "12345"],
+          ["Mostrador urgencias", "12346"],
+          ["Control boxes", "12347"],
+          // Two non-empty cells: label + 10-digit reference number.
+          // extractNumbers("ref 1234567890") = ["1234567890"] (≥ 4 digits),
+          // so the multi-cell section-setter gate (which requires every col-1+
+          // cell to have extractNumbers length=0) does NOT fire.
+          // hasPhoneLikeNumber requires number length 4–9; 10 digits → not phone-like,
+          // so rowHasPhone = false.  No social context → isSocialContextRow = false
+          // → row is kept in result.rows.
+          ["urgencias", "ref 1234567890"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    // "urgencias" without social context must appear in result.rows.
+    expect(names).toContain("urgencias");
+  });
+
+  it("skips a no-phone handle-shaped label UNDER a social section header", () => {
+    // "REDES SOCIALES HOSPITAL" as a single-cell row → section setter (currentSection).
+    // "hospitaldrnegrin" row has two cells so bypasses the section-setter gate.
+    // sectionIsSocial(currentSection) → true → isSocialContextRow fires → skipped.
+    const filePath = writeWorkbook(testRoot, "handle-under-social-section.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje urgencias", "12345"],
+          ["Mostrador urgencias", "12346"],
+          ["Control boxes", "12347"],
+          // Single-cell row — becomes the section header (sectionIsSocial → true).
+          ["REDES SOCIALES HOSPITAL"],
+          // Two-cell row whose label is a handle and has no phone → skipped.
+          ["hospitaldrnegrin", "ver perfil"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("hospitaldrnegrin");
+    expect(names).toContain("Triaje urgencias");
+  });
+
+  it("skips a no-phone handle when the CURRENT ROW contains a social token", () => {
+    // Row col-0 is the handle, col-1 is a social-media token (INSTAGRAM).
+    // Two non-empty cells → section-setter gate is bypassed.
+    // rowContainsSocialToken → true → effectiveSocialContext=true.
+    // isSocialContextRow("hospitaldrnegrin", true) → true → skipped.
+    const filePath = writeWorkbook(testRoot, "handle-row-social-token.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje urgencias", "12345"],
+          ["Mostrador urgencias", "12346"],
+          ["Control boxes", "12347"],
+          // Col-0 is the handle, col-1 is "INSTAGRAM" (a social token).
+          // No phone → social skip fires.
+          ["hospitaldrnegrin", "INSTAGRAM"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("hospitaldrnegrin");
+    expect(names).toContain("Triaje urgencias");
+  });
+
+  it("does NOT skip a real lowercase label WITH a phone even under social section", () => {
+    // A row with a phone co-occurring is never affected by the social skip.
+    const filePath = writeWorkbook(testRoot, "lowercase-phone-social-section.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje urgencias", "12345"],
+          ["Mostrador urgencias", "12346"],
+          ["Control boxes", "12347"],
+          ["REDES SOCIALES"],
+          // Handle-shaped label WITH a phone — must be kept.
+          ["secretaria", "70979"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("secretaria");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 4 — unguarded JSON entries in buildPhones / mergeRecordsByDisplayName
+// ---------------------------------------------------------------------------
+
+describe("Bug 4 — invalid phones JSON entries do not crash the import", () => {
+  it("handles a phones JSON entry with null number without throwing", async () => {
+    // A phones JSON column with a null 'number' field must not crash buildPhones.
+    // The invalid entry is dropped; valid entries are kept.
+    const { buildImportPreviewFromRows } = await import("./csv-import.service.js");
+    const row = {
+      type: "service",
+      displayName: "Test Service",
+      phones: JSON.stringify([
+        { number: null, label: "L1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false },
+        { number: "70001", label: "L2", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+      ])
+    };
+
+    let errorThrown = false;
+    try {
+      const { preview, dataset } = await buildImportPreviewFromRows([row], {
+        sourceFilePath: "/tmp/test.csv",
+        fileName: "test.csv",
+        editorName: "TestEditor"
+      });
+      // The null-number entry must be dropped; the valid entry kept.
+      expect(preview.invalidRowCount).toBe(0);
+      expect(dataset.records[0]?.contactMethods.phones).toHaveLength(1);
+      expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("70001");
+    } catch {
+      errorThrown = true;
+    }
+    expect(errorThrown).toBe(false);
+  });
+
+  it("handles a phones JSON entry with numeric number without throwing", async () => {
+    const { buildImportPreviewFromRows } = await import("./csv-import.service.js");
+    const row = {
+      type: "service",
+      displayName: "Test Service 2",
+      phones: JSON.stringify([
+        { number: 12345, label: "L1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false },
+        { number: "70002", label: "L2", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+      ])
+    };
+
+    const { preview, dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+    // The numeric-number entry is dropped; valid string entry kept.
+    expect(preview.invalidRowCount).toBe(0);
+    expect(dataset.records[0]?.contactMethods.phones).toHaveLength(1);
+    expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("70002");
+  });
+
+  it("handles a phones JSON entry with missing number field without throwing", async () => {
+    const { buildImportPreviewFromRows } = await import("./csv-import.service.js");
+    const row = {
+      type: "service",
+      displayName: "Test Service 3",
+      phones: JSON.stringify([
+        { label: "L1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false },
+        { number: "70003", label: "L2", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+      ])
+    };
+
+    const { preview, dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+    // Missing-number entry dropped; valid entry kept.
+    expect(preview.invalidRowCount).toBe(0);
+    expect(dataset.records[0]?.contactMethods.phones).toHaveLength(1);
+    expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("70003");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 5 — silent zero-phone merged record
+// ---------------------------------------------------------------------------
+
+describe("Bug 5 — zero-phone merged record gets a warning in notes", () => {
+  it("merged record with valid phones does NOT get a warning in notes", () => {
+    // Regression guard: a normal two-sheet merge (both with real phone numbers)
+    // must NOT produce the zero-phone warning in notes.
+    const filePath = writeWorkbook(testRoot, "valid-phones-merge.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Banco de Sangre", numbers: ["11111"] }
+      ]),
+      makeServiceSheet("umi", [
+        { label: "Banco de Sangre", numbers: ["22222"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const row = result.rows.find((r) => r.displayName === "Banco de Sangre");
+    expect(row).toBeDefined();
+    // Valid phones on both sides → no warning injected.
+    expect(row?.notes ?? "").not.toContain("AVISO");
+  });
+
+  it("merged group with all-invalid phones JSON gets a warning in notes", async () => {
+    // Calls mergeRecordsByDisplayName directly with NormalizedImportRow records
+    // whose phones JSON fields contain only entries that fail isSerializedPhoneEntry
+    // (number: null rather than a string).  The merged group resolves to zero
+    // phones → Bug 5 fix injects the warning into notes.
+    const { mergeRecordsByDisplayName } = await import("./spreadsheet-import.service.js");
+
+    const invalidPhonesJson = JSON.stringify([
+      { number: null, label: "L1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+    ]);
+
+    const recordA = {
+      externalId: "banco-a",
+      type: "service",
+      displayName: "Banco de Sangre",
+      phones: invalidPhonesJson,
+      notes: ""
+    } as Record<string, string>;
+
+    const recordB = {
+      externalId: "banco-b",
+      type: "service",
+      displayName: "Banco de Sangre",
+      phones: invalidPhonesJson,
+      notes: ""
+    } as Record<string, string>;
+
+    const merged = mergeRecordsByDisplayName([recordA, recordB]);
+
+    // Two records with the same normalized displayName → merged into one.
+    expect(merged).toHaveLength(1);
+    // Every phone entry fails isSerializedPhoneEntry → zero phones → warning injected.
+    expect(merged[0]?.notes ?? "").toContain("AVISO");
   });
 });

@@ -111,7 +111,8 @@ describe("DuplicateDetectionService", () => {
           reasons.includes("displayName:fuzzy") ||
           reasons.includes("displayName:levenshtein")
       ).toBe(true);
-      expect(result.pairs[0]?.score).toBeGreaterThanOrEqual(0.6);
+      // Tightened: García→Garcia normalizes to exact displayName match → score 0.9
+      expect(result.pairs[0]?.score).toBe(0.9);
     });
 
     it("detects externalId match with highest score", () => {
@@ -200,7 +201,8 @@ describe("DuplicateDetectionService", () => {
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("displayName:levenshtein");
-      expect(result.pairs[0]?.score).toBeGreaterThanOrEqual(0.75);
+      // Tightened: Levenshtein signal has a deterministic score of 0.75.
+      expect(result.pairs[0]?.score).toBe(0.75);
     });
 
     it("does not detect Levenshtein signal for far-apart names (5+ char difference)", () => {
@@ -214,16 +216,17 @@ describe("DuplicateDetectionService", () => {
     });
 
     it("detects same-department + similar-name signal", () => {
-      // Names differ by 4+ chars (title prefix dropped) so levenshtein won't fire;
-      // bigram similarity is high (>= 0.7) so dept+name should fire.
+      // Edit distance = 13 chars (title prefix + surname), maxLev = ceil(45*0.2) = 9.
+      // 13 > 9 → Levenshtein does NOT fire.
+      // Bigram Jaccard ≈ 0.757 >= 0.7 → dept+name fires at score 0.65.
       const recordA = buildMinimalContact({
         id: "a",
-        displayName: "Dr. Juan Antonio Morales",
+        displayName: "Dra. María Carmen Rodríguez Fernández Álvarez",
         organization: { department: "Cardiology" }
       });
       const recordB = buildMinimalContact({
         id: "b",
-        displayName: "Juan Antonio Morales",
+        displayName: "María Carmen Rodríguez Fernández",
         organization: { department: "Cardiology" }
       });
 
@@ -231,7 +234,9 @@ describe("DuplicateDetectionService", () => {
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("dept+name");
-      expect(result.pairs[0]?.score).toBeGreaterThanOrEqual(0.65);
+      expect(result.pairs[0]?.reasons).not.toContain("displayName:levenshtein");
+      // Only dept+name fires → deterministic score of 0.65.
+      expect(result.pairs[0]?.score).toBe(0.65);
     });
 
     it("does not trigger dept+name signal when departments differ", () => {
@@ -293,7 +298,8 @@ describe("DuplicateDetectionService", () => {
 
       const result = service.detectDuplicates([recordA, recordB]);
 
-      expect(result.pairCount).toBeGreaterThan(0);
+      // Tightened: Ana López vs Ana Lopez → exact displayName match after normalization → 1 pair.
+      expect(result.pairCount).toBe(1);
 
       // Both records present in map
       expect(result.records["x"]).toBeDefined();

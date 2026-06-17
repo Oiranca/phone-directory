@@ -183,7 +183,8 @@ describe("buildCsvImportPreview", () => {
     const { preview, dataset } = await buildCsvImportPreview(filePath, "TestEditor");
 
     expect(preview.validRowCount).toBe(1);
-    expect(preview.warningCount).toBeGreaterThanOrEqual(1);
+    // Tightened: exactly 1 warning (the dedup warning for aliases).
+    expect(preview.warningCount).toBe(1);
     const record = dataset.records[0];
     const lowerAliases = record?.aliases.map((a) => a.toLowerCase()) ?? [];
     const uniqueCount = new Set(lowerAliases).size;
@@ -202,7 +203,8 @@ describe("buildCsvImportPreview", () => {
     const { preview, dataset } = await buildCsvImportPreview(filePath, "TestEditor");
 
     expect(preview.validRowCount).toBe(1);
-    expect(preview.warningCount).toBeGreaterThanOrEqual(1);
+    // Tightened: exactly 1 warning (the dedup warning for tags).
+    expect(preview.warningCount).toBe(1);
     const record = dataset.records[0];
     const lowerTags = record?.tags.map((t) => t.toLowerCase()) ?? [];
     const uniqueCount = new Set(lowerTags).size;

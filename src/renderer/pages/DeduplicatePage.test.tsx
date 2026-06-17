@@ -81,7 +81,8 @@ describe("DeduplicatePage", () => {
 
     // Both records share the same department label
     const deptEls = screen.getAllByText("Admisión");
-    expect(deptEls.length).toBeGreaterThanOrEqual(2);
+    // Tightened: exactly 2 records in pair, each with same department.
+    expect(deptEls).toHaveLength(2);
 
     // Phone numbers from the flat phones array
     expect(screen.getByText("70005")).toBeInTheDocument();

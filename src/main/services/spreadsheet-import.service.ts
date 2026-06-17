@@ -140,6 +140,21 @@ export type SerializedPhoneEntry = {
 };
 
 /**
+ * Runtime type guard for SerializedPhoneEntry (Bug 4 fix).
+ * Validates that an untrusted JSON-parsed value has the required shape before
+ * it is used so a crafted phones column cannot crash the import pipeline.
+ */
+export const isSerializedPhoneEntry = (value: unknown): value is SerializedPhoneEntry =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as Record<string, unknown>).number === "string" &&
+  typeof (value as Record<string, unknown>).label === "string" &&
+  typeof (value as Record<string, unknown>).kind === "string" &&
+  typeof (value as Record<string, unknown>).isPrimary === "boolean" &&
+  typeof (value as Record<string, unknown>).confidential === "boolean" &&
+  typeof (value as Record<string, unknown>).noPatientSharing === "boolean";
+
+/**
  * Normalizes a displayName for cross-sheet identity matching:
  * trim + lowercase + strip diacritics/accents.
  * Two names that are equal after this transform are considered the same contact.
@@ -518,35 +533,88 @@ const isDeferredFeatureSheet = (slug: string): boolean =>
   slug.startsWith(BUSCAS_SHEET_SLUG_PREFIX);
 
 /**
- * INTERIM (OIR-102): Returns true when a resolved row label looks like a
- * social-media handle rather than a real contact name.
+ * INTERIM (OIR-102): Social-context tokens used to identify a row as belonging
+ * to a social-media section rather than a real contact.
  *
- * Predicate: the label is a single whitespace-free token, entirely lowercase
- * (no capital letters), contains no digits, and is at least 8 characters long.
- *
- * This precisely targets patterns like "hospitaldrnegrin" (the hospital's
- * Instagram/Facebook handle stored in the ODS alongside the phone number of
- * the Comunicaciones / Redes Sociales row) while leaving real contact names
- * untouched:
- *   - Multi-word names ("Banco de Sangre", "Dr. García") contain spaces → not matched.
- *   - Title-case names ("Secretaria", "Resonancia") have an uppercase first
- *     letter → not matched.
- *   - Names that are single lowercase words but do have phone numbers (e.g.
- *     "secretaria 70979") are never affected because the skip fires ONLY when
- *     dedupedPhoneNumbers.length === 0.
- *   - A real name with a missing number (incomplete contact the operator needs
- *     to see as REJECTED) will almost always be multi-word or title-case, so
- *     it is NOT matched and continues to surface as a rejection.
- *
- * Social media as a contact method is a planned future feature; this skip is
- * the minimal interim guard until that feature exists (sibling of OIR-102).
+ * These tokens are matched diacritic-insensitively (normalizeMarker strips
+ * diacritics and upper-cases) against the active section header or the raw row
+ * cells.  The set is deliberately narrow to avoid false positives on real
+ * service names.
  */
-const isSocialHandle = (label: string): boolean => {
-  if (/\s/.test(label)) return false;       // spaces → multi-word → real name
-  if (/\d/.test(label)) return false;       // digits → phone-like or code → not a handle
+const SOCIAL_CONTEXT_TOKENS = [
+  "REDESSOCIALES",
+  "RRSS",
+  "INSTAGRAM",
+  "FACEBOOK",
+  "TWITTER",
+  "LINKEDIN",
+  "TIKTOK",
+  "YOUTUBE"
+] as const;
+
+/**
+ * Returns true when any cell in the given row contains a social-media context
+ * token (diacritic-insensitive).  Used to detect rows whose cells reveal
+ * social media context even when the active section header does not.
+ */
+const rowContainsSocialToken = (cells: string[]): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) =>
+    cells.some((cell) => normalizeMarker(cell).includes(token))
+  );
+
+/**
+ * Returns true when the active section header contains a social-media context
+ * token (diacritic-insensitive).
+ */
+const sectionIsSocial = (section: string): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) => normalizeMarker(section).includes(token));
+
+/**
+ * INTERIM (OIR-102): Returns true when a no-phone row should be silently
+ * skipped as a social-media handle row rather than surfaced as a rejected
+ * contact.
+ *
+ * Fix (Bug 3): the skip is now section-CONTEXT based rather than label-shape
+ * based.  A row is considered social only when its context (active section
+ * header OR any cell in the row) reveals social media intent.  The handle-shape
+ * heuristic (single-token, all-lowercase, no digit, ≥8 chars) is applied as a
+ * secondary guard to avoid skipping real no-phone rows that happen to sit near
+ * a social section header.
+ *
+ * This means:
+ *   - "hospitaldrnegrin" in a row whose cells contain "INSTAGRAM" → skipped.
+ *   - "urgencias" with no phone, NOT under a social section → NOT skipped
+ *     (surfaces as rejected — the operator can investigate).
+ *   - Any label that has a phone is never affected (skip fires only when
+ *     dedupedPhoneNumbers.length === 0).
+ *
+ * Social media as a contact method is a planned future feature; this guard is
+ * the minimal interim skip until that feature exists (sibling of OIR-102).
+ */
+/**
+ * Returns true when a no-phone row should be silently skipped as social-media.
+ *
+ * @param label            The resolved row label.
+ * @param hasSocialContext True when the active section, the current row cells,
+ *                         or the immediately prior row's cells contained a
+ *                         social-media context token (caller pre-computes this
+ *                         so continuation rows inherit the context from the
+ *                         preceding data row).
+ */
+const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean => {
+  if (!hasSocialContext) {
+    return false;
+  }
+
+  // Secondary guard: the label must look like a concatenated handle (single token,
+  // all-lowercase, no digit, ≥8 chars).  This prevents skipping a real row that
+  // happens to be near a social section but has a normally-cased label.
+  if (/\s/.test(label)) return false;       // multi-word → not a handle
+  if (/\d/.test(label)) return false;       // contains digit → not a handle
   if (label.length < 8) return false;       // too short to be a concatenated handle
-  if (label !== label.toLowerCase()) return false; // uppercase → title-case → real name
-  return /[a-z]/.test(label);              // must contain at least one ASCII lowercase letter
+  if (label !== label.toLowerCase()) return false; // has uppercase → not a handle
+
+  return /[a-z]/.test(label);              // must have at least one ASCII letter
 };
 
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
@@ -595,6 +663,10 @@ const normalizeServiceSheet = (
   const records: NormalizedImportRow[] = [];
   let currentSection = "";
   let socialSkippedRows = 0;
+  // Bug 3 fix: tracks whether the immediately previous row contained a social-media
+  // context token.  Continuation rows (e.g. a blank col-0 row that follows a
+  // "COMUNICACIONES – REDES SOCIALES … INSTAGRAM" row) inherit that context.
+  let prevRowHadSocialContext = false;
 
   data.forEach((row, rowIndex) => {
     const cells = row.map((value) => clean(value));
@@ -607,6 +679,7 @@ const normalizeServiceSheet = (
       !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
     ) {
       currentSection = firstCell;
+      prevRowHadSocialContext = sectionIsSocial(firstCell);
       return;
     }
 
@@ -637,6 +710,7 @@ const normalizeServiceSheet = (
 
     if (nonEmpty.length === 1 && label && cells[0] === label) {
       currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
       return;
     }
 
@@ -653,6 +727,7 @@ const normalizeServiceSheet = (
       extractNumbers(label).length === 0
     ) {
       currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
       return;
     }
 
@@ -702,7 +777,11 @@ const normalizeServiceSheet = (
     //
     // Social media as a contact method is a planned future feature; this guard
     // is the minimal interim skip until that feature exists (sibling of OIR-102).
-    if (dedupedPhoneNumbers.length === 0 && isSocialHandle(label)) {
+    const thisCellsHaveSocialContext = rowContainsSocialToken(cells);
+    const effectiveSocialContext = sectionIsSocial(currentSection) || thisCellsHaveSocialContext || prevRowHadSocialContext;
+    prevRowHadSocialContext = thisCellsHaveSocialContext;
+
+    if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
       socialSkippedRows += 1;
       return;
     }
@@ -1318,24 +1397,30 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
  * - Records without a `phones` JSON field (e.g. centers-parser records) are
  *   passed through unchanged — they are never merged.
  */
-const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
-  // Separate records that carry the structured phones field from those that don't.
-  const mergeableRecords: NormalizedImportRow[] = [];
-  const passthroughRecords: NormalizedImportRow[] = [];
+export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
+  // Phase 1 — group mergeable records by normalized displayName.
+  //
+  // Bug 1 fix: skip grouping when the normalized key is empty (blank displayName).
+  // Such records are treated as passthroughs — each stays as its own record.
+  //
+  // Bug 2 fix: we do NOT separate mergeable from passthrough up front and then
+  // concatenate.  Instead we do a single ordered pass over the original array,
+  // emitting each group at the position of its first member so relative order
+  // is preserved.
 
-  for (const record of records) {
-    if (record.phones !== undefined && record.phones !== "") {
-      mergeableRecords.push(record);
-    } else {
-      passthroughRecords.push(record);
-    }
-  }
-
-  // Group mergeable records by normalized displayName, preserving insertion order.
   const groups = new Map<string, NormalizedImportRow[]>();
 
-  for (const record of mergeableRecords) {
+  for (const record of records) {
+    if (record.phones === undefined || record.phones === "") {
+      continue; // No phones JSON → passthrough, never merged.
+    }
+
     const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      continue; // Bug 1: blank normalized key → passthrough.
+    }
+
     const existing = groups.get(key);
 
     if (existing) {
@@ -1345,12 +1430,41 @@ const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedIm
     }
   }
 
-  const merged: NormalizedImportRow[] = [];
+  // Phase 2 — single ordered pass emitting results in original encounter order.
+  // Each merge group materializes at its first member's position; later members
+  // of the same group are skipped; passthroughs emit inline.
+  const result: NormalizedImportRow[] = [];
+  const emittedKeys = new Set<string>();
 
-  for (const group of groups.values()) {
-    // Single-record groups need no merging.
+  for (const record of records) {
+    const hasPhonesJson = record.phones !== undefined && record.phones !== "";
+
+    if (!hasPhonesJson) {
+      // Passthrough (no phones JSON): emit as-is in place.
+      result.push(record);
+      continue;
+    }
+
+    const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      // Bug 1 fix: blank normalized key → passthrough, emit in place.
+      result.push(record);
+      continue;
+    }
+
+    if (emittedKeys.has(key)) {
+      // Later member of an already-emitted group: skip (already folded in).
+      continue;
+    }
+
+    // First encounter of this key: build the merged record and emit it.
+    emittedKeys.add(key);
+    const group = groups.get(key)!;
+
     if (group.length === 1) {
-      merged.push(group[0]!);
+      // Single-record group: no merging needed.
+      result.push(group[0]!);
       continue;
     }
 
@@ -1358,12 +1472,15 @@ const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedIm
     const combinedPhones: SerializedPhoneEntry[] = [];
     const seenNormalized = new Set<string>();
 
-    for (const record of group) {
+    for (const groupRecord of group) {
       let entries: SerializedPhoneEntry[] = [];
 
       try {
-        const parsed = JSON.parse(record.phones ?? "[]");
-        if (Array.isArray(parsed)) entries = parsed as SerializedPhoneEntry[];
+        const parsed = JSON.parse(groupRecord.phones ?? "[]");
+        if (Array.isArray(parsed)) {
+          // Bug 4 (apply here too): validate each entry before using it.
+          entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
+        }
       } catch {
         // Malformed JSON is treated as no phones for this record.
       }
@@ -1389,6 +1506,29 @@ const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedIm
     const base = { ...group[0]! };
     base.phones = JSON.stringify(reassertedPhones);
 
+    // Bug 5 fix: when a merge group resolves to zero phones, surface a warning
+    // so downstream readers can see it is not silently clean.
+    if (reassertedPhones.length === 0) {
+      const existingNotes = base.notes ? `${base.notes} | ` : "";
+      base.notes = `${existingNotes}[AVISO: registro combinado sin teléfonos válidos]`;
+      base.phone1Label = "";
+      base.phone1Number = "";
+      base.phone1Kind = "";
+      base.phone1IsPrimary = "false";
+      base.phone1Confidential = "false";
+      base.phone1NoPatientSharing = "false";
+      base.phone1Notes = "";
+      base.phone2Label = "";
+      base.phone2Number = "";
+      base.phone2Kind = "";
+      base.phone2IsPrimary = "false";
+      base.phone2Confidential = "false";
+      base.phone2NoPatientSharing = "false";
+      base.phone2Notes = "";
+      result.push(base);
+      continue;
+    }
+
     // Rewrite phone1/phone2 flat fields to match merged result.
     const first = reassertedPhones[0];
     const second = reassertedPhones[1];
@@ -1408,12 +1548,10 @@ const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedIm
     base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
     base.phone2Notes = second?.notes ?? "";
 
-    merged.push(base);
+    result.push(base);
   }
 
-  // Reconstruct the final list in original encounter order: mergeable records
-  // first (in key-insertion order), then passthrough.
-  return [...merged, ...passthroughRecords];
+  return result;
 };
 
 export const normalizeWorkbookRowsFromFile = (

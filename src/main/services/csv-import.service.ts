@@ -14,6 +14,7 @@ import type {
   PhoneContact,
   EmailContact
 } from "../../shared/types/contact.js";
+import { isSerializedPhoneEntry } from "./spreadsheet-import.service.js";
 import type { SerializedPhoneEntry } from "./spreadsheet-import.service.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
@@ -209,7 +210,13 @@ const buildPhones = (
 
     try {
       const parsed = JSON.parse(rawPhonesJson);
-      if (Array.isArray(parsed)) entries = parsed as SerializedPhoneEntry[];
+      if (Array.isArray(parsed)) {
+        // Bug 4 fix: validate each entry at runtime before use.
+        // A crafted CSV with phones:[{"number":null}] would previously cause
+        // normalizeNumberForDedup(entry.number) to throw on a non-string value.
+        // Invalid entries are silently dropped; valid ones are kept.
+        entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
+      }
     } catch {
       // Malformed JSON: fall through to phone1/phone2 path below.
     }
