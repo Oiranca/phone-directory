@@ -162,4 +162,42 @@ Copy the contents of this directory to the USB root.
 Data will be created under portable-data/ on first launch.
 EOF
 
+# ---------------------------------------------------------------------------
+# Phase 2 — SHA-256 artifact integrity checksums
+#
+# Compute SHA-256 for every regular file under the USB package root and write
+# two artefacts alongside RELEASE_MANIFEST.txt:
+#
+#   RELEASE_MANIFEST.txt.sha256  — shasum-compatible manifest, one entry per file,
+#                                   paths relative to PACKAGE_ROOT, verifiable with:
+#                                     shasum -a 256 -c RELEASE_MANIFEST.txt.sha256
+#
+# The checksum list is also appended to RELEASE_MANIFEST.txt so the manifest
+# itself records the integrity state of the bundle.
+# ---------------------------------------------------------------------------
+
+log "Computing SHA-256 checksums for release artifacts"
+
+CHECKSUM_FILE="$PACKAGE_ROOT/RELEASE_MANIFEST.txt.sha256"
+
+# Build the checksum manifest relative to PACKAGE_ROOT so it is portable
+# (shasum -c must be run from within PACKAGE_ROOT on the target machine).
+(
+  cd "$PACKAGE_ROOT"
+  # Find all regular files; exclude the checksum file itself to avoid circularity.
+  find . -type f ! -name 'RELEASE_MANIFEST.txt.sha256' -print0 \
+    | sort -z \
+    | xargs -0 shasum -a 256 \
+    > "$CHECKSUM_FILE"
+)
+
+log "Checksums written: $CHECKSUM_FILE"
+
+# Append checksum block to the human-readable manifest
+{
+  printf '\n--- SHA-256 Artifact Checksums ---\n'
+  printf 'Verify on target: cd <usb-package> && shasum -a 256 -c RELEASE_MANIFEST.txt.sha256\n\n'
+  cat "$CHECKSUM_FILE"
+} >> "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
+
 log "USB package ready: $PACKAGE_ROOT"
