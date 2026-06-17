@@ -107,6 +107,8 @@ export type SpreadsheetImportNormalizationResult = {
   rows: NormalizedImportRow[];
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
+  /** INTERIM (OIR-102): Total rows silently skipped by deferred-feature guards. */
+  deferredSkippedRowCount: number;
 };
 
 type SheetProfile = {
@@ -580,7 +582,10 @@ const resolveServiceRowLabel = (cells: string[]) => {
   ) ?? "";
 };
 
-const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
+const normalizeServiceSheet = (
+  sheet: SheetData,
+  profile: SheetProfile
+): { records: NormalizedImportRow[]; socialSkippedRows: number } => {
   const metadata = {
     area: profile.area ?? "otros",
     department: profile.department,
@@ -589,6 +594,7 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
   const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
   let currentSection = "";
+  let socialSkippedRows = 0;
 
   data.forEach((row, rowIndex) => {
     const cells = row.map((value) => clean(value));
@@ -697,6 +703,7 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     // Social media as a contact method is a planned future feature; this guard
     // is the minimal interim skip until that feature exists (sibling of OIR-102).
     if (dedupedPhoneNumbers.length === 0 && isSocialHandle(label)) {
+      socialSkippedRows += 1;
       return;
     }
 
@@ -769,7 +776,7 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     records.push(record);
   });
 
-  return records;
+  return { records, socialSkippedRows };
 };
 
 const splitCenterAddress = (raw: string) => {
@@ -1426,9 +1433,20 @@ export const normalizeWorkbookRowsFromFile = (
 
   const records: NormalizedImportRow[] = [];
   const profiles: SheetProfile[] = [];
+  let deferredSkippedRowCount = 0;
 
   for (const sheet of sheets) {
     if (sheet.rows.length === 0) {
+      continue;
+    }
+
+    // INTERIM (OIR-102): Count data rows in Buscas sheets before detectSheetProfile
+    // discards them via isDeferredFeatureSheet, so the operator can see how many rows
+    // were silently omitted.  We approximate by counting non-empty rows minus one
+    // header row (consistent with how service sheets count their data rows).
+    if (isDeferredFeatureSheet(sheet.slug)) {
+      const dataRowCount = Math.max(0, sheet.rows.length - 1);
+      deferredSkippedRowCount += dataRowCount;
       continue;
     }
 
@@ -1445,7 +1463,9 @@ export const normalizeWorkbookRowsFromFile = (
       continue;
     }
 
-    records.push(...normalizeServiceSheet(sheet, profile));
+    const serviceResult = normalizeServiceSheet(sheet, profile);
+    records.push(...serviceResult.records);
+    deferredSkippedRowCount += serviceResult.socialSkippedRows;
   }
 
   if (records.length === 0) {
@@ -1459,7 +1479,8 @@ export const normalizeWorkbookRowsFromFile = (
 
   return {
     rows: mergedRecords,
-    ...summarizeDetectedFormat(profiles)
+    ...summarizeDetectedFormat(profiles),
+    deferredSkippedRowCount
   };
 };
 
@@ -1615,6 +1636,7 @@ export const buildSpreadsheetImportPreview = async (
     fileName: path.basename(sourceFilePath),
     editorName,
     detectedFormat: normalized.detectedFormat,
-    detectionConfidence: normalized.detectionConfidence
+    detectionConfidence: normalized.detectionConfidence,
+    deferredSkippedRowCount: normalized.deferredSkippedRowCount
   });
 };

@@ -145,6 +145,19 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
+      {/* INTERIM (OIR-102): Deferred-skip informational note */}
+      {(preview.deferredSkippedRowCount ?? 0) > 0 && (
+        <div
+          role="note"
+          className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+        >
+          <span className="font-semibold">
+            {preview.deferredSkippedRowCount} {preview.deferredSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
+          </span>{" "}
+          (hojas de buscas / redes sociales — pendientes de su sección)
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-white/80 p-4">

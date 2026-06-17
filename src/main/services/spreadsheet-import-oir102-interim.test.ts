@@ -256,7 +256,138 @@ describe("Social-handle row skip (isSocialHandle)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C. Regression — real flat service sheets still import after both skips
+// C. deferredSkippedRowCount surface (OIR-102 security review fix)
+// ---------------------------------------------------------------------------
+
+describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
+  it("counts data rows from a Buscas sheet in deferredSkippedRowCount", () => {
+    // Buscas_Celadores has 1 header row + 2 data rows = 2 deferred rows.
+    const filePath = writeWorkbook(testRoot, "buscas-count.xlsx", [
+      {
+        name: "Buscas_Celadores",
+        data: [
+          ["SERVICIO", "PRINCIPAL", "PRINCIPAL 2"],
+          ["CELADOR CCEE (A+B)", "7183", ""],
+          ["CELADOR QUIRÓFANO", "7585", ""]
+        ]
+      },
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // 2 data rows in Buscas_Celadores (header excluded), 0 social rows.
+    expect(result.deferredSkippedRowCount).toBe(2);
+    // Real contacts unaffected.
+    expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
+  });
+
+  it("counts social-handle rows in deferredSkippedRowCount", () => {
+    // Sheet contains one social-handle row (label: "hospitaldrnegrin", no phone).
+    const filePath = writeWorkbook(testRoot, "social-count.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje", "12345"],
+          ["Mostrador urgencias", "12346"],
+          // Social handle: all-lowercase single token, 8+ chars, no phone.
+          ["REDES SOCIALES HOSPITAL - INSTAGRAM", "hospitaldrnegrin", "", ""],
+          ["Control cajas", "12347"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // Exactly 1 social-handle row was skipped.
+    expect(result.deferredSkippedRowCount).toBe(1);
+    // Real contacts unaffected.
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Mostrador urgencias");
+    expect(names).toContain("Control cajas");
+    expect(names).not.toContain("hospitaldrnegrin");
+  });
+
+  it("aggregates buscas rows and social rows into a single deferredSkippedRowCount", () => {
+    // Buscas_Varios: 1 header + 3 data = 3 buscas rows.
+    // urgencias sheet: 1 social-handle row.
+    // Total expected: 3 + 1 = 4.
+    const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
+      {
+        name: "Buscas_Varios",
+        data: [
+          ["SERVICIO", "PRINCIPAL"],
+          ["ANESTESIA", "7001"],
+          ["CARDIOLOGÍA", "7002"],
+          ["CIRUGÍA", "7003"]
+        ]
+      },
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje", "12345"],
+          ["REDES SOCIALES HOSPITAL - INSTAGRAM", "hospitaldrnegrin", "", ""],
+          ["Mostrador", "12346"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    expect(result.deferredSkippedRowCount).toBe(4);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Mostrador");
+  });
+
+  it("returns deferredSkippedRowCount of 0 when there are no deferred skips", () => {
+    const filePath = writeWorkbook(testRoot, "no-skips.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["11111"] },
+        { label: "Control boxes", numbers: ["22222"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    expect(result.deferredSkippedRowCount).toBe(0);
+    expect(result.rows).toHaveLength(2);
+  });
+
+  it("preview carries deferredSkippedRowCount from the normalization result", async () => {
+    // Integration: buildSpreadsheetImportPreview (sync path) returns a preview
+    // with deferredSkippedRowCount reflecting actual buscas rows.
+    const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");
+    const filePath = writeWorkbook(testRoot, "preview-count.xlsx", [
+      {
+        name: "Buscas_Enfermería",
+        data: [
+          ["SERVICIO", "PRINCIPAL"],
+          ["PLANTA 1", "8001"],
+          ["PLANTA 2", "8002"]
+        ]
+      },
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const { preview } = await buildSpreadsheetImportPreview(filePath, "test-editor");
+
+    // 2 data rows in Buscas_Enfermería.
+    expect(preview.deferredSkippedRowCount).toBe(2);
+    // Import is not blocked.
+    expect(preview.invalidRowCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// E. Regression — real flat service sheets still import after both skips
 // ---------------------------------------------------------------------------
 
 describe("Regression: real flat service sheets still import after interim skips", () => {

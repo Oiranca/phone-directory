@@ -394,6 +394,8 @@ export const buildImportPreviewFromRows = async (
     editorName: string;
     detectedFormat?: string;
     detectionConfidence?: "high" | "medium" | "low";
+    /** INTERIM (OIR-102): rows silently skipped by deferred-feature guards. Default 0 (CSV path). */
+    deferredSkippedRowCount?: number;
   }
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
   const records: ContactRecord[] = [];
@@ -586,6 +588,7 @@ export const buildImportPreviewFromRows = async (
       mergedRecordCount: dataset.records.length,
       createdCount: dataset.records.length,
       updatedCount: 0,
+      deferredSkippedRowCount: options.deferredSkippedRowCount ?? 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,
