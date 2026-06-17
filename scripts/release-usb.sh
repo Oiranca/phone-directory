@@ -19,6 +19,16 @@ detect_platform() {
   esac
 }
 
+# Read package version without require() so it works under Node 22+ ESM projects.
+# node --input-type=module feeds the snippet as an ES module — no CJS assumption.
+read_package_version() {
+  node --input-type=module <<'NODESCRIPT'
+import { readFileSync } from 'fs';
+const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
+process.stdout.write(pkg.version);
+NODESCRIPT
+}
+
 if [[ "$PLATFORM" == "--platform" ]]; then
   PLATFORM="${2:-}"
 elif [[ "$PLATFORM" == --platform=* ]]; then
@@ -101,7 +111,7 @@ copy_linux_appimage() {
   local version
   local source
 
-  version="$(node -p "require('./package.json').version")"
+  version="$(read_package_version)"
   source="$DIST_ROOT/Phone Directory-$version.AppImage"
 
   if [[ -f "$source" ]]; then
@@ -138,16 +148,77 @@ esac
 
 copy_required "$REPO_ROOT/usb-launchers/README.txt" "$PACKAGE_ROOT/README.txt"
 
+PKG_VERSION="$(read_package_version)"
+
 cat > "$PACKAGE_ROOT/RELEASE_MANIFEST.txt" <<EOF
 Phone Directory USB release
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Platform: $PLATFORM
-Version: $(node -p "require('./package.json').version")
+Version: $PKG_VERSION
 Source commit: $(git rev-parse --short HEAD)
 ${AUDIT_STATUS_LINE}
 
 Copy the contents of this directory to the USB root.
 Data will be created under portable-data/ on first launch.
 EOF
+
+# ---------------------------------------------------------------------------
+# Phase 2 — SHA-256 artifact integrity checksums
+#
+# Compute SHA-256 for every regular file under the USB package root and write
+# two artefacts alongside RELEASE_MANIFEST.txt:
+#
+#   RELEASE_MANIFEST.txt.sha256  — shasum-compatible manifest, one entry per file,
+#                                   paths relative to PACKAGE_ROOT, verifiable with:
+#                                     shasum -a 256 -c RELEASE_MANIFEST.txt.sha256
+#
+# The checksum list is also appended to RELEASE_MANIFEST.txt so the manifest
+# itself records the integrity state of the bundle.
+# ---------------------------------------------------------------------------
+
+log "Computing SHA-256 checksums for release artifacts"
+
+CHECKSUM_FILE="$PACKAGE_ROOT/RELEASE_MANIFEST.txt.sha256"
+
+# Portability shim: prefer shasum (macOS/Perl), fall back to sha256sum (Linux
+# coreutils). If neither is available, skip checksum generation with a warning
+# rather than aborting the whole release under set -euo pipefail.
+SHA256_CMD=""
+if command -v shasum >/dev/null 2>&1; then
+  SHA256_CMD="shasum -a 256"
+elif command -v sha256sum >/dev/null 2>&1; then
+  SHA256_CMD="sha256sum"
+else
+  log "WARNING: neither shasum nor sha256sum found — skipping checksum generation"
+fi
+
+if [ -n "$SHA256_CMD" ]; then
+  # Build the checksum manifest relative to PACKAGE_ROOT so it is portable
+  # (shasum -c / sha256sum -c must be run from within PACKAGE_ROOT on the
+  # target machine).
+  #
+  # Exclude RELEASE_MANIFEST.txt.sha256 (circularity) AND RELEASE_MANIFEST.txt
+  # itself: the checksum block is appended to RELEASE_MANIFEST.txt AFTER this
+  # step, so checksumming it here would always produce FAILED on verification.
+  (
+    cd "$PACKAGE_ROOT"
+    find . -type f \
+      ! -name 'RELEASE_MANIFEST.txt.sha256' \
+      ! -name 'RELEASE_MANIFEST.txt' \
+      -print0 \
+      | sort -z \
+      | xargs -0 $SHA256_CMD \
+      > "$CHECKSUM_FILE"
+  )
+
+  log "Checksums written: $CHECKSUM_FILE"
+
+  # Append checksum block to the human-readable manifest
+  {
+    printf '\n--- SHA-256 Artifact Checksums ---\n'
+    printf 'Verify on target: cd <usb-package> && %s -c RELEASE_MANIFEST.txt.sha256\n\n' "$SHA256_CMD"
+    cat "$CHECKSUM_FILE"
+  } >> "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
+fi
 
 log "USB package ready: $PACKAGE_ROOT"

@@ -14,6 +14,8 @@ import type {
   PhoneContact,
   EmailContact
 } from "../../shared/types/contact.js";
+import { isSerializedPhoneEntry } from "./spreadsheet-import.service.js";
+import type { SerializedPhoneEntry } from "./spreadsheet-import.service.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_COLUMNS = [
@@ -197,6 +199,55 @@ const buildPhones = (
   displayName: string | undefined,
   warnings: CsvImportWarning[]
 ) => {
+  // When the row carries the structured `phones` JSON field (emitted by the
+  // spreadsheet normalizer), use it directly — it may contain more than two
+  // numbers and each already carries its source-sheet label.  The CSV import
+  // path does not set this field and continues to use phone1/phone2 columns.
+  const rawPhonesJson = maybe(row.phones);
+
+  if (rawPhonesJson) {
+    let entries: SerializedPhoneEntry[] = [];
+
+    try {
+      const parsed = JSON.parse(rawPhonesJson);
+      if (Array.isArray(parsed)) {
+        // Bug 4 fix: validate each entry at runtime before use.
+        // A crafted CSV with phones:[{"number":null}] would previously cause
+        // normalizeNumberForDedup(entry.number) to throw on a non-string value.
+        // Invalid entries are silently dropped; valid ones are kept.
+        entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
+      }
+    } catch {
+      // Malformed JSON: fall through to phone1/phone2 path below.
+    }
+
+    if (entries.length > 0) {
+      const phones: PhoneContact[] = entries.map((entry, index) =>
+        compactObject({
+          id: `ph_${rowNumber}_${index + 1}`,
+          label: entry.label || undefined,
+          number: entry.number,
+          kind: SUPPORTED_PHONE_KINDS.has(entry.kind) ? entry.kind : "internal",
+          isPrimary: index === 0,
+          confidential: entry.confidential,
+          noPatientSharing: entry.noPatientSharing,
+          notes: entry.notes || undefined
+        }) as PhoneContact
+      );
+
+      // ensureSinglePrimary is a no-op here (we already set index 0 as
+      // primary) but call it for invariant safety.
+      return ensureSinglePrimary(
+        phones,
+        "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
+        warnings,
+        rowNumber,
+        displayName
+      );
+    }
+  }
+
+  // CSV import path: read phone1 / phone2 flat columns.
   const phones: PhoneContact[] = [];
 
   for (const prefix of ["phone1", "phone2"] as const) {
@@ -350,6 +401,8 @@ export const buildImportPreviewFromRows = async (
     editorName: string;
     detectedFormat?: string;
     detectionConfidence?: "high" | "medium" | "low";
+    /** INTERIM (OIR-102): rows silently skipped by deferred-feature guards. Default 0 (CSV path). */
+    deferredSkippedRowCount?: number;
   }
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
   const records: ContactRecord[] = [];
@@ -542,6 +595,7 @@ export const buildImportPreviewFromRows = async (
       mergedRecordCount: dataset.records.length,
       createdCount: dataset.records.length,
       updatedCount: 0,
+      deferredSkippedRowCount: options.deferredSkippedRowCount ?? 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

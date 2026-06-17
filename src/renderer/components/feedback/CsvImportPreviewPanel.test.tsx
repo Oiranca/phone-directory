@@ -15,6 +15,7 @@ const basePreview: CsvImportPreviewWithConflicts = {
   mergedRecordCount: 0,
   createdCount: 0,
   updatedCount: 0,
+  deferredSkippedRowCount: 0,
   typeCounts: {},
   areaCounts: {},
   rowIssues: [],
@@ -525,6 +526,51 @@ describe("CsvImportPreviewPanel", () => {
       });
 
       expect(screen.getByRole("alert")).toHaveTextContent("1 fila rechazada");
+    });
+  });
+
+  describe("deferred-skip informational note (OIR-102)", () => {
+    it("shows the informational note when deferredSkippedRowCount > 0", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 3,
+        deferredSkippedRowCount: 5,
+        previewRows: []
+      });
+
+      const note = screen.getByRole("note");
+      expect(note).toBeInTheDocument();
+      expect(note).toHaveTextContent("5 filas omitidas");
+      expect(note).toHaveTextContent("hojas de buscas / redes sociales");
+    });
+
+    it("uses singular 'fila omitida' when exactly one row is deferred", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 1,
+        deferredSkippedRowCount: 1,
+        previewRows: []
+      });
+
+      expect(screen.getByRole("note")).toHaveTextContent("1 fila omitida");
+    });
+
+    it("does not render the informational note when deferredSkippedRowCount is 0", () => {
+      renderPanel({ ...basePreview, deferredSkippedRowCount: 0 });
+
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("does not disable the confirm button when deferredSkippedRowCount > 0", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 2,
+        deferredSkippedRowCount: 3,
+        previewRows: []
+      });
+
+      // deferredSkippedRowCount alone does not block import.
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
   });
 });

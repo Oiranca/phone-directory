@@ -107,6 +107,8 @@ export type SpreadsheetImportNormalizationResult = {
   rows: NormalizedImportRow[];
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
+  /** INTERIM (OIR-102): Total rows silently skipped by deferred-feature guards. */
+  deferredSkippedRowCount: number;
 };
 
 type SheetProfile = {
@@ -120,6 +122,57 @@ type SheetProfile = {
 };
 
 const clean = (value: string) => value.replace(/\u00a0/g, " ").split(/\s+/).filter(Boolean).join(" ").trim();
+
+/**
+ * A serialized phone entry stored as JSON in NormalizedImportRow["phones"].
+ * Carrying this structured form lets the normalization layer pass an unbounded
+ * list of phones through the flat Record<string,string> intermediate without
+ * capping at phone1/phone2.
+ */
+export type SerializedPhoneEntry = {
+  number: string;
+  label: string;
+  kind: string;
+  isPrimary: boolean;
+  confidential: boolean;
+  noPatientSharing: boolean;
+  notes?: string;
+};
+
+/**
+ * Runtime type guard for SerializedPhoneEntry (Bug 4 fix).
+ * Validates that an untrusted JSON-parsed value has the required shape before
+ * it is used so a crafted phones column cannot crash the import pipeline.
+ */
+export const isSerializedPhoneEntry = (value: unknown): value is SerializedPhoneEntry =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as Record<string, unknown>).number === "string" &&
+  typeof (value as Record<string, unknown>).label === "string" &&
+  typeof (value as Record<string, unknown>).kind === "string" &&
+  typeof (value as Record<string, unknown>).isPrimary === "boolean" &&
+  typeof (value as Record<string, unknown>).confidential === "boolean" &&
+  typeof (value as Record<string, unknown>).noPatientSharing === "boolean";
+
+/**
+ * Normalizes a displayName for cross-sheet identity matching:
+ * trim + lowercase + strip diacritics/accents.
+ * Two names that are equal after this transform are considered the same contact.
+ * Exact normalized equality only \u2014 no fuzzy matching.
+ */
+const normalizeDisplayNameForMerge = (name: string): string =>
+  name
+    .trim()
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/**
+ * Normalizes a phone number for deduplication purposes:
+ * strip all non-digit characters.
+ */
+const normalizeNumberForDedup = (number: string): string => number.replace(/\D/g, "");
 
 const normalizeAscii = (value: string) =>
   value
@@ -443,6 +496,127 @@ const inferAreaFromLabel = (value: string) => {
   return undefined;
 };
 
+/**
+ * Slugs that indicate a navigation/TOC sheet (no real contact data).
+ * Slugs are produced by normalizeAscii (lower, diacritics stripped, non-alnum→"-").
+ * "indice*" covers "Índice_Agenda_Telefónica" → "indice-agenda-telefonica" etc.
+ * "original" covers a literal sheet named "Original" used as a reference copy.
+ */
+const NAVIGATION_SHEET_SLUG_PREFIXES = ["indice"];
+const NAVIGATION_SHEET_SLUG_EXACT = new Set(["original"]);
+
+const isNavigationSheet = (slug: string): boolean => {
+  if (NAVIGATION_SHEET_SLUG_EXACT.has(slug)) {
+    return true;
+  }
+  return NAVIGATION_SHEET_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
+};
+
+/**
+ * INTERIM (OIR-102): Slug prefix for Buscas sheets (pager/localizador system).
+ *
+ * Sheets like Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores, and
+ * Buscas_Varios belong to the separate Buscas (pager/localizador) section that
+ * has its own data store (BuscasService / buscas.json) and is NOT part of the
+ * phone-directory contact import pipeline.  Their rows use 4-digit pager codes,
+ * not phone numbers, and their column header "PRINCIPAL / RESIDENTE" would be
+ * mistakenly parsed as a contact name, causing spurious rejections.
+ *
+ * These sheets are skipped here — kept distinct from isNavigationSheet so the
+ * reason is explicit and easy to remove once a proper Buscas ODS-import path
+ * is built.  Tracked as a future Linear feature (child of OIR-102).
+ */
+const BUSCAS_SHEET_SLUG_PREFIX = "buscas";
+
+/** Returns true when the sheet is a deferred-feature Buscas (pager) sheet. */
+const isDeferredFeatureSheet = (slug: string): boolean =>
+  slug.startsWith(BUSCAS_SHEET_SLUG_PREFIX);
+
+/**
+ * INTERIM (OIR-102): Social-context tokens used to identify a row as belonging
+ * to a social-media section rather than a real contact.
+ *
+ * These tokens are matched diacritic-insensitively (normalizeMarker strips
+ * diacritics and upper-cases) against the active section header or the raw row
+ * cells.  The set is deliberately narrow to avoid false positives on real
+ * service names.
+ */
+const SOCIAL_CONTEXT_TOKENS = [
+  "REDESSOCIALES",
+  "RRSS",
+  "INSTAGRAM",
+  "FACEBOOK",
+  "TWITTER",
+  "LINKEDIN",
+  "TIKTOK",
+  "YOUTUBE"
+] as const;
+
+/**
+ * Returns true when any cell in the given row contains a social-media context
+ * token (diacritic-insensitive).  Used to detect rows whose cells reveal
+ * social media context even when the active section header does not.
+ */
+const rowContainsSocialToken = (cells: string[]): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) =>
+    cells.some((cell) => normalizeMarker(cell).includes(token))
+  );
+
+/**
+ * Returns true when the active section header contains a social-media context
+ * token (diacritic-insensitive).
+ */
+const sectionIsSocial = (section: string): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) => normalizeMarker(section).includes(token));
+
+/**
+ * INTERIM (OIR-102): Returns true when a no-phone row should be silently
+ * skipped as a social-media handle row rather than surfaced as a rejected
+ * contact.
+ *
+ * Fix (Bug 3): the skip is now section-CONTEXT based rather than label-shape
+ * based.  A row is considered social only when its context (active section
+ * header OR any cell in the row) reveals social media intent.  The handle-shape
+ * heuristic (single-token, all-lowercase, no digit, ≥8 chars) is applied as a
+ * secondary guard to avoid skipping real no-phone rows that happen to sit near
+ * a social section header.
+ *
+ * This means:
+ *   - "hospitaldrnegrin" in a row whose cells contain "INSTAGRAM" → skipped.
+ *   - "urgencias" with no phone, NOT under a social section → NOT skipped
+ *     (surfaces as rejected — the operator can investigate).
+ *   - Any label that has a phone is never affected (skip fires only when
+ *     dedupedPhoneNumbers.length === 0).
+ *
+ * Social media as a contact method is a planned future feature; this guard is
+ * the minimal interim skip until that feature exists (sibling of OIR-102).
+ */
+/**
+ * Returns true when a no-phone row should be silently skipped as social-media.
+ *
+ * @param label            The resolved row label.
+ * @param hasSocialContext True when the active section, the current row cells,
+ *                         or the immediately prior row's cells contained a
+ *                         social-media context token (caller pre-computes this
+ *                         so continuation rows inherit the context from the
+ *                         preceding data row).
+ */
+const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean => {
+  if (!hasSocialContext) {
+    return false;
+  }
+
+  // Secondary guard: the label must look like a concatenated handle (single token,
+  // all-lowercase, no digit, ≥8 chars).  This prevents skipping a real row that
+  // happens to be near a social section but has a normally-cased label.
+  if (/\s/.test(label)) return false;       // multi-word → not a handle
+  if (/\d/.test(label)) return false;       // contains digit → not a handle
+  if (label.length < 8) return false;       // too short to be a concatenated handle
+  if (label !== label.toLowerCase()) return false; // has uppercase → not a handle
+
+  return /[a-z]/.test(label);              // must have at least one ASCII letter
+};
+
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
 
 const SERVICE_PROFILE_ALIASES: Record<string, string> = {
@@ -476,7 +650,10 @@ const resolveServiceRowLabel = (cells: string[]) => {
   ) ?? "";
 };
 
-const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
+const normalizeServiceSheet = (
+  sheet: SheetData,
+  profile: SheetProfile
+): { records: NormalizedImportRow[]; socialSkippedRows: number } => {
   const metadata = {
     area: profile.area ?? "otros",
     department: profile.department,
@@ -485,6 +662,11 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
   const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
   let currentSection = "";
+  let socialSkippedRows = 0;
+  // Bug 3 fix: tracks whether the immediately previous row contained a social-media
+  // context token.  Continuation rows (e.g. a blank col-0 row that follows a
+  // "COMUNICACIONES – REDES SOCIALES … INSTAGRAM" row) inherit that context.
+  let prevRowHadSocialContext = false;
 
   data.forEach((row, rowIndex) => {
     const cells = row.map((value) => clean(value));
@@ -497,31 +679,55 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
       !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
     ) {
       currentSection = firstCell;
+      prevRowHadSocialContext = sectionIsSocial(firstCell);
       return;
     }
 
-    const label = resolveServiceRowLabel(cells);
+    // Fix (Bug B): isExcludedLabel uses an all-caps regex to catch section
+    // headers (e.g. a lone "URGENCIAS" banner row).  But ALL-CAPS service names
+    // like "BANCO DE SANGRE (ADMINISTRATIVO)" that appear in the same row as a
+    // phone number are contact rows, not section headers.
+    //
+    // Strategy: compute rowHasPhone BEFORE resolving the label so we can apply
+    // the phone-aware gate in two places:
+    //   1. resolveServiceRowLabel returns "" when the first cell is all-caps
+    //      excluded — if that happens but the row has a phone, fall back to the
+    //      raw firstCell so the label is never lost.
+    //   2. Gate all isExcludedLabel early-returns on !rowHasPhone so an
+    //      all-caps label that co-occurs with a phone is kept as a contact name.
+    const rowHasPhone = cells.slice(1).some((cell) => hasPhoneLikeNumber(cell));
 
-    if (label && isExcludedLabel(label)) {
+    const resolvedLabel = resolveServiceRowLabel(cells);
+    // When resolveServiceRowLabel excluded the first cell (returned "") but a
+    // phone is present, use firstCell directly — it is the contact name.
+    const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
+      ? firstCell
+      : resolvedLabel;
+
+    if (label && isExcludedLabel(label) && !rowHasPhone) {
       return;
     }
 
     if (nonEmpty.length === 1 && label && cells[0] === label) {
       currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
       return;
     }
 
-    if (nonEmpty.length > 0 && nonEmpty.every((value) => isExcludedLabel(value))) {
+    // Only drop an all-cells-excluded row when the row also has no phone.
+    if (nonEmpty.length > 0 && !rowHasPhone && nonEmpty.every((value) => isExcludedLabel(value))) {
       return;
     }
 
     if (
+      !rowHasPhone &&
       cells[0] === label &&
       nonEmpty.length > 1 &&
       nonEmpty.every((value, index) => index === 0 || isExcludedLabel(value) || extractNumbers(value).length === 0) &&
       extractNumbers(label).length === 0
     ) {
       currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
       return;
     }
 
@@ -554,6 +760,32 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
       return;
     }
 
+    // INTERIM (OIR-102): Skip social-media handle rows silently.
+    //
+    // Some ODS sheets contain a row whose resolved label is a social-media
+    // handle (e.g. "hospitaldrnegrin" — the hospital's Instagram/Facebook
+    // handle) with no phone number.  The handle appears because the operator
+    // typed it next to the Comunicaciones/Redes Sociales phone row, and the
+    // parser picks it up as the "label" via resolveServiceRowLabel's fallback.
+    //
+    // We skip it here rather than emitting a rejected record, because the
+    // operator cannot fix it (there IS no phone number to add) and it blocks
+    // the import unnecessarily.  A "missing phone" on a real contact (e.g.
+    // "Dr. García" with no number yet) is NOT matched: real names are either
+    // multi-word (contain spaces) or start with a capital letter, whereas a
+    // social handle is all-lowercase, single-token, no digits, and 8+ chars.
+    //
+    // Social media as a contact method is a planned future feature; this guard
+    // is the minimal interim skip until that feature exists (sibling of OIR-102).
+    const thisCellsHaveSocialContext = rowContainsSocialToken(cells);
+    const effectiveSocialContext = sectionIsSocial(currentSection) || thisCellsHaveSocialContext || prevRowHadSocialContext;
+    prevRowHadSocialContext = thisCellsHaveSocialContext;
+
+    if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
+      socialSkippedRows += 1;
+      return;
+    }
+
     const labelNotes: string[] = [];
 
     if (currentSection && currentSection !== metadata.department) {
@@ -581,6 +813,27 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     record.area = metadata.area;
     record.department = metadata.department;
     record.service = currentSection && currentSection !== metadata.department ? currentSection : label;
+    record.aliases = aliasesFromLabel(label);
+    record.notes = finalNotes;
+    record.status = "active";
+
+    // Serialize ALL deduped phone numbers into the structured `phones` JSON
+    // field so that the downstream buildPhones() can carry an unbounded list.
+    // The label for each entry is the source sheet name (most informative
+    // context for where the number came from). The first number is primary.
+    const phoneEntries: SerializedPhoneEntry[] = dedupedPhoneNumbers.map((number, index) => ({
+      number,
+      label: sheet.name,
+      kind: "internal",
+      isPrimary: index === 0,
+      confidential: privacy.confidential,
+      noPatientSharing: privacy.noPatientSharing,
+      notes: finalNotes || undefined
+    }));
+    record.phones = JSON.stringify(phoneEntries);
+
+    // Keep phone1/phone2 populated for backward compatibility with any reader
+    // that does not yet understand the phones JSON field.
     record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
     record.phone1Number = dedupedPhoneNumbers[0] ?? "";
     record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
@@ -588,9 +841,6 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     record.phone1Confidential = privacy.confidential ? "true" : "false";
     record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
     record.phone1Notes = finalNotes;
-    record.aliases = aliasesFromLabel(label);
-    record.notes = finalNotes;
-    record.status = "active";
 
     if (dedupedPhoneNumbers.length > 1) {
       record.phone2Label = "Secundario";
@@ -605,7 +855,7 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     records.push(record);
   });
 
-  return records;
+  return { records, socialSkippedRows };
 };
 
 const splitCenterAddress = (raw: string) => {
@@ -942,8 +1192,48 @@ const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
   };
 };
 
+/**
+ * Counts rows that look like a flat contact row: first cell has at least one
+ * letter, AND at least one non-first cell has a phone-like number.
+ *
+ * Unlike analyzeRawServiceRows / isMeaningfulServiceLabel this intentionally
+ * does NOT apply isExcludedLabel so that ALL-CAPS service names such as
+ * "BANCO DE SANGRE (ADMINISTRATIVO)" are counted.  It is only used as an
+ * acceptance threshold in detectSheetProfile (Bug A fix).
+ */
+const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => {
+  let count = 0;
+
+  rows.slice(startIndex, startIndex + 20).forEach((row) => {
+    const cells = row.map((cell) => clean(cell));
+    const firstCell = cells[0] ?? "";
+    const hasLetterInFirst = firstCell !== "" && hasLetters(firstCell);
+    const phoneLikeCells = cells.filter((cell, index) => index > 0 && hasPhoneLikeNumber(cell)).length;
+
+    if (hasLetterInFirst && phoneLikeCells > 0) {
+      count += 1;
+    }
+  });
+
+  return count;
+};
+
 const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   if (sheet.rows.length === 0) {
+    return null;
+  }
+
+  // Fix: skip navigation / TOC sheets by slug before any further analysis.
+  if (isNavigationSheet(sheet.slug)) {
+    return null;
+  }
+
+  // INTERIM (OIR-102): Skip Buscas (pager/localizador) sheets.
+  // These belong to a separate app section that does not yet have an ODS-import
+  // pipeline.  Their column header "PRINCIPAL / RESIDENTE" would be mistakenly
+  // parsed as a contact and rejected, blocking the whole import.
+  // Remove this guard when a proper Buscas import path is built.
+  if (isDeferredFeatureSheet(sheet.slug)) {
     return null;
   }
 
@@ -1039,6 +1329,37 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
     };
   }
 
+  // Fix (Bug A): Generic flat label+phone acceptance.
+  //
+  // Flat service sheets (e.g. Banco de Sangre index sheets A/B/S/D,
+  // Telefonos_emergencias, Corporativos, etc.) have zero section rows and zero
+  // continuation rows, so all evidence paths above reject them.  However they
+  // ARE real contact tables: every row is simply [label, phone, ...].
+  //
+  // We accept a sheet as a generic flat service sheet when at least 3 rows
+  // have a non-empty first cell with letters AND at least one phone-like value
+  // in a subsequent cell.  countFlatPhoneBearingRows intentionally skips
+  // isExcludedLabel so that ALL-CAPS multi-word service names (Bug B companion)
+  // are counted; those rows are handled at parse time.
+  //
+  // Threshold of 3 is conservative: it admits real contact sheets (which always
+  // have many rows) while rejecting 1- or 2-row tables that only mimic the
+  // label+phone layout (e.g. budget or scheduling sheets with two entries).
+  const flatStartIndex = serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0;
+  const flatPhoneBearingRows = countFlatPhoneBearingRows(sheet.rows, flatStartIndex);
+
+  if (flatPhoneBearingRows >= 3) {
+    return {
+      parser: "service",
+      canonicalSlug: normalizeAscii(derivedDepartment),
+      department: derivedDepartment,
+      area: inferAreaFromLabel(derivedDepartment),
+      rowsToSkip: flatStartIndex,
+      detectedFormat: "exportación cruda de hoja de servicios",
+      detectionConfidence: "low"
+    };
+  }
+
   return null;
 };
 
@@ -1054,6 +1375,183 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
     detectedFormat: kinds.size === 1 ? [...kinds][0]! : "hoja de cálculo cruda mixta",
     detectionConfidence: confidence
   };
+};
+
+/**
+ * Merges service-sheet NormalizedImportRows that share the same normalized
+ * displayName (trim + lowercase + strip diacritics) into a single row.
+ *
+ * Merge rules (confirmed with operator):
+ * - Identity key: exact normalized displayName equality only (no fuzzy match).
+ * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
+ *   digit string; keep first occurrence. Each phone retains the source sheet
+ *   label it was tagged with in normalizeServiceSheet.
+ * - externalId: the FIRST record's externalId is kept (deterministic, stable
+ *   across re-imports of the same file PROVIDED sheet order in the workbook is
+ *   unchanged — reordering tabs changes which sheet is "first" and therefore
+ *   which externalId is selected, which can produce a duplicate on re-import).
+ * - All other scalar fields (type, area, department, service, aliases, notes,
+ *   status): taken from the first record in the group.
+ * - phone1/phone2 flat fields: rewritten to match the merged phones list so
+ *   any reader that uses only those fields still gets the primary number.
+ * - Records without a `phones` JSON field (e.g. centers-parser records) are
+ *   passed through unchanged — they are never merged.
+ */
+export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
+  // Phase 1 — group mergeable records by normalized displayName.
+  //
+  // Bug 1 fix: skip grouping when the normalized key is empty (blank displayName).
+  // Such records are treated as passthroughs — each stays as its own record.
+  //
+  // Bug 2 fix: we do NOT separate mergeable from passthrough up front and then
+  // concatenate.  Instead we do a single ordered pass over the original array,
+  // emitting each group at the position of its first member so relative order
+  // is preserved.
+
+  const groups = new Map<string, NormalizedImportRow[]>();
+
+  for (const record of records) {
+    if (record.phones === undefined || record.phones === "") {
+      continue; // No phones JSON → passthrough, never merged.
+    }
+
+    const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      continue; // Bug 1: blank normalized key → passthrough.
+    }
+
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.push(record);
+    } else {
+      groups.set(key, [record]);
+    }
+  }
+
+  // Phase 2 — single ordered pass emitting results in original encounter order.
+  // Each merge group materializes at its first member's position; later members
+  // of the same group are skipped; passthroughs emit inline.
+  const result: NormalizedImportRow[] = [];
+  const emittedKeys = new Set<string>();
+
+  for (const record of records) {
+    const hasPhonesJson = record.phones !== undefined && record.phones !== "";
+
+    if (!hasPhonesJson) {
+      // Passthrough (no phones JSON): emit as-is in place.
+      result.push(record);
+      continue;
+    }
+
+    const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      // Bug 1 fix: blank normalized key → passthrough, emit in place.
+      result.push(record);
+      continue;
+    }
+
+    if (emittedKeys.has(key)) {
+      // Later member of an already-emitted group: skip (already folded in).
+      continue;
+    }
+
+    // First encounter of this key: build the merged record and emit it.
+    emittedKeys.add(key);
+    const group = groups.get(key)!;
+
+    if (group.length === 1) {
+      // Single-record group: no merging needed.
+      result.push(group[0]!);
+      continue;
+    }
+
+    // Combine all phone entries from every record in the group.
+    const combinedPhones: SerializedPhoneEntry[] = [];
+    const seenNormalized = new Set<string>();
+
+    for (const groupRecord of group) {
+      let entries: SerializedPhoneEntry[] = [];
+
+      try {
+        const parsed = JSON.parse(groupRecord.phones ?? "[]");
+        if (Array.isArray(parsed)) {
+          // Bug 4 (apply here too): validate each entry before using it.
+          entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
+        }
+      } catch {
+        // Malformed JSON is treated as no phones for this record.
+      }
+
+      for (const entry of entries) {
+        const normalized = normalizeNumberForDedup(entry.number);
+
+        if (normalized && !seenNormalized.has(normalized)) {
+          seenNormalized.add(normalized);
+          combinedPhones.push(entry);
+        }
+      }
+    }
+
+    // Re-assert primary: first phone is primary, rest are not.
+    const reassertedPhones = combinedPhones.map((phone, index) => ({
+      ...phone,
+      isPrimary: index === 0
+    }));
+
+    // Build the merged record from the first record in the group (keeps its
+    // externalId and other scalar fields stable for re-import).
+    const base = { ...group[0]! };
+    base.phones = JSON.stringify(reassertedPhones);
+
+    // Bug 5 fix: when a merge group resolves to zero phones, surface a warning
+    // so downstream readers can see it is not silently clean.
+    if (reassertedPhones.length === 0) {
+      const existingNotes = base.notes ? `${base.notes} | ` : "";
+      base.notes = `${existingNotes}[AVISO: registro combinado sin teléfonos válidos]`;
+      base.phone1Label = "";
+      base.phone1Number = "";
+      base.phone1Kind = "";
+      base.phone1IsPrimary = "false";
+      base.phone1Confidential = "false";
+      base.phone1NoPatientSharing = "false";
+      base.phone1Notes = "";
+      base.phone2Label = "";
+      base.phone2Number = "";
+      base.phone2Kind = "";
+      base.phone2IsPrimary = "false";
+      base.phone2Confidential = "false";
+      base.phone2NoPatientSharing = "false";
+      base.phone2Notes = "";
+      result.push(base);
+      continue;
+    }
+
+    // Rewrite phone1/phone2 flat fields to match merged result.
+    const first = reassertedPhones[0];
+    const second = reassertedPhones[1];
+
+    base.phone1Label = first ? "Principal" : "";
+    base.phone1Number = first?.number ?? "";
+    base.phone1Kind = first ? "internal" : "";
+    base.phone1IsPrimary = first ? "true" : "false";
+    base.phone1Confidential = first?.confidential ? "true" : "false";
+    base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
+    base.phone1Notes = first?.notes ?? "";
+    base.phone2Label = second ? "Secundario" : "";
+    base.phone2Number = second?.number ?? "";
+    base.phone2Kind = second ? "internal" : "";
+    base.phone2IsPrimary = "false";
+    base.phone2Confidential = second?.confidential ? "true" : "false";
+    base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
+    base.phone2Notes = second?.notes ?? "";
+
+    result.push(base);
+  }
+
+  return result;
 };
 
 export const normalizeWorkbookRowsFromFile = (
@@ -1073,9 +1571,20 @@ export const normalizeWorkbookRowsFromFile = (
 
   const records: NormalizedImportRow[] = [];
   const profiles: SheetProfile[] = [];
+  let deferredSkippedRowCount = 0;
 
   for (const sheet of sheets) {
     if (sheet.rows.length === 0) {
+      continue;
+    }
+
+    // INTERIM (OIR-102): Count data rows in Buscas sheets before detectSheetProfile
+    // discards them via isDeferredFeatureSheet, so the operator can see how many rows
+    // were silently omitted.  We approximate by counting non-empty rows minus one
+    // header row (consistent with how service sheets count their data rows).
+    if (isDeferredFeatureSheet(sheet.slug)) {
+      const dataRowCount = Math.max(0, sheet.rows.length - 1);
+      deferredSkippedRowCount += dataRowCount;
       continue;
     }
 
@@ -1092,7 +1601,9 @@ export const normalizeWorkbookRowsFromFile = (
       continue;
     }
 
-    records.push(...normalizeServiceSheet(sheet, profile));
+    const serviceResult = normalizeServiceSheet(sheet, profile);
+    records.push(...serviceResult.records);
+    deferredSkippedRowCount += serviceResult.socialSkippedRows;
   }
 
   if (records.length === 0) {
@@ -1101,9 +1612,13 @@ export const normalizeWorkbookRowsFromFile = (
     );
   }
 
+  // Merge records that share the same normalized displayName across sheets.
+  const mergedRecords = mergeRecordsByDisplayName(records);
+
   return {
-    rows: records,
-    ...summarizeDetectedFormat(profiles)
+    rows: mergedRecords,
+    ...summarizeDetectedFormat(profiles),
+    deferredSkippedRowCount
   };
 };
 
@@ -1259,6 +1774,7 @@ export const buildSpreadsheetImportPreview = async (
     fileName: path.basename(sourceFilePath),
     editorName,
     detectedFormat: normalized.detectedFormat,
-    detectionConfidence: normalized.detectionConfidence
+    detectionConfidence: normalized.detectionConfidence,
+    deferredSkippedRowCount: normalized.deferredSkippedRowCount
   });
 };

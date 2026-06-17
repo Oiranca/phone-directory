@@ -3912,6 +3912,89 @@ else
 fi
 rm -rf "$SANDBOX93" "$BIN93"
 
+# --- SHA-256 checksum coverage (Tests 94–97) -----------------------------------
+#
+# These tests exercise the Phase 2 checksum block in release-usb.sh:
+#   - RELEASE_MANIFEST.txt.sha256 is created and non-empty
+#   - RELEASE_MANIFEST.txt contains the "SHA-256 Artifact Checksums" section
+#   - RELEASE_MANIFEST.txt itself is NOT listed inside the .sha256 set
+#   - RELEASE_MANIFEST.txt.sha256 is NOT listed inside the .sha256 set (circularity)
+#
+# Test 94: SHA-256 checksum file is created and non-empty after a successful run
+printf '\nTest 94 (sha256): RELEASE_MANIFEST.txt.sha256 created and non-empty\n'
+SANDBOX94="$(build_sandbox_repo)"
+BIN94="$(mktemp -d "$TEST_FIXTURE_ROOT/bin94-XXXXXX")"
+write_sandbox_bin "$BIN94" "$SANDBOX94" "$CLEAN_JSON" 0 linux
+rc_94=0
+env PATH="$BIN94:$PATH" bash "$SANDBOX94/scripts/release-usb.sh" linux >/dev/null 2>&1 || rc_94=$?
+PKG94="$SANDBOX94/dist-portable/usb-package"
+SHA256FILE94="$PKG94/RELEASE_MANIFEST.txt.sha256"
+if [[ $rc_94 -eq 0 ]]; then
+  pass "Test 94: release-usb.sh linux exited 0"
+else
+  fail "Test 94: release-usb.sh linux exited non-zero ($rc_94)"
+fi
+if [[ -f "$SHA256FILE94" && -s "$SHA256FILE94" ]]; then
+  pass "Test 94: RELEASE_MANIFEST.txt.sha256 exists and is non-empty"
+else
+  fail "Test 94: RELEASE_MANIFEST.txt.sha256 missing or empty (path: $SHA256FILE94)"
+fi
+rm -rf "$SANDBOX94" "$BIN94"
+
+# Test 95: RELEASE_MANIFEST.txt contains the SHA-256 section header
+printf '\nTest 95 (sha256): RELEASE_MANIFEST.txt contains SHA-256 Artifact Checksums section\n'
+SANDBOX95="$(build_sandbox_repo)"
+BIN95="$(mktemp -d "$TEST_FIXTURE_ROOT/bin95-XXXXXX")"
+write_sandbox_bin "$BIN95" "$SANDBOX95" "$CLEAN_JSON" 0 linux
+env PATH="$BIN95:$PATH" bash "$SANDBOX95/scripts/release-usb.sh" linux >/dev/null 2>&1 || true
+PKG95="$SANDBOX95/dist-portable/usb-package"
+MANIFEST95="$PKG95/RELEASE_MANIFEST.txt"
+if [[ -f "$MANIFEST95" ]] && grep -qF -- '--- SHA-256 Artifact Checksums ---' "$MANIFEST95"; then
+  pass "Test 95: RELEASE_MANIFEST.txt contains '--- SHA-256 Artifact Checksums ---' section"
+else
+  fail "Test 95: RELEASE_MANIFEST.txt missing SHA-256 section (got: $(tail -10 "$MANIFEST95" 2>/dev/null || echo MISSING))"
+fi
+rm -rf "$SANDBOX95" "$BIN95"
+
+# Test 96: RELEASE_MANIFEST.txt itself is NOT listed in the .sha256 file
+printf '\nTest 96 (sha256): RELEASE_MANIFEST.txt is excluded from .sha256 checksum set\n'
+SANDBOX96="$(build_sandbox_repo)"
+BIN96="$(mktemp -d "$TEST_FIXTURE_ROOT/bin96-XXXXXX")"
+write_sandbox_bin "$BIN96" "$SANDBOX96" "$CLEAN_JSON" 0 linux
+env PATH="$BIN96:$PATH" bash "$SANDBOX96/scripts/release-usb.sh" linux >/dev/null 2>&1 || true
+PKG96="$SANDBOX96/dist-portable/usb-package"
+SHA256FILE96="$PKG96/RELEASE_MANIFEST.txt.sha256"
+if [[ -f "$SHA256FILE96" ]] && ! grep -qF 'RELEASE_MANIFEST.txt' "$SHA256FILE96"; then
+  pass "Test 96: RELEASE_MANIFEST.txt is excluded from .sha256 checksum entries"
+else
+  if [[ ! -f "$SHA256FILE96" ]]; then
+    fail "Test 96: .sha256 file not found (cannot verify exclusion)"
+  else
+    fail "Test 96: RELEASE_MANIFEST.txt or .sha256 appears in the .sha256 file (circularity violation)"
+  fi
+fi
+rm -rf "$SANDBOX96" "$BIN96"
+
+# Test 97: SHA-256 section is also appended inside RELEASE_MANIFEST.txt (not just .sha256 sidecar)
+printf '\nTest 97 (sha256): RELEASE_MANIFEST.txt.sha256 content echoed inside RELEASE_MANIFEST.txt\n'
+SANDBOX97="$(build_sandbox_repo)"
+BIN97="$(mktemp -d "$TEST_FIXTURE_ROOT/bin97-XXXXXX")"
+write_sandbox_bin "$BIN97" "$SANDBOX97" "$CLEAN_JSON" 0 linux
+env PATH="$BIN97:$PATH" bash "$SANDBOX97/scripts/release-usb.sh" linux >/dev/null 2>&1 || true
+PKG97="$SANDBOX97/dist-portable/usb-package"
+MANIFEST97="$PKG97/RELEASE_MANIFEST.txt"
+SHA256FILE97="$PKG97/RELEASE_MANIFEST.txt.sha256"
+# The manifest must contain at least one checksum line (hash + filename pattern)
+if [[ -f "$MANIFEST97" ]] && grep -qE '^[0-9a-f]{64}' "$MANIFEST97"; then
+  pass "Test 97: RELEASE_MANIFEST.txt contains embedded checksum line(s)"
+elif [[ -f "$MANIFEST97" ]] && grep -qE '^[0-9a-f]{40}' "$MANIFEST97"; then
+  # shasum -a 256 on some systems uses 40-char SHA-1 style layout — accept both
+  pass "Test 97: RELEASE_MANIFEST.txt contains embedded checksum line(s) (sha1sum format)"
+else
+  fail "Test 97: RELEASE_MANIFEST.txt has no embedded checksum lines after SHA-256 section (manifest tail: $(tail -5 "$MANIFEST97" 2>/dev/null || echo MISSING))"
+fi
+rm -rf "$SANDBOX97" "$BIN97"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'

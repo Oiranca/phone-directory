@@ -220,12 +220,12 @@ export const DeduplicatePage = () => {
                       ].join(" ")}
                     >
                       <p className="font-semibold text-scs-blueDark">{record.displayName}</p>
-                      {record.organization.department && (
-                        <p className="mt-1 text-xs text-slate-500">{record.organization.department}</p>
+                      {record.department && (
+                        <p className="mt-1 text-xs text-slate-500">{record.department}</p>
                       )}
-                      {record.contactMethods.phones.length > 0 && (
+                      {record.phones.length > 0 && (
                         <ul className="mt-3 space-y-1">
-                          {record.contactMethods.phones.map((phone) => (
+                          {record.phones.map((phone) => (
                             <li key={phone.id} className="text-sm text-slate-700">
                               {phone.label ? <span className="font-medium">{phone.label}: </span> : null}
                               {phone.number}

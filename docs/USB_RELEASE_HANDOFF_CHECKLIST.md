@@ -126,3 +126,64 @@ If the app does not open:
 - on macOS, capture any visible Terminal, Finder, Gatekeeper, or launch dialog text
 - retry on the same machine after ejecting and remounting the USB drive
 - if it still fails, rebuild from the latest `main` and replace the USB contents
+
+## 7. Release Pipeline Security
+
+### SHA-256 artifact integrity
+
+The release script (`scripts/release-usb.sh`) generates SHA-256 checksums for all
+packaged artifacts in `usb-package/` (excluding `RELEASE_MANIFEST.txt` and
+`RELEASE_MANIFEST.txt.sha256` themselves) and writes them to
+`RELEASE_MANIFEST.txt.sha256`.
+
+To verify integrity on the deployment machine before handing off:
+
+```bash
+cd dist-portable/usb-package
+# macOS / systems with shasum (Perl):
+shasum -a 256 -c RELEASE_MANIFEST.txt.sha256
+# Linux / systems with sha256sum (GNU coreutils):
+sha256sum -c RELEASE_MANIFEST.txt.sha256
+```
+
+The verification command to use is printed inside `RELEASE_MANIFEST.txt` under
+the `--- SHA-256 Artifact Checksums ---` section, so you can always check which
+tool was used to generate the manifest on that machine.
+
+Every file must report `OK`. Any `FAILED` line indicates a corrupted or tampered file.
+Do not hand off the USB if any checksum fails.
+
+### CVE remediation status (as of 2026-06-17)
+
+| GHSA | Package | Status |
+|------|---------|--------|
+| GHSA-5xrq-8626-4rwp | vitest UI RCE | Resolved — vitest 4.1.9 |
+| GHSA-67mh-4wv8-2f99 | esbuild CORS bypass | Resolved — vite 6.4.3 |
+| GHSA-4w7w-66w2-5vf9 | vite path traversal | Resolved — vite 6.x |
+| GHSA-ph9p-34f9-6g65 | tmp path traversal | No upstream patch; allowlisted, monitor below |
+| GHSA-gv7w-rqvm-qjhr | esbuild Deno binary | Allowlisted — Node npm path unaffected |
+
+### tmp monitoring plan (GHSA-ph9p-34f9-6g65)
+
+`tmp@0.2.5` has no patch available. It is a transitive dependency via:
+`electron-builder > app-builder-lib > @malept/flatpak-bundler > tmp-promise > tmp`
+
+The Flatpak target is not used in this project. Monitor:
+- `electron-builder` changelog for an `app-builder-lib` bump that pulls `tmp >=0.2.6`.
+- `@malept/flatpak-bundler` repository for a direct `tmp-promise` upgrade.
+
+When a patched version becomes available:
+1. Upgrade `electron-builder` in `package.json`.
+2. Confirm `pnpm audit` no longer reports GHSA-ph9p-34f9-6g65.
+3. Remove the `GHSA-ph9p-34f9-6g65` entry from `scripts/audit-allowlist.json`.
+4. Run `pnpm run ci` to confirm no regressions.
+
+### Allowlist review cadence
+
+`scripts/audit-allowlist.json` entries carry an `expires` date.
+Before each release:
+
+1. Run `pnpm run test:audit-gate` — must exit 0.
+2. Review entries expiring within 30 days: check whether an upstream patch is now available.
+3. If patched: upgrade the package and remove the allowlist entry.
+4. If not patched: update the `expires` date and `reason` to reflect the current evaluation.
