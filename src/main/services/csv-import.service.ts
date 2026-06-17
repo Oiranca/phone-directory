@@ -208,7 +208,8 @@ const buildPhones = (
     let entries: SerializedPhoneEntry[] = [];
 
     try {
-      entries = JSON.parse(rawPhonesJson) as SerializedPhoneEntry[];
+      const parsed = JSON.parse(rawPhonesJson);
+      if (Array.isArray(parsed)) entries = parsed as SerializedPhoneEntry[];
     } catch {
       // Malformed JSON: fall through to phone1/phone2 path below.
     }

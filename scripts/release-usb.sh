@@ -180,24 +180,45 @@ log "Computing SHA-256 checksums for release artifacts"
 
 CHECKSUM_FILE="$PACKAGE_ROOT/RELEASE_MANIFEST.txt.sha256"
 
-# Build the checksum manifest relative to PACKAGE_ROOT so it is portable
-# (shasum -c must be run from within PACKAGE_ROOT on the target machine).
-(
-  cd "$PACKAGE_ROOT"
-  # Find all regular files; exclude the checksum file itself to avoid circularity.
-  find . -type f ! -name 'RELEASE_MANIFEST.txt.sha256' -print0 \
-    | sort -z \
-    | xargs -0 shasum -a 256 \
-    > "$CHECKSUM_FILE"
-)
+# Portability shim: prefer shasum (macOS/Perl), fall back to sha256sum (Linux
+# coreutils). If neither is available, skip checksum generation with a warning
+# rather than aborting the whole release under set -euo pipefail.
+SHA256_CMD=""
+if command -v shasum >/dev/null 2>&1; then
+  SHA256_CMD="shasum -a 256"
+elif command -v sha256sum >/dev/null 2>&1; then
+  SHA256_CMD="sha256sum"
+else
+  log "WARNING: neither shasum nor sha256sum found — skipping checksum generation"
+fi
 
-log "Checksums written: $CHECKSUM_FILE"
+if [ -n "$SHA256_CMD" ]; then
+  # Build the checksum manifest relative to PACKAGE_ROOT so it is portable
+  # (shasum -c / sha256sum -c must be run from within PACKAGE_ROOT on the
+  # target machine).
+  #
+  # Exclude RELEASE_MANIFEST.txt.sha256 (circularity) AND RELEASE_MANIFEST.txt
+  # itself: the checksum block is appended to RELEASE_MANIFEST.txt AFTER this
+  # step, so checksumming it here would always produce FAILED on verification.
+  (
+    cd "$PACKAGE_ROOT"
+    find . -type f \
+      ! -name 'RELEASE_MANIFEST.txt.sha256' \
+      ! -name 'RELEASE_MANIFEST.txt' \
+      -print0 \
+      | sort -z \
+      | xargs -0 $SHA256_CMD \
+      > "$CHECKSUM_FILE"
+  )
 
-# Append checksum block to the human-readable manifest
-{
-  printf '\n--- SHA-256 Artifact Checksums ---\n'
-  printf 'Verify on target: cd <usb-package> && shasum -a 256 -c RELEASE_MANIFEST.txt.sha256\n\n'
-  cat "$CHECKSUM_FILE"
-} >> "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
+  log "Checksums written: $CHECKSUM_FILE"
+
+  # Append checksum block to the human-readable manifest
+  {
+    printf '\n--- SHA-256 Artifact Checksums ---\n'
+    printf 'Verify on target: cd <usb-package> && %s -c RELEASE_MANIFEST.txt.sha256\n\n' "$SHA256_CMD"
+    cat "$CHECKSUM_FILE"
+  } >> "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
+fi
 
 log "USB package ready: $PACKAGE_ROOT"

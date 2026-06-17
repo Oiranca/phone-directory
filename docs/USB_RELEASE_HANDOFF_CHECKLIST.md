@@ -132,14 +132,23 @@ If the app does not open:
 ### SHA-256 artifact integrity
 
 The release script (`scripts/release-usb.sh`) generates SHA-256 checksums for all
-files in `usb-package/` and writes them to `RELEASE_MANIFEST.txt.sha256`.
+packaged artifacts in `usb-package/` (excluding `RELEASE_MANIFEST.txt` and
+`RELEASE_MANIFEST.txt.sha256` themselves) and writes them to
+`RELEASE_MANIFEST.txt.sha256`.
 
 To verify integrity on the deployment machine before handing off:
 
 ```bash
 cd dist-portable/usb-package
+# macOS / systems with shasum (Perl):
 shasum -a 256 -c RELEASE_MANIFEST.txt.sha256
+# Linux / systems with sha256sum (GNU coreutils):
+sha256sum -c RELEASE_MANIFEST.txt.sha256
 ```
+
+The verification command to use is printed inside `RELEASE_MANIFEST.txt` under
+the `--- SHA-256 Artifact Checksums ---` section, so you can always check which
+tool was used to generate the manifest on that machine.
 
 Every file must report `OK`. Any `FAILED` line indicates a corrupted or tampered file.
 Do not hand off the USB if any checksum fails.

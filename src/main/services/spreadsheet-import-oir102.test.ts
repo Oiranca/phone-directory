@@ -273,7 +273,7 @@ describe("variant names stay as separate contacts", () => {
       r.displayName.toLowerCase().includes("banco de sangre") ||
       r.displayName.toLowerCase().includes("aferesis")
     );
-    expect(bancoRows.length).toBeGreaterThanOrEqual(3);
+    expect(bancoRows).toHaveLength(3);
   });
 
   it("matches names that differ only in accents and extra spaces", () => {

@@ -1120,7 +1120,9 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
  *   digit string; keep first occurrence. Each phone retains the source sheet
  *   label it was tagged with in normalizeServiceSheet.
  * - externalId: the FIRST record's externalId is kept (deterministic, stable
- *   across re-imports of the same file — same first sheet, same first row).
+ *   across re-imports of the same file PROVIDED sheet order in the workbook is
+ *   unchanged — reordering tabs changes which sheet is "first" and therefore
+ *   which externalId is selected, which can produce a duplicate on re-import).
  * - All other scalar fields (type, area, department, service, aliases, notes,
  *   status): taken from the first record in the group.
  * - phone1/phone2 flat fields: rewritten to match the merged phones list so
@@ -1172,7 +1174,8 @@ const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedIm
       let entries: SerializedPhoneEntry[] = [];
 
       try {
-        entries = JSON.parse(record.phones ?? "[]") as SerializedPhoneEntry[];
+        const parsed = JSON.parse(record.phones ?? "[]");
+        if (Array.isArray(parsed)) entries = parsed as SerializedPhoneEntry[];
       } catch {
         // Malformed JSON is treated as no phones for this record.
       }
