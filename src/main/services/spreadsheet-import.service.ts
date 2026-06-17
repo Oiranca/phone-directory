@@ -479,6 +479,22 @@ const inferAreaFromLabel = (value: string) => {
   return undefined;
 };
 
+/**
+ * Slugs that indicate a navigation/TOC sheet (no real contact data).
+ * Slugs are produced by normalizeAscii (lower, diacritics stripped, non-alnum→"-").
+ * "indice*" covers "Índice_Agenda_Telefónica" → "indice-agenda-telefonica" etc.
+ * "original" covers a literal sheet named "Original" used as a reference copy.
+ */
+const NAVIGATION_SHEET_SLUG_PREFIXES = ["indice"];
+const NAVIGATION_SHEET_SLUG_EXACT = new Set(["original"]);
+
+const isNavigationSheet = (slug: string): boolean => {
+  if (NAVIGATION_SHEET_SLUG_EXACT.has(slug)) {
+    return true;
+  }
+  return NAVIGATION_SHEET_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
+};
+
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
 
 const SERVICE_PROFILE_ALIASES: Record<string, string> = {
@@ -536,9 +552,28 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
       return;
     }
 
-    const label = resolveServiceRowLabel(cells);
+    // Fix (Bug B): isExcludedLabel uses an all-caps regex to catch section
+    // headers (e.g. a lone "URGENCIAS" banner row).  But ALL-CAPS service names
+    // like "BANCO DE SANGRE (ADMINISTRATIVO)" that appear in the same row as a
+    // phone number are contact rows, not section headers.
+    //
+    // Strategy: compute rowHasPhone BEFORE resolving the label so we can apply
+    // the phone-aware gate in two places:
+    //   1. resolveServiceRowLabel returns "" when the first cell is all-caps
+    //      excluded — if that happens but the row has a phone, fall back to the
+    //      raw firstCell so the label is never lost.
+    //   2. Gate all isExcludedLabel early-returns on !rowHasPhone so an
+    //      all-caps label that co-occurs with a phone is kept as a contact name.
+    const rowHasPhone = cells.slice(1).some((cell) => hasPhoneLikeNumber(cell));
 
-    if (label && isExcludedLabel(label)) {
+    const resolvedLabel = resolveServiceRowLabel(cells);
+    // When resolveServiceRowLabel excluded the first cell (returned "") but a
+    // phone is present, use firstCell directly — it is the contact name.
+    const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
+      ? firstCell
+      : resolvedLabel;
+
+    if (label && isExcludedLabel(label) && !rowHasPhone) {
       return;
     }
 
@@ -547,11 +582,13 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
       return;
     }
 
-    if (nonEmpty.length > 0 && nonEmpty.every((value) => isExcludedLabel(value))) {
+    // Only drop an all-cells-excluded row when the row also has no phone.
+    if (nonEmpty.length > 0 && !rowHasPhone && nonEmpty.every((value) => isExcludedLabel(value))) {
       return;
     }
 
     if (
+      !rowHasPhone &&
       cells[0] === label &&
       nonEmpty.length > 1 &&
       nonEmpty.every((value, index) => index === 0 || isExcludedLabel(value) || extractNumbers(value).length === 0) &&
@@ -996,8 +1033,39 @@ const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
   };
 };
 
+/**
+ * Counts rows that look like a flat contact row: first cell has at least one
+ * letter, AND at least one non-first cell has a phone-like number.
+ *
+ * Unlike analyzeRawServiceRows / isMeaningfulServiceLabel this intentionally
+ * does NOT apply isExcludedLabel so that ALL-CAPS service names such as
+ * "BANCO DE SANGRE (ADMINISTRATIVO)" are counted.  It is only used as an
+ * acceptance threshold in detectSheetProfile (Bug A fix).
+ */
+const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => {
+  let count = 0;
+
+  rows.slice(startIndex, startIndex + 20).forEach((row) => {
+    const cells = row.map((cell) => clean(cell));
+    const firstCell = cells[0] ?? "";
+    const hasLetterInFirst = firstCell !== "" && hasLetters(firstCell);
+    const phoneLikeCells = cells.filter((cell, index) => index > 0 && hasPhoneLikeNumber(cell)).length;
+
+    if (hasLetterInFirst && phoneLikeCells > 0) {
+      count += 1;
+    }
+  });
+
+  return count;
+};
+
 const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   if (sheet.rows.length === 0) {
+    return null;
+  }
+
+  // Fix: skip navigation / TOC sheets by slug before any further analysis.
+  if (isNavigationSheet(sheet.slug)) {
     return null;
   }
 
@@ -1090,6 +1158,37 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
       rowsToSkip: serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0,
       detectedFormat: "exportación cruda de hoja de servicios",
       detectionConfidence: serviceHeader.score >= 3 ? "high" : "medium"
+    };
+  }
+
+  // Fix (Bug A): Generic flat label+phone acceptance.
+  //
+  // Flat service sheets (e.g. Banco de Sangre index sheets A/B/S/D,
+  // Telefonos_emergencias, Corporativos, etc.) have zero section rows and zero
+  // continuation rows, so all evidence paths above reject them.  However they
+  // ARE real contact tables: every row is simply [label, phone, ...].
+  //
+  // We accept a sheet as a generic flat service sheet when at least 3 rows
+  // have a non-empty first cell with letters AND at least one phone-like value
+  // in a subsequent cell.  countFlatPhoneBearingRows intentionally skips
+  // isExcludedLabel so that ALL-CAPS multi-word service names (Bug B companion)
+  // are counted; those rows are handled at parse time.
+  //
+  // Threshold of 3 is conservative: it admits real contact sheets (which always
+  // have many rows) while rejecting 1- or 2-row tables that only mimic the
+  // label+phone layout (e.g. budget or scheduling sheets with two entries).
+  const flatStartIndex = serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0;
+  const flatPhoneBearingRows = countFlatPhoneBearingRows(sheet.rows, flatStartIndex);
+
+  if (flatPhoneBearingRows >= 3) {
+    return {
+      parser: "service",
+      canonicalSlug: normalizeAscii(derivedDepartment),
+      department: derivedDepartment,
+      area: inferAreaFromLabel(derivedDepartment),
+      rowsToSkip: flatStartIndex,
+      detectedFormat: "exportación cruda de hoja de servicios",
+      detectionConfidence: "low"
     };
   }
 

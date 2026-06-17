@@ -370,3 +370,228 @@ describe("full pipeline: normalize → buildImportPreviewFromRows", () => {
     expect(dataset.records).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bug A + Bug B — flat label+phone sheets and ALL-CAPS label preservation
+// ---------------------------------------------------------------------------
+
+/**
+ * A helper to create a flat sheet with NO header row and NO section rows —
+ * just raw [label, phone] rows, as found in Banco de Sangre index sheets
+ * (A, B, S, D), Telefonos_emergencias, Corporativos, etc.
+ */
+const makeFlatSheet = (
+  name: string,
+  rows: Array<{ label: string; numbers: string[] }>
+): { name: string; data: string[][] } => ({
+  name,
+  data: rows.map(({ label, numbers }) => [label, ...numbers])
+});
+
+describe("Bug A — flat label+phone sheet acceptance (no section/continuation rows)", () => {
+  it("accepts a flat sheet with ALL-CAPS labels and produces contacts (not dropped)", () => {
+    // No header row, no section rows, no continuation rows — threshold is 3
+    // phone-bearing rows so real ODS index sheets (A/B/S/D) are accepted while
+    // 1- or 2-row scheduling tables are still rejected.
+    const filePath = writeWorkbook(testRoot, "flat-allcaps.xlsx", [
+      makeFlatSheet("Banco_Sangre_A", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["79457"] },
+        { label: "AFERESIS BANCO DE SANGRE", numbers: ["79458"] },
+        { label: "CELADOR BANCO DE SANGRE", numbers: ["79459"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // All three rows should survive.
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("BANCO DE SANGRE (ADMINISTRATIVO)");
+    expect(names).toContain("AFERESIS BANCO DE SANGRE");
+    expect(names).toContain("CELADOR BANCO DE SANGRE");
+  });
+
+  it("flat ALL-CAPS contacts from ≥3 sheets merge into ONE record with all distinct numbers", () => {
+    // Simulates the real-world scenario: BANCO DE SANGRE rows scattered across
+    // alphabetic index sheets A, B, S.  Each sheet must have ≥3 phone-bearing
+    // rows to cross the generic flat-sheet acceptance threshold.
+    const filePath = writeWorkbook(testRoot, "flat-merge.xlsx", [
+      makeFlatSheet("Hoja_A", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["11111"] },
+        { label: "LABORATORIO HEMATOLOGIA", numbers: ["11112"] },
+        { label: "BANCO DE SANGRE GUARDIA", numbers: ["11113"] }
+      ]),
+      makeFlatSheet("Hoja_B", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["22222"] },
+        { label: "LABORATORIO BIOQUIMICA", numbers: ["22223"] },
+        { label: "BANCO DE SANGRE GUARDIA", numbers: ["22224"] }
+      ]),
+      makeFlatSheet("Hoja_S", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["33333"] },
+        { label: "SUPERVISORA PLANTA", numbers: ["33334"] },
+        { label: "BANCO DE SANGRE GUARDIA", numbers: ["33335"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // Three sheets → ONE merged contact for BANCO DE SANGRE (ADMINISTRATIVO).
+    const rows = result.rows.filter((r) =>
+      r.displayName === "BANCO DE SANGRE (ADMINISTRATIVO)"
+    );
+    expect(rows).toHaveLength(1);
+
+    const phones = JSON.parse(rows[0]!.phones!) as Array<{ number: string }>;
+    const numbers = phones.map((p) => p.number);
+    expect(numbers).toContain("11111");
+    expect(numbers).toContain("22222");
+    expect(numbers).toContain("33333");
+    expect(numbers).toHaveLength(3);
+  });
+});
+
+describe("Bug B — phone-bearing ALL-CAPS labels are contacts, not section headers", () => {
+  it("keeps ALL-CAPS label as displayName when the row has a phone number", () => {
+    // Uses a canonical sheet (urgencias) with a mixed-case row alongside the
+    // ALL-CAPS row so the canonical acceptance path activates; the ALL-CAPS row
+    // with phone tests Bug B specifically.
+    const filePath = writeWorkbook(testRoot, "allcaps-contact.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["79457"] },
+        { label: "Mostrador urgencias", numbers: ["79458"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("BANCO DE SANGRE (ADMINISTRATIVO)");
+    expect(names).toContain("Mostrador urgencias");
+  });
+
+  it("still treats a phone-less all-caps row as a section header (not a bogus contact)", () => {
+    // A lone ALL-CAPS banner with no phone on the same row must NOT produce a
+    // contact record — it is a section header.
+    const filePath = writeWorkbook(testRoot, "allcaps-section.xlsx", [
+      makeServiceSheet("urgencias", [
+        // Section header (ALL-CAPS, no phone) followed by two real contacts.
+        { label: "URGENCIAS", numbers: [] },
+        { label: "Mostrador", numbers: ["12345"] },
+        { label: "Control boxes", numbers: ["12346"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // Only real contacts should appear; "URGENCIAS" is a section.
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("URGENCIAS");
+    expect(names).toContain("Mostrador");
+    expect(names).toContain("Control boxes");
+  });
+
+  it("three ALL-CAPS variant names from the same canonical sheet stay as separate contacts", () => {
+    const filePath = writeWorkbook(testRoot, "allcaps-variants.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "BANCO DE SANGRE (ADMINISTRATIVO)", numbers: ["11111"] },
+        { label: "AFERESIS BANCO DE SANGRE", numbers: ["22222"] },
+        { label: "CELADOR BANCO DE SANGRE", numbers: ["33333"] }
+      ])
+    ]);
+
+    // The flat-sheet acceptance path kicks in here (3 flat phone-bearing rows).
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("BANCO DE SANGRE (ADMINISTRATIVO)");
+    expect(names).toContain("AFERESIS BANCO DE SANGRE");
+    expect(names).toContain("CELADOR BANCO DE SANGRE");
+    expect(result.rows).toHaveLength(3);
+  });
+});
+
+describe("Navigation sheet skipping (isNavigationSheet)", () => {
+  it("skips a sheet named like 'Índice_Agenda_Telefónica' and produces no contacts", () => {
+    // slug = normalizeAscii("Índice_Agenda_Telefónica") = "indice-agenda-telefonica"
+    // → starts with "indice" → navigation sheet → skipped
+    const filePath = writeWorkbook(testRoot, "nav-indice.xlsx", [
+      {
+        name: "Índice_Agenda_Telefónica",
+        data: [
+          ["Hoja", "Descripción"],
+          ["A", "Banco de Sangre"],
+          ["B", "Banco de Sangre B"]
+        ]
+      },
+      // Include a real data sheet so normalizeWorkbookRowsFromFile does not throw.
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    // Navigation sheet rows must NOT appear.
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("Hoja");
+    expect(names).not.toContain("Descripción");
+    expect(names).toContain("Triaje");
+  });
+
+  it("skips a sheet named 'ORIGINAL' (slug 'original') and produces no contacts", () => {
+    const filePath = writeWorkbook(testRoot, "nav-original.xlsx", [
+      {
+        name: "ORIGINAL",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Algún servicio", "99999"]
+        ]
+      },
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("Algún servicio");
+    expect(names).toContain("Triaje");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression guard — canonical sheets still parse unchanged after all fixes
+// ---------------------------------------------------------------------------
+
+describe("Regression: canonical sheets (urgencias / rayos) parse unchanged", () => {
+  it("urgencias canonical sheet still produces contacts with phones (regression guard)", () => {
+    const filePath = writeWorkbook(testRoot, "regression-urgencias.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["11111"] },
+        { label: "Consulta 1", numbers: ["22222", "33333"] },
+        { label: "Banco de Sangre", numbers: ["44444"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Consulta 1");
+    expect(names).toContain("Banco de Sangre");
+
+    const consulta = result.rows.find((r) => r.displayName === "Consulta 1")!;
+    const phones = JSON.parse(consulta.phones!) as Array<{ number: string }>;
+    expect(phones.map((p) => p.number)).toEqual(["22222", "33333"]);
+  });
+
+  it("rayos canonical sheet still produces contacts with phones (regression guard)", () => {
+    const filePath = writeWorkbook(testRoot, "regression-rayos.xlsx", [
+      makeServiceSheet("rayos", [
+        { label: "Sala TAC", numbers: ["55555"] },
+        { label: "Sala RX", numbers: ["66666"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Sala TAC");
+    expect(names).toContain("Sala RX");
+    expect(result.rows).toHaveLength(2);
+  });
+});
