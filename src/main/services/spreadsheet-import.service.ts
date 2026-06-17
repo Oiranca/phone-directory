@@ -121,6 +121,42 @@ type SheetProfile = {
 
 const clean = (value: string) => value.replace(/\u00a0/g, " ").split(/\s+/).filter(Boolean).join(" ").trim();
 
+/**
+ * A serialized phone entry stored as JSON in NormalizedImportRow["phones"].
+ * Carrying this structured form lets the normalization layer pass an unbounded
+ * list of phones through the flat Record<string,string> intermediate without
+ * capping at phone1/phone2.
+ */
+export type SerializedPhoneEntry = {
+  number: string;
+  label: string;
+  kind: string;
+  isPrimary: boolean;
+  confidential: boolean;
+  noPatientSharing: boolean;
+  notes?: string;
+};
+
+/**
+ * Normalizes a displayName for cross-sheet identity matching:
+ * trim + lowercase + strip diacritics/accents.
+ * Two names that are equal after this transform are considered the same contact.
+ * Exact normalized equality only \u2014 no fuzzy matching.
+ */
+const normalizeDisplayNameForMerge = (name: string): string =>
+  name
+    .trim()
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/**
+ * Normalizes a phone number for deduplication purposes:
+ * strip all non-digit characters.
+ */
+const normalizeNumberForDedup = (number: string): string => number.replace(/\D/g, "");
+
 const normalizeAscii = (value: string) =>
   value
     .normalize("NFKD")
@@ -581,6 +617,27 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     record.area = metadata.area;
     record.department = metadata.department;
     record.service = currentSection && currentSection !== metadata.department ? currentSection : label;
+    record.aliases = aliasesFromLabel(label);
+    record.notes = finalNotes;
+    record.status = "active";
+
+    // Serialize ALL deduped phone numbers into the structured `phones` JSON
+    // field so that the downstream buildPhones() can carry an unbounded list.
+    // The label for each entry is the source sheet name (most informative
+    // context for where the number came from). The first number is primary.
+    const phoneEntries: SerializedPhoneEntry[] = dedupedPhoneNumbers.map((number, index) => ({
+      number,
+      label: sheet.name,
+      kind: "internal",
+      isPrimary: index === 0,
+      confidential: privacy.confidential,
+      noPatientSharing: privacy.noPatientSharing,
+      notes: finalNotes || undefined
+    }));
+    record.phones = JSON.stringify(phoneEntries);
+
+    // Keep phone1/phone2 populated for backward compatibility with any reader
+    // that does not yet understand the phones JSON field.
     record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
     record.phone1Number = dedupedPhoneNumbers[0] ?? "";
     record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
@@ -588,9 +645,6 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     record.phone1Confidential = privacy.confidential ? "true" : "false";
     record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
     record.phone1Notes = finalNotes;
-    record.aliases = aliasesFromLabel(label);
-    record.notes = finalNotes;
-    record.status = "active";
 
     if (dedupedPhoneNumbers.length > 1) {
       record.phone2Label = "Secundario";
@@ -1056,6 +1110,121 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
   };
 };
 
+/**
+ * Merges service-sheet NormalizedImportRows that share the same normalized
+ * displayName (trim + lowercase + strip diacritics) into a single row.
+ *
+ * Merge rules (confirmed with operator):
+ * - Identity key: exact normalized displayName equality only (no fuzzy match).
+ * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
+ *   digit string; keep first occurrence. Each phone retains the source sheet
+ *   label it was tagged with in normalizeServiceSheet.
+ * - externalId: the FIRST record's externalId is kept (deterministic, stable
+ *   across re-imports of the same file — same first sheet, same first row).
+ * - All other scalar fields (type, area, department, service, aliases, notes,
+ *   status): taken from the first record in the group.
+ * - phone1/phone2 flat fields: rewritten to match the merged phones list so
+ *   any reader that uses only those fields still gets the primary number.
+ * - Records without a `phones` JSON field (e.g. centers-parser records) are
+ *   passed through unchanged — they are never merged.
+ */
+const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
+  // Separate records that carry the structured phones field from those that don't.
+  const mergeableRecords: NormalizedImportRow[] = [];
+  const passthroughRecords: NormalizedImportRow[] = [];
+
+  for (const record of records) {
+    if (record.phones !== undefined && record.phones !== "") {
+      mergeableRecords.push(record);
+    } else {
+      passthroughRecords.push(record);
+    }
+  }
+
+  // Group mergeable records by normalized displayName, preserving insertion order.
+  const groups = new Map<string, NormalizedImportRow[]>();
+
+  for (const record of mergeableRecords) {
+    const key = normalizeDisplayNameForMerge(record.displayName);
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.push(record);
+    } else {
+      groups.set(key, [record]);
+    }
+  }
+
+  const merged: NormalizedImportRow[] = [];
+
+  for (const group of groups.values()) {
+    // Single-record groups need no merging.
+    if (group.length === 1) {
+      merged.push(group[0]!);
+      continue;
+    }
+
+    // Combine all phone entries from every record in the group.
+    const combinedPhones: SerializedPhoneEntry[] = [];
+    const seenNormalized = new Set<string>();
+
+    for (const record of group) {
+      let entries: SerializedPhoneEntry[] = [];
+
+      try {
+        entries = JSON.parse(record.phones ?? "[]") as SerializedPhoneEntry[];
+      } catch {
+        // Malformed JSON is treated as no phones for this record.
+      }
+
+      for (const entry of entries) {
+        const normalized = normalizeNumberForDedup(entry.number);
+
+        if (normalized && !seenNormalized.has(normalized)) {
+          seenNormalized.add(normalized);
+          combinedPhones.push(entry);
+        }
+      }
+    }
+
+    // Re-assert primary: first phone is primary, rest are not.
+    const reassertedPhones = combinedPhones.map((phone, index) => ({
+      ...phone,
+      isPrimary: index === 0
+    }));
+
+    // Build the merged record from the first record in the group (keeps its
+    // externalId and other scalar fields stable for re-import).
+    const base = { ...group[0]! };
+    base.phones = JSON.stringify(reassertedPhones);
+
+    // Rewrite phone1/phone2 flat fields to match merged result.
+    const first = reassertedPhones[0];
+    const second = reassertedPhones[1];
+
+    base.phone1Label = first ? "Principal" : "";
+    base.phone1Number = first?.number ?? "";
+    base.phone1Kind = first ? "internal" : "";
+    base.phone1IsPrimary = first ? "true" : "false";
+    base.phone1Confidential = first?.confidential ? "true" : "false";
+    base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
+    base.phone1Notes = first?.notes ?? "";
+    base.phone2Label = second ? "Secundario" : "";
+    base.phone2Number = second?.number ?? "";
+    base.phone2Kind = second ? "internal" : "";
+    base.phone2IsPrimary = "false";
+    base.phone2Confidential = second?.confidential ? "true" : "false";
+    base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
+    base.phone2Notes = second?.notes ?? "";
+
+    merged.push(base);
+  }
+
+  // Reconstruct the final list in original encounter order: mergeable records
+  // first (in key-insertion order), then passthrough.
+  return [...merged, ...passthroughRecords];
+};
+
 export const normalizeWorkbookRowsFromFile = (
   sourceFilePath: string
 ): SpreadsheetImportNormalizationResult => {
@@ -1101,8 +1270,11 @@ export const normalizeWorkbookRowsFromFile = (
     );
   }
 
+  // Merge records that share the same normalized displayName across sheets.
+  const mergedRecords = mergeRecordsByDisplayName(records);
+
   return {
-    rows: records,
+    rows: mergedRecords,
     ...summarizeDetectedFormat(profiles)
   };
 };
