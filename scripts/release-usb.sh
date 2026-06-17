@@ -19,6 +19,16 @@ detect_platform() {
   esac
 }
 
+# Read package version without require() so it works under Node 22+ ESM projects.
+# node --input-type=module feeds the snippet as an ES module — no CJS assumption.
+read_package_version() {
+  node --input-type=module <<'NODESCRIPT'
+import { readFileSync } from 'fs';
+const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
+process.stdout.write(pkg.version);
+NODESCRIPT
+}
+
 if [[ "$PLATFORM" == "--platform" ]]; then
   PLATFORM="${2:-}"
 elif [[ "$PLATFORM" == --platform=* ]]; then
@@ -101,7 +111,7 @@ copy_linux_appimage() {
   local version
   local source
 
-  version="$(node -p "require('./package.json').version")"
+  version="$(read_package_version)"
   source="$DIST_ROOT/Phone Directory-$version.AppImage"
 
   if [[ -f "$source" ]]; then
@@ -138,11 +148,13 @@ esac
 
 copy_required "$REPO_ROOT/usb-launchers/README.txt" "$PACKAGE_ROOT/README.txt"
 
+PKG_VERSION="$(read_package_version)"
+
 cat > "$PACKAGE_ROOT/RELEASE_MANIFEST.txt" <<EOF
 Phone Directory USB release
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Platform: $PLATFORM
-Version: $(node -p "require('./package.json').version")
+Version: $PKG_VERSION
 Source commit: $(git rev-parse --short HEAD)
 ${AUDIT_STATUS_LINE}
 
