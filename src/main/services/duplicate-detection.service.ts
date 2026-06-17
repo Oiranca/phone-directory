@@ -1,5 +1,9 @@
 import type { ContactRecord } from "../../shared/types/contact.js";
-import type { DuplicatePair, DuplicateDetectionResult } from "../../shared/types/duplicate.js";
+import type {
+  DuplicateDetectionResult,
+  DuplicatePair,
+  DuplicateRecordSummary
+} from "../../shared/types/duplicate.js";
 
 export class DuplicateDetectionService {
   /**
@@ -7,10 +11,15 @@ export class DuplicateDetectionService {
    * O(n²) comparison with early-exit optimization: skips pairs with zero matching signals.
    * Performance: filters impossible pairs before expensive string operations.
    * At scale > 10k records, add name-prefix indexing for ~90% reduction in comparisons.
+   *
+   * IPC payload: returns DuplicateRecordSummary (not full ContactRecord) to keep
+   * the IPC payload < 5 KB for 50 pairs. The `records` map deduplicates entries
+   * that appear in multiple pairs.
    */
   detectDuplicates(records: ContactRecord[]): DuplicateDetectionResult {
     const pairs: DuplicatePair[] = [];
     const seenPairKeys = new Set<string>();
+    const recordSummaryMap = new Map<string, DuplicateRecordSummary>();
 
     // Precompute signals for each record (cheap cache to skip impossible pairs)
     const signals = records.map((r) => ({
@@ -52,10 +61,15 @@ export class DuplicateDetectionService {
 
           if (!seenPairKeys.has(pairKey)) {
             seenPairKeys.add(pairKey);
+
+            // Build summaries only once per unique record id
+            const summaryA = this.getOrBuildSummary(signalA.record, recordSummaryMap);
+            const summaryB = this.getOrBuildSummary(signalB.record, recordSummaryMap);
+
             pairs.push({
               id: pairKey,
-              recordA: signalA.record,
-              recordB: signalB.record,
+              recordA: summaryA,
+              recordB: summaryB,
               reasons: matchResult.reasons,
               score: matchResult.score
             });
@@ -69,9 +83,36 @@ export class DuplicateDetectionService {
 
     return {
       pairs,
+      records: Object.fromEntries(recordSummaryMap),
       checkedCount: records.length,
       pairCount: pairs.length
     };
+  }
+
+  /**
+   * Build or retrieve a DuplicateRecordSummary for a ContactRecord.
+   * Only extracts the fields DeduplicatePage actually renders to keep IPC payload minimal.
+   */
+  private getOrBuildSummary(
+    record: ContactRecord,
+    cache: Map<string, DuplicateRecordSummary>
+  ): DuplicateRecordSummary {
+    const cached = cache.get(record.id);
+    if (cached) return cached;
+
+    const summary: DuplicateRecordSummary = {
+      id: record.id,
+      displayName: record.displayName,
+      department: record.organization.department,
+      phones: record.contactMethods.phones.map((p) => ({
+        id: p.id,
+        label: p.label,
+        number: p.number
+      }))
+    };
+
+    cache.set(record.id, summary);
+    return summary;
   }
 
   private matchRecords(

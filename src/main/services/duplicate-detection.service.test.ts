@@ -29,6 +29,7 @@ describe("DuplicateDetectionService", () => {
 
       expect(result).toEqual({
         pairs: [],
+        records: {},
         checkedCount: 0,
         pairCount: 0
       });
@@ -272,6 +273,79 @@ describe("DuplicateDetectionService", () => {
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("displayName:levenshtein");
+    });
+
+    it("populates records map with DuplicateRecordSummary for each unique record in a pair", () => {
+      const recordA = buildMinimalContact({
+        id: "x",
+        displayName: "Ana López",
+        organization: { department: "Urgencias" },
+        contactMethods: {
+          phones: [{ id: "ph-1", number: "612345678", label: "work", isPrimary: true, kind: "direct", confidential: false, noPatientSharing: false }],
+          emails: []
+        }
+      });
+      const recordB = buildMinimalContact({
+        id: "y",
+        displayName: "Ana Lopez",
+        organization: { department: "Urgencias" }
+      });
+
+      const result = service.detectDuplicates([recordA, recordB]);
+
+      expect(result.pairCount).toBeGreaterThan(0);
+
+      // Both records present in map
+      expect(result.records["x"]).toBeDefined();
+      expect(result.records["y"]).toBeDefined();
+
+      // Summary only contains display fields — not full ContactRecord fields
+      const summaryX = result.records["x"]!;
+      expect(summaryX.id).toBe("x");
+      expect(summaryX.displayName).toBe("Ana López");
+      expect(summaryX.department).toBe("Urgencias");
+      expect(summaryX.phones).toHaveLength(1);
+      expect(summaryX.phones[0]?.number).toBe("612345678");
+      expect(summaryX.phones[0]?.label).toBe("work");
+
+      // Must NOT contain ContactRecord-only fields
+      expect((summaryX as Record<string, unknown>)["organization"]).toBeUndefined();
+      expect((summaryX as Record<string, unknown>)["contactMethods"]).toBeUndefined();
+      expect((summaryX as Record<string, unknown>)["tags"]).toBeUndefined();
+      expect((summaryX as Record<string, unknown>)["aliases"]).toBeUndefined();
+    });
+
+    it("deduplicates records in map when same record appears in multiple pairs", () => {
+      // Record A matches both B and C → A appears in two pairs but map has only one entry
+      const recordA = buildMinimalContact({ id: "a", displayName: "Shared Name" });
+      const recordB = buildMinimalContact({ id: "b", displayName: "Shared Name" });
+      const recordC = buildMinimalContact({ id: "c", displayName: "Shared Name" });
+
+      const result = service.detectDuplicates([recordA, recordB, recordC]);
+
+      // All three pairs found
+      expect(result.pairCount).toBe(3);
+
+      // records map has exactly one entry per unique id
+      const recordIds = Object.keys(result.records);
+      expect(recordIds).toHaveLength(3);
+      expect(recordIds).toContain("a");
+      expect(recordIds).toContain("b");
+      expect(recordIds).toContain("c");
+    });
+
+    it("pairs reference the same summary objects that are in the records map", () => {
+      const recordA = buildMinimalContact({ id: "p", displayName: "María García" });
+      const recordB = buildMinimalContact({ id: "q", displayName: "Maria García" });
+
+      const result = service.detectDuplicates([recordA, recordB]);
+
+      expect(result.pairCount).toBeGreaterThan(0);
+      const pair = result.pairs[0]!;
+
+      // pair.recordA and pair.recordB are identical references to what's in the map
+      expect(pair.recordA).toBe(result.records[pair.recordA.id]);
+      expect(pair.recordB).toBe(result.records[pair.recordB.id]);
     });
   });
 });

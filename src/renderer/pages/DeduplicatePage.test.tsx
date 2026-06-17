@@ -1,50 +1,45 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { DeduplicatePage } from "./DeduplicatePage";
 
+// DuplicateRecordSummary shape — only fields DeduplicatePage renders
+const recordA = {
+  id: "cnt_0001",
+  displayName: "Admisión General",
+  department: "Admisión",
+  phones: [{ id: "ph_1", number: "70005" }]
+};
+
+const recordB = {
+  id: "cnt_0002",
+  displayName: "Admisión General",
+  department: "Admisión",
+  phones: [{ id: "ph_2", number: "70006" }]
+};
+
 const mockPair = {
   id: "cnt_0001:cnt_0002",
-  recordA: {
-    id: "cnt_0001",
-    type: "service" as const,
-    displayName: "Admisión General",
-    organization: { department: "Admisión", area: "gestion-administracion" as const },
-    contactMethods: {
-      phones: [{ id: "ph_1", number: "70005", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-      emails: []
-    },
-    aliases: [],
-    tags: ["admisión"],
-    status: "active" as const,
-    audit: { createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", createdBy: "System", updatedBy: "System" }
-  },
-  recordB: {
-    id: "cnt_0002",
-    type: "service" as const,
-    displayName: "Admisión General",
-    organization: { department: "Admisión", area: "gestion-administracion" as const },
-    contactMethods: {
-      phones: [{ id: "ph_2", number: "70006", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-      emails: []
-    },
-    aliases: [],
-    tags: [],
-    status: "active" as const,
-    audit: { createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", createdBy: "System", updatedBy: "System" }
-  },
+  recordA,
+  recordB,
   reasons: ["displayName"],
   score: 0.9
 };
 
 const mockDetectDuplicates = vi.fn().mockResolvedValue({
   pairs: [mockPair],
+  records: { cnt_0001: recordA, cnt_0002: recordB },
   checkedCount: 2,
   pairCount: 1
 });
 
-const mockMergeContacts = vi.fn().mockResolvedValue(mockPair.recordA);
+const mockMergeContacts = vi.fn().mockResolvedValue({
+  id: "cnt_0001",
+  displayName: "Admisión General",
+  department: "Admisión",
+  phones: []
+});
 
 const renderPage = () =>
   render(
@@ -79,6 +74,20 @@ describe("DeduplicatePage", () => {
     expect(screen.getByText("displayName")).toBeInTheDocument();
   });
 
+  it("renders department and phone number for each record", async () => {
+    renderPage();
+
+    await screen.findAllByText("Admisión General");
+
+    // Both records share the same department label
+    const deptEls = screen.getAllByText("Admisión");
+    expect(deptEls.length).toBeGreaterThanOrEqual(2);
+
+    // Phone numbers from the flat phones array
+    expect(screen.getByText("70005")).toBeInTheDocument();
+    expect(screen.getByText("70006")).toBeInTheDocument();
+  });
+
   it("enables Fusionar button after selecting Conservar este on one side", async () => {
     renderPage();
 
@@ -92,4 +101,16 @@ describe("DeduplicatePage", () => {
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
   });
 
+  it("shows empty state when no pairs returned", async () => {
+    mockDetectDuplicates.mockResolvedValueOnce({
+      pairs: [],
+      records: {},
+      checkedCount: 5,
+      pairCount: 0
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
+  });
 });
