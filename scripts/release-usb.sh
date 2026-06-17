@@ -48,6 +48,26 @@ rm -rf "$DIST_ROOT"
 log "Running typecheck"
 pnpm typecheck
 
+log "Running dependency audit"
+# Neutralize ONLY the test-only sentinels that may have been inherited from the
+# operator's environment.  AUDIT_GATE_TEST_MODE=1 would allow AUDIT_ALLOWLIST
+# to redirect the gate to an arbitrary allowlist file; unsetting both here
+# ensures the real release path always uses the pinned repo allowlist.
+#
+# Do NOT unset SKIP_AUDIT / SKIP_AUDIT_REASON: the documented operator-initiated
+# bypass (SKIP_AUDIT=1 SKIP_AUDIT_REASON="..." pnpm run release:usb) MUST remain
+# reachable on the real release path — see SECURITY.md §SKIP_AUDIT Override,
+# scripts/README.md, and docs/USB_RELEASE_HANDOFF_CHECKLIST.md.  The bypass is
+# safe because it is fully traceable: the gate requires a non-empty validated
+# SKIP_AUDIT_REASON and records "Dependency audit: BYPASSED — reason: <reason>"
+# in RELEASE_MANIFEST.txt for every produced artifact.
+unset AUDIT_GATE_TEST_MODE AUDIT_ALLOWLIST
+# shellcheck source=scripts/lib/audit-gate.sh
+source "$REPO_ROOT/scripts/lib/audit-gate.sh"
+AUDIT_STATUS_LINE=""
+run_audit_gate
+log "$AUDIT_STATUS_LINE"
+
 log "Running tests"
 pnpm test
 
@@ -124,6 +144,7 @@ Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Platform: $PLATFORM
 Version: $(node -p "require('./package.json').version")
 Source commit: $(git rev-parse --short HEAD)
+${AUDIT_STATUS_LINE}
 
 Copy the contents of this directory to the USB root.
 Data will be created under portable-data/ on first launch.

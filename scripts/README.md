@@ -29,6 +29,69 @@ version, and source commit. Linux packages may also include
 For the full packaging and operator handoff process, see
 [../docs/USB_RELEASE_HANDOFF_CHECKLIST.md](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
 
+### Dependency Audit Gate
+
+The release script sources `scripts/lib/audit-gate.sh` and calls `run_audit_gate` early in the pipeline (after typecheck, before tests and build). The gate:
+
+1. Runs `pnpm audit --json` to collect the current advisory list.
+2. Filters out every advisory whose GHSA ID appears in `scripts/audit-allowlist.json` (explicitly accepted risks).
+3. **Fails the release** if any high-severity or critical advisory is _not_ in the allowlist.
+4. Records the result in `RELEASE_MANIFEST.txt` — either `Dependency audit: PASSED (allowlist N entries)` or `Dependency audit: BYPASSED — reason: <reason>`.
+
+If the gate fails because of a non-advisory error (network outage, registry unreachable) the message reads:
+
+```
+[audit-gate] ✗ Dependency audit failed to complete (non-advisory error — check network/registry).
+```
+
+This is distinct from an advisory failure message, which lists `NON-ALLOWLISTED` advisories by package and GHSA ID.
+
+#### Advisory allowlist
+
+`scripts/audit-allowlist.json` is the machine-readable source of truth for accepted risks. Each entry requires the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | GHSA advisory ID (non-empty) |
+| `package` | string | Affected package name |
+| `severity` | string | Advisory severity (`high` or `critical`) |
+| `reason` | string | Rationale for acceptance (deployment context, unreachable code path, etc.) |
+| `expires` | string | Expiry date in `YYYY-MM-DD` format — the gate rejects entries past this date |
+| `reviewDate` | string | When the entry was last reviewed (informational) |
+
+The accepted **identity** of an entry is the composite of its GHSA `id` **and** `package`. A single GHSA advisory that affects more than one package (e.g. `GHSA-2j2x-hqr9-3h42` covering both `react-router` and `react-router-dom`) is therefore represented as one allowlist entry per package, all sharing the same `id`. A live advisory is suppressed only when its GHSA id, package name, and normalized severity all match an accepted identity.
+
+The gate validates all required fields and rejects the run (exit 3) if any entry is malformed, contains a duplicate **identity** (the same GHSA `id` **and** the same `package`), or is **expired** (current date > `expires`). An expired entry requires the advisory to be re-reviewed and the `expires` date updated — or the advisory resolved — before a new release can proceed.
+
+Adding an entry with a realistic `expires` date (typically 3–6 months from review) is the correct way to accept a known advisory rather than using `SKIP_AUDIT=1`.
+
+See `SECURITY.md → Accepted Risks` for a human-readable summary of each accepted advisory.
+
+#### Bypassing the gate
+
+`SKIP_AUDIT=1` skips the audit entirely. A non-empty `SKIP_AUDIT_REASON` is **required** — without it the release aborts:
+
+```bash
+SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks" \
+  pnpm run release:usb
+```
+
+The bypass reason is written to `RELEASE_MANIFEST.txt` so every produced artifact is traceable. The value must be exactly `"1"` — other values (`true`, `yes`, `2`, or empty) are ignored and the gate runs normally.
+
+Do not use `SKIP_AUDIT=1` to suppress uninvestigated advisories. Use the allowlist instead.
+
+#### Running the gate tests
+
+The gate logic is tested in isolation using a stubbed `pnpm` executable (no real network calls):
+
+```bash
+bash scripts/release-usb.audit.test.sh
+# or via npm script:
+pnpm run test:audit-gate
+```
+
+Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass, infra/network error, bypass with and without reason, and strict `SKIP_AUDIT=1` matching.
+
 ## `extract_ods_to_csv.py`
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.

@@ -8,7 +8,7 @@
   "type": "module",
   "main": "dist-electron/main/index.js",
   "scripts": {
-    "ci": "pnpm typecheck && pnpm test && pnpm run build",
+    "ci": "pnpm typecheck && pnpm test && pnpm run test:audit-gate && pnpm run build",
     "clean": "rimraf dist dist-electron dist-portable",
     "dev": "concurrently -k \"pnpm:dev:renderer\" \"pnpm:dev:electron\" \"pnpm:dev:app\"",
     "dev:renderer": "vite",
@@ -22,6 +22,8 @@
     "build:dist:mac": "pnpm run build && electron-builder --mac --dir",
     "build:dist:linux": "pnpm run build && electron-builder --linux --dir",
     "release:usb": "bash scripts/release-usb.sh",
+    "test:audit-gate": "bash scripts/release-usb.audit.test.sh",
+    "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
