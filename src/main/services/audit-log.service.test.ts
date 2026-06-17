@@ -152,7 +152,7 @@ describe("AuditLogService", () => {
     expect(result.entries[0]!.recordName).toBe("Admisión General");
   });
 
-  it("returns empty result when audit log file is missing", async () => {
+  it("returns empty result when audit log file is missing (ENOENT is not a corruption)", async () => {
     const { AuditLogService } = await import("./audit-log.service.js");
     const service = new AuditLogService();
 
@@ -206,5 +206,218 @@ describe("AuditLogService", () => {
 
     const csv = service.toCsv(entries);
     expect(csv).toContain('"Smith, John ""The Doc"""');
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-104: fail-closed on corruption
+  // ---------------------------------------------------------------------------
+
+  describe("corruption handling — query", () => {
+    it("throws AuditLogIntegrityError (not empty result) when file contains malformed JSON", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "{ this is not valid json !!!}", "utf-8");
+
+      await expect(service.query({})).rejects.toBeInstanceOf(AuditLogIntegrityError);
+    });
+
+    it("throws AuditLogIntegrityError when file fails Zod schema validation", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      // Valid JSON but wrong shape — not an array of audit entries.
+      await fs.writeFile(auditLogPath, JSON.stringify({ corrupted: true }), "utf-8");
+
+      await expect(service.query({})).rejects.toBeInstanceOf(AuditLogIntegrityError);
+    });
+
+    it("preserves original bytes byte-for-byte in the quarantine sidecar after malformed JSON", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      const corruptContent = "{ this is not valid json !!!}";
+      await fs.writeFile(auditLogPath, corruptContent, "utf-8");
+
+      let integrityError!: InstanceType<typeof AuditLogIntegrityError>;
+      try {
+        await service.query({});
+      } catch (err) {
+        integrityError = err as InstanceType<typeof AuditLogIntegrityError>;
+      }
+
+      expect(integrityError).toBeInstanceOf(AuditLogIntegrityError);
+      expect(integrityError.quarantineFilePath).not.toBeNull();
+
+      const sidecarBytes = await fs.readFile(integrityError.quarantineFilePath!);
+      expect(sidecarBytes.toString("utf-8")).toBe(corruptContent);
+    });
+
+    it("quarantine sidecar filename matches expected pattern (audit-log.corrupt-<timestamp>.json)", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad json", "utf-8");
+
+      let integrityError!: InstanceType<typeof AuditLogIntegrityError>;
+      try {
+        await service.query({});
+      } catch (err) {
+        integrityError = err as InstanceType<typeof AuditLogIntegrityError>;
+      }
+
+      expect(integrityError.quarantineFilePath).toMatch(
+        /audit-log\.corrupt-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/
+      );
+    });
+  });
+
+  describe("corruption handling — append", () => {
+    it("throws AuditLogIntegrityError (not silently overwriting) when file is malformed JSON", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "not-json", "utf-8");
+
+      await expect(
+        service.append({ timestamp: "2026-06-01T00:00:00.000Z", editor: "Admin", action: "create" })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+    });
+
+    it("does NOT overwrite the corrupt file after a failed append", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      const originalCorruptContent = "not-json";
+      await fs.writeFile(auditLogPath, originalCorruptContent, "utf-8");
+
+      try {
+        await service.append({ timestamp: "2026-06-01T00:00:00.000Z", editor: "Admin", action: "create" });
+      } catch (err) {
+        expect(err).toBeInstanceOf(AuditLogIntegrityError);
+      }
+
+      // The original file must still contain the corrupt bytes — not a fresh [].
+      const stillOnDisk = await fs.readFile(auditLogPath, "utf-8");
+      expect(stillOnDisk).toBe(originalCorruptContent);
+    });
+
+    it("refuses subsequent appends while in integrity-error state without calling recoverFromIntegrityError()", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      // First append triggers the integrity error and quarantine.
+      await expect(
+        service.append({ timestamp: "2026-06-01T00:00:00.000Z", editor: "Admin", action: "create" })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      // Externally fix the file — but without calling recoverFromIntegrityError()
+      // the service must still refuse to append (fail-closed on cached state).
+      await fs.writeFile(auditLogPath, "[]", "utf-8");
+
+      await expect(
+        service.append({ timestamp: "2026-06-01T01:00:00.000Z", editor: "Admin", action: "update", changes: null })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+    });
+  });
+
+  describe("corruption handling — failed quarantine", () => {
+    it("still throws AuditLogIntegrityError even when quarantine write itself fails, with quarantineFilePath null", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      // Make the data directory read-only so the sidecar write fails.
+      await fs.chmod(path.dirname(auditLogPath), 0o444);
+
+      let integrityError!: InstanceType<typeof AuditLogIntegrityError>;
+      try {
+        await service.query({});
+      } catch (err) {
+        integrityError = err as InstanceType<typeof AuditLogIntegrityError>;
+      } finally {
+        // Restore permissions so afterEach cleanup can remove tmpdir.
+        await fs.chmod(path.dirname(auditLogPath), 0o755);
+      }
+
+      expect(integrityError).toBeInstanceOf(AuditLogIntegrityError);
+      // Quarantine sidecar write failed — path must be null, not a string.
+      expect(integrityError.quarantineFilePath).toBeNull();
+    });
+  });
+
+  describe("recovery — recoverFromIntegrityError()", () => {
+    it("allows appends after recoverFromIntegrityError() is called", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      // Trigger integrity error.
+      await expect(
+        service.append({ timestamp: "2026-06-01T00:00:00.000Z", editor: "Admin", action: "create" })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      // Explicit recovery — must not throw.
+      await service.recoverFromIntegrityError();
+
+      // Subsequent append must succeed.
+      await service.append({
+        timestamp: "2026-06-02T00:00:00.000Z",
+        editor: "Admin",
+        action: "create",
+        recordName: "Post-recovery entry"
+      });
+
+      const result = await service.query({});
+      expect(result.totalCount).toBe(1);
+      expect(result.entries[0]!.recordName).toBe("Post-recovery entry");
+    });
+
+    it("fresh log after recovery starts with exactly the appended entries, not merged with old corrupt content", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      // Force integrity error via query.
+      await service.query({}).catch(() => undefined);
+      await service.recoverFromIntegrityError();
+
+      await service.append({ timestamp: "2026-06-02T00:00:00.000Z", editor: "Admin", action: "create" });
+
+      const diskContent = JSON.parse(await fs.readFile(auditLogPath, "utf-8")) as unknown[];
+      expect(diskContent).toHaveLength(1);
+    });
+
+    it("query succeeds and returns empty after recoverFromIntegrityError()", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      // Trigger corruption on query.
+      await expect(service.query({})).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      await service.recoverFromIntegrityError();
+
+      const result = await service.query({});
+      expect(result.entries).toHaveLength(0);
+      expect(result.totalCount).toBe(0);
+    });
   });
 });

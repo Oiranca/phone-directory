@@ -6,7 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
-import { AuditLogService } from "./audit-log.service.js";
+import { AuditLogIntegrityError, AuditLogService } from "./audit-log.service.js";
 import type {
   AutoBackupSettings,
   AppSettings,
@@ -1707,7 +1707,19 @@ export class AppDataService {
     try {
       await this.auditLog.append(entry);
     } catch (error) {
-      console.error("[AuditLog] Failed to append entry:", error);
+      if (error instanceof AuditLogIntegrityError) {
+        // The audit log is corrupt.  The service has already quarantined the
+        // original bytes.  We surface a distinct log message so operators can
+        // identify the quarantine sidecar and call recoverFromIntegrityError().
+        console.error(
+          "[AuditLog] INTEGRITY ERROR — audit log is corrupt and all further appends are blocked.",
+          "Quarantine sidecar:", error.quarantineFilePath ?? "(quarantine failed)",
+          "Log file:", error.logFilePath,
+        );
+      } else {
+        console.error("[AuditLog] Failed to append entry:", error);
+      }
+      // Audit failure does not block the contact mutation — intentional.
     }
   }
 }
