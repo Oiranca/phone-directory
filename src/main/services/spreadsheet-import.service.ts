@@ -495,6 +495,58 @@ const isNavigationSheet = (slug: string): boolean => {
   return NAVIGATION_SHEET_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
 };
 
+/**
+ * INTERIM (OIR-102): Slug prefix for Buscas sheets (pager/localizador system).
+ *
+ * Sheets like Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores, and
+ * Buscas_Varios belong to the separate Buscas (pager/localizador) section that
+ * has its own data store (BuscasService / buscas.json) and is NOT part of the
+ * phone-directory contact import pipeline.  Their rows use 4-digit pager codes,
+ * not phone numbers, and their column header "PRINCIPAL / RESIDENTE" would be
+ * mistakenly parsed as a contact name, causing spurious rejections.
+ *
+ * These sheets are skipped here — kept distinct from isNavigationSheet so the
+ * reason is explicit and easy to remove once a proper Buscas ODS-import path
+ * is built.  Tracked as a future Linear feature (child of OIR-102).
+ */
+const BUSCAS_SHEET_SLUG_PREFIX = "buscas";
+
+/** Returns true when the sheet is a deferred-feature Buscas (pager) sheet. */
+const isDeferredFeatureSheet = (slug: string): boolean =>
+  slug.startsWith(BUSCAS_SHEET_SLUG_PREFIX);
+
+/**
+ * INTERIM (OIR-102): Returns true when a resolved row label looks like a
+ * social-media handle rather than a real contact name.
+ *
+ * Predicate: the label is a single whitespace-free token, entirely lowercase
+ * (no capital letters), contains no digits, and is at least 8 characters long.
+ *
+ * This precisely targets patterns like "hospitaldrnegrin" (the hospital's
+ * Instagram/Facebook handle stored in the ODS alongside the phone number of
+ * the Comunicaciones / Redes Sociales row) while leaving real contact names
+ * untouched:
+ *   - Multi-word names ("Banco de Sangre", "Dr. García") contain spaces → not matched.
+ *   - Title-case names ("Secretaria", "Resonancia") have an uppercase first
+ *     letter → not matched.
+ *   - Names that are single lowercase words but do have phone numbers (e.g.
+ *     "secretaria 70979") are never affected because the skip fires ONLY when
+ *     dedupedPhoneNumbers.length === 0.
+ *   - A real name with a missing number (incomplete contact the operator needs
+ *     to see as REJECTED) will almost always be multi-word or title-case, so
+ *     it is NOT matched and continues to surface as a rejection.
+ *
+ * Social media as a contact method is a planned future feature; this skip is
+ * the minimal interim guard until that feature exists (sibling of OIR-102).
+ */
+const isSocialHandle = (label: string): boolean => {
+  if (/\s/.test(label)) return false;       // spaces → multi-word → real name
+  if (/\d/.test(label)) return false;       // digits → phone-like or code → not a handle
+  if (label.length < 8) return false;       // too short to be a concatenated handle
+  if (label !== label.toLowerCase()) return false; // uppercase → title-case → real name
+  return /[a-z]/.test(label);              // must contain at least one ASCII lowercase letter
+};
+
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
 
 const SERVICE_PROFILE_ALIASES: Record<string, string> = {
@@ -624,6 +676,27 @@ const normalizeServiceSheet = (sheet: SheetData, profile: SheetProfile) => {
     const dedupedPhoneNumbers = dedupeKeepOrder(phoneNumbers);
 
     if (dedupedPhoneNumbers.length === 0 && cells.slice(1).every((value) => !value)) {
+      return;
+    }
+
+    // INTERIM (OIR-102): Skip social-media handle rows silently.
+    //
+    // Some ODS sheets contain a row whose resolved label is a social-media
+    // handle (e.g. "hospitaldrnegrin" — the hospital's Instagram/Facebook
+    // handle) with no phone number.  The handle appears because the operator
+    // typed it next to the Comunicaciones/Redes Sociales phone row, and the
+    // parser picks it up as the "label" via resolveServiceRowLabel's fallback.
+    //
+    // We skip it here rather than emitting a rejected record, because the
+    // operator cannot fix it (there IS no phone number to add) and it blocks
+    // the import unnecessarily.  A "missing phone" on a real contact (e.g.
+    // "Dr. García" with no number yet) is NOT matched: real names are either
+    // multi-word (contain spaces) or start with a capital letter, whereas a
+    // social handle is all-lowercase, single-token, no digits, and 8+ chars.
+    //
+    // Social media as a contact method is a planned future feature; this guard
+    // is the minimal interim skip until that feature exists (sibling of OIR-102).
+    if (dedupedPhoneNumbers.length === 0 && isSocialHandle(label)) {
       return;
     }
 
@@ -1066,6 +1139,15 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
 
   // Fix: skip navigation / TOC sheets by slug before any further analysis.
   if (isNavigationSheet(sheet.slug)) {
+    return null;
+  }
+
+  // INTERIM (OIR-102): Skip Buscas (pager/localizador) sheets.
+  // These belong to a separate app section that does not yet have an ODS-import
+  // pipeline.  Their column header "PRINCIPAL / RESIDENTE" would be mistakenly
+  // parsed as a contact and rejected, blocking the whole import.
+  // Remove this guard when a proper Buscas import path is built.
+  if (isDeferredFeatureSheet(sheet.slug)) {
     return null;
   }
 

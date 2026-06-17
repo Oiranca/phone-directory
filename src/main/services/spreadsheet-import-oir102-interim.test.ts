@@ -1,0 +1,298 @@
+/**
+ * OIR-102 INTERIM — Buscas sheet skip and social-handle row skip.
+ *
+ * Two categories of non-phone-contact rows were blocking the all-or-nothing
+ * import preview:
+ *
+ *   A. Buscas sheets (Buscas_Facultativos, Buscas_Enfermería, etc.) — these
+ *      belong to a separate pager/localizador section that does not yet exist
+ *      in this app.  Their "PRINCIPAL / RESIDENTE" header was being parsed as
+ *      a rejected contact.  Fix: isDeferredFeatureSheet skips any sheet whose
+ *      slug starts with "buscas" before detectSheetProfile runs.
+ *
+ *   B. Social-media handle rows — e.g. "hospitaldrnegrin" (the hospital's
+ *      Instagram handle) stored in the ODS next to the Comunicaciones/Redes
+ *      Sociales phone entry.  Fix: isSocialHandle silently skips a resolved
+ *      label that is single-token, all-lowercase, no digits, 8+ chars, and
+ *      has no phone numbers on the same row.
+ *
+ * These tests call normalizeWorkbookRowsFromFile (the sync path active when
+ * VITEST=true) and write temporary workbook fixtures via xlsx-republish.
+ */
+import nodeFs from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import XLSX from "xlsx-republish";
+import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
+
+XLSX.set_fs(nodeFs);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const writeWorkbook = (
+  dir: string,
+  fileName: string,
+  sheets: Array<{ name: string; data: string[][] }>
+): string => {
+  const wb = XLSX.utils.book_new();
+  for (const { name, data } of sheets) {
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+  const filePath = path.join(dir, fileName);
+  XLSX.writeFile(wb, filePath);
+  return filePath;
+};
+
+/** Minimal service-sheet: header row + data rows. Name must be canonical. */
+const makeServiceSheet = (
+  name: string,
+  rows: Array<{ label: string; numbers: string[] }>
+): { name: string; data: string[][] } => ({
+  name,
+  data: [
+    ["SERVICIO", "NUMERO"],
+    ...rows.map(({ label, numbers }) => [label, ...numbers])
+  ]
+});
+
+let testRoot: string;
+
+beforeEach(async () => {
+  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir102-interim-"));
+});
+
+afterEach(async () => {
+  await fs.rm(testRoot, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// A. Buscas sheet skip
+// ---------------------------------------------------------------------------
+
+describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
+  it("produces NO contacts from a Buscas_Celadores sheet", () => {
+    // Buscas sheets use 4-digit pager codes, not phone numbers.
+    // The "PRINCIPAL / RESIDENTE" header row must NOT become a contact.
+    const filePath = writeWorkbook(testRoot, "buscas-celadores.xlsx", [
+      {
+        name: "Buscas_Celadores",
+        data: [
+          ["SERVICIO", "PRINCIPAL", "PRINCIPAL 2", "COMENTARIOS"],
+          ["CELADOR CCEE (A+B)", "7183", "", ""],
+          ["CELADOR QUIRÓFANO", "7585", "", ""]
+        ]
+      },
+      // Include a real data sheet so normalizeWorkbookRowsFromFile does not throw.
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    // Buscas rows must not appear at all.
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("PRINCIPAL / RESIDENTE");
+    expect(names).not.toContain("CELADOR CCEE (A+B)");
+    expect(names).not.toContain("CELADOR QUIRÓFANO");
+    // Real data sheet rows are present.
+    expect(names).toContain("Triaje");
+  });
+
+  it("produces NO contacts from a Buscas_Facultativos sheet including its header", () => {
+    const filePath = writeWorkbook(testRoot, "buscas-facultativos.xlsx", [
+      {
+        name: "Buscas_Facultativos",
+        data: [
+          ["SERVICIO", "PRINCIPAL / RESIDENTE", "ADJUNTO 1", "COMENTARIOS"],
+          ["ANESTESIA", "7321", "", ""],
+          ["CARDIOLOGÍA", "7580", "", ""]
+        ]
+      },
+      makeServiceSheet("urgencias", [
+        { label: "Mostrador", numbers: ["11111"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    // Column header "PRINCIPAL / RESIDENTE" must NOT appear as a contact.
+    expect(names).not.toContain("PRINCIPAL / RESIDENTE");
+    expect(names).not.toContain("ANESTESIA");
+    expect(names).not.toContain("CARDIOLOGÍA");
+    expect(names).toContain("Mostrador");
+  });
+
+  it("produces NO contacts from any sheet whose name starts with Buscas_", () => {
+    // All four real Buscas variants must be skipped.
+    const buscasNames = [
+      "Buscas_Facultativos",
+      "Buscas_Enfermería",
+      "Buscas_Celadores",
+      "Buscas_Varios"
+    ];
+    const filePath = writeWorkbook(testRoot, "all-buscas.xlsx", [
+      ...buscasNames.map((name) => ({
+        name,
+        data: [
+          ["SERVICIO", "PRINCIPAL"],
+          ["ALGÚN SERVICIO BUSCA", "7000"]
+        ]
+      })),
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["12345"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).not.toContain("ALGÚN SERVICIO BUSCA");
+    expect(names).toContain("Triaje");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B. Social-handle row skip (isSocialHandle)
+// ---------------------------------------------------------------------------
+
+describe("Social-handle row skip (isSocialHandle)", () => {
+  it("does not emit a record for a social-handle label with no phone", () => {
+    // Simulates: ["REDES SOCIALES … INSTAGRAM", "hospitaldrnegrin", "", ...]
+    // The parser resolves "hospitaldrnegrin" as the label (first cell is
+    // ALL-CAPS excluded; fallback finds the all-lowercase token in col 1).
+    const filePath = writeWorkbook(testRoot, "social-handle.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["Triaje", "12345"],
+          ["Mostrador urgencias", "12346"],
+          // Social-media row: label would resolve to "hospitaldrnegrin"
+          ["REDES SOCIALES HOSPITAL - INSTAGRAM", "hospitaldrnegrin", "", ""],
+          // Continuation row with empty col-0 and handle in col-2
+          ["", "", "hospitaldrnegrin", "", ""],
+          ["Control cajas", "12347"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+
+    // Social handle must NOT appear — not as a contact, not as a rejected row.
+    expect(names).not.toContain("hospitaldrnegrin");
+    // Real contacts are preserved.
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Mostrador urgencias");
+    expect(names).toContain("Control cajas");
+  });
+
+  it("does not skip a multi-word fallback label when the first cell is excluded", () => {
+    // The isSocialHandle check only activates when the label is resolved via
+    // resolveServiceRowLabel's fallback (col-0 is excluded).  This test
+    // verifies that a multi-word label resolved from a later column is NOT
+    // matched by isSocialHandle (which requires no spaces).
+    //
+    // Row shape: [excluded-ALL-CAPS, "Dr. García asignado pendiente", ""]
+    //   - col-0 excluded → fallback resolves "Dr. García asignado pendiente"
+    //     from col-1 (has letters, no phone-like digits)
+    //   - "Dr. García asignado pendiente" has spaces → isSocialHandle = false
+    //   - Row has no phone but col-1 is non-empty → not caught by all-empty guard
+    //   - Result: the row IS emitted as a no-phone contact (will be rejected by
+    //     buildImportPreviewFromRows, but NOT silently swallowed by isSocialHandle)
+    const filePath = writeWorkbook(testRoot, "multi-word-fallback.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          // Valid contacts to ensure the sheet is accepted.
+          ["Triaje urgencias", "12345"],
+          ["Mostrador urgencias", "12346"],
+          ["Control boxes", "12347"],
+          // Row where col-0 is excluded but col-1 resolves a multi-word label.
+          ["SECCIÓN ESPECIAL", "Dr. García pendiente", ""]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+
+    // The multi-word fallback label must be emitted (has spaces → not a handle).
+    expect(names).toContain("Dr. García pendiente");
+    // Valid contacts still present.
+    expect(names).toContain("Triaje urgencias");
+  });
+
+  it("does not skip a contact whose all-lowercase single-word label co-occurs with a phone", () => {
+    // e.g. "secretaria 70979" — the label resolves to "secretaria" (one word,
+    // all lowercase) BUT there is a phone number → isSocialHandle skip is not
+    // triggered (phones present).
+    const filePath = writeWorkbook(testRoot, "lowercase-with-phone.xlsx", [
+      {
+        name: "urgencias",
+        data: [
+          ["SERVICIO", "NUMERO"],
+          ["secretaria", "70979"],
+          ["resonancia", "79306"],
+          ["Triaje urgencias", "12345"]
+        ]
+      }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+
+    // These have phones → they are normal contacts, not skipped.
+    expect(names).toContain("secretaria");
+    expect(names).toContain("resonancia");
+    expect(names).toContain("Triaje urgencias");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C. Regression — real flat service sheets still import after both skips
+// ---------------------------------------------------------------------------
+
+describe("Regression: real flat service sheets still import after interim skips", () => {
+  it("imports contacts from urgencias sheet unchanged", () => {
+    const filePath = writeWorkbook(testRoot, "regression-urgencias.xlsx", [
+      makeServiceSheet("urgencias", [
+        { label: "Triaje", numbers: ["11111"] },
+        { label: "Control boxes", numbers: ["22222", "33333"] },
+        { label: "Banco de Sangre", numbers: ["44444"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Triaje");
+    expect(names).toContain("Control boxes");
+    expect(names).toContain("Banco de Sangre");
+    expect(result.rows).toHaveLength(3);
+  });
+
+  it("imports contacts from a canonical sheet (rayos) containing mixed-case labels", () => {
+    // Regression guard: canonical sheet parsing must not be disrupted by the
+    // buscas-skip or social-handle-skip additions.
+    const filePath = writeWorkbook(testRoot, "regression-rayos.xlsx", [
+      makeServiceSheet("rayos", [
+        { label: "Sala TAC", numbers: ["55555"] },
+        { label: "Sala RX", numbers: ["66666"] },
+        { label: "Resonancia", numbers: ["79306"] }
+      ])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const names = result.rows.map((r) => r.displayName);
+    expect(names).toContain("Sala TAC");
+    expect(names).toContain("Sala RX");
+    expect(names).toContain("Resonancia");
+    expect(result.rows).toHaveLength(3);
+  });
+});
