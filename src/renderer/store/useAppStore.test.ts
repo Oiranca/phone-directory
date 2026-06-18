@@ -328,4 +328,81 @@ describe("useAppStore actions", () => {
       expect(state.selectedRecordId).toBe("cnt_0001");
     });
   });
+
+  describe("applyMergeResult", () => {
+    const survivor = {
+      ...structuredClone(defaultContacts.records[0]),
+      id: "cnt_0001",
+      displayName: "Admisión General (fusionado)"
+    };
+    const discardedId = "cnt_0002";
+
+    beforeEach(() => {
+      useAppStore.getState().initialize(bootstrapPayload);
+    });
+
+    it("removes the discarded record from the store", () => {
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      const records = useAppStore.getState().contacts!.records;
+      expect(records.find((r) => r.id === discardedId)).toBeUndefined();
+    });
+
+    it("updates the survivor record in the store with merged fields", () => {
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      const records = useAppStore.getState().contacts!.records;
+      const found = records.find((r) => r.id === survivor.id);
+      expect(found).toBeDefined();
+      expect(found!.displayName).toBe("Admisión General (fusionado)");
+    });
+
+    it("leaves other records untouched", () => {
+      const before = useAppStore.getState().contacts!.records.length;
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      const after = useAppStore.getState().contacts!.records.length;
+      // one record removed, survivor updated in place
+      expect(after).toBe(before - 1);
+    });
+
+    it("redirects selectedRecordId to survivor when the discarded record was selected", () => {
+      useAppStore.setState({ selectedRecordId: discardedId });
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      expect(useAppStore.getState().selectedRecordId).toBe(survivor.id);
+    });
+
+    it("preserves selectedRecordId when an unrelated record was selected", () => {
+      useAppStore.setState({ selectedRecordId: "cnt_0001" });
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      expect(useAppStore.getState().selectedRecordId).toBe("cnt_0001");
+    });
+
+    it("is a no-op when contacts is null", () => {
+      useAppStore.setState({ contacts: null });
+      // should not throw
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      expect(useAppStore.getState().contacts).toBeNull();
+    });
+
+    it("does not mutate the store when contacts is null (no partial mutation)", () => {
+      useAppStore.setState({ contacts: null, selectedRecordId: "cnt_0001" });
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      expect(useAppStore.getState().selectedRecordId).toBe("cnt_0001");
+    });
+
+    it("post-merge in-memory records equal a fresh load of the same dataset", () => {
+      useAppStore.getState().applyMergeResult(survivor, discardedId);
+      const inMemoryRecords = useAppStore.getState().contacts!.records;
+
+      // Simulate a reload: build the expected dataset as if persisted state was fetched fresh
+      const reloadedContacts = {
+        ...defaultContacts,
+        records: defaultContacts.records
+          .filter((r) => r.id !== discardedId)
+          .map((r) => (r.id === survivor.id ? survivor : r))
+      };
+      useAppStore.getState().initialize({ contacts: reloadedContacts, settings: defaultSettings });
+      const reloadedRecords = useAppStore.getState().contacts!.records;
+
+      expect(inMemoryRecords).toEqual(reloadedRecords);
+    });
+  });
 });

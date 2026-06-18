@@ -1,8 +1,46 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { DeduplicatePage } from "./DeduplicatePage";
+import { useAppStore } from "../store/useAppStore";
+import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+
+// Stub HTMLDialogElement.showModal/close since jsdom does not implement them
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+});
 
 // DuplicateRecordSummary shape — only fields DeduplicatePage renders
 const recordA = {
@@ -27,6 +65,12 @@ const mockPair = {
   score: 0.9
 };
 
+const survivorRecord = {
+  ...defaultContacts.records[0]!,
+  id: "cnt_0001",
+  displayName: "Admisión General (fusionado)"
+};
+
 const mockDetectDuplicates = vi.fn().mockResolvedValue({
   pairs: [mockPair],
   records: { cnt_0001: recordA, cnt_0002: recordB },
@@ -34,12 +78,7 @@ const mockDetectDuplicates = vi.fn().mockResolvedValue({
   pairCount: 1
 });
 
-const mockMergeContacts = vi.fn().mockResolvedValue({
-  id: "cnt_0001",
-  displayName: "Admisión General",
-  department: "Admisión",
-  phones: []
-});
+const mockMergeContacts = vi.fn().mockResolvedValue(survivorRecord);
 
 const renderPage = () =>
   render(
@@ -113,5 +152,136 @@ describe("DeduplicatePage", () => {
     renderPage();
 
     expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
+  });
+
+  describe("merge store reconciliation", () => {
+    const pairsResult = {
+      pairs: [mockPair],
+      records: { cnt_0001: recordA, cnt_0002: recordB },
+      checkedCount: 2,
+      pairCount: 1
+    };
+    const emptyResult = { pairs: [], records: {}, checkedCount: 2, pairCount: 0 };
+
+    beforeEach(() => {
+      // Seed the store with both records so we can assert changes after merge
+      useAppStore.setState({
+        contacts: {
+          ...defaultContacts,
+          records: [
+            { ...defaultContacts.records[0]!, id: "cnt_0001", displayName: "Admisión General" },
+            { ...defaultContacts.records[1]!, id: "cnt_0002", displayName: "Admisión General" }
+          ]
+        },
+        selectedRecordId: "cnt_0001"
+      });
+      // Override detectDuplicates for this block: first call returns pair, second returns empty
+      let callCount = 0;
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockImplementation(() => {
+            callCount += 1;
+            return Promise.resolve(callCount === 1 ? pairsResult : emptyResult);
+          }),
+          mergeContacts: mockMergeContacts
+        }
+      });
+    });
+
+    const triggerMerge = async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      // Select record to keep
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Open confirm dialog (page-level Fusionar button)
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      // Confirm the merge — at this point both buttons are in the DOM;
+      // the dialog confirm button has a destructive style class
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      const dialogConfirm = allFusionar[allFusionar.length - 1]!;
+      fireEvent.click(dialogConfirm);
+    };
+
+    it("removes the discarded record from the store after a successful merge", async () => {
+      await triggerMerge();
+      await waitFor(() => {
+        const records = useAppStore.getState().contacts?.records ?? [];
+        expect(records.find((r) => r.id === "cnt_0002")).toBeUndefined();
+      });
+    });
+
+    it("updates the survivor record in the store with the returned merged fields", async () => {
+      await triggerMerge();
+      await waitFor(() => {
+        const records = useAppStore.getState().contacts?.records ?? [];
+        const survivor = records.find((r) => r.id === "cnt_0001");
+        expect(survivor).toBeDefined();
+        expect(survivor!.displayName).toBe("Admisión General (fusionado)");
+      });
+    });
+
+    it("shows success toast after merge", async () => {
+      await triggerMerge();
+      expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
+    });
+  });
+
+  describe("merge failure rollback", () => {
+    beforeEach(() => {
+      useAppStore.setState({
+        contacts: {
+          ...defaultContacts,
+          records: [
+            { ...defaultContacts.records[0]!, id: "cnt_0001", displayName: "Admisión General" },
+            { ...defaultContacts.records[1]!, id: "cnt_0002", displayName: "Admisión General" }
+          ]
+        },
+        selectedRecordId: "cnt_0001"
+      });
+      // Use a fresh detect mock that always returns pairs for this block
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockResolvedValue({
+            pairs: [mockPair],
+            records: { cnt_0001: recordA, cnt_0002: recordB },
+            checkedCount: 2,
+            pairCount: 1
+          }),
+          mergeContacts: mockMergeContacts
+        }
+      });
+    });
+
+    it("leaves the store unchanged when the merge IPC rejects", async () => {
+      mockMergeContacts.mockRejectedValueOnce(new Error("merge failed"));
+
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const recordsBefore = useAppStore.getState().contacts!.records.map((r) => r.id);
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Open confirm dialog
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      // Click dialog confirm
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      await waitFor(() => {
+        expect(screen.getByText("merge failed")).toBeInTheDocument();
+      });
+
+      const recordsAfter = useAppStore.getState().contacts!.records.map((r) => r.id);
+      expect(recordsAfter).toEqual(recordsBefore);
+    });
   });
 });

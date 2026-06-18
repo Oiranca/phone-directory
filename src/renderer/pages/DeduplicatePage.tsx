@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { useAppStore } from "../store/useAppStore";
 
 interface PairState {
   pair: DuplicatePair;
@@ -10,6 +11,7 @@ interface PairState {
 
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
+  const applyMergeResult = useAppStore((s) => s.applyMergeResult);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
@@ -77,18 +79,20 @@ export const DeduplicatePage = () => {
 
     try {
       setMergingId(confirmState.pairId);
-      await window.hospitalDirectory.mergeContacts({
+      const survivor = await window.hospitalDirectory.mergeContacts({
         keepId: confirmState.keepRecord.id,
         discardId: confirmState.discardRecord.id
       });
+
+      // Reconcile the central store — remove discarded, upsert survivor
+      applyMergeResult(survivor, confirmState.discardRecord.id);
 
       // Remove merged pair and refresh detection to handle stale pairs
       setPairStates((current) =>
         current.filter((ps) => ps.pair.id !== confirmState.pairId)
       );
 
-      // Optionally refresh all pairs to update global store
-      // This prevents stale pairs from remaining after merge
+      // Refresh all pairs to clear any pairs that referenced the discarded record
       const result = await window.hospitalDirectory.detectDuplicates();
       setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
 
