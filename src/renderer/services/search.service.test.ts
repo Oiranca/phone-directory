@@ -225,6 +225,65 @@ describe("searchRecords", () => {
   });
 });
 
+describe("confidential flags are advisory — flagged records remain searchable", () => {
+  it("returns a record whose only phone is confidential when searching by display name", () => {
+    // Advisory policy (OIR-105 / P1-03): confidential/noPatientSharing are presentation markers only.
+    // Flagged values must never be excluded from search results.
+    const advisoryRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "confidential-record",
+        displayName: "Servicio confidencial de prueba",
+        contactMethods: {
+          emails: [],
+          phones: [
+            {
+              id: "ph-conf",
+              number: "99999",
+              kind: "internal",
+              isPrimary: true,
+              confidential: true,
+              noPatientSharing: true
+            }
+          ]
+        }
+      }
+    ];
+
+    const result = searchRecords(advisoryRecords, "confidencial de prueba", defaultFilters);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]?.id).toBe("confidential-record");
+  });
+
+  it("returns a record when searching by its confidential phone number directly", () => {
+    // Flagged phone numbers remain indexed — searching by number must still find the record.
+    const advisoryRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "confidential-phone-search",
+        displayName: "Central restringida",
+        contactMethods: {
+          emails: [],
+          phones: [
+            {
+              id: "ph-conf2",
+              number: "77777",
+              kind: "internal",
+              isPrimary: true,
+              confidential: true,
+              noPatientSharing: false
+            }
+          ]
+        }
+      }
+    ];
+
+    const result = searchRecords(advisoryRecords, "77777", defaultFilters);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]?.id).toBe("confidential-phone-search");
+  });
+});
+
 describe("getPreferredResultPhone", () => {
   it("returns the first non-confidential, non-noPatientSharing phone", () => {
     const record = structuredClone(records[0]) as ContactRecord;

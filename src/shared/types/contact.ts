@@ -7,7 +7,9 @@ export interface PhoneContact {
   extension?: string;
   kind: string;
   isPrimary: boolean;
+  /** Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105). */
   confidential: boolean;
+  /** Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105). */
   noPatientSharing: boolean;
   notes?: string;
 }
@@ -144,7 +146,9 @@ export interface EditablePhoneContact {
   extension?: string;
   kind: string;
   isPrimary: boolean;
+  /** Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105). */
   confidential: boolean;
+  /** Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105). */
   noPatientSharing: boolean;
   notes?: string;
 }

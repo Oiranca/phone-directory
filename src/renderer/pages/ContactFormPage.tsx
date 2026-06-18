@@ -884,7 +884,10 @@ export const ContactFormPage = () => {
                     />
                     Principal
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <label
+                    className="flex items-center gap-2 text-sm text-slate-700"
+                    title="Marcador visual orientativo — no restringe el acceso al número"
+                  >
                     <input
                       type="checkbox"
                       checked={phone.confidential}
@@ -892,7 +895,10 @@ export const ContactFormPage = () => {
                     />
                     Confidencial
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <label
+                    className="flex items-center gap-2 text-sm text-slate-700"
+                    title="Marcador visual orientativo — no restringe el acceso al número"
+                  >
                     <input
                       type="checkbox"
                       checked={phone.noPatientSharing}
