@@ -209,6 +209,120 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // OIR-111: CSV formula injection neutralization (CWE-1236)
+  // ---------------------------------------------------------------------------
+
+  describe("toCsv — formula injection neutralization", () => {
+    it("prefixes apostrophe for cell starting with '='", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "=HYPERLINK(\"evil.com\")", action: "create" as const }
+      ]);
+      // editor cell must contain the apostrophe-prefixed value (inside quotes because it contains quotes)
+      expect(csv).toContain("'=HYPERLINK");
+    });
+
+    it("prefixes apostrophe for cell starting with '+'", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "+cmd|' /C calc", action: "create" as const }
+      ]);
+      expect(csv).toContain("'+cmd");
+    });
+
+    it("prefixes apostrophe for cell starting with '-'", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "-2+3", action: "create" as const }
+      ]);
+      expect(csv).toContain("'-2+3");
+    });
+
+    it("prefixes apostrophe for cell starting with '@'", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "@SUM(1,2)", action: "create" as const }
+      ]);
+      expect(csv).toContain("'@SUM");
+    });
+
+    it("prefixes apostrophe for cell starting with TAB (0x09)", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "\tindented", action: "create" as const }
+      ]);
+      expect(csv).toContain("'\t");
+    });
+
+    it("prefixes apostrophe for cell starting with CR (0x0D)", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "\rcarriage", action: "create" as const }
+      ]);
+      expect(csv).toContain("'\r");
+    });
+
+    it("does NOT prefix apostrophe for trigger char that is NOT at position 0", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "a=b+c", action: "create" as const }
+      ]);
+      expect(csv).not.toContain("'a=b+c");
+      expect(csv).toContain("a=b+c");
+    });
+
+    it("does NOT modify a normal Unicode value (accented name)", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "José Müller", action: "create" as const }
+      ]);
+      expect(csv).toContain("José Müller");
+      expect(csv).not.toContain("'José");
+    });
+
+    it("wraps a quoted field correctly when trigger cell also contains a double-quote", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      // Input: ="say ""hello"""  (has = trigger and internal quotes)
+      // After neutralization: '="say ""hello"""
+      // After RFC 4180 quote-wrap + double internal quotes: "'=""say """"hello"""""" (wrapped in outer quotes)
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: '="say ""hello"""', action: "create" as const }
+      ]);
+      // Actual produced cell: outer-quoted, apostrophe first, all internal quotes doubled
+      expect(csv).toContain(`"'=""say """"hello"""""""`);
+    });
+
+    it("wraps field in quotes when trigger cell contains a comma", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "=SUM(A1,B1)", action: "create" as const }
+      ]);
+      // After neutralization: '=SUM(A1,B1) — has a comma so must be quoted
+      expect(csv).toContain('"\'=SUM(A1,B1)"');
+    });
+
+    it("wraps field in quotes when trigger cell contains a newline", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "=line1\nline2", action: "create" as const }
+      ]);
+      // After neutralization: '=line1\nline2 — has a newline so must be quoted
+      expect(csv).toContain('"\'=line1\nline2"');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // OIR-104: fail-closed on corruption
   // ---------------------------------------------------------------------------
 
