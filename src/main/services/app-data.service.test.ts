@@ -2951,4 +2951,123 @@ describe("AppDataService", () => {
     expect(ids).toContain(r1.savedRecordId);
     expect(ids).toContain(r2.savedRecordId);
   });
+
+  it("createBackup produces distinct file names even when the clock returns the same tick", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Freeze Date so both backups land in the same timestamp tick.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    try {
+      const firstPath = await service.createBackup();
+      const secondPath = await service.createBackup();
+
+      expect(firstPath).not.toBe(secondPath);
+      expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("parallel createBackup calls all produce distinct files and none are overwritten", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const count = 5;
+    const paths = await Promise.all(
+      Array.from({ length: count }, () => service.createBackup())
+    );
+
+    const uniquePaths = new Set(paths);
+    expect(uniquePaths.size).toBe(count);
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = await fs.readdir(backupDir);
+    const backupFiles = files.filter((f) => f.startsWith("contacts-") && f.endsWith(".json"));
+    expect(backupFiles).toHaveLength(count);
+  });
+
+  it("createBackup retries and succeeds when the first candidate name already exists", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Intercept the first suffix to be a predictable collision, then let the rest through.
+    const originalRandomUUID = globalThis.crypto.randomUUID.bind(globalThis.crypto);
+    let callCount = 0;
+    const collidingSuffix = "aaaaaa";
+
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
+      callCount += 1;
+      // Return a UUID whose first 6 non-hyphen chars match the colliding suffix on the first call.
+      if (callCount === 1) {
+        return `${collidingSuffix.slice(0, 4)}-${collidingSuffix.slice(4)}-0000-0000-000000000000` as ReturnType<typeof crypto.randomUUID>;
+      }
+      return originalRandomUUID();
+    });
+
+    // Pre-create the file that would collide with the first suffix.
+    const frozenDate = new Date("2026-06-01T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(frozenDate);
+    const safeTimestamp = frozenDate.toISOString().replace(/[:.]/g, "-");
+    const collidingPath = path.join(backupDir, `contacts-${safeTimestamp}-${collidingSuffix}.json`);
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.writeFile(collidingPath, "{}");
+
+    let resultPath: string;
+    try {
+      resultPath = await service.createBackup();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Must have succeeded with a different name.
+    expect(resultPath).not.toBe(collidingPath);
+    expect(path.basename(resultPath)).not.toBe(path.basename(collidingPath));
+
+    // Both the pre-existing collision file and the new backup exist.
+    const files = await fs.readdir(backupDir);
+    const backupFiles = files.filter((f) => f.startsWith("contacts-") && f.endsWith(".json"));
+    expect(backupFiles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("backup retention ordering is correct under the new name format with random suffix", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Create three backups with a deliberate time gap so mtime ordering is deterministic.
+    const firstPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const thirdPath = await service.createBackup();
+
+    const backups = await service.listBackups();
+
+    // listBackups returns descending by createdAt (newest first).
+    expect(backups).toHaveLength(3);
+    expect(backups[0]?.filePath).toBe(thirdPath);
+    expect(backups[1]?.filePath).toBe(secondPath);
+    expect(backups[2]?.filePath).toBe(firstPath);
+
+    const times = backups.map((b) => new Date(b.createdAt).getTime());
+    expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+    expect(times[1]).toBeGreaterThanOrEqual(times[2]!);
+  });
 });

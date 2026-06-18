@@ -159,8 +159,12 @@ export class AppDataService {
   }
 
   async createBackup() {
+    return this.enqueueWrite(() => this.createBackupInner());
+  }
+
+  private async createBackupInner() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePath(settings, "contacts");
+    const backupFilePath = await this.createBackupFilePathUnique(settings, "contacts");
     await this.copyFileWithContext(
       settings.dataFilePath,
       backupFilePath,
@@ -247,7 +251,7 @@ export class AppDataService {
     const importedContacts = directoryDatasetSchema.parse(
       await readJsonFile<DirectoryDataset>(sourceFilePath)
     );
-    const backupPath = await this.createBackup();
+    const backupPath = await this.createBackupInner();
     const settings = await this.readSettings(true);
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
@@ -306,7 +310,7 @@ export class AppDataService {
       await backupHandle.close();
     }
 
-    const backupPath = await this.createBackup();
+    const backupPath = await this.createBackupInner();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
 
@@ -325,7 +329,7 @@ export class AppDataService {
     const settings = await this.readSettings(true);
     const contactsFilePath = settings.dataFilePath;
     const backupPath = (await this.fileExists(contactsFilePath))
-      ? await this.createBackup()
+      ? await this.createBackupInner()
       : null;
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
@@ -384,7 +388,7 @@ export class AppDataService {
     const conflicts = this.detectConflicts(currentContacts, dataset);
     const policies = this.resolveImportPolicies(conflicts, policySelections);
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
-    const backupPath = await this.createBackup();
+    const backupPath = await this.createBackupInner();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
     this.noteAutoBackupEligibleEdit();
     await this.appendAuditEntry({
@@ -626,7 +630,11 @@ export class AppDataService {
     );
   }
 
-  private async createBackupFilePath(settings: AppSettings, prefix: string) {
+  private createBackupSuffix() {
+    return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 6);
+  }
+
+  private async createBackupFilePathUnique(settings: AppSettings, prefix: string) {
     const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
@@ -641,7 +649,25 @@ export class AppDataService {
         { filePath: backupDirectory }
       );
     }
-    return path.join(backupDirectory, `${prefix}-${safeTimestamp}.json`);
+
+    const maxAttempts = 5;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const suffix = this.createBackupSuffix();
+      const filePath = path.join(backupDirectory, `${prefix}-${safeTimestamp}-${suffix}.json`);
+
+      try {
+        await fs.access(filePath, fsConstants.F_OK);
+        // File already exists — retry with a fresh suffix.
+      } catch {
+        // File does not exist — this name is safe to use.
+        return filePath;
+      }
+    }
+
+    throw new Error(
+      `No se pudo generar un nombre único para el backup después de ${maxAttempts} intentos.`
+    );
   }
 
   private async readSettings(validatePaths = false) {
@@ -987,7 +1013,7 @@ export class AppDataService {
 
   private async createAutoBackup() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePath(settings, "auto-backup");
+    const backupFilePath = await this.createBackupFilePathUnique(settings, "auto-backup");
 
     await this.copyFileWithContext(
       settings.dataFilePath,
