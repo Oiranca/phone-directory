@@ -1,6 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PathDisplay } from "./PathDisplay";
+
+/** Flush all pending microtasks (Promise callbacks) without advancing fake timers. */
+const flushPromises = () => act(async () => { await Promise.resolve(); });
 
 afterEach(() => {
   cleanup();
@@ -115,6 +118,74 @@ describe("PathDisplay", () => {
       fireEvent.click(screen.getByRole("button", { name: "Copiar ruta completa" }));
       expect(writeText).toHaveBeenCalledWith("/home/alice/data/contacts.json");
     });
+
+    it("clipboard rejection is silently swallowed — no 'Copiado' and no thrown error", async () => {
+      // Mock writeText to reject (e.g. clipboard permission denied).
+      mockClipboard(() => Promise.reject(new Error("NotAllowedError")));
+      render(<PathDisplay path="/home/alice/data/contacts.json" />);
+      fireEvent.click(screen.getByRole("button", { name: "Copiar ruta completa" }));
+      // Give the rejected promise time to settle.
+      await waitFor(() => {});
+      // The button must still show the default label — no "Copiado" state mutation.
+      expect(screen.getByRole("button", { name: "Copiar ruta completa" })).toHaveTextContent("Copiar ruta");
+    });
+  });
+
+  describe("copy timer lifecycle (FIX 1 — no setState-after-unmount)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("unmounting during the reset window does not cause setState-after-unmount", async () => {
+      mockClipboard();
+      const { unmount } = render(<PathDisplay path="/home/alice/data/contacts.json" />);
+
+      // Click copy — starts the 1500 ms reset timer.
+      fireEvent.click(screen.getByRole("button", { name: "Copiar ruta completa" }));
+
+      // Wait for clipboard promise to resolve so copied=true is set.
+      await flushPromises();
+
+      // Unmount before the timer fires.
+      unmount();
+
+      // Advance past the 1500 ms timeout — the cleared timer must NOT call setCopied.
+      // If setState fires on an unmounted component React would warn; capture any error.
+      const consoleSpy = vi.spyOn(console, "error");
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+
+    it("a second copy click cancels the previous timer (no two pending resets)", async () => {
+      mockClipboard();
+      render(<PathDisplay path="/home/alice/data/contacts.json" />);
+
+      const copyBtn = screen.getByRole("button", { name: "Copiar ruta completa" });
+
+      // First click at t=0.
+      fireEvent.click(copyBtn);
+      await flushPromises();
+
+      // t=1000 ms: still within the 1500 ms window from the first click.
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(copyBtn).toHaveTextContent("Copiado");
+
+      // Second click at t=1000 ms — cancels the first timer and restarts the 1500 ms window.
+      fireEvent.click(copyBtn);
+      await flushPromises();
+
+      // t=2000 ms: only 1000 ms since the second click — should still show "Copiado".
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(copyBtn).toHaveTextContent("Copiado");
+
+      // t=2600 ms: 1600 ms since the second click — timer has fired, label reverts.
+      act(() => { vi.advanceTimersByTime(600); });
+      expect(copyBtn).toHaveTextContent("Copiar ruta");
+    });
   });
 
   describe("basename collision disambiguation", () => {
@@ -148,6 +219,34 @@ describe("PathDisplay", () => {
     it("applies extra className to the wrapper", () => {
       const { container } = render(<PathDisplay path="/data/contacts.json" className="extra-class" />);
       expect(container.firstChild).toHaveClass("extra-class");
+    });
+  });
+
+  describe("textClassName prop (FIX 2 — caller-controlled text size)", () => {
+    it("defaults to text-sm on the basename span when textClassName is not provided", () => {
+      const { container } = render(<PathDisplay path="/data/contacts.json" />);
+      // The first child of the root span is the text span.
+      const textSpan = container.querySelector("span > span:first-child");
+      expect(textSpan).toHaveClass("text-sm");
+    });
+
+    it("applies a caller-provided textClassName (e.g. text-xs) to the basename span", () => {
+      const { container } = render(
+        <PathDisplay path="/data/contacts.json" textClassName="text-xs" />
+      );
+      const textSpan = container.querySelector("span > span:first-child");
+      expect(textSpan).toHaveClass("text-xs");
+      expect(textSpan).not.toHaveClass("text-sm");
+    });
+
+    it("caller textClassName is applied to the revealed full path span as well", () => {
+      const { container } = render(
+        <PathDisplay path="/data/contacts.json" textClassName="text-xs" />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Mostrar ruta completa" }));
+      const textSpan = container.querySelector("span > span:first-child");
+      expect(textSpan).toHaveClass("text-xs");
+      expect(textSpan).not.toHaveClass("text-sm");
     });
   });
 });

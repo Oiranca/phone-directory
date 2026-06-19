@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** Extract the last non-empty path segment (basename) from any absolute or relative path.
  *  Handles trailing separators (e.g. "/foo/bar/") and both POSIX/Windows separators.
@@ -19,6 +19,13 @@ type Props = {
   path: string;
   /** Additional class names applied to the root wrapper element. */
   className?: string;
+  /**
+   * Class names applied to the basename/path text span, controlling font size and
+   * any other text-level styles.  Defaults to `text-sm`.  Callers that need a
+   * different size (e.g. `text-xs` for compact backup cards) can pass it here so
+   * the hardcoded size does not override their intent.
+   */
+  textClassName?: string;
 };
 
 /**
@@ -27,17 +34,30 @@ type Props = {
  * and a "copy full path" button.  This prevents screenshots from leaking
  * usernames, share names, or workstation directory structure (OIR-115).
  */
-export const PathDisplay = ({ path, className }: Props) => {
+export const PathDisplay = ({ path, className, textClassName = "text-sm" }: Props) => {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // FIX 1: keep a ref to the pending reset timer so we can clear it on unmount
+  // and on each repeated copy click, preventing setState-after-unmount.
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Clear any pending timer when the component unmounts.
+  useEffect(() => {
+    return () => {
+      clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const name = basename(path);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(path);
+      // Clear any prior pending reset before starting a new one (repeated clicks).
+      clearTimeout(copyTimerRef.current);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       // Clipboard access can fail in restricted contexts; fail silently.
     }
@@ -49,7 +69,8 @@ export const PathDisplay = ({ path, className }: Props) => {
 
   return (
     <span className={["inline-flex flex-col gap-1", className].filter(Boolean).join(" ")}>
-      <span className="break-all font-mono text-sm">
+      {/* FIX 2: text size cascades from caller via textClassName (default "text-sm"). */}
+      <span className={["break-all font-mono", textClassName].filter(Boolean).join(" ")}>
         {revealed ? path : name}
       </span>
       <span className="flex flex-wrap items-center gap-2">

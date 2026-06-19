@@ -527,7 +527,7 @@ export const ImportExportPage = () => {
             backups.map((backup) => (
               <article key={backup.filePath} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
-                <PathDisplay path={backup.filePath} className="mt-1 text-xs text-slate-500" />
+                <PathDisplay path={backup.filePath} className="mt-1 text-slate-500" textClassName="text-xs" />
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatTimestamp(backup.createdAt)}</span>
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatSize(backup.sizeBytes)}</span>
