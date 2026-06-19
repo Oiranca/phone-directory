@@ -3445,4 +3445,67 @@ describe("AppDataService", () => {
     expect(autoFiles).toHaveLength(1);
     expect(manualFiles).toHaveLength(1);
   });
+
+  it("excludes 0-byte crash-orphaned placeholder files from listBackups", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Place a real backup so we confirm valid entries still appear.
+    const realBackupPath = await service.createBackup();
+
+    // Simulate the crash-orphaned 0-byte placeholder left when a copy fails
+    // mid-flight (createBackupCore opens the file exclusively, copy crashes,
+    // unlink never runs).
+    const orphanPath = path.join(backupDir, "contacts-orphan-crash.json");
+    await fs.writeFile(orphanPath, "", "utf-8");
+
+    const backups = await service.listBackups();
+
+    expect(backups.some((b) => b.filePath === orphanPath)).toBe(false);
+    expect(backups.some((b) => b.filePath === realBackupPath)).toBe(true);
+    expect(backups.every((b) => b.sizeBytes > 0)).toBe(true);
+  });
+
+  it("rejects restoreBackup on an empty (0-byte) backup file with a clear error", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+    const emptyBackupPath = path.join(backupDir, "contacts-empty-crash.json");
+    await fs.writeFile(emptyBackupPath, "", "utf-8");
+
+    await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
+      /El archivo de backup está vacío y no puede restaurarse/
+    );
+  });
+
+  it("still lists and restores valid backups after the 0-byte filter is applied", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Drop a 0-byte orphan alongside a valid backup.
+    const orphanPath = path.join(backupDir, "contacts-zero-orphan.json");
+    await fs.writeFile(orphanPath, "", "utf-8");
+
+    const realBackupPath = await service.createBackup();
+
+    // listBackups should include only the real backup.
+    const backups = await service.listBackups();
+    expect(backups).toHaveLength(1);
+    expect(backups[0]!.filePath).toBe(realBackupPath);
+
+    // restoreBackup on the real backup should succeed.
+    const result = await service.restoreBackup(realBackupPath);
+    expect(result.recordCount).toBeGreaterThanOrEqual(0);
+  });
 });
