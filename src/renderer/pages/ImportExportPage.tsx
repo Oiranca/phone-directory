@@ -50,6 +50,10 @@ export const ImportExportPage = () => {
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const confirmationInFlightRef = useRef(false);
+  // Tracks whether the initial backup list load has been requested so the
+  // backups effect never issues more than one listBackups IPC call, even when
+  // contacts or settings references change after the initial load.
+  const backupsRequestedRef = useRef(false);
   const isRestoreInProgress = restoringBackupPath !== "";
   const isMutating =
     isCreatingBackup ||
@@ -84,10 +88,11 @@ export const ImportExportPage = () => {
       setIsLoading(false);
       return;
     }
-    if (contacts || settings) {
+    if (contacts && settings && !backupsRequestedRef.current) {
+      backupsRequestedRef.current = true;
       void loadBackups();
     }
-  }, [storeIsLoading, bootstrapStatus]);
+  }, [storeIsLoading, bootstrapStatus, contacts, settings]);
 
   const refreshBackups = async () => {
     try {
