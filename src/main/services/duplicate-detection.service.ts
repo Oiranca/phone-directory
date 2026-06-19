@@ -53,12 +53,16 @@ export class DuplicateDetectionService {
     }));
 
     for (let i = 0; i < signals.length; i++) {
+      // Unconditional abort check on every outer iteration — guarantees an
+      // already-aborted signal is caught immediately, even for tiny datasets
+      // that never reach a chunk boundary (including i=0).
+      if (signal?.aborted) {
+        throw new DuplicateDetectionAbortError();
+      }
+
       // Yield to the event loop every CHUNK_SIZE outer iterations so the main
-      // process stays responsive. Check abort at the same boundary.
+      // process stays responsive during large scans.
       if (i > 0 && i % CHUNK_SIZE === 0) {
-        if (signal?.aborted) {
-          throw new DuplicateDetectionAbortError();
-        }
         await new Promise<void>((r) => setImmediate(r));
         // Re-check after yield in case abort was signalled during the await
         if (signal?.aborted) {
