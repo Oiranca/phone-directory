@@ -164,13 +164,29 @@ export class AppDataService {
 
   private async createBackupInner() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePathUnique(settings, "contacts");
-    await this.copyFileWithContext(
-      settings.dataFilePath,
-      backupFilePath,
-      "No se pudo crear el backup del directorio."
-    );
+    const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear el backup del directorio.");
     this.autoBackupEditCount = 0;
+    return backupFilePath;
+  }
+
+  /**
+   * Shared primitive: generates a unique path, atomically claims it, then
+   * copies the contacts file to that path.  Used by both createBackupInner
+   * (manual/import/reset backups) and createAutoBackup.
+   *
+   * Must only be called from inside an enqueueWrite slot.
+   */
+  private async createBackupCore(settings: AppSettings, prefix: string, errorMessage: string) {
+    const backupFilePath = await this.createBackupFilePathUnique(settings, prefix);
+    // The atomic open in createBackupFilePathUnique left a 0-byte placeholder
+    // at backupFilePath.  If the copy fails we must remove that placeholder so
+    // it does not appear in listBackups as a valid (but empty) backup file.
+    try {
+      await this.copyFileWithContext(settings.dataFilePath, backupFilePath, errorMessage);
+    } catch (error) {
+      await fs.unlink(backupFilePath).catch(() => undefined);
+      throw error;
+    }
     return backupFilePath;
   }
 
@@ -635,7 +651,6 @@ export class AppDataService {
   }
 
   private async createBackupFilePathUnique(settings: AppSettings, prefix: string) {
-    const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
       "No se pudo preparar la carpeta de backups del directorio."
@@ -653,15 +668,37 @@ export class AppDataService {
     const maxAttempts = 5;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Regenerate both timestamp and suffix on every attempt so that two
+      // concurrent callers hitting the same millisecond can't race: the
+      // O_CREAT|O_EXCL open is the atomic claim — whoever wins the open owns
+      // the file name.
+      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const suffix = this.createBackupSuffix();
-      const filePath = path.join(backupDirectory, `${prefix}-${safeTimestamp}-${suffix}.json`);
+      const candidatePath = path.join(backupDirectory, `${prefix}-${safeTimestamp}-${suffix}.json`);
+
+      let fileHandle: fs.FileHandle | undefined;
 
       try {
-        await fs.access(filePath, fsConstants.F_OK);
-        // File already exists — retry with a fresh suffix.
-      } catch {
-        // File does not exist — this name is safe to use.
-        return filePath;
+        // 'wx' = O_CREAT | O_EXCL | O_WRONLY — fails with EEXIST if the file
+        // already exists.  On success we atomically own this path.
+        fileHandle = await fs.open(candidatePath, "wx");
+        // Close immediately; the subsequent copyFile will overwrite the empty
+        // placeholder we just created (which is safe because we hold the name).
+        await fileHandle.close();
+        return candidatePath;
+      } catch (error) {
+        await fileHandle?.close().catch(() => undefined);
+        const errno = this.getErrnoException(error);
+        if (errno?.code === "EEXIST") {
+          // Name already taken — retry with a fresh timestamp + suffix.
+          continue;
+        }
+        // Any other error (EACCES, ENOSPC, …) — surface it.
+        throw this.toFilesystemError(
+          error,
+          "No se pudo preparar la carpeta de backups del directorio.",
+          { filePath: candidatePath }
+        );
       }
     }
 
@@ -1013,13 +1050,10 @@ export class AppDataService {
 
   private async createAutoBackup() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePathUnique(settings, "auto-backup");
-
-    await this.copyFileWithContext(
-      settings.dataFilePath,
-      backupFilePath,
-      "No se pudo crear el auto-backup del directorio."
-    );
+    // Delegates to the shared createBackupCore primitive (which calls
+    // createBackupFilePathUnique + copyFileWithContext) instead of duplicating
+    // that logic here.  This ensures the two code paths can never diverge.
+    await this.createBackupCore(settings, "auto-backup", "No se pudo crear el auto-backup del directorio.");
     await this.pruneAutoBackups(settings);
   }
 
