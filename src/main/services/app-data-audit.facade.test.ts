@@ -116,7 +116,6 @@ describe("AppDataAuditFacade", () => {
 
   it("appendEntry swallows AuditLogIntegrityError and logs to console (non-fatal)", async () => {
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
-    const { AuditLogIntegrityError } = await import("./audit-log.service.js");
 
     const facade = new AppDataAuditFacade();
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -138,7 +137,7 @@ describe("AppDataAuditFacade", () => {
     // Must NOT throw even though the audit log is corrupt
     await expect(facade.appendEntry(entry)).resolves.toBeUndefined();
 
-    // Must have logged the integrity error
+    // Must have logged the integrity error exactly once
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("[AuditLog] INTEGRITY ERROR"),
       expect.any(String),
@@ -146,6 +145,46 @@ describe("AppDataAuditFacade", () => {
       expect.any(String),
       expect.anything()
     );
+  });
+
+  it("appendEntry one-shot latch: integrity-error block fires ONCE across multiple appends after the log latches", async () => {
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+    const { AuditLogService } = await import("./audit-log.service.js");
+    const { AuditLogIntegrityError } = await import("./audit-log.service.js");
+
+    const facade = new AppDataAuditFacade();
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // Build a stable AuditLogIntegrityError that the mock will keep throwing
+    const integrityErr = new AuditLogIntegrityError({
+      logFilePath: "/abs/path/to/audit-log.json",
+      quarantineFilePath: "/abs/path/to/audit-log.json.quarantine",
+      cause: new SyntaxError("Unexpected token"),
+    });
+
+    // Make every append call throw AuditLogIntegrityError (simulates the service
+    // having latched after the first corruption detection)
+    vi.spyOn(AuditLogService.prototype, "append").mockRejectedValue(integrityErr);
+
+    const entry = {
+      timestamp: new Date().toISOString(),
+      editor: "Latch Test",
+      action: "create" as const,
+      recordsAffected: 1,
+      recordId: "cnt_latch",
+      changes: {}
+    };
+
+    // Drive five back-to-back appends — all must be fail-open (no throw)
+    for (let i = 0; i < 5; i++) {
+      await expect(facade.appendEntry(entry)).resolves.toBeUndefined();
+    }
+
+    // The integrity-error console.error block must have fired EXACTLY ONCE
+    const integrityCalls = consoleErrorSpy.mock.calls.filter(
+      ([msg]) => typeof msg === "string" && (msg as string).includes("[AuditLog] INTEGRITY ERROR")
+    );
+    expect(integrityCalls).toHaveLength(1);
   });
 
   it("appendEntry swallows generic errors and logs code+message without the raw error object (FIX 4 — path-leak guard)", async () => {
