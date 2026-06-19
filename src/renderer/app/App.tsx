@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { PathDisplay } from "../components/feedback/PathDisplay";
 import { AppShell } from "../components/layout/AppShell";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
@@ -108,7 +109,7 @@ const RecoveryPanel = () => {
       {recovery.details && <p className="mt-2 text-sm text-slate-600">{recovery.details}</p>}
       <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
         <p className="font-semibold text-scs-blueDark">Archivo afectado</p>
-        <p className="mt-1 break-all">{recovery.contactsFilePath}</p>
+        <PathDisplay path={recovery.contactsFilePath} className="mt-1" />
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">

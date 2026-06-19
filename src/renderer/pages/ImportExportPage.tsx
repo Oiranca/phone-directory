@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
+import { PathDisplay } from "../components/feedback/PathDisplay";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
@@ -521,7 +522,7 @@ export const ImportExportPage = () => {
             backups.map((backup) => (
               <article key={backup.filePath} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
-                <p className="mt-1 break-all text-xs text-slate-500">{backup.filePath}</p>
+                <PathDisplay path={backup.filePath} className="mt-1 text-xs text-slate-500" />
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatTimestamp(backup.createdAt)}</span>
                   <span className="rounded-full bg-slate-100 px-3 py-1">{formatSize(backup.sizeBytes)}</span>

@@ -468,6 +468,21 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
   });
 
+  it("OIR-115 — sourceFilePath is stripped from the preview payload before reaching the renderer", async () => {
+    const sender = makeWebContentsSender(10);
+    const handler = handlers.get("contacts:preview-csv-import");
+    if (!handler) throw new Error("preview handler not registered");
+
+    const result = await handler({ sender } as unknown) as Record<string, unknown>;
+
+    // importToken must be present (the renderer needs it for confirmation)
+    expect(typeof result.importToken).toBe("string");
+    // sourceFilePath must NOT be present in the renderer-facing payload
+    expect(Object.prototype.hasOwnProperty.call(result, "sourceFilePath")).toBe(false);
+    // fileName (basename only) should still be present for display
+    expect(result.fileName).toBe("test.csv");
+  });
+
   it("concurrent confirmations — exactly one succeeds, the other is rejected", async () => {
     const sender = makeWebContentsSender(10);
     const importToken = await runPreview(sender);

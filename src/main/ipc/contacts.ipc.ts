@@ -156,6 +156,9 @@ export const registerContactsIpc = (service: AppDataService) => {
     if (!sourceFilePath) {
       return null;
     }
+    // previewCsvImport declares { sourceFilePath: string } in its return type so
+    // TypeScript proves the field exists here; we destructure it out before the
+    // renderer payload is assembled (OIR-115 — no cast needed).
     const preview = await service.previewCsvImport(sourceFilePath);
     const importToken = randomUUID();
     const previousImportToken = senderTokens.get(senderId);
@@ -198,8 +201,12 @@ export const registerContactsIpc = (service: AppDataService) => {
       });
     }
 
+    // Strip the absolute sourceFilePath before sending to the renderer (OIR-115).
+    // The path is retained server-side in pendingCsvImports; the renderer
+    // identifies the import by importToken only.
+    const { sourceFilePath: _stripped, ...safePreview } = preview;
     return {
-      ...preview,
+      ...safePreview,
       importToken
     };
   });

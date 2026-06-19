@@ -247,7 +247,6 @@ export interface CsvImportPreviewRow {
 
 export interface CsvImportPreview {
   importToken: string;
-  sourceFilePath: string;
   fileName: string;
   detectedFormat?: string;
   detectionConfidence?: "high" | "medium" | "low";

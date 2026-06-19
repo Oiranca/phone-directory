@@ -138,7 +138,6 @@ describe("ImportExportPage", () => {
         }),
         previewCsvImport: vi.fn().mockResolvedValue({
           importToken: "csv-token-1",
-          sourceFilePath: "/tmp/incoming/directory.csv",
           fileName: "directory.csv",
           detectedFormat: "exportación cruda de hoja de servicios",
           detectionConfidence: "medium",
@@ -234,7 +233,9 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    expect(screen.getByText("contacts-1.json")).toBeInTheDocument();
+    // PathDisplay renders the basename twice: once in the heading <p> and once in the
+    // PathDisplay component itself — both showing "contacts-1.json".
+    expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
   });
 
@@ -336,7 +337,7 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("contacts-1.json")).toBeInTheDocument();
+    expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not reload bootstrap when store already has data (route transition), only loads backups", async () => {
@@ -423,7 +424,6 @@ describe("ImportExportPage", () => {
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-conflict",
-      sourceFilePath: "/tmp/incoming/conflicts.csv",
       fileName: "conflicts.csv",
       totalRowCount: 1,
       validRowCount: 1,
@@ -496,7 +496,6 @@ describe("ImportExportPage", () => {
   it("updates confirmation counts when a conflict is skipped", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-skip-conflict",
-      sourceFilePath: "/tmp/incoming/skip-conflicts.csv",
       fileName: "skip-conflicts.csv",
       totalRowCount: 1,
       validRowCount: 1,
@@ -558,7 +557,6 @@ describe("ImportExportPage", () => {
   it("blocks stale resolved previews when a conflict is missing its selected policy", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-stale-conflict",
-      sourceFilePath: "/tmp/incoming/stale-conflicts.csv",
       fileName: "stale-conflicts.csv",
       totalRowCount: 1,
       validRowCount: 1,
@@ -621,7 +619,6 @@ describe("ImportExportPage", () => {
   it("blocks import confirmation when the preview contains invalid rows", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-invalid",
-      sourceFilePath: "/tmp/incoming/broken.csv",
       fileName: "broken.csv",
       totalRowCount: 2,
       validRowCount: 1,
@@ -675,7 +672,6 @@ describe("ImportExportPage", () => {
       .fn()
       .mockResolvedValueOnce({
         importToken: "csv-token-first",
-        sourceFilePath: "/tmp/incoming/directory.csv",
         fileName: "directory.csv",
         totalRowCount: 2,
         validRowCount: 2,
