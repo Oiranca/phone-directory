@@ -27,6 +27,8 @@ import type {
 
 export class AppDataAuditFacade {
   private readonly auditLog = new AuditLogService();
+  /** Set to true after the integrity-error block has been logged once per process instance. */
+  private integrityErrorLogged = false;
 
   async getAuditLog(params: AuditLogQueryParams): Promise<AuditLogResult> {
     return this.auditLog.query(params);
@@ -60,11 +62,21 @@ export class AppDataAuditFacade {
         // The audit log is corrupt.  The service has already quarantined the
         // original bytes.  We surface a distinct log message so operators can
         // identify the quarantine sidecar and call recoverFromIntegrityError().
-        console.error(
-          "[AuditLog] INTEGRITY ERROR — audit log is corrupt and all further appends are blocked.",
-          "Quarantine sidecar:", error.quarantineFilePath ?? "(quarantine failed)",
-          "Log file:", error.logFilePath,
-        );
+        //
+        // One-shot latch: log the full details only on the FIRST occurrence.
+        // Every subsequent call that re-enters this branch (while the underlying
+        // AuditLogService keeps rejecting appends) is silently dropped to avoid
+        // spamming the console once per contact mutation.
+        if (!this.integrityErrorLogged) {
+          this.integrityErrorLogged = true;
+          // Full paths are logged exactly once so the operator can locate and
+          // recover the quarantine sidecar.  The latch ensures they never repeat.
+          console.error(
+            "[AuditLog] INTEGRITY ERROR — audit log is corrupt and all further appends are blocked.",
+            "Quarantine sidecar:", error.quarantineFilePath ?? "(quarantine failed)",
+            "Log file:", error.logFilePath,
+          );
+        }
       } else {
         // FIX 4 (PR #67): log only the error code and message, not the full error
         // object, to avoid leaking absolute filesystem paths into the console.
