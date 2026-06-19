@@ -255,6 +255,16 @@ export class AppDataService {
     const settings = await this.readSettings(true);
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // importSource is the basename only (no absolute path). No PII in the entry.
+    // "bulk-import" matches importCsvDataset semantics: wholesale dataset replacement.
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: this.getEditorName(settings),
+      action: "bulk-import",
+      recordsAffected: importedContacts.records.length,
+      importSource: path.basename(sourceFilePath)
+    });
 
     return {
       contacts: importedContacts,
@@ -313,6 +323,15 @@ export class AppDataService {
     const backupPath = await this.createBackupInner();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // importSource is the basename only (no absolute path). No PII in the entry.
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: this.getEditorName(settings),
+      action: "restore-from-backup",
+      recordsAffected: importedContacts.records.length,
+      importSource: path.basename(canonicalSourceFilePath)
+    });
 
     return {
       contacts: importedContacts,
@@ -334,6 +353,14 @@ export class AppDataService {
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
     await this.writeDatasetToPath(settings.dataFilePath, contacts);
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // No PII in the entry; recordsAffected=0 reflects the resulting empty dataset.
+    await this.appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      editor: this.getEditorName(settings),
+      action: "reset",
+      recordsAffected: 0
+    });
 
     return {
       contacts,
@@ -448,6 +475,15 @@ export class AppDataService {
     const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     this.noteAutoBackupEligibleEdit();
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // Only stable identifiers are logged; no PII (name, phone, email) is written.
+    await this.appendAuditEntry({
+      timestamp: now,
+      editor: editorName,
+      action: "create",
+      recordId: savedRecordId,
+      recordsAffected: 1
+    });
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -491,6 +527,15 @@ export class AppDataService {
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     this.noteAutoBackupEligibleEdit();
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // Only stable identifiers are logged; no PII (name, phone, email) is written.
+    await this.appendAuditEntry({
+      timestamp: now,
+      editor: editorName,
+      action: "update",
+      recordId: currentRecord.id,
+      recordsAffected: 1
+    });
     return {
       contacts: nextContacts,
       settings: this.toEditableSettings(settings),
@@ -594,6 +639,17 @@ export class AppDataService {
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     this.noteAutoBackupEligibleEdit();
+    // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
+    // Only stable identifiers are logged; no PII (name, phone, email) is written.
+    // recordId = kept record; changes.discardedId records which record was removed.
+    await this.appendAuditEntry({
+      timestamp: now,
+      editor: editorName,
+      action: "update",
+      recordId: keepId,
+      recordsAffected: 1,
+      changes: { discardedId: { old: discardId, new: null } }
+    });
 
     return mergedRecord;
     });

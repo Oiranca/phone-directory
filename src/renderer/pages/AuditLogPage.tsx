@@ -8,7 +8,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   update: "Actualización",
   delete: "Eliminación",
   "bulk-import": "Importación masiva",
-  "restore-from-backup": "Restauración de backup"
+  "restore-from-backup": "Restauración de backup",
+  reset: "Restablecer"
 };
 
 const ACTION_COLORS: Record<AuditAction, string> = {
@@ -16,10 +17,11 @@ const ACTION_COLORS: Record<AuditAction, string> = {
   update: "bg-blue-100 text-blue-900",
   delete: "bg-red-100 text-red-900",
   "bulk-import": "bg-purple-100 text-purple-900",
-  "restore-from-backup": "bg-amber-100 text-amber-900"
+  "restore-from-backup": "bg-amber-100 text-amber-900",
+  reset: "bg-slate-100 text-slate-900"
 };
 
-const AUDIT_ACTIONS: AuditAction[] = ["create", "update", "delete", "bulk-import", "restore-from-backup"];
+const AUDIT_ACTIONS: AuditAction[] = ["create", "update", "delete", "bulk-import", "restore-from-backup", "reset"];
 
 const formatTimestamp = (value: string) => {
   const date = new Date(value);
