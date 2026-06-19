@@ -36,7 +36,7 @@ import type {
 } from "../../shared/types/contact.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
-import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
@@ -1755,6 +1755,21 @@ export class AppDataService {
   }
 
   private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
-    return this.auditFacade.appendEntry(entry);
+    // FIX 3 (PR #67): use await so this frame appears in async stack traces and
+    // a future throw is caught by this method's own context rather than silently
+    // escaping as an unhandled promise rejection.
+    await this.auditFacade.appendEntry(entry);
+  }
+
+  /**
+   * Clear the latched integrity-error state on the audit log so that subsequent
+   * appends are attempted again.
+   *
+   * An IPC entrypoint can call this after the operator has resolved the
+   * underlying file corruption (no new IPC channel is needed — wire the
+   * existing audit-related IPC handler to this method if recovery is desired).
+   */
+  async recoverAuditLog(): Promise<void> {
+    return this.auditFacade.recoverFromIntegrityError();
   }
 }
