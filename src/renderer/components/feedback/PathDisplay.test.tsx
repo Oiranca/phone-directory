@@ -215,6 +215,66 @@ describe("PathDisplay", () => {
     });
   });
 
+  describe("path prop change resets revealed and copied state (FIX 3 — no auto-exposure)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("revealed resets to false when path prop changes — new path is NOT auto-exposed", () => {
+      const { rerender } = render(<PathDisplay path="/home/alice/backup-A/contacts.json" />);
+
+      // Reveal path A explicitly.
+      fireEvent.click(screen.getByRole("button", { name: "Mostrar ruta completa" }));
+      expect(screen.getByText("/home/alice/backup-A/contacts.json")).toBeInTheDocument();
+
+      // Rerender the SAME instance with a new path (simulates list refresh/reorder).
+      act(() => {
+        rerender(<PathDisplay path="/home/bob/backup-B/contacts.json" />);
+      });
+
+      // Must return to basename-only — full path B must NOT be in the DOM.
+      expect(screen.getByText("contacts.json")).toBeInTheDocument();
+      expect(screen.queryByText("/home/bob/backup-B/contacts.json")).not.toBeInTheDocument();
+      // The old path A must also be gone.
+      expect(screen.queryByText("/home/alice/backup-A/contacts.json")).not.toBeInTheDocument();
+      // Toggle button must reflect hidden state.
+      expect(screen.getByRole("button", { name: "Mostrar ruta completa" })).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("'Copiado' feedback resets when path prop changes and pending timer is cleared", async () => {
+      mockClipboard();
+      const { rerender } = render(<PathDisplay path="/home/alice/backup-A/contacts.json" />);
+
+      // Trigger copy on path A — starts the 1500 ms reset timer.
+      fireEvent.click(screen.getByRole("button", { name: "Copiar ruta completa" }));
+      // Flush clipboard Promise so copied=true is applied.
+      await flushPromises();
+
+      const copyBtn = screen.getByRole("button", { name: "Copiar ruta completa" });
+      expect(copyBtn).toHaveTextContent("Copiado");
+
+      // Rerender with a new path BEFORE the 1500 ms timer fires.
+      act(() => {
+        rerender(<PathDisplay path="/home/bob/backup-B/contacts.json" />);
+      });
+
+      // copied must have been reset immediately (not waiting for the timer).
+      const copyBtnAfter = screen.getByRole("button", { name: "Copiar ruta completa" });
+      expect(copyBtnAfter).toHaveTextContent("Copiar ruta");
+
+      // Advance well past the original 1500 ms window to confirm the stale timer
+      // was cleared and does NOT flip copied back to true.
+      const consoleSpy = vi.spyOn(console, "error");
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Copiar ruta completa" })).toHaveTextContent("Copiar ruta");
+    });
+  });
+
   describe("className passthrough", () => {
     it("applies extra className to the wrapper", () => {
       const { container } = render(<PathDisplay path="/data/contacts.json" className="extra-class" />);

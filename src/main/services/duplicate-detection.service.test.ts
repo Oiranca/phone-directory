@@ -570,6 +570,82 @@ describe("DuplicateDetectionService", () => {
       expect(partial).toBeUndefined();
     }, 60_000);
 
+    it("inner-loop abort: mid-scan abort during a single outer iteration is honored within INNER_ABORT_INTERVAL steps", async () => {
+      // This test locks the THIRD abort surface: the abort check added inside the inner
+      // j-loop every INNER_ABORT_INTERVAL (512) steps.
+      //
+      // Strategy: use a dataset of exactly 1 record in the outer loop's first row
+      // with N-1 inner comparisons where N-1 > INNER_ABORT_INTERVAL. We build
+      // 600 records. For i=0 the inner loop runs j=1..599 (599 steps). At j=512
+      // (the first multiple of INNER_ABORT_INTERVAL inside the inner loop) the check
+      // fires. We abort before the scan starts so signal.aborted is true when j=512
+      // is reached — but NOT at i=0 outer check (which fires first). So we need
+      // the outer check at i=0 to NOT fire (i.e. signal is NOT yet aborted at i=0)
+      // and only become aborted partway through the inner loop.
+      //
+      // We achieve this by scheduling the abort via setImmediate AFTER starting the
+      // detectDuplicates call. Because the inner loop is synchronous, setImmediate
+      // callbacks won't run until the current microtask/task yields. We need a
+      // different mechanism: use AbortController and trigger abort asynchronously
+      // in a way that the inner-loop check sees it.
+      //
+      // Approach: use a custom AbortSignal that becomes aborted after a fixed count
+      // of checks — simulated by having the outer check pass (not aborted yet) and
+      // the inner check catch it. We do this by aborting via a promise microtask
+      // scheduled before the scan, which means signal.aborted becomes true during
+      // the synchronous inner loop on the very first outer iteration:
+      //
+      // Actually the cleanest approach: abort BEFORE the call but after i=0's outer
+      // check. Since both the outer check (i=0) and inner check (j>=512) are
+      // synchronous code in the same microtask, we can't interleave real async.
+      //
+      // Instead: verify that an already-aborted signal on a 600-record dataset
+      // (where i=0 outer check runs first) is caught at i=0 (outer check). That's
+      // already tested above. For the inner-loop check specifically, we need
+      // signal.aborted to become true AFTER the outer check at i=0 but BEFORE
+      // j=512. This is not possible with a real synchronous abort.
+      //
+      // Correct approach: use a Proxy-based signal whose .aborted property returns
+      // false for the first K reads (letting the outer check and early inner iters
+      // pass) then returns true at the 513th read (j=512 check). This directly
+      // tests that the inner-loop check path is reachable and throws.
+
+      let abortReadCount = 0;
+      // Allow outer check (read 1) + inner checks at j=0..511 would not fire
+      // (reads 2..513 are j%512!==0 skips, but actually the check only runs when
+      // j%512===0, so the inner check runs at j=0? No: j starts at i+1=1, and
+      // check fires when j%512===0, so first inner check is at j=512).
+      // Outer loop: 1 read of signal.aborted (i=0 check).
+      // Inner loop: j=1..599, check fires only at j=512 (1 read).
+      // Total reads before inner check: 1 (outer). We let read 1 return false,
+      // read 2 (at j=512) return true.
+      const OUTER_READS_BEFORE_INNER = 1;
+      const mockSignal = new Proxy({} as AbortSignal, {
+        get(_, prop) {
+          if (prop === "aborted") {
+            abortReadCount++;
+            // First OUTER_READS_BEFORE_INNER reads: not aborted (outer check passes)
+            // From read OUTER_READS_BEFORE_INNER+1 onward: aborted (inner check fires)
+            return abortReadCount > OUTER_READS_BEFORE_INNER;
+          }
+          return undefined;
+        }
+      });
+
+      // 600 records: i=0 outer row has j=1..599 (599 inner steps).
+      // First inner abort check fires at j=512 (512 % 512 === 0).
+      const records = buildLargeFixture(600);
+
+      await expect(
+        service.detectDuplicates(records, { signal: mockSignal })
+      ).rejects.toThrow(DuplicateDetectionAbortError);
+
+      // Verify the inner check was the one that fired (abortReadCount should be
+      // exactly 2: one outer read that returned false, one inner read at j=512
+      // that returned true).
+      expect(abortReadCount).toBe(2);
+    });
+
     it("IPC 30s timeout path surfaces DuplicateDetectionAbortError via fake timers", async () => {
       vi.useFakeTimers();
       const controller = new AbortController();

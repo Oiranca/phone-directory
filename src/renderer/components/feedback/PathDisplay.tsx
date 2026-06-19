@@ -42,6 +42,15 @@ export const PathDisplay = ({ path, className, textClassName = "text-sm" }: Prop
   // and on each repeated copy click, preventing setState-after-unmount.
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // FIX 3: reset revealed + copied whenever the path prop changes so that a
+  // reused component instance (same key, new path) never auto-exposes the
+  // incoming absolute path — it must restart in basename-only / hidden state.
+  useEffect(() => {
+    setRevealed(false);
+    setCopied(false);
+    clearTimeout(copyTimerRef.current);
+  }, [path]);
+
   // Clear any pending timer when the component unmounts.
   useEffect(() => {
     return () => {

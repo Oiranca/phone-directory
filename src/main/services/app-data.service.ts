@@ -200,12 +200,19 @@ export class AppDataService {
     try {
       await ensureDirectory(backupDirectory);
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-      const backupFiles = await Promise.all(
+      const backupEntries = await Promise.all(
         entries
           .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
           .map(async (entry) => {
             const filePath = path.join(backupDirectory, entry.name);
             const stats = await fs.stat(filePath);
+
+            // Skip 0-byte placeholders left by a crash between the exclusive
+            // open (O_EXCL) and the copyFile completing.  Restoring an empty
+            // file would crash with JSON.parse('') → SyntaxError.
+            if (stats.size === 0) {
+              return null;
+            }
 
             const createdAt = stats.birthtimeMs > 1000
               ? stats.birthtime.toISOString()
@@ -219,6 +226,8 @@ export class AppDataService {
             } satisfies BackupListItem;
           })
       );
+
+      const backupFiles = backupEntries.filter((item): item is BackupListItem => item !== null);
 
       return backupFiles.sort((left, right) => {
         const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
@@ -275,11 +284,12 @@ export class AppDataService {
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
-    // "bulk-import" matches importCsvDataset semantics: wholesale dataset replacement.
+    // "dataset-replace" (not "bulk-import") because this is a wholesale JSON replacement,
+    // semantically distinct from importCsvDataset which is a row-by-row merge with conflict resolution.
     await this.appendAuditEntry({
       timestamp: now,
       editor: this.getEditorName(settings),
-      action: "bulk-import",
+      action: "dataset-replace",
       recordsAffected: importedContacts.records.length,
       importSource: path.basename(sourceFilePath)
     });
@@ -333,6 +343,15 @@ export class AppDataService {
       }
 
       const rawContents = await backupHandle.readFile({ encoding: "utf-8" });
+
+      // Defense-in-depth: reject empty files so a crash-orphaned 0-byte
+      // placeholder never reaches JSON.parse (which would throw SyntaxError).
+      if (rawContents.trim().length === 0) {
+        throw new Error(
+          `${message} El archivo de backup está vacío y no puede restaurarse. Ruta afectada: ${canonicalSourceFilePath}.`
+        );
+      }
+
       importedContacts = directoryDatasetSchema.parse(JSON.parse(rawContents) as DirectoryDataset);
     } finally {
       await backupHandle.close();

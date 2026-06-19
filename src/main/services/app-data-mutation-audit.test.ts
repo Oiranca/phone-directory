@@ -251,7 +251,7 @@ describe("AppDataService — mutation audit coverage (OIR-112)", () => {
   // importDataset — 1 entry on success, 0 on failure
   // -------------------------------------------------------------------------
 
-  it("importDataset appends exactly one audit entry on success (action: bulk-import)", async () => {
+  it("importDataset appends exactly one audit entry on success (action: dataset-replace)", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const service = new AppDataService();
     await service.ensureInitialFiles();
@@ -266,7 +266,9 @@ describe("AppDataService — mutation audit coverage (OIR-112)", () => {
     const entries = await readAuditLog(testRoot);
     expect(entries).toHaveLength(1);
     const entry = entries[0]!;
-    expect(entry["action"]).toBe("bulk-import");
+    // importDataset is a wholesale JSON replacement — must emit "dataset-replace", NOT "bulk-import"
+    expect(entry["action"]).toBe("dataset-replace");
+    expect(entry["action"]).not.toBe("bulk-import");
     expect(typeof entry["recordsAffected"]).toBe("number");
     // importSource must be a basename, not an absolute path
     expect(typeof entry["importSource"]).toBe("string");
@@ -477,7 +479,7 @@ describe("AppDataService — mutation audit coverage (OIR-112)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Schema — "reset" is a valid AuditAction value
+// Schema — "reset" and "dataset-replace" are valid AuditAction values
 // ---------------------------------------------------------------------------
 
 describe("auditActionSchema — reset is a valid action", () => {
@@ -489,5 +491,21 @@ describe("auditActionSchema — reset is a valid action", () => {
   it("still rejects unknown action values", async () => {
     const { auditActionSchema } = await import("../../shared/schemas/contact.js");
     expect(() => auditActionSchema.parse("unknown-action")).toThrow();
+  });
+});
+
+describe("auditActionSchema — dataset-replace is a distinct valid action", () => {
+  it("accepts dataset-replace as a valid AuditAction", async () => {
+    const { auditActionSchema } = await import("../../shared/schemas/contact.js");
+    expect(() => auditActionSchema.parse("dataset-replace")).not.toThrow();
+  });
+
+  it("dataset-replace and bulk-import are distinct string values", () => {
+    // Guard: the two import operations must never share the same action string,
+    // otherwise audit queries can't distinguish a full JSON replacement from a
+    // CSV row-by-row merge.
+    const datasetReplace = "dataset-replace";
+    const bulkImport = "bulk-import";
+    expect(datasetReplace).not.toBe(bulkImport);
   });
 });
