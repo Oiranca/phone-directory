@@ -133,18 +133,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // Error: allow retry (fall through to start a new load)
 
+    // Synchronous bridge-presence check: if the IPC bridge is not available
+    // we set the error state and return immediately WITHOUT touching
+    // bootstrapInFlight, so a later retry (once the bridge exists) is not
+    // blocked by a stale resolved promise left in the module-level guard.
+    // We skip the set() call when the status is already "error" and the bridge
+    // is still absent — the store already reflects this error, so writing it
+    // again is a redundant render. When the bridge later becomes present the
+    // check below passes and we fall through to start a real load.
+    if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
+      if (state.bootstrapStatus !== "error") {
+        set({
+          bootstrapStatus: "error",
+          isLoading: false,
+          bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
+          bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo."
+        });
+      }
+      return Promise.resolve();
+    }
+
     const run = async () => {
       try {
-        if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
-          set({
-            bootstrapStatus: "error",
-            isLoading: false,
-            bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
-            bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo."
-          });
-          return;
-        }
-
         set({ bootstrapStatus: "loading", isLoading: true, bootstrapError: "", bootstrapHelp: "" });
 
         try {

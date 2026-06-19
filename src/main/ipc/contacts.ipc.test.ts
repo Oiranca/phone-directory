@@ -509,4 +509,107 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(rejected).toHaveLength(1);
     expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
   });
+
+  // ---------------------------------------------------------------------------
+  // Bounded wrong-sender attempt counter (PR #62 review finding)
+  // ---------------------------------------------------------------------------
+
+  it("wrong sender — token survives the first wrong-sender attempt; legitimate sender can still confirm", async () => {
+    const legitimateSender = makeWebContentsSender(10);
+    const attackerSender = makeWebContentsSender(99);
+    const importToken = await runPreview(legitimateSender);
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    // One wrong-sender attempt — must be rejected opaquely
+    await expect(
+      handler({ sender: attackerSender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+
+    // The legitimate sender can still confirm (token survives attempt #1)
+    await handler({ sender: legitimateSender } as unknown, importToken, []);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("wrong sender — token survives two wrong-sender attempts; legitimate sender can still confirm after attempt #2", async () => {
+    const legitimateSender = makeWebContentsSender(10);
+    const attackerSender = makeWebContentsSender(99);
+    const importToken = await runPreview(legitimateSender);
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    // Two wrong-sender attempts — must both be rejected opaquely
+    await expect(
+      handler({ sender: attackerSender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+    await expect(
+      handler({ sender: attackerSender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+
+    // The legitimate sender can still confirm (token survives attempts #1 and #2)
+    await handler({ sender: legitimateSender } as unknown, importToken, []);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("wrong sender cap — after 3 wrong-sender attempts the token is invalidated; correct sender is rejected after the wrong-sender cap is exhausted", async () => {
+    const legitimateSender = makeWebContentsSender(10);
+    const attackerSender = makeWebContentsSender(99);
+    const importToken = await runPreview(legitimateSender);
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    // Exhaust the cap with 3 wrong-sender probes
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        handler({ sender: attackerSender } as unknown, importToken, [])
+      ).rejects.toThrow("La importación CSV ya no es válida.");
+    }
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+
+    // Token must now be invalidated — even the correct sender is rejected
+    await expect(
+      handler({ sender: legitimateSender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  it("wrong sender cap — error messages are opaque (all four distinguishable paths return the same message)", async () => {
+    // Confirms that all four distinguishable rejection paths surface the same generic error:
+    // wrong-sender below cap (attempt 1), wrong-sender below cap (attempt 2),
+    // wrong-sender at cap (attempt 3, triggers invalidation), and token-gone (no-pending-import).
+    // The caller must not be able to distinguish any of these states.
+    const legitimateSender = makeWebContentsSender(10);
+    const attackerSender = makeWebContentsSender(99);
+    const importToken = await runPreview(legitimateSender);
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    const expectedError = "La importación CSV ya no es válida. Vuelve a seleccionar el archivo.";
+
+    // Path 1: wrong-sender (below cap)
+    const err1 = await handler({ sender: attackerSender } as unknown, importToken, []).catch((e: Error) => e);
+    expect((err1 as Error).message).toBe(expectedError);
+
+    // Path 2: wrong-sender below cap (attempt #2 of 3)
+    const err2 = await handler({ sender: attackerSender } as unknown, importToken, []).catch((e: Error) => e);
+    expect((err2 as Error).message).toBe(expectedError);
+
+    // Path 3: cap-hit — wrong-sender attempt #3 triggers clearPendingCsvImport, still same error
+    const err3 = await handler({ sender: attackerSender } as unknown, importToken, []).catch((e: Error) => e);
+    expect((err3 as Error).message).toBe(expectedError);
+
+    // Path 4: token gone (no-pending-import branch after cap invalidation) — same message
+    const err4 = await handler({ sender: legitimateSender } as unknown, importToken, []).catch((e: Error) => e);
+    expect((err4 as Error).message).toBe(expectedError);
+  });
 });

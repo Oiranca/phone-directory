@@ -37,7 +37,7 @@ import type {
 } from "../../shared/types/contact.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
-import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
@@ -165,13 +165,29 @@ export class AppDataService {
 
   private async createBackupInner() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePathUnique(settings, "contacts");
-    await this.copyFileWithContext(
-      settings.dataFilePath,
-      backupFilePath,
-      "No se pudo crear el backup del directorio."
-    );
+    const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear el backup del directorio.");
     this.autoBackupEditCount = 0;
+    return backupFilePath;
+  }
+
+  /**
+   * Shared primitive: generates a unique path, atomically claims it, then
+   * copies the contacts file to that path.  Used by both createBackupInner
+   * (manual/import/reset backups) and createAutoBackup.
+   *
+   * Must only be called from inside an enqueueWrite slot.
+   */
+  private async createBackupCore(settings: AppSettings, prefix: string, errorMessage: string) {
+    const backupFilePath = await this.createBackupFilePathUnique(settings, prefix);
+    // The atomic open in createBackupFilePathUnique left a 0-byte placeholder
+    // at backupFilePath.  If the copy fails we must remove that placeholder so
+    // it does not appear in listBackups as a valid (but empty) backup file.
+    try {
+      await this.copyFileWithContext(settings.dataFilePath, backupFilePath, errorMessage);
+    } catch (error) {
+      await fs.unlink(backupFilePath).catch(() => undefined);
+      throw error;
+    }
     return backupFilePath;
   }
 
@@ -254,13 +270,14 @@ export class AppDataService {
     );
     const backupPath = await this.createBackupInner();
     const settings = await this.readSettings(true);
+    const now = new Date().toISOString();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
     // "bulk-import" matches importCsvDataset semantics: wholesale dataset replacement.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "bulk-import",
       recordsAffected: importedContacts.records.length,
@@ -322,12 +339,13 @@ export class AppDataService {
     }
 
     const backupPath = await this.createBackupInner();
+    const now = new Date().toISOString();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "restore-from-backup",
       recordsAffected: importedContacts.records.length,
@@ -351,13 +369,14 @@ export class AppDataService {
     const backupPath = (await this.fileExists(contactsFilePath))
       ? await this.createBackupInner()
       : null;
+    const now = new Date().toISOString();
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
     await this.writeDatasetToPath(settings.dataFilePath, contacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // No PII in the entry; recordsAffected=0 reflects the resulting empty dataset.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "reset",
       recordsAffected: 0
@@ -420,10 +439,11 @@ export class AppDataService {
     const policies = this.resolveImportPolicies(conflicts, policySelections);
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
     const backupPath = await this.createBackupInner();
+    const now = new Date().toISOString();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
     this.noteAutoBackupEligibleEdit();
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: editorName,
       action: "bulk-import",
       recordsAffected: merged.createdCount + merged.updatedCount,
@@ -695,7 +715,6 @@ export class AppDataService {
   }
 
   private async createBackupFilePathUnique(settings: AppSettings, prefix: string) {
-    const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
       "No se pudo preparar la carpeta de backups del directorio."
@@ -713,15 +732,37 @@ export class AppDataService {
     const maxAttempts = 5;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Regenerate both timestamp and suffix on every attempt so that two
+      // concurrent callers hitting the same millisecond can't race: the
+      // O_CREAT|O_EXCL open is the atomic claim — whoever wins the open owns
+      // the file name.
+      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const suffix = this.createBackupSuffix();
-      const filePath = path.join(backupDirectory, `${prefix}-${safeTimestamp}-${suffix}.json`);
+      const candidatePath = path.join(backupDirectory, `${prefix}-${safeTimestamp}-${suffix}.json`);
+
+      let fileHandle: fs.FileHandle | undefined;
 
       try {
-        await fs.access(filePath, fsConstants.F_OK);
-        // File already exists — retry with a fresh suffix.
-      } catch {
-        // File does not exist — this name is safe to use.
-        return filePath;
+        // 'wx' = O_CREAT | O_EXCL | O_WRONLY — fails with EEXIST if the file
+        // already exists.  On success we atomically own this path.
+        fileHandle = await fs.open(candidatePath, "wx");
+        // Close immediately; the subsequent copyFile will overwrite the empty
+        // placeholder we just created (which is safe because we hold the name).
+        await fileHandle.close();
+        return candidatePath;
+      } catch (error) {
+        await fileHandle?.close().catch(() => undefined);
+        const errno = this.getErrnoException(error);
+        if (errno?.code === "EEXIST") {
+          // Name already taken — retry with a fresh timestamp + suffix.
+          continue;
+        }
+        // Any other error (EACCES, ENOSPC, …) — surface it.
+        throw this.toFilesystemError(
+          error,
+          "No se pudo preparar la carpeta de backups del directorio.",
+          { filePath: candidatePath }
+        );
       }
     }
 
@@ -1073,13 +1114,10 @@ export class AppDataService {
 
   private async createAutoBackup() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupFilePathUnique(settings, "auto-backup");
-
-    await this.copyFileWithContext(
-      settings.dataFilePath,
-      backupFilePath,
-      "No se pudo crear el auto-backup del directorio."
-    );
+    // Delegates to the shared createBackupCore primitive (which calls
+    // createBackupFilePathUnique + copyFileWithContext) instead of duplicating
+    // that logic here.  This ensures the two code paths can never diverge.
+    await this.createBackupCore(settings, "auto-backup", "No se pudo crear el auto-backup del directorio.");
     await this.pruneAutoBackups(settings);
   }
 
@@ -1781,6 +1819,21 @@ export class AppDataService {
   }
 
   private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
-    return this.auditFacade.appendEntry(entry);
+    // FIX 3 (PR #67): use await so this frame appears in async stack traces and
+    // a future throw is caught by this method's own context rather than silently
+    // escaping as an unhandled promise rejection.
+    await this.auditFacade.appendEntry(entry);
+  }
+
+  /**
+   * Clear the latched integrity-error state on the audit log so that subsequent
+   * appends are attempted again.
+   *
+   * An IPC entrypoint can call this after the operator has resolved the
+   * underlying file corruption (no new IPC channel is needed — wire the
+   * existing audit-related IPC handler to this method if recovery is desired).
+   */
+  async recoverAuditLog(): Promise<void> {
+    return this.auditFacade.recoverFromIntegrityError();
   }
 }

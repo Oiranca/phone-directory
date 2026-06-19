@@ -845,4 +845,82 @@ describe("ImportExportPage", () => {
       recordCount: defaultContacts.records.length
     });
   });
+
+  it("does NOT call listBackups in recovery mode (contacts null, settings present)", async () => {
+    // FIX 2 regression lock: loadBackups must only fire when BOTH contacts AND
+    // settings are present. In recovery mode contacts is null, so the backup
+    // panel is hidden by the render gate — issuing listBackups IPC is wasted work.
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: {
+        reason: "invalid-contacts-json",
+        contactsFilePath: "/data/contacts.json",
+        message: "Failed to parse"
+      },
+      settings: editableSettings
+    });
+
+    renderPage();
+
+    // Wait for the bootstrap to complete (store moves to success with contacts=null)
+    await waitFor(() => {
+      expect(useAppStore.getState().bootstrapStatus).toBe("success");
+    });
+    await waitFor(() => {
+      expect(useAppStore.getState().isLoading).toBe(false);
+    });
+
+    expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
+  });
+
+  it("calls listBackups in normal mode (contacts AND settings both present)", async () => {
+    // Ensure the happy path: both contacts and settings non-null → listBackups fires.
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT re-issue listBackups when contacts change after initial load (backupsRequestedRef guard)", async () => {
+    // Regression lock for the loaded-once guarantee: after the initial load,
+    // subsequent store mutations (e.g. after a JSON import) update contacts,
+    // which is now in the effect deps. The backupsRequestedRef guard must
+    // prevent listBackups from firing a second time.
+    renderPage();
+
+    // Wait for initial load to complete
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
+
+    // Simulate a contacts mutation (e.g. post-import store update)
+    const mutatedContacts = {
+      ...defaultContacts,
+      records: defaultContacts.records.slice(0, 1)
+    };
+    useAppStore.setState({ contacts: mutatedContacts });
+
+    // Give React time to flush any effects triggered by the state change
+    await waitFor(() => {
+      expect(useAppStore.getState().contacts).toBe(mutatedContacts);
+    });
+
+    // listBackups must still be 1 — the ref guard prevented a second call
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows error UI and does not hang spinner when bootstrap fails (bootstrap-error early-out)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("bridge error"));
+
+    renderPage();
+
+    // Spinner must stop
+    await waitFor(() => {
+      const status = screen.getByRole("status");
+      expect(status).not.toHaveAttribute("aria-busy", "true");
+    });
+
+    // Error text is shown, not the spinner text
+    expect(screen.queryByText(/Cargando importación/)).not.toBeInTheDocument();
+    // listBackups must never be called
+    expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
+  });
 });

@@ -226,14 +226,17 @@ describe("searchRecords", () => {
 });
 
 describe("confidential flags are advisory — flagged records remain searchable", () => {
-  it("returns a record whose only phone is confidential when searching by display name", () => {
+  it("returns a record whose only phone is confidential when searching by that phone NUMBER", () => {
     // Advisory policy (OIR-105 / P1-03): confidential/noPatientSharing are presentation markers only.
-    // Flagged values must never be excluded from search results.
+    // Flagged phone NUMBERS must remain in the Fuse index — the record must be found by querying
+    // its phone number directly (not the displayName) to prove the number itself is not stripped.
+    // The displayName ("Servicio genérico") contains no digits, so a hit on "99999" can only
+    // come from the indexed contactMethods.phones.number field.
     const advisoryRecords: ContactRecord[] = [
       {
         ...structuredClone(records[0]),
         id: "confidential-record",
-        displayName: "Servicio confidencial de prueba",
+        displayName: "Servicio genérico",
         contactMethods: {
           emails: [],
           phones: [
@@ -250,18 +253,21 @@ describe("confidential flags are advisory — flagged records remain searchable"
       }
     ];
 
-    const result = searchRecords(advisoryRecords, "confidencial de prueba", defaultFilters);
+    // Query is the confidential phone number itself — NOT present in displayName or any other field.
+    const result = searchRecords(advisoryRecords, "99999", defaultFilters);
     expect(result.length).toBeGreaterThan(0);
     expect(result[0]?.id).toBe("confidential-record");
   });
 
-  it("returns a record when searching by its confidential phone number directly", () => {
-    // Flagged phone numbers remain indexed — searching by number must still find the record.
+  it("returns a record when searching by a noPatientSharing-only phone number (confidential: false)", () => {
+    // Covers the noPatientSharing-only variant: phone has confidential: false, noPatientSharing: true.
+    // The number "77777" exists ONLY in this phone field — displayName "Central genérica" has no digits.
+    // A match proves the noPatientSharing flag alone does not cause the number to be stripped from the index.
     const advisoryRecords: ContactRecord[] = [
       {
         ...structuredClone(records[0]),
         id: "confidential-phone-search",
-        displayName: "Central restringida",
+        displayName: "Central genérica",
         contactMethods: {
           emails: [],
           phones: [
@@ -270,14 +276,15 @@ describe("confidential flags are advisory — flagged records remain searchable"
               number: "77777",
               kind: "internal",
               isPrimary: true,
-              confidential: true,
-              noPatientSharing: false
+              confidential: false,
+              noPatientSharing: true
             }
           ]
         }
       }
     ];
 
+    // Query is the phone number itself — NOT present in displayName or any other field.
     const result = searchRecords(advisoryRecords, "77777", defaultFilters);
     expect(result.length).toBeGreaterThan(0);
     expect(result[0]?.id).toBe("confidential-phone-search");
