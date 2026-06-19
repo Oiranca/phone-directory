@@ -68,16 +68,46 @@ export class AuditLogService {
 
     try {
       await fs.access(filePath);
-    } catch {
+    } catch (accessErr) {
+      // Only create a fresh empty log when the file genuinely does not exist.
+      // Any other error (EACCES, EMFILE, …) means the file may exist but is
+      // transiently unreadable — silently overwriting it with [] would destroy
+      // audit history with no quarantine.  Rethrow and let the caller handle it.
+      if ((accessErr as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        throw accessErr;
+      }
       await writeJsonFile(filePath, []);
     }
   }
+
+  /**
+   * Transient OS error codes that should NOT latch `integrityError`.
+   *
+   * These four codes are safe-transient because they are purely resource
+   * exhaustion or scheduling signals — they carry no information about the
+   * file's contents and resolve automatically once the kernel releases the
+   * resource.  The service self-heals on the next call.
+   *
+   * EACCES is intentionally excluded: a file that is both corrupt AND has its
+   * permissions set to 0o000 would escape quarantine permanently if we treated
+   * EACCES as transient.  EACCES therefore falls through to the existing
+   * quarantine-and-latch path, preserving the fail-closed guarantee.
+   */
+  private static readonly TRANSIENT_FS_CODES = new Set([
+    "EMFILE",  // process fd table exhausted
+    "ENFILE",  // system-wide fd table exhausted
+    "EAGAIN",  // resource temporarily unavailable (non-blocking fd)
+    "EBUSY",   // device or resource busy (e.g. Windows file lock analogue)
+  ]);
 
   /**
    * Attempt to read and parse the audit-log file.
    *
    * On success: returns the parsed entries array.
    * On ENOENT: returns an empty array (no quarantine needed).
+   * On a transient OS error (EMFILE, ENFILE, EAGAIN, EBUSY): rethrows
+   *   the original error as-is WITHOUT latching `integrityError` so the service
+   *   self-heals on the next call.
    * On any other failure (IO error, malformed JSON, schema mismatch):
    *   quarantines the original bytes to a timestamped sidecar in the same
    *   directory, records the integrity error on the instance, and throws an
@@ -88,11 +118,20 @@ export class AuditLogService {
     try {
       rawBytes = await fs.readFile(filePath);
     } catch (readErr) {
+      const code = (readErr as NodeJS.ErrnoException)?.code ?? "";
+
       // File simply does not exist — return empty, no quarantine needed.
-      if ((readErr as NodeJS.ErrnoException).code === "ENOENT") {
+      if (code === "ENOENT") {
         return [];
       }
-      // Unreadable file (permissions, device error, …) — quarantine & fail closed.
+
+      // Transient OS error — rethrow without latching integrityError.
+      // The service will self-heal once the OS condition resolves.
+      if (AuditLogService.TRANSIENT_FS_CODES.has(code)) {
+        throw readErr;
+      }
+
+      // Unreadable file (unknown IO error) — quarantine & fail closed.
       const quarantineFilePath = await this.quarantine(filePath, undefined);
       const integrityError = new AuditLogIntegrityError({
         logFilePath: filePath,
@@ -246,6 +285,13 @@ export class AuditLogService {
    */
   async recoverFromIntegrityError(): Promise<void> {
     return this.enqueueWrite(async () => {
+      // No-op guard: do not destroy a healthy log when there is no active
+      // integrity error.  Calling this method on a healthy service is a
+      // programming mistake, not a recovery event.
+      if (this.integrityError === null) {
+        return;
+      }
+
       const filePath = this.getFilePath();
       await ensureDirectory(path.dirname(filePath));
       await writeJsonFile(filePath, []);
@@ -277,9 +323,9 @@ export class AuditLogService {
       // Neutralize CSV formula injection (CWE-1236): if the first character is a
       // formula trigger, prepend an apostrophe so spreadsheet apps treat the cell
       // as text rather than executing it as a formula.
-      const neutralized = str.length > 0 && /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      const neutralized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
 
-      if (neutralized.includes(",") || neutralized.includes('"') || neutralized.includes("\n")) {
+      if (neutralized.includes(",") || neutralized.includes('"') || neutralized.includes("\n") || neutralized.includes("\r")) {
         return `"${neutralized.replace(/"/g, '""')}"`;
       }
 
