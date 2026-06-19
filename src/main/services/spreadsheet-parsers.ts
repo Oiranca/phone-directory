@@ -28,17 +28,71 @@ import {
   dedupeKeepOrder,
   classifyType,
   aliasesFromLabel,
-  blankRecord,
-  buildStableExternalId,
   normalizeDisplayNameForMerge,
   normalizeNumberForDedup,
   isSerializedPhoneEntry,
   normalizeMarker,
   normalizeAscii,
-  prettifyLabel,
-  EXCLUDED_PATTERNS,
   isExcludedLabel,
 } from "./spreadsheet-normalize.js";
+
+// ---------------------------------------------------------------------------
+// Record construction helpers (moved here from spreadsheet-normalize.ts to
+// break the csv-import ↔ normalize circular dependency)
+// ---------------------------------------------------------------------------
+
+/** Returns a NormalizedImportRow with all fields set to empty strings. */
+export const blankRecord = (): NormalizedImportRow => ({
+  externalId: "",
+  type: "",
+  displayName: "",
+  firstName: "",
+  lastName: "",
+  area: "",
+  department: "",
+  service: "",
+  specialty: "",
+  building: "",
+  floor: "",
+  room: "",
+  locationText: "",
+  phone1Label: "",
+  phone1Number: "",
+  phone1Extension: "",
+  phone1Kind: "",
+  phone1IsPrimary: "",
+  phone1Confidential: "",
+  phone1NoPatientSharing: "",
+  phone1Notes: "",
+  phone2Label: "",
+  phone2Number: "",
+  phone2Extension: "",
+  phone2Kind: "",
+  phone2IsPrimary: "",
+  phone2Confidential: "",
+  phone2NoPatientSharing: "",
+  phone2Notes: "",
+  email1: "",
+  email1Label: "",
+  email1IsPrimary: "",
+  email2: "",
+  email2Label: "",
+  email2IsPrimary: "",
+  tags: "",
+  aliases: "",
+  notes: "",
+  status: ""
+});
+
+/**
+ * Builds a stable external ID by normalizing and joining the given parts
+ * with dashes. Falls back to "row" when all parts are empty.
+ */
+export const buildStableExternalId = (parts: Array<string | undefined>) =>
+  parts
+    .map((part) => normalizeAscii(part ?? ""))
+    .filter(Boolean)
+    .join("-") || "row";
 
 // ---------------------------------------------------------------------------
 // Shared sheet data type (mirrors the private type in the main service)

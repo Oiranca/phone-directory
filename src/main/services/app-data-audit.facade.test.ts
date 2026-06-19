@@ -148,16 +148,19 @@ describe("AppDataAuditFacade", () => {
     );
   });
 
-  it("appendEntry swallows generic errors and logs to console (non-fatal)", async () => {
+  it("appendEntry swallows generic errors and logs code+message without the raw error object (FIX 4 — path-leak guard)", async () => {
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
     const { AuditLogService } = await import("./audit-log.service.js");
 
     const facade = new AppDataAuditFacade();
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    vi.spyOn(AuditLogService.prototype, "append").mockRejectedValueOnce(
-      new Error("Generic audit error")
+    // Simulate an EACCES error whose message contains an absolute filesystem path
+    const fsError = Object.assign(
+      new Error("EACCES: permission denied, open '/private/tmp/phone-dir/data/audit-log.json'"),
+      { code: "EACCES" }
     );
+    vi.spyOn(AuditLogService.prototype, "append").mockRejectedValueOnce(fsError);
 
     const entry = {
       timestamp: new Date().toISOString(),
@@ -171,10 +174,64 @@ describe("AppDataAuditFacade", () => {
     // Must NOT throw
     await expect(facade.appendEntry(entry)).resolves.toBeUndefined();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[AuditLog] Failed to append entry:",
-      expect.any(Error)
+    // FIX 4: console.error must have been called exactly once, with a single
+    // string argument (no raw Error object, no stray empty-string argument).
+    expect(consoleErrorSpy).toHaveBeenCalledOnce();
+    const loggedArgs = consoleErrorSpy.mock.calls[0]!;
+    // Exactly one argument — the fully-interpolated message string
+    expect(loggedArgs).toHaveLength(1);
+    expect(typeof loggedArgs[0]).toBe("string");
+    expect(loggedArgs[0]).toContain("[AuditLog] Failed to append entry —");
+    expect(loggedArgs[0]).toContain("EACCES");
+    // The raw Error object must not have been passed
+    expect(loggedArgs).not.toContain(fsError);
+  });
+
+  it("recoverFromIntegrityError clears the latched error so a subsequent appendEntry succeeds", async () => {
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    // Create the audit-log directory so AuditLogService can write
+    await fs.mkdir(path.join(testRoot, "data"), { recursive: true });
+
+    // Corrupt the audit log to trigger AuditLogIntegrityError on the first append
+    const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+    await fs.writeFile(auditLogPath, "{ invalid json {{{{", "utf-8");
+
+    const facade = new AppDataAuditFacade();
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const entry = {
+      timestamp: new Date().toISOString(),
+      editor: "Recovery Test",
+      action: "create" as const,
+      recordsAffected: 1,
+      recordId: "cnt_recovery",
+      changes: {}
+    };
+
+    // First append: latches the integrity error (non-fatal, swallowed)
+    await facade.appendEntry(entry);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    // Remove the corrupt file so recoverFromIntegrityError + subsequent writes can succeed
+    await fs.rm(auditLogPath, { force: true });
+
+    // Recovery must not throw
+    await expect(facade.recoverFromIntegrityError()).resolves.toBeUndefined();
+
+    // After recovery a second append must succeed — integrity guard is cleared
+    consoleErrorSpy.mockClear();
+    await facade.appendEntry(entry);
+
+    // No integrity error must have been logged after recovery
+    const integrityCallsAfterRecovery = consoleErrorSpy.mock.calls.filter(
+      ([msg]) => typeof msg === "string" && (msg as string).includes("INTEGRITY ERROR")
     );
+    expect(integrityCallsAfterRecovery).toHaveLength(0);
+
+    // The entry must actually be persisted on disk
+    const result = await facade.getAuditLog({ page: 1, pageSize: 20 });
+    expect(result.entries.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -225,5 +282,17 @@ describe("AppDataService → AppDataAuditFacade delegation", () => {
     expect(exportSpy).toHaveBeenCalledOnce();
     expect(exportSpy).toHaveBeenCalledWith(exportPath, { page: 1, pageSize: 100 });
     expect(result).toBe(mockResult);
+  });
+
+  it("AppDataService.recoverAuditLog delegates to AppDataAuditFacade.recoverFromIntegrityError (FIX 1)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const recoverSpy = vi.spyOn(AppDataAuditFacade.prototype, "recoverFromIntegrityError").mockResolvedValueOnce(undefined);
+
+    const service = new AppDataService();
+    await expect(service.recoverAuditLog()).resolves.toBeUndefined();
+
+    expect(recoverSpy).toHaveBeenCalledOnce();
   });
 });

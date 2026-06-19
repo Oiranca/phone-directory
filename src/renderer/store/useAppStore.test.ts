@@ -504,6 +504,36 @@ describe("ensureBootstrapLoaded", () => {
     expect(state.isLoading).toBe(false);
   });
 
+  it("absent-bridge: bootstrapInFlight is NOT set after the synchronous early exit", async () => {
+    // Regression lock for FIX 1: the synchronous bridge-precheck must return
+    // Promise.resolve() without ever assigning bootstrapInFlight. If it did assign
+    // it, the immediately-resolved promise would remain in the guard and the next
+    // call (with the bridge present) would return that stale resolved value and
+    // never call getBootstrapData.
+    Object.defineProperty(window, "hospitalDirectory", {
+      configurable: true,
+      value: undefined
+    });
+
+    // First call — bridge absent → synchronous error, bootstrapInFlight stays null
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(useAppStore.getState().bootstrapStatus).toBe("error");
+
+    // Restore the bridge to simulate "Reintentar" after Electron reloads the preload
+    Object.defineProperty(window, "hospitalDirectory", {
+      configurable: true,
+      value: {
+        getBootstrapData: vi.fn().mockResolvedValue(bootstrapPayload)
+      }
+    });
+
+    // Second call — bridge now present → must perform a real load, NOT return the
+    // stale resolved promise that the old (buggy) code would have left in bootstrapInFlight.
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().bootstrapStatus).toBe("success");
+  });
+
   it("absent-bridge error is retryable: bootstrapInFlight is cleared so a second call proceeds", async () => {
     // Simulate the state left by a prior absent-bridge failure:
     // bootstrapStatus is "error" and bootstrapInFlight is null (already reset by resetStore / resetBootstrapInFlight).

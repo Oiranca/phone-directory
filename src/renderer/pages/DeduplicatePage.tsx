@@ -77,32 +77,50 @@ export const DeduplicatePage = () => {
     // Prevent concurrent merges (disable all buttons during merge)
     if (mergingId) return;
 
+    const mergedPairId = confirmState.pairId;
+    const discardId = confirmState.discardRecord.id;
+
     try {
-      setMergingId(confirmState.pairId);
+      setMergingId(mergedPairId);
+
+      // Stage A: IPC merge + store reconciliation — if this throws, merge genuinely failed
       const survivor = await window.hospitalDirectory.mergeContacts({
         keepId: confirmState.keepRecord.id,
-        discardId: confirmState.discardRecord.id
+        discardId
       });
 
       // Reconcile the central store — remove discarded, upsert survivor
-      applyMergeResult(survivor, confirmState.discardRecord.id);
-
-      // Remove merged pair and refresh detection to handle stale pairs
-      setPairStates((current) =>
-        current.filter((ps) => ps.pair.id !== confirmState.pairId)
-      );
-
-      // Refresh all pairs to clear any pairs that referenced the discarded record
-      const result = await window.hospitalDirectory.detectDuplicates();
-      setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
-
-      pushToast({ type: "success", message: "Duplicado fusionado correctamente" });
+      applyMergeResult(survivor, discardId);
     } catch (error) {
+      // Merge truly failed — report it and bail out without touching pair state
       const message =
         error instanceof Error
           ? error.message
           : "No se pudo fusionar el duplicado. Inténtalo de nuevo.";
       pushToast({ type: "error", message });
+      setMergingId(null);
+      setConfirmState(null);
+      return;
+    }
+
+    // Stage B: merge committed — show success, then refresh the list
+    pushToast({ type: "success", message: "Duplicado fusionado correctamente" });
+
+    try {
+      // Refresh all pairs to clear any pairs that referenced the discarded record
+      const result = await window.hospitalDirectory.detectDuplicates();
+      setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
+    } catch {
+      // Refresh failed but the merge already committed — degrade gracefully:
+      // apply the optimistic local filter so the just-merged pair disappears
+      // from the UI even without a full server refresh.
+      setPairStates((current) =>
+        current.filter((ps) => ps.pair.id !== mergedPairId)
+      );
+      pushToast({
+        type: "warning",
+        message: "La fusión se completó, pero la lista no pudo actualizarse. Recarga la página para ver los cambios."
+      });
     } finally {
       setMergingId(null);
       setConfirmState(null);
