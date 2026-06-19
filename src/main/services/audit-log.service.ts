@@ -323,9 +323,9 @@ export class AuditLogService {
       // Neutralize CSV formula injection (CWE-1236): if the first character is a
       // formula trigger, prepend an apostrophe so spreadsheet apps treat the cell
       // as text rather than executing it as a formula.
-      const neutralized = str.length > 0 && /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      const neutralized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
 
-      if (neutralized.includes(",") || neutralized.includes('"') || neutralized.includes("\n")) {
+      if (neutralized.includes(",") || neutralized.includes('"') || neutralized.includes("\n") || neutralized.includes("\r")) {
         return `"${neutralized.replace(/"/g, '""')}"`;
       }
 

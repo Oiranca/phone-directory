@@ -299,6 +299,29 @@ describe("AuditLogService", () => {
       expect(csv).toContain("'\r");
     });
 
+    it("wraps field in double-quotes when cell contains a mid-value CR (RFC 4180 §2.6)", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "hello\rworld", action: "create" as const }
+      ]);
+      // The CR is mid-value (not at position 0), so no apostrophe prefix.
+      // RFC 4180 requires the field to be wrapped in double quotes.
+      expect(csv).toContain('"hello\rworld"');
+    });
+
+    it("wraps CR-prefixed formula trigger in double-quotes AND adds apostrophe prefix", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      // \r at position 0 → apostrophe prefix (injection neutralization)
+      // resulting neutralized value '\rcarriage contains \r → must also be double-quoted
+      const csv = service.toCsv([
+        { timestamp: "2026-05-01T10:00:00.000Z", editor: "\rcarriage", action: "create" as const }
+      ]);
+      // Cell must be outer-quoted AND contain apostrophe then CR
+      expect(csv).toContain("\"'\rcarriage\"");
+    });
+
     it("does NOT prefix apostrophe for trigger char that is NOT at position 0", async () => {
       const { AuditLogService } = await import("./audit-log.service.js");
       const service = new AuditLogService();
