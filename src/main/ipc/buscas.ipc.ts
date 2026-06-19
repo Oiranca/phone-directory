@@ -2,12 +2,7 @@ import { ipcMain } from "electron";
 import { ZodError } from "zod";
 import { editableBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
 import type { BuscasService } from "../services/buscas.service.js";
-import { BUSCAS_CHANNELS } from "../../shared/ipc/channels.js";
-
-// Server-only channel — not exposed to the renderer via contextBridge and not in
-// BUSCAS_CHANNELS. Exported so buscas.ipc.test.ts can reference it without
-// hardcoding the string literal (which would silently desync on a rename).
-export const SEARCH_CHANNEL = "buscas:search" as const;
+import { BUSCAS_CHANNELS, SERVER_CHANNELS } from "../../shared/ipc/channels.js";
 
 /**
  * Maps a caught error to a renderer-safe message.
@@ -69,12 +64,12 @@ export const registerBuscasIpc = (service: BuscasService) => {
     }
   });
 
-  ipcMain.handle(SEARCH_CHANNEL, async (_event, query: unknown) => {
+  ipcMain.handle(SERVER_CHANNELS.buscasSearch, async (_event, query: unknown) => {
     try {
       const q = typeof query === "string" ? query : "";
       return await service.search(q);
     } catch (err) {
-      throw toRendererError(err, SEARCH_CHANNEL);
+      throw toRendererError(err, SERVER_CHANNELS.buscasSearch);
     }
   });
 };

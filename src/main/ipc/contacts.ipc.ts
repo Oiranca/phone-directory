@@ -241,6 +241,8 @@ export const registerContactsIpc = (service: AppDataService) => {
     return service.importCsvDataset(pendingImport.sourceFilePath, policies);
   });
 
+  ipcMain.handle(CHANNELS.recoverAuditLog, () => service.recoverAuditLog());
+
   ipcMain.handle(CHANNELS.getAuditLog, async (_event, rawParams: unknown) => {
     const parsed = auditLogQueryParamsSchema.safeParse(rawParams ?? {});
     if (!parsed.success) {

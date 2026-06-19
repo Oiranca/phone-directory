@@ -26,6 +26,7 @@ export const CONTACTS_CHANNELS = {
   importCsvDataset: "contacts:import-csv-dataset",
   getAuditLog:      "contacts:get-audit-log",
   exportAuditLog:   "contacts:export-audit-log",
+  recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
 } as const;
@@ -45,4 +46,13 @@ export const BUSCAS_CHANNELS = {
 
 export const PUSH_CHANNELS = {
   autoBackupFailed: "app:auto-backup-failed"
+} as const;
+
+/**
+ * Server-only channels — used exclusively by ipcMain handlers inside the main
+ * process. These are NOT exposed to the renderer via contextBridge and are NOT
+ * part of HospitalDirectoryApi. They must NOT appear in REQUIRED_CHANNELS.
+ */
+export const SERVER_CHANNELS = {
+  buscasSearch: "buscas:search"
 } as const;

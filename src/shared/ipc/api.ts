@@ -63,6 +63,7 @@ export interface HospitalDirectoryApi {
   // Audit log
   getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
   exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
+  recoverAuditLog: () => Promise<void>;
 
   // Buscas
   listBuscas: () => Promise<BuscaRecord[]>;

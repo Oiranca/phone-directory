@@ -1,4 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+// SERVER_CHANNELS is a pure constant object with no Electron dependency — safe to
+// import statically so SEARCH_CHANNEL is defined at describe()-collection time and
+// the test-reporter title does not interpolate as "undefined".
+import { SERVER_CHANNELS } from "../../shared/ipc/channels.js";
 
 // handlers and ipcMainStub are hoisted via vi.hoisted() so the vi.mock factory
 // below can reference them safely (vi.mock is hoisted to before all imports).
@@ -16,14 +20,8 @@ vi.mock("electron", () => ({
   ipcMain: ipcMainStub
 }));
 
-// SEARCH_CHANNEL is imported after the mock is established. Using a let + beforeAll
-// assignment avoids the static-import hoisting issue (vi.mock runs before static imports).
-let SEARCH_CHANNEL: string;
-
-beforeAll(async () => {
-  const mod = await import("./buscas.ipc.js");
-  SEARCH_CHANNEL = mod.SEARCH_CHANNEL;
-});
+// Alias for readability — value is "buscas:search" (defined in channels.ts).
+const SEARCH_CHANNEL = SERVER_CHANNELS.buscasSearch;
 
 // Helper to invoke a registered handler as if called from the renderer
 const invoke = async (channel: string, ...args: unknown[]): Promise<unknown> => {

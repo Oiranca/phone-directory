@@ -360,6 +360,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
       importDataset: vi.fn(),
       getAuditLog: vi.fn(),
       exportAuditLog: vi.fn(),
+      recoverAuditLog: vi.fn(),
       detectDuplicates: vi.fn(),
       mergeDuplicates: vi.fn()
     };
@@ -580,6 +581,19 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     ).rejects.toThrow("La importación CSV ya no es válida.");
 
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  it("contacts:recover-audit-log — invoking the channel calls AppDataService.recoverAuditLog", async () => {
+    // Verifies FIX 3 (OIR-116): the recoverAuditLog IPC handler is registered and
+    // delegates directly to service.recoverAuditLog() with no arguments.
+    serviceMock.recoverAuditLog = vi.fn().mockResolvedValue(undefined);
+
+    const handler = handlers.get("contacts:recover-audit-log");
+    expect(handler, "contacts:recover-audit-log handler must be registered").toBeDefined();
+
+    await (handler as (...args: unknown[]) => Promise<unknown>)({} as unknown);
+
+    expect(serviceMock.recoverAuditLog).toHaveBeenCalledOnce();
   });
 
   it("wrong sender cap — error messages are opaque (all four distinguishable paths return the same message)", async () => {
