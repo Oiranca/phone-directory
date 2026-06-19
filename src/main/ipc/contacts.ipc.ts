@@ -1,6 +1,7 @@
 import type { CsvImportPolicySelection, EditableContactRecord, MergePolicy } from "../../shared/types/contact.js";
 import { auditLogQueryParamsSchema } from "../../shared/schemas/contact.js";
 import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.js";
+import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
@@ -12,24 +13,6 @@ import { env } from "../config/env.js";
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
-
-const CHANNELS = {
-  bootstrap: "contacts:get-bootstrap-data",
-  createBackup: "contacts:create-backup",
-  resetDataset: "contacts:reset-dataset",
-  createRecord: "contacts:create-record",
-  updateRecord: "contacts:update-record",
-  listBackups: "contacts:list-backups",
-  restoreBackup: "contacts:restore-backup",
-  exportDataset: "contacts:export-dataset",
-  importDataset: "contacts:import-dataset",
-  previewCsvImport: "contacts:preview-csv-import",
-  importCsvDataset: "contacts:import-csv-dataset",
-  getAuditLog: "contacts:get-audit-log",
-  exportAuditLog: "contacts:export-audit-log",
-  detectDuplicates: "contacts:detect-duplicates",
-  mergeDuplicates: "contacts:merge-duplicates"
-};
 
 export const registerContactsIpc = (service: AppDataService) => {
   // sourceFilePath and senderId identify the import; sender/navListener are held so

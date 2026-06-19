@@ -1,69 +1,59 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type {
-  AutoBackupFailureEvent,
-  BackupListItem,
-  BootstrapResult,
-  ContactRecord,
-  CsvImportPolicySelection,
-  CsvImportPreviewWithConflicts,
-  CsvImportResult,
-  EditableAppSettings,
-  EditableContactRecord,
-  ExportContactsResult,
-  AuditLogQueryParams,
-  AuditLogResult,
-  ExportAuditLogResult,
-  ImportContactsResult,
-  ResetContactsResult,
-  SaveContactResult
-} from "../shared/types/contact.js";
-import type { BuscaRecord, EditableBuscaRecord } from "../shared/schemas/busca.schema.js";
-import type { DuplicateDetectionResult } from "../shared/types/duplicate.js";
+import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
+import {
+  CONTACTS_CHANNELS,
+  SETTINGS_CHANNELS,
+  BUSCAS_CHANNELS,
+  PUSH_CHANNELS
+} from "../shared/ipc/channels.js";
 
-const api = {
-  getBootstrapData: () => ipcRenderer.invoke("contacts:get-bootstrap-data") as Promise<BootstrapResult>,
-  getSettingsDefaults: () => ipcRenderer.invoke("settings:defaults") as Promise<EditableAppSettings>,
-  saveSettings: (settings: EditableAppSettings) =>
-    ipcRenderer.invoke("settings:save", settings) as Promise<EditableAppSettings>,
-  createBackup: () => ipcRenderer.invoke("contacts:create-backup") as Promise<string>,
-  createRecord: (record: EditableContactRecord) =>
-    ipcRenderer.invoke("contacts:create-record", record) as Promise<SaveContactResult>,
-  updateRecord: (recordId: string, record: EditableContactRecord) =>
-    ipcRenderer.invoke("contacts:update-record", recordId, record) as Promise<SaveContactResult>,
-  listBackups: () => ipcRenderer.invoke("contacts:list-backups") as Promise<BackupListItem[]>,
-  restoreBackup: (backupFilePath: string) =>
-    ipcRenderer.invoke("contacts:restore-backup", backupFilePath) as Promise<ImportContactsResult>,
-  exportDataset: () => ipcRenderer.invoke("contacts:export-dataset") as Promise<ExportContactsResult | null>,
-  importDataset: () => ipcRenderer.invoke("contacts:import-dataset") as Promise<ImportContactsResult | null>,
-  resetDataset: () => ipcRenderer.invoke("contacts:reset-dataset") as Promise<ResetContactsResult>,
-  previewCsvImport: () => ipcRenderer.invoke("contacts:preview-csv-import") as Promise<CsvImportPreviewWithConflicts | null>,
-  importCsvDataset: (importToken: string, policies: CsvImportPolicySelection[] = []) =>
-    ipcRenderer.invoke("contacts:import-csv-dataset", importToken, policies) as Promise<CsvImportResult>,
-  browseForPath: (type: "dataFile" | "backupDirectory") =>
-    ipcRenderer.invoke("settings:browse-path", type) as Promise<string | null>,
-  getAuditLog: (params: AuditLogQueryParams) =>
-    ipcRenderer.invoke("contacts:get-audit-log", params) as Promise<AuditLogResult>,
-  exportAuditLog: (params: AuditLogQueryParams) =>
-    ipcRenderer.invoke("contacts:export-audit-log", params) as Promise<ExportAuditLogResult | null>,
-  listBuscas: () => ipcRenderer.invoke("buscas:list") as Promise<BuscaRecord[]>,
-  addBusca: (record: EditableBuscaRecord) =>
-    ipcRenderer.invoke("buscas:add", record) as Promise<BuscaRecord>,
-  updateBusca: (id: string, record: EditableBuscaRecord) =>
-    ipcRenderer.invoke("buscas:update", id, record) as Promise<BuscaRecord>,
-  deleteBusca: (id: string) => ipcRenderer.invoke("buscas:delete", id) as Promise<void>,
+// Type assertion: `api` must satisfy HospitalDirectoryApi exactly.
+// If a method is missing, renamed, or has the wrong signature, tsc (tsconfig.electron.json)
+// will error here — before the code ever runs.
+const api: HospitalDirectoryApi = {
+  getBootstrapData: () => ipcRenderer.invoke(CONTACTS_CHANNELS.bootstrap) as ReturnType<HospitalDirectoryApi["getBootstrapData"]>,
+  getSettingsDefaults: () => ipcRenderer.invoke(SETTINGS_CHANNELS.defaults) as ReturnType<HospitalDirectoryApi["getSettingsDefaults"]>,
+  saveSettings: (settings) =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.save, settings) as ReturnType<HospitalDirectoryApi["saveSettings"]>,
+  createBackup: () => ipcRenderer.invoke(CONTACTS_CHANNELS.createBackup) as ReturnType<HospitalDirectoryApi["createBackup"]>,
+  createRecord: (record) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.createRecord, record) as ReturnType<HospitalDirectoryApi["createRecord"]>,
+  updateRecord: (recordId, record) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.updateRecord, recordId, record) as ReturnType<HospitalDirectoryApi["updateRecord"]>,
+  listBackups: () => ipcRenderer.invoke(CONTACTS_CHANNELS.listBackups) as ReturnType<HospitalDirectoryApi["listBackups"]>,
+  restoreBackup: (backupFilePath) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.restoreBackup, backupFilePath) as ReturnType<HospitalDirectoryApi["restoreBackup"]>,
+  exportDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.exportDataset) as ReturnType<HospitalDirectoryApi["exportDataset"]>,
+  importDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.importDataset) as ReturnType<HospitalDirectoryApi["importDataset"]>,
+  resetDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.resetDataset) as ReturnType<HospitalDirectoryApi["resetDataset"]>,
+  previewCsvImport: () => ipcRenderer.invoke(CONTACTS_CHANNELS.previewCsvImport) as ReturnType<HospitalDirectoryApi["previewCsvImport"]>,
+  importCsvDataset: (importToken, policies = []) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.importCsvDataset, importToken, policies) as ReturnType<HospitalDirectoryApi["importCsvDataset"]>,
+  browseForPath: (type) =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.browsePath, type) as ReturnType<HospitalDirectoryApi["browseForPath"]>,
+  getAuditLog: (params) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.getAuditLog, params) as ReturnType<HospitalDirectoryApi["getAuditLog"]>,
+  exportAuditLog: (params) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.exportAuditLog, params) as ReturnType<HospitalDirectoryApi["exportAuditLog"]>,
+  listBuscas: () => ipcRenderer.invoke(BUSCAS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBuscas"]>,
+  addBusca: (record) =>
+    ipcRenderer.invoke(BUSCAS_CHANNELS.add, record) as ReturnType<HospitalDirectoryApi["addBusca"]>,
+  updateBusca: (id, record) =>
+    ipcRenderer.invoke(BUSCAS_CHANNELS.update, id, record) as ReturnType<HospitalDirectoryApi["updateBusca"]>,
+  deleteBusca: (id) => ipcRenderer.invoke(BUSCAS_CHANNELS.remove, id) as ReturnType<HospitalDirectoryApi["deleteBusca"]>,
   detectDuplicates: () =>
-    ipcRenderer.invoke("contacts:detect-duplicates") as Promise<DuplicateDetectionResult>,
-  mergeContacts: (req: { keepId: string; discardId: string }) =>
-    ipcRenderer.invoke("contacts:merge-duplicates", req) as Promise<ContactRecord>,
-  onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => {
-    const wrappedListener = (_event: unknown, payload: AutoBackupFailureEvent) => {
+    ipcRenderer.invoke(CONTACTS_CHANNELS.detectDuplicates) as ReturnType<HospitalDirectoryApi["detectDuplicates"]>,
+  mergeContacts: (req) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.mergeDuplicates, req) as ReturnType<HospitalDirectoryApi["mergeContacts"]>,
+  onAutoBackupFailure: (listener) => {
+    const wrappedListener = (_event: unknown, payload: Parameters<typeof listener>[0]) => {
       listener(payload);
     };
 
-    ipcRenderer.on("app:auto-backup-failed", wrappedListener);
+    ipcRenderer.on(PUSH_CHANNELS.autoBackupFailed, wrappedListener);
 
     return () => {
-      ipcRenderer.removeListener("app:auto-backup-failed", wrappedListener);
+      ipcRenderer.removeListener(PUSH_CHANNELS.autoBackupFailed, wrappedListener);
     };
   }
 };

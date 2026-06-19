@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { registerBuscasIpc } from "./ipc/buscas.ipc.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
+import { PUSH_CHANNELS } from "../shared/ipc/channels.js";
 import { AppDataService } from "./services/app-data.service.js";
 import { BuscasService } from "./services/buscas.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
@@ -89,7 +90,7 @@ const bootstrap = async () => {
   const service = new AppDataService({
     onAutoBackupFailure: (message) => {
       for (const window of BrowserWindow.getAllWindows()) {
-        window.webContents.send("app:auto-backup-failed", { message });
+        window.webContents.send(PUSH_CHANNELS.autoBackupFailed, { message });
       }
     }
   });
