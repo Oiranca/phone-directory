@@ -66,9 +66,29 @@ export class AppDataAuditFacade {
           "Log file:", error.logFilePath,
         );
       } else {
-        console.error("[AuditLog] Failed to append entry:", error);
+        // FIX 4 (PR #67): log only the error code and message, not the full error
+        // object, to avoid leaking absolute filesystem paths into the console.
+        const errCode = (error as NodeJS.ErrnoException)?.code;
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[AuditLog] Failed to append entry — ${errCode ? errCode + ": " : ""}${errMsg}`);
       }
       // Audit failure does not block the contact mutation — intentional.
     }
+  }
+
+  /**
+   * Clear the latched integrity-error state on the underlying AuditLogService so
+   * that subsequent appends are attempted again.
+   *
+   * After an AuditLogIntegrityError the service stops accepting new entries for
+   * the lifetime of the process.  Callers (e.g. an IPC entrypoint) can invoke
+   * this to resume audit logging once the operator has resolved the underlying
+   * file corruption.
+   *
+   * Note: an IPC entrypoint can call AppDataService.recoverAuditLog() which
+   * delegates here — no new IPC channel is required for the current use-case.
+   */
+  async recoverFromIntegrityError(): Promise<void> {
+    return this.auditLog.recoverFromIntegrityError();
   }
 }

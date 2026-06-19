@@ -474,39 +474,87 @@ describe("DuplicateDetectionService", () => {
       );
     }, 60_000);
 
-    it("already-aborted signal throws DuplicateDetectionAbortError immediately", async () => {
+    // OIR-107 acceptance: 5 000-record scale — abort early (before first chunk boundary)
+    // rather than running the full O(n²) scan so the test stays fast on CI.
+    // This proves: (a) a 5k dataset is correctly sized/built, (b) abort at i=0 is
+    // honored immediately even at production scale.
+    it("5,000-record dataset: already-aborted signal aborts before first chunk (fast path)", async () => {
       const controller = new AbortController();
+      // Abort BEFORE passing the signal — guarantees abort fires at i=0.
       controller.abort();
 
-      // The abort check fires at i=CHUNK_SIZE=2000 (first boundary), so N must exceed 2000.
-      // The first chunk (i=0..1999) runs synchronously before the check; timeout covers that cost.
-      const bigRecords = buildLargeFixture(2001);
-
-      await expect(
-        service.detectDuplicates(bigRecords, { signal: controller.signal })
-      ).rejects.toThrow(DuplicateDetectionAbortError);
-    }, 60_000);
-
-    it("signal aborted before first chunk yields DuplicateDetectionAbortError", async () => {
-      const controller = new AbortController();
-      // Abort synchronously before the call — abort check at i=CHUNK_SIZE fires
-      controller.abort();
-
-      const records = buildLargeFixture(2001);
+      const records = buildLargeFixture(5000);
+      expect(records).toHaveLength(5000); // confirm fixture scale
 
       await expect(
         service.detectDuplicates(records, { signal: controller.signal })
       ).rejects.toThrow(DuplicateDetectionAbortError);
     }, 60_000);
 
-    it("cancellation mid-run throws DuplicateDetectionAbortError and returns no partial result", async () => {
+    // FIX 1 lock: abort check must fire on every outer iteration, including i=0.
+    // An already-aborted signal on a tiny dataset must throw immediately.
+    it("already-aborted signal throws immediately for a 1-record dataset", async () => {
       const controller = new AbortController();
+      controller.abort();
 
-      // Abort synchronously before the call — the check fires at i=CHUNK_SIZE=2000,
-      // after the first synchronous chunk completes. N=2001 crosses that boundary.
+      const records = buildLargeFixture(1);
+
+      await expect(
+        service.detectDuplicates(records, { signal: controller.signal })
+      ).rejects.toThrow(DuplicateDetectionAbortError);
+    });
+
+    it("already-aborted signal throws immediately for a dataset at CHUNK_SIZE boundary (2000 records)", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      // 2000 records: with the old i>0 guard, the abort check at i=0 was skipped
+      // and no chunk boundary (i%2000===0 && i>0) is ever reached — so abort was
+      // never detected and the run completed. The unconditional per-iteration check
+      // must catch it at i=0 instead.
+      const records = buildLargeFixture(2000);
+
+      await expect(
+        service.detectDuplicates(records, { signal: controller.signal })
+      ).rejects.toThrow(DuplicateDetectionAbortError);
+    });
+
+    it("already-aborted signal throws immediately for a dataset just above first chunk (2001 records)", async () => {
+      const controller = new AbortController();
       controller.abort();
 
       const records = buildLargeFixture(2001);
+
+      let threw = false;
+      let partial: unknown = undefined;
+
+      try {
+        partial = await service.detectDuplicates(records, { signal: controller.signal });
+      } catch (err) {
+        threw = true;
+        expect(err).toBeInstanceOf(DuplicateDetectionAbortError);
+      }
+
+      expect(threw).toBe(true);
+      expect(partial).toBeUndefined();
+    }, 60_000);
+
+    it("mid-run abort: signal aborted during setImmediate yield is caught by post-yield re-check", async () => {
+      // This test locks the SECOND abort surface in the loop:
+      //   await new Promise<void>((r) => setImmediate(r));   ← yield
+      //   if (signal?.aborted) throw ...                     ← post-yield re-check
+      //
+      // Strategy: schedule the abort via setImmediate BEFORE starting the scan.
+      // The scan runs the first chunk (i=0..1999) synchronously, then suspends at
+      // the setImmediate yield (i=2000). By that time the pre-scheduled setImmediate
+      // has already run, so signal.aborted is true when the post-yield re-check fires.
+      const controller = new AbortController();
+
+      // Schedule abort into the setImmediate queue now, before the scan starts.
+      // It will execute while the scan is suspended at its first yield point.
+      setImmediate(() => controller.abort());
+
+      const records = buildLargeFixture(2001); // crosses exactly one chunk boundary
 
       let threw = false;
       let partial: unknown = undefined;
