@@ -355,7 +355,7 @@ export interface CsvImportResult extends ImportContactsResult {
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
 }
 
-export type AuditAction = "create" | "update" | "delete" | "bulk-import" | "restore-from-backup" | "reset";
+export type AuditAction = "create" | "update" | "delete" | "bulk-import" | "dataset-replace" | "restore-from-backup" | "reset";
 
 export interface AuditLogEntry {
   timestamp: string;

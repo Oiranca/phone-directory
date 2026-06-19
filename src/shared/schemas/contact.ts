@@ -148,7 +148,7 @@ export const editableEmailContactSchema = z.object({
   isPrimary: z.boolean()
 });
 
-export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "restore-from-backup", "reset"]);
+export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "dataset-replace", "restore-from-backup", "reset"]);
 
 export const auditLogEntrySchema = z.object({
   timestamp: isoDateTimeString,

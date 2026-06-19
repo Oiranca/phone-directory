@@ -283,11 +283,12 @@ export class AppDataService {
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
-    // "bulk-import" matches importCsvDataset semantics: wholesale dataset replacement.
+    // "dataset-replace" (not "bulk-import") because this is a wholesale JSON replacement,
+    // semantically distinct from importCsvDataset which is a row-by-row merge with conflict resolution.
     await this.appendAuditEntry({
       timestamp: now,
       editor: this.getEditorName(settings),
-      action: "bulk-import",
+      action: "dataset-replace",
       recordsAffected: importedContacts.records.length,
       importSource: path.basename(sourceFilePath)
     });
