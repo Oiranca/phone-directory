@@ -4,9 +4,10 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { ContactFormPage } from "./ContactFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
-import { useAppStore } from "../store/useAppStore";
+import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 
 const resetStore = () => {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -17,7 +18,10 @@ const resetStore = () => {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 };
 
@@ -146,7 +150,10 @@ describe("ContactFormPage", () => {
       selectedType: "service",
       selectedArea: "gestion-administracion",
       showInactive: true,
-      isLoading: false
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
     });
 
     const router = renderWithRoute("/contacts/new");
@@ -282,13 +289,38 @@ describe("ContactFormPage", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Añadir correo" }));
   });
 
-  it("shows recovery actions when bootstrap loading fails", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
+  it("shows loading state while bootstrap is in progress (direct route entry)", () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
+      () => new Promise(() => undefined)
+    );
 
     renderWithRoute("/contacts/new");
 
-    expect(await screen.findByText("No se pudo abrir el formulario")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Volver al directorio" })).toBeInTheDocument();
+    // Page defers to store loading state — no page-level error panel
+    expect(screen.getByText("Cargando formulario…")).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo abrir el formulario")).not.toBeInTheDocument();
+  });
+
+  it("calls ensureBootstrapLoaded on mount and shows form after load (direct route entry)", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByRole("heading", { name: "Alta de contacto" })).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload bootstrap when store already has data (route transition)", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByRole("heading", { name: "Alta de contacto" })).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 });

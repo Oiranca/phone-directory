@@ -7,8 +7,11 @@ import type {
   EditableAppSettings,
   RecoveryState
 } from "../../shared/types/contact";
+import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { DirectoryFilters } from "../services/search.service";
 import { searchRecords } from "../services/search.service";
+
+export type BootstrapStatus = "idle" | "loading" | "success" | "error";
 
 interface AppStore {
   contacts: DirectoryDataset | null;
@@ -21,6 +24,9 @@ interface AppStore {
   selectedTags: string[];
   showInactive: boolean;
   isLoading: boolean;
+  bootstrapStatus: BootstrapStatus;
+  bootstrapError: string;
+  bootstrapHelp: string;
   initialize: (payload: BootstrapData) => void;
   initializeRecovery: (recovery: RecoveryState, settings: EditableAppSettings) => void;
   setIsLoading: (isLoading: boolean) => void;
@@ -33,9 +39,19 @@ interface AppStore {
   setSettings: (settings: EditableAppSettings) => void;
   setContacts: (contacts: DirectoryDataset) => void;
   applyMergeResult: (survivor: ContactRecord, discardedId: string) => void;
+  ensureBootstrapLoaded: () => Promise<void>;
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+// Module-level in-flight guard: ensures at most one bootstrap IPC call in progress
+// regardless of how many concurrent callers invoke ensureBootstrapLoaded.
+let bootstrapInFlight: Promise<void> | null = null;
+
+/** Reset the in-flight guard. Call this in test teardown after resetting store state. */
+export function resetBootstrapInFlight() {
+  bootstrapInFlight = null;
+}
+
+export const useAppStore = create<AppStore>((set, get) => ({
   contacts: null,
   settings: null,
   recovery: null,
@@ -46,6 +62,9 @@ export const useAppStore = create<AppStore>((set) => ({
   selectedTags: [],
   showInactive: false,
   isLoading: true,
+  bootstrapStatus: "idle",
+  bootstrapError: "",
+  bootstrapHelp: "",
   initialize: (payload) =>
     set({
       contacts: payload.contacts,
@@ -56,7 +75,10 @@ export const useAppStore = create<AppStore>((set) => ({
       selectedArea: "all",
       selectedTags: [],
       showInactive: payload.settings.ui.showInactiveByDefault,
-      isLoading: false
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
     }),
   initializeRecovery: (recovery, settings) =>
     set({
@@ -68,7 +90,10 @@ export const useAppStore = create<AppStore>((set) => ({
       selectedArea: "all",
       selectedTags: [],
       showInactive: settings.ui.showInactiveByDefault,
-      isLoading: false
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
     }),
   setIsLoading: (isLoading) => set({ isLoading }),
   setQuery: (query) => set({ query }),
@@ -91,7 +116,63 @@ export const useAppStore = create<AppStore>((set) => ({
         contacts: { ...state.contacts, records },
         selectedRecordId
       };
-    })
+    }),
+  ensureBootstrapLoaded: () => {
+    const state = get();
+
+    // Success: already loaded — no-op
+    if (state.bootstrapStatus === "success") {
+      return Promise.resolve();
+    }
+
+    // In-flight: share the existing promise so concurrent callers wait on the
+    // same load and at most one IPC call is ever made at a time.
+    if (bootstrapInFlight !== null) {
+      return bootstrapInFlight;
+    }
+
+    // Error: allow retry (fall through to start a new load)
+
+    const run = async () => {
+      try {
+        if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
+          set({
+            bootstrapStatus: "error",
+            isLoading: false,
+            bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
+            bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo."
+          });
+          return;
+        }
+
+        set({ bootstrapStatus: "loading", isLoading: true, bootstrapError: "", bootstrapHelp: "" });
+
+        try {
+          const payload = await window.hospitalDirectory.getBootstrapData();
+
+          if (isRecoveryBootstrap(payload)) {
+            get().initializeRecovery(payload.recovery, payload.settings);
+            return;
+          }
+
+          get().initialize(payload);
+        } catch (error) {
+          console.error("[AppStore] Bootstrap failed:", error);
+          set({
+            bootstrapStatus: "error",
+            isLoading: false,
+            bootstrapError: "No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.",
+            bootstrapHelp: ""
+          });
+        }
+      } finally {
+        bootstrapInFlight = null;
+      }
+    };
+
+    bootstrapInFlight = run();
+    return bootstrapInFlight;
+  }
 }));
 
 export const selectVisibleRecords = (

@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { ImportExportPage } from "./ImportExportPage";
-import { useAppStore } from "../store/useAppStore";
+import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 
 const originalHTMLDialogElement = globalThis.HTMLDialogElement;
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
@@ -50,6 +50,7 @@ afterAll(() => {
 });
 
 const resetStore = () => {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -60,7 +61,10 @@ const resetStore = () => {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 };
 
@@ -302,30 +306,13 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
-  it("shows a recovery state when bootstrap loading fails", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
-    window.hospitalDirectory.listBackups = vi.fn().mockRejectedValue(new Error("broken file"));
-
-    renderPage();
-
-    expect(await screen.findByText("Importación y backups no disponibles")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
-  });
-
   it("exposes a busy status while bootstrap data is still loading", async () => {
     let resolveBootstrap: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.getBootstrapData>>) => void) | null = null;
-    let resolveBackups: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.listBackups>>) => void) | null = null;
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveBootstrap = resolve;
-        })
-    );
-    window.hospitalDirectory.listBackups = vi.fn().mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveBackups = resolve;
         })
     );
 
@@ -339,37 +326,48 @@ describe("ImportExportPage", () => {
       contacts: defaultContacts,
       settings: editableSettings
     });
-    resolveBackups?.([]);
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
   });
 
-  it("retries bootstrap loading after an initial failure", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn()
-      .mockRejectedValueOnce(new Error("broken file"))
-      .mockResolvedValueOnce({
-        contacts: defaultContacts,
-        settings: editableSettings
-      });
-    window.hospitalDirectory.listBackups = vi.fn()
-      .mockRejectedValueOnce(new Error("broken file"))
-      .mockResolvedValueOnce([
-        {
-          fileName: "contacts-1.json",
-          filePath: "/tmp/backups/contacts-1.json",
-          createdAt: "2026-04-19T18:00:00.000Z",
-          sizeBytes: 2048
-        }
-      ]);
+  it("calls ensureBootstrapLoaded on mount then loads backups (direct route entry)", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("contacts-1.json")).toBeInTheDocument();
+  });
+
+  it("does not reload bootstrap when store already has data (route transition), only loads backups", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
 
     renderPage();
 
-    expect(await screen.findByText("Importación y backups no disponibles")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
-    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2);
+    expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hang on the spinner when bootstrap fails — exits loading state and shows error", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("IPC failed"));
+
+    renderPage();
+
+    // Should exit the spinner; aria-busy must not remain true indefinitely
+    await waitFor(() => {
+      const status = screen.getByRole("status");
+      expect(status).not.toHaveAttribute("aria-busy", "true");
+    });
+    // listBackups must NOT be called when bootstrap failed
+    expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
   });
 
   it("shows a backup refresh error instead of throwing on rejection", async () => {

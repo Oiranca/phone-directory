@@ -1,5 +1,4 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
@@ -15,7 +14,7 @@ const clampInteger = (value: string, minimum: number, maximum: number) => {
 };
 
 export const SettingsPage = () => {
-  const { settings, initialize, setSettings } = useAppStore();
+  const { settings, setSettings, ensureBootstrapLoaded } = useAppStore();
   const { pushToast } = useToast();
   const [editorName, setEditorName] = useState("");
   const [hasEditorDraft, setHasEditorDraft] = useState(false);
@@ -35,32 +34,11 @@ export const SettingsPage = () => {
   const [isBrowsingBackupDir, setIsBrowsingBackupDir] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isResettingPaths, setIsResettingPaths] = useState(false);
-  const [bootstrapError, setBootstrapError] = useState("");
   const [saveError, setSaveError] = useState("");
 
-  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
-  // This local loader is retained only for page-level retry and test isolation.
-  const loadBootstrapData = async () => {
-    try {
-      setBootstrapError("");
-      const payload = await window.hospitalDirectory.getBootstrapData();
-      if (isRecoveryBootstrap(payload)) {
-        setBootstrapError(payload.recovery.message);
-        return;
-      }
-      initialize(payload);
-    } catch {
-      setBootstrapError(
-        "No se pudo cargar la configuración local. Revisa los archivos de datos o restaura una copia válida."
-      );
-    }
-  };
-
   useEffect(() => {
-    if (!settings) {
-      void loadBootstrapData();
-    }
-  }, [settings]);
+    void ensureBootstrapLoaded();
+  }, []);
 
   useEffect(() => {
     if (!settings) {
@@ -106,22 +84,6 @@ export const SettingsPage = () => {
       isCancelled = true;
     };
   }, [managedDefaults, settings]);
-
-  if (bootstrapError) {
-    return (
-      <section className="rounded-3xl bg-white p-6 shadow-panel">
-        <h2 className="text-2xl font-semibold text-scs-blueDark">Configuración no disponible</h2>
-        <p role="alert" className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
-        <button
-          type="button"
-          onClick={() => void loadBootstrapData()}
-          className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-        >
-          Reintentar
-        </button>
-      </section>
-    );
-  }
 
   if (!settings) {
     return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;

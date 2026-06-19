@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
@@ -38,10 +37,9 @@ type PendingConfirmation =
   | { kind: "restore-backup"; backup: BackupListItem };
 
 export const ImportExportPage = () => {
-  const { contacts, settings, initialize } = useAppStore();
+  const { contacts, settings, initialize, isLoading: storeIsLoading, bootstrapStatus, bootstrapError, ensureBootstrapLoaded } = useAppStore();
   const { pushToast } = useToast();
   const [backups, setBackups] = useState<BackupListItem[]>([]);
-  const [bootstrapError, setBootstrapError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -61,41 +59,35 @@ export const ImportExportPage = () => {
     isImportingCsv ||
     isRestoreInProgress;
 
-  const loadPageData = async () => {
+  const loadBackups = async () => {
     try {
-      setBootstrapError("");
       setIsLoading(true);
-
-      const bootstrapPromise = contacts && settings
-        ? Promise.resolve({ contacts, settings })
-        : window.hospitalDirectory.getBootstrapData();
-      const [payload, backupItems] = await Promise.all([
-        bootstrapPromise,
-        window.hospitalDirectory.listBackups()
-      ]);
-
-      if (isRecoveryBootstrap(payload)) {
-        setBootstrapError(payload.recovery.message);
-        return;
-      }
-
-      if (!contacts || !settings) {
-        initialize(payload);
-      }
-
+      const backupItems = await window.hospitalDirectory.listBackups();
       setBackups(backupItems);
     } catch {
-      setBootstrapError(
-        "No se pudo cargar el estado de importación y backups. Revisa los archivos locales o restaura una copia válida."
-      );
+      pushToast({
+        type: "error",
+        message: "No se pudo cargar la lista de backups. Inténtalo de nuevo."
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadPageData();
+    void ensureBootstrapLoaded();
   }, []);
+
+  useEffect(() => {
+    if (storeIsLoading) return;
+    if (bootstrapStatus === "error") {
+      setIsLoading(false);
+      return;
+    }
+    if (contacts || settings) {
+      void loadBackups();
+    }
+  }, [storeIsLoading, bootstrapStatus]);
 
   const refreshBackups = async () => {
     try {
@@ -402,23 +394,11 @@ export const ImportExportPage = () => {
     };
   })();
 
-  if (bootstrapError) {
-    return (
-      <section className="rounded-3xl bg-white p-6 shadow-panel">
-        <h2 className="text-2xl font-semibold text-scs-blueDark">Importación y backups no disponibles</h2>
-        <p role="alert" className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
-        <button
-          type="button"
-          onClick={() => void loadPageData()}
-          className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-        >
-          Reintentar
-        </button>
-      </section>
-    );
+  if (bootstrapStatus === "error") {
+    return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-6 shadow-panel">{bootstrapError}</section>;
   }
 
-  if (isLoading || !contacts || !settings) {
+  if (isLoading || storeIsLoading || !contacts || !settings) {
     return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y backups…</section>;
   }
 

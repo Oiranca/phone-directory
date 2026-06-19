@@ -1,6 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { isRecoveryBootstrap } from "../../shared/types/contact";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
@@ -88,17 +87,20 @@ export const DirectoryPage = () => {
     selectedArea,
     selectedTags,
     showInactive,
-    initialize,
     setQuery,
     setSelectedType,
     setSelectedArea,
     setSelectedTags,
     setShowInactive,
     setSelectedRecordId,
-    isLoading
+    isLoading,
+    ensureBootstrapLoaded
   } = useAppStore();
-  const [bootstrapError, setBootstrapError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    void ensureBootstrapLoaded();
+  }, []);
   const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
   const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
   const availableTags = useMemo(() => {
@@ -143,28 +145,6 @@ export const DirectoryPage = () => {
     [visibleRecords, pageStart]
   );
   const paginationItems = getPaginationItems(currentPage, totalPages);
-
-  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
-  // This local loader is retained only for page-level retry and test isolation.
-  const loadBootstrapData = async () => {
-    try {
-      setBootstrapError("");
-      const payload = await window.hospitalDirectory.getBootstrapData();
-      if (isRecoveryBootstrap(payload)) {
-        setBootstrapError(payload.recovery.message);
-        return;
-      }
-      initialize(payload);
-    } catch {
-      setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");
-    }
-  };
-
-  useEffect(() => {
-    if (!contacts) {
-      void loadBootstrapData();
-    }
-  }, [contacts]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -293,22 +273,6 @@ export const DirectoryPage = () => {
       selectedButton?.focus();
     }
   };
-
-  if (bootstrapError) {
-    return (
-      <section className="rounded-3xl bg-white p-8 shadow-panel">
-        <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
-        <p role="alert" className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
-        <button
-          type="button"
-          onClick={() => void loadBootstrapData()}
-          className="focus-ring mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-        >
-          Reintentar
-        </button>
-      </section>
-    );
-  }
 
   if (isLoading || !contacts || !settings) {
     return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;

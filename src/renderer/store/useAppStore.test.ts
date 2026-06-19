@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { selectVisibleRecords, useAppStore } from "./useAppStore";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { selectVisibleRecords, useAppStore, resetBootstrapInFlight } from "./useAppStore";
 import type { BootstrapData, EditableAppSettings, RecoveryState } from "../../shared/types/contact";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
@@ -115,6 +115,7 @@ const recoveryState: RecoveryState = {
 };
 
 function resetStore() {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -125,7 +126,10 @@ function resetStore() {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 }
 
@@ -404,5 +408,134 @@ describe("useAppStore actions", () => {
 
       expect(inMemoryRecords).toEqual(reloadedRecords);
     });
+  });
+});
+
+// ─── ensureBootstrapLoaded Tests ─────────────────────────────────────────────
+
+describe("ensureBootstrapLoaded", () => {
+  beforeEach(() => {
+    resetStore();
+    Object.defineProperty(window, "hospitalDirectory", {
+      configurable: true,
+      value: {
+        getBootstrapData: vi.fn().mockResolvedValue(bootstrapPayload)
+      }
+    });
+  });
+
+  it("loads bootstrap data and transitions to success status", async () => {
+    await useAppStore.getState().ensureBootstrapLoaded();
+    const state = useAppStore.getState();
+    expect(state.bootstrapStatus).toBe("success");
+    expect(state.contacts).toBe(bootstrapPayload.contacts);
+    expect(state.settings).toBe(bootstrapPayload.settings);
+    expect(state.isLoading).toBe(false);
+    expect(state.bootstrapError).toBe("");
+  });
+
+  it("is idempotent — second call while status is success is a no-op", async () => {
+    await useAppStore.getState().ensureBootstrapLoaded();
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+  });
+
+  it("concurrent calls trigger AT MOST one in-flight load", async () => {
+    // Fire two concurrent calls before either resolves
+    const [, ] = await Promise.all([
+      useAppStore.getState().ensureBootstrapLoaded(),
+      useAppStore.getState().ensureBootstrapLoaded()
+    ]);
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+  });
+
+  it("transitions to error status and stores the error message on failure", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("IPC failed"));
+
+    await useAppStore.getState().ensureBootstrapLoaded();
+    const state = useAppStore.getState();
+    expect(state.bootstrapStatus).toBe("error");
+    expect(state.bootstrapError).toBe(
+      "No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida."
+    );
+    expect(state.isLoading).toBe(false);
+  });
+
+  it("retries after a previous failure (error status allows retry)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn()
+      .mockRejectedValueOnce(new Error("first fail"))
+      .mockResolvedValueOnce(bootstrapPayload);
+
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(useAppStore.getState().bootstrapStatus).toBe("error");
+
+    // Second call should retry because status is "error"
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(useAppStore.getState().bootstrapStatus).toBe("success");
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+  });
+
+  it("transitions to recovery mode when bootstrap returns recovery data", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: recoveryState,
+      settings: defaultSettings
+    });
+
+    await useAppStore.getState().ensureBootstrapLoaded();
+    const state = useAppStore.getState();
+    expect(state.bootstrapStatus).toBe("success");
+    expect(state.recovery).toBe(recoveryState);
+    expect(state.contacts).toBeNull();
+    expect(state.isLoading).toBe(false);
+  });
+
+  it("sets an error with browser-context help when hospitalDirectory bridge is absent", async () => {
+    // Remove the bridge
+    Object.defineProperty(window, "hospitalDirectory", {
+      configurable: true,
+      value: undefined
+    });
+
+    await useAppStore.getState().ensureBootstrapLoaded();
+    const state = useAppStore.getState();
+    expect(state.bootstrapStatus).toBe("error");
+    expect(state.bootstrapError).toContain("navegador");
+    expect(state.bootstrapHelp).toContain("pnpm dev");
+    expect(state.isLoading).toBe(false);
+  });
+
+  it("absent-bridge error is retryable: bootstrapInFlight is cleared so a second call proceeds", async () => {
+    // Simulate the state left by a prior absent-bridge failure:
+    // bootstrapStatus is "error" and bootstrapInFlight is null (already reset by resetStore / resetBootstrapInFlight).
+    // The bridge IS available (set up by beforeEach).
+    useAppStore.setState({
+      bootstrapStatus: "error",
+      bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
+      bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.",
+      isLoading: false
+    });
+
+    // ensureBootstrapLoaded must NOT return the stale resolved promise — it must
+    // start a new load because status is "error" (not "success") and no in-flight
+    // promise exists. If bootstrapInFlight were still set, getBootstrapData would
+    // never be called and status would remain "error".
+    await useAppStore.getState().ensureBootstrapLoaded();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().bootstrapStatus).toBe("success");
+  });
+
+  it("initialize sets bootstrapStatus to success and clears error fields", () => {
+    // Simulate a prior error
+    useAppStore.setState({ bootstrapStatus: "error", bootstrapError: "old error", bootstrapHelp: "old help" });
+    useAppStore.getState().initialize(bootstrapPayload);
+    const state = useAppStore.getState();
+    expect(state.bootstrapStatus).toBe("success");
+    expect(state.bootstrapError).toBe("");
+    expect(state.bootstrapHelp).toBe("");
+  });
+
+  it("initializeRecovery sets bootstrapStatus to success", () => {
+    useAppStore.getState().initializeRecovery(recoveryState, defaultSettings);
+    expect(useAppStore.getState().bootstrapStatus).toBe("success");
   });
 });
