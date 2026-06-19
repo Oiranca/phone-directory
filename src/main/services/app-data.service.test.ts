@@ -602,6 +602,9 @@ describe("AppDataService", () => {
 
     expect(files).toHaveLength(2);
     expect(files.at(-1)).toMatch(/^auto-backup-/);
+    // Drain any in-flight write-queue entries before the afterEach removes the
+    // temp dir, preventing an ENOTEMPTY race between pruneAutoBackups and fs.rm.
+    await service.dispose();
   });
 
   it("creates an auto-backup after the configured edit threshold", async () => {
@@ -661,6 +664,7 @@ describe("AppDataService", () => {
 
     const files = await fs.readdir(path.join(testRoot, "backups"));
     expect(files.some((file) => file.startsWith("auto-backup-"))).toBe(true);
+    await service.dispose();
   });
 
   it("retries the edit-threshold auto-backup after a failed attempt", async () => {
@@ -721,6 +725,7 @@ describe("AppDataService", () => {
     });
 
     await waitForCondition(async () => autoBackupFailures.length === 1);
+    await service.dispose();
 
     await service.createRecord({
       type: "person",
@@ -758,6 +763,7 @@ describe("AppDataService", () => {
     });
 
     expect(autoBackupFailures).toHaveLength(1);
+    await service.dispose();
   });
 
   it("preserves edit-threshold progress when saving unrelated settings", async () => {
@@ -863,6 +869,7 @@ describe("AppDataService", () => {
 
     const files = await fs.readdir(path.join(testRoot, "backups"));
     expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+    await service.dispose();
   });
 
   it("resets edit-threshold progress when backup targets change", async () => {
@@ -1002,6 +1009,7 @@ describe("AppDataService", () => {
     });
 
     expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+    await service.dispose();
   });
 
   it("resets edit-threshold progress when the data file changes", async () => {
@@ -1142,6 +1150,7 @@ describe("AppDataService", () => {
     });
 
     expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+    await service.dispose();
   });
 
   it("ignores client supplied ids when creating a new record", async () => {

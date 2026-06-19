@@ -90,6 +90,22 @@ export class AppDataService {
     this.configureAutoBackup(settings.ui.autoBackup);
   }
 
+  /**
+   * Stop the auto-backup scheduler and drain any in-flight write-queue entries.
+   * Call this during app teardown (or in test afterEach) to ensure no background
+   * writes race with filesystem cleanup.
+   */
+  async dispose() {
+    if (this.autoBackupTimer) {
+      clearInterval(this.autoBackupTimer);
+      this.autoBackupTimer = null;
+    }
+    // Drain the write queue: any enqueued write that is currently in-flight will
+    // complete before this resolves.  New writes enqueued after dispose() returns
+    // are not prevented — callers must stop triggering operations after dispose().
+    await this.writeQueue;
+  }
+
   async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
     const settings = await this.readSettings(true);
