@@ -12,17 +12,19 @@
  *   4. Flat-sheet (Bug A fix)   (low-confidence service path)
  *   5. Multi-sheet workbook     (mergeRecordsByDisplayName cross-sheet)
  *
- * Pure-function unit golden tests:
+ * Pure-function unit golden tests (in this file):
  *   - extractNumbers (compact range, compact suffix, dedup)
  *   - detectPrivacy
- *   - blankRecord shape
- *   - buildStableExternalId
  *   - buildCenterPhones
  *   - normalizeDisplayNameForMerge (via mergeRecordsByDisplayName)
  *   - mergeRecordsByDisplayName (phone union, order, empty key passthrough)
  *   - isSerializedPhoneEntry (type guard)
  *   - normalizeWorkbookRowsFromFile error paths (unsupported format, no rows)
  *   - 5000-row cap
+ *
+ * Unit tests in spreadsheet-parsers.test.ts:
+ *   - blankRecord (full shape assertion, key set lock)
+ *   - buildStableExternalId (ASCII-fold, join, determinism, edge inputs)
  */
 
 import nodeFs from "node:fs";
