@@ -269,13 +269,14 @@ export class AppDataService {
     );
     const backupPath = await this.createBackupInner();
     const settings = await this.readSettings(true);
+    const now = new Date().toISOString();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
     // "bulk-import" matches importCsvDataset semantics: wholesale dataset replacement.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "bulk-import",
       recordsAffected: importedContacts.records.length,
@@ -337,12 +338,13 @@ export class AppDataService {
     }
 
     const backupPath = await this.createBackupInner();
+    const now = new Date().toISOString();
 
     await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "restore-from-backup",
       recordsAffected: importedContacts.records.length,
@@ -366,13 +368,14 @@ export class AppDataService {
     const backupPath = (await this.fileExists(contactsFilePath))
       ? await this.createBackupInner()
       : null;
+    const now = new Date().toISOString();
     const contacts = this.buildEmptyDataset(this.getEditorName(settings));
 
     await this.writeDatasetToPath(settings.dataFilePath, contacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // No PII in the entry; recordsAffected=0 reflects the resulting empty dataset.
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: this.getEditorName(settings),
       action: "reset",
       recordsAffected: 0
@@ -432,10 +435,11 @@ export class AppDataService {
     const policies = this.resolveImportPolicies(conflicts, policySelections);
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
     const backupPath = await this.createBackupInner();
+    const now = new Date().toISOString();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
     this.noteAutoBackupEligibleEdit();
     await this.appendAuditEntry({
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       editor: editorName,
       action: "bulk-import",
       recordsAffected: merged.createdCount + merged.updatedCount,

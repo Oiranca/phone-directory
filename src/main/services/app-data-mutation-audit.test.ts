@@ -431,10 +431,12 @@ describe("AppDataService — mutation audit coverage (OIR-112)", () => {
     const result = await service.createRecord(makeContact());
     expect(result.savedRecordId).toBeTruthy();
 
-    // The facade must have logged the error (non-blocking, not silent)
+    // The facade must have logged the error (non-blocking, not silent).
+    // PR #67 changed the log to a single concatenated string (code+message) to
+    // avoid leaking absolute filesystem paths — assert the new single-string form,
+    // and that the error detail (message text) is included in that string.
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[AuditLog] Failed to append entry:",
-      expect.any(Error)
+      expect.stringMatching(/^\[AuditLog\] Failed to append entry.*Simulated audit IO failure/)
     );
 
     appendSpy.mockRestore();
