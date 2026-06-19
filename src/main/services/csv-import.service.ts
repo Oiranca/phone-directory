@@ -14,8 +14,8 @@ import type {
   PhoneContact,
   EmailContact
 } from "../../shared/types/contact.js";
-import { isSerializedPhoneEntry } from "./spreadsheet-import.service.js";
-import type { SerializedPhoneEntry } from "./spreadsheet-import.service.js";
+import { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_COLUMNS = [

@@ -7,6 +7,30 @@ import Papa from "papaparse";
 import XLSX from "xlsx-republish";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImportRow } from "./csv-import.service.js";
 import type { CsvImportPreview, DirectoryDataset } from "../../shared/types/contact.js";
+import {
+  clean,
+  stripBom,
+  hasLetters,
+  hasPhoneLikeNumber,
+  normalizeAscii,
+  normalizeMarker,
+  isMeaningfulServiceLabel as isMeaningfulServiceLabelBase,
+  inferAreaFromLabel,
+  prettifyLabel,
+  EXCLUDED_PATTERNS,
+  isExcludedLabel,
+} from "./spreadsheet-normalize.js";
+import {
+  normalizeServiceSheet,
+  normalizeCentersSheet,
+  resolveServiceRowLabel,
+  mergeRecordsByDisplayName,
+} from "./spreadsheet-parsers.js";
+
+// Re-export the public symbols that external modules depend on.
+export type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
+export { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
+export { mergeRecordsByDisplayName } from "./spreadsheet-parsers.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
@@ -65,36 +89,6 @@ const SERVICE_SHEETS: Record<string, { area: string; department: string }> = {
   umi: { area: "sanitaria-asistencial", department: "UMI" }
 };
 
-const CENTER_SERVICE_LABELS: Record<string, string> = {
-  "INF.": "Información",
-  "ADM.": "Administración",
-  "URG.": "Urgencias",
-  URGENCIAS: "Urgencias",
-  "FAX.": "Fax",
-  FAX: "Fax"
-};
-
-const EXCLUDED_PATTERNS = [
-  /^servicio$/i,
-  /^n[uú]mero/i,
-  /^centros de salud$/i,
-  /^sala[s]?$/i,
-  /^[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\-.\(\)0-9]+$/
-];
-
-const NO_SHARE_MARKERS = [
-  "NO DAR A LA CALLE",
-  "NO PASAR DESPACHO MÉDICO",
-  "NO DAR EL NÚMERO LARGO A LA CALLE",
-  "NO PASAR LLAMADAS EXTERNAS",
-  "NO HACEN CAMBIOS DE CITAS"
-];
-
-const CONFIDENTIAL_MARKERS = [
-  "DESPACHO MÉDICO",
-  "INTERNAL USE ONLY"
-];
-
 type SheetData = {
   name: string;
   slug: string;
@@ -121,380 +115,13 @@ type SheetProfile = {
   detectionConfidence: DetectionConfidence;
 };
 
-const clean = (value: string) => value.replace(/\u00a0/g, " ").split(/\s+/).filter(Boolean).join(" ").trim();
-
-/**
- * A serialized phone entry stored as JSON in NormalizedImportRow["phones"].
- * Carrying this structured form lets the normalization layer pass an unbounded
- * list of phones through the flat Record<string,string> intermediate without
- * capping at phone1/phone2.
- */
-export type SerializedPhoneEntry = {
-  number: string;
-  label: string;
-  kind: string;
-  isPrimary: boolean;
-  confidential: boolean;
-  noPatientSharing: boolean;
-  notes?: string;
-};
-
-/**
- * Runtime type guard for SerializedPhoneEntry (Bug 4 fix).
- * Validates that an untrusted JSON-parsed value has the required shape before
- * it is used so a crafted phones column cannot crash the import pipeline.
- */
-export const isSerializedPhoneEntry = (value: unknown): value is SerializedPhoneEntry =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as Record<string, unknown>).number === "string" &&
-  typeof (value as Record<string, unknown>).label === "string" &&
-  typeof (value as Record<string, unknown>).kind === "string" &&
-  typeof (value as Record<string, unknown>).isPrimary === "boolean" &&
-  typeof (value as Record<string, unknown>).confidential === "boolean" &&
-  typeof (value as Record<string, unknown>).noPatientSharing === "boolean";
-
-/**
- * Normalizes a displayName for cross-sheet identity matching:
- * trim + lowercase + strip diacritics/accents.
- * Two names that are equal after this transform are considered the same contact.
- * Exact normalized equality only \u2014 no fuzzy matching.
- */
-const normalizeDisplayNameForMerge = (name: string): string =>
-  name
-    .trim()
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-
-/**
- * Normalizes a phone number for deduplication purposes:
- * strip all non-digit characters.
- */
-const normalizeNumberForDedup = (number: string): string => number.replace(/\D/g, "");
-
-const normalizeAscii = (value: string) =>
-  value
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "sheet";
-
-const normalizeMarker = (value: string) =>
-  value
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toUpperCase()
-    .replace(/\s+/g, "");
-
-const dedupeKeepOrder = (values: string[]) => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    if (seen.has(value)) {
-      continue;
-    }
-
-    seen.add(value);
-    result.push(value);
-  }
-
-  return result;
-};
-
-const isExcludedLabel = (label: string) => {
-  const value = clean(label);
-
-  if (!value) {
-    return true;
-  }
-
-  const normalized = normalizeMarker(value);
-
-  if (normalized === "INDICEAGENDA" || normalized === "INDICEAGENDAHOSPITALARIA") {
-    return true;
-  }
-
-  return EXCLUDED_PATTERNS.some((pattern) => {
-    if (!pattern.test(value)) {
-      return false;
-    }
-
-    if (/\d/.test(value) && value.split(" ").length > 3) {
-      return false;
-    }
-
-    return true;
-  });
-};
-
-const expandCompactRange = (part: string) => {
-  const match = /^(\d+)-(\d+)$/.exec(part);
-
-  if (!match) {
-    return null;
-  }
-
-  const [, startRaw, endSuffix] = match;
-
-  if (startRaw.length <= endSuffix.length) {
-    return null;
-  }
-
-  const prefix = startRaw.slice(0, startRaw.length - endSuffix.length);
-  const start = Number(startRaw);
-  const end = Number(`${prefix}${endSuffix}`);
-
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || end - start > 20) {
-    return null;
-  }
-
-  return Array.from({ length: end - start + 1 }, (_, index) => String(start + index));
-};
-
-const expandCompactSuffix = (previousDigits: string | undefined, currentPart: string) => {
-  const currentDigits = currentPart.replace(/\D/g, "");
-
-  if (!previousDigits || currentDigits.length === 0 || currentDigits.length >= previousDigits.length) {
-    return null;
-  }
-
-  const prefix = previousDigits.slice(0, previousDigits.length - currentDigits.length);
-  const candidate = `${prefix}${currentDigits}`;
-
-  return /^\d+$/.test(candidate) ? candidate : null;
-};
-
-const extractNumbers = (text: string) => {
-  const value = clean(text);
-
-  if (!value) {
-    return [];
-  }
-
-  const results: string[] = [];
-  let previousDigits: string | undefined;
-
-  for (const part of value.split(/\s*\/\s*/)) {
-    const normalizedPart = clean(part);
-
-    if (!normalizedPart) {
-      continue;
-    }
-
-    const expanded = expandCompactRange(normalizedPart);
-
-    if (expanded) {
-      results.push(...expanded);
-      previousDigits = expanded[expanded.length - 1];
-      continue;
-    }
-
-    const digits = normalizedPart.replace(/\D/g, "");
-
-    if (digits.length >= 4) {
-      results.push(digits);
-      previousDigits = digits;
-      continue;
-    }
-
-    const expandedSuffix = expandCompactSuffix(previousDigits, normalizedPart);
-
-    if (expandedSuffix) {
-      results.push(expandedSuffix);
-      previousDigits = expandedSuffix;
-    }
-  }
-
-  return dedupeKeepOrder(results);
-};
-
-const detectPrivacy = (notes: string): { confidential: boolean; noPatientSharing: boolean } => {
-  const upper = notes.toUpperCase();
-  return {
-    confidential: CONFIDENTIAL_MARKERS.some((marker) => upper.includes(marker)),
-    noPatientSharing: NO_SHARE_MARKERS.some((marker) => upper.includes(marker))
-  };
-};
-
-const cleanNoteFragments = (values: string[]) =>
-  values
-    .map((value) => clean(value))
-    .filter((value) => {
-      if (!value) {
-        return false;
-      }
-
-      const marker = normalizeMarker(value);
-      return marker !== "INDICEAGENDA" && marker !== "INDICEAGENDAHOSPITALARIA";
-    });
-
-const looksLikePerson = (label: string) => {
-  const lower = label.toLowerCase();
-  return ["dr.", "dra.", "laura", "juan", "lidia", "tere", "cris", "ana ", "david ", "natalia "]
-    .some((marker) => lower.includes(marker));
-};
-
-const classifyType = (label: string, sheetSlug: string) => {
-  const lower = label.toLowerCase();
-
-  if (lower.includes("supervisi")) {
-    return "supervision";
-  }
-
-  if (lower.startsWith("sala") || lower.startsWith("qx ") || lower.includes("camas") || lower.includes("boxes")) {
-    return "room";
-  }
-
-  if (lower.includes("mostrador") || lower.includes("control") || lower.includes("puerta")) {
-    return "control";
-  }
-
-  if (sheetSlug === "centros-de-salud") {
-    return "external-center";
-  }
-
-  if (looksLikePerson(label)) {
-    return "person";
-  }
-
-  return "service";
-};
-
-const aliasesFromLabel = (label: string) => {
-  const aliases: string[] = [];
-  const upper = label.toUpperCase();
-
-  if (upper.includes("TAC")) {
-    aliases.push("scanner");
-  }
-
-  if (upper.includes("RX")) {
-    aliases.push("radiologia");
-  }
-
-  if (upper.includes("UMI")) {
-    aliases.push("uci");
-  }
-
-  if (upper.includes("SECRETAR")) {
-    aliases.push("secretaria");
-  }
-
-  return dedupeKeepOrder(aliases).join("|");
-};
-
-const blankRecord = (): NormalizedImportRow => ({
-  externalId: "",
-  type: "",
-  displayName: "",
-  firstName: "",
-  lastName: "",
-  area: "",
-  department: "",
-  service: "",
-  specialty: "",
-  building: "",
-  floor: "",
-  room: "",
-  locationText: "",
-  phone1Label: "",
-  phone1Number: "",
-  phone1Extension: "",
-  phone1Kind: "",
-  phone1IsPrimary: "",
-  phone1Confidential: "",
-  phone1NoPatientSharing: "",
-  phone1Notes: "",
-  phone2Label: "",
-  phone2Number: "",
-  phone2Extension: "",
-  phone2Kind: "",
-  phone2IsPrimary: "",
-  phone2Confidential: "",
-  phone2NoPatientSharing: "",
-  phone2Notes: "",
-  email1: "",
-  email1Label: "",
-  email1IsPrimary: "",
-  email2: "",
-  email2Label: "",
-  email2IsPrimary: "",
-  tags: "",
-  aliases: "",
-  notes: "",
-  status: ""
-});
-
-const buildStableExternalId = (parts: Array<string | undefined>) =>
-  parts
-    .map((part) => normalizeAscii(part ?? ""))
-    .filter(Boolean)
-    .join("-") || "row";
-
-const buildCenterPhones = (longNumber: string, shortNumber: string) => {
-  const longNumbers = extractNumbers(longNumber);
-  const shortNumbers = extractNumbers(shortNumber);
-
-  return longNumbers.slice(0, 2).map((number, index) => ({
-    number,
-    extension: shortNumbers[index] ?? undefined
-  }));
-};
-
-const stripBom = (value: string) => value.replace(/^\uFEFF/, "");
-const hasLetters = (value: string) => /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(value);
-const looksLikeDateValue = (value: string) => {
-  const normalized = clean(value);
-
-  if (!normalized) {
-    return false;
-  }
-
-  return /^(\d{1,4})[\/.-](\d{1,2})[\/.-](\d{1,4})$/.test(normalized);
-};
-
-const hasPhoneLikeNumber = (value: string) =>
-  !looksLikeDateValue(value) && extractNumbers(value).some((number) => number.length >= 4 && number.length <= 9);
-
-const isMeaningfulServiceLabel = (value: string) => {
-  const normalized = clean(value);
-
-  if (!normalized || !hasLetters(normalized) || isExcludedLabel(normalized) || looksLikeDateValue(normalized)) {
-    return false;
-  }
-
-  return !/^\d/.test(normalized);
-};
-
-const prettifyLabel = (value: string) =>
-  clean(
-    value
-      .replace(/[_-]+/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (match) => match.toUpperCase())
-  );
-
-const inferAreaFromLabel = (value: string) => {
-  const normalized = normalizeAscii(value);
-
-  if (/(urgencias|hospitales-de-dia|hospitalizacion|planta|umi|quirofanos|quirofanos|criticos|uci)/.test(normalized)) {
-    return "sanitaria-asistencial";
-  }
-
-  if (/(admision|secretarias|secretaria|citas|usuario|almacenes|telecomunicaciones)/.test(normalized)) {
-    return "gestion-administracion";
-  }
-
-  if (/(rayos|cc-ee|consulta|consulta|especialidades)/.test(normalized)) {
-    return "especialidades";
-  }
-
-  return undefined;
-};
+// ---------------------------------------------------------------------------
+// Heuristic helpers — these stay in the main service (format-detection logic)
+// ---------------------------------------------------------------------------
+
+/** Wrapper that binds isExcludedLabel into the base isMeaningfulServiceLabel. */
+const isMeaningfulServiceLabel = (value: string) =>
+  isMeaningfulServiceLabelBase(value, isExcludedLabel);
 
 /**
  * Slugs that indicate a navigation/TOC sheet (no real contact data).
@@ -532,91 +159,6 @@ const BUSCAS_SHEET_SLUG_PREFIX = "buscas";
 const isDeferredFeatureSheet = (slug: string): boolean =>
   slug.startsWith(BUSCAS_SHEET_SLUG_PREFIX);
 
-/**
- * INTERIM (OIR-102): Social-context tokens used to identify a row as belonging
- * to a social-media section rather than a real contact.
- *
- * These tokens are matched diacritic-insensitively (normalizeMarker strips
- * diacritics and upper-cases) against the active section header or the raw row
- * cells.  The set is deliberately narrow to avoid false positives on real
- * service names.
- */
-const SOCIAL_CONTEXT_TOKENS = [
-  "REDESSOCIALES",
-  "RRSS",
-  "INSTAGRAM",
-  "FACEBOOK",
-  "TWITTER",
-  "LINKEDIN",
-  "TIKTOK",
-  "YOUTUBE"
-] as const;
-
-/**
- * Returns true when any cell in the given row contains a social-media context
- * token (diacritic-insensitive).  Used to detect rows whose cells reveal
- * social media context even when the active section header does not.
- */
-const rowContainsSocialToken = (cells: string[]): boolean =>
-  SOCIAL_CONTEXT_TOKENS.some((token) =>
-    cells.some((cell) => normalizeMarker(cell).includes(token))
-  );
-
-/**
- * Returns true when the active section header contains a social-media context
- * token (diacritic-insensitive).
- */
-const sectionIsSocial = (section: string): boolean =>
-  SOCIAL_CONTEXT_TOKENS.some((token) => normalizeMarker(section).includes(token));
-
-/**
- * INTERIM (OIR-102): Returns true when a no-phone row should be silently
- * skipped as a social-media handle row rather than surfaced as a rejected
- * contact.
- *
- * Fix (Bug 3): the skip is now section-CONTEXT based rather than label-shape
- * based.  A row is considered social only when its context (active section
- * header OR any cell in the row) reveals social media intent.  The handle-shape
- * heuristic (single-token, all-lowercase, no digit, ≥8 chars) is applied as a
- * secondary guard to avoid skipping real no-phone rows that happen to sit near
- * a social section header.
- *
- * This means:
- *   - "hospitaldrnegrin" in a row whose cells contain "INSTAGRAM" → skipped.
- *   - "urgencias" with no phone, NOT under a social section → NOT skipped
- *     (surfaces as rejected — the operator can investigate).
- *   - Any label that has a phone is never affected (skip fires only when
- *     dedupedPhoneNumbers.length === 0).
- *
- * Social media as a contact method is a planned future feature; this guard is
- * the minimal interim skip until that feature exists (sibling of OIR-102).
- */
-/**
- * Returns true when a no-phone row should be silently skipped as social-media.
- *
- * @param label            The resolved row label.
- * @param hasSocialContext True when the active section, the current row cells,
- *                         or the immediately prior row's cells contained a
- *                         social-media context token (caller pre-computes this
- *                         so continuation rows inherit the context from the
- *                         preceding data row).
- */
-const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean => {
-  if (!hasSocialContext) {
-    return false;
-  }
-
-  // Secondary guard: the label must look like a concatenated handle (single token,
-  // all-lowercase, no digit, ≥8 chars).  This prevents skipping a real row that
-  // happens to be near a social section but has a normally-cased label.
-  if (/\s/.test(label)) return false;       // multi-word → not a handle
-  if (/\d/.test(label)) return false;       // contains digit → not a handle
-  if (label.length < 8) return false;       // too short to be a concatenated handle
-  if (label !== label.toLowerCase()) return false; // has uppercase → not a handle
-
-  return /[a-z]/.test(label);              // must have at least one ASCII letter
-};
-
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
 
 const SERVICE_PROFILE_ALIASES: Record<string, string> = {
@@ -632,455 +174,6 @@ const SERVICE_PROFILE_ALIASES: Record<string, string> = {
   "hospitales de dia": "hospitales-de-dia",
   "hospitales de día": "hospitales-de-dia",
   umi: "umi"
-};
-
-const resolveServiceRowLabel = (cells: string[]) => {
-  const firstCell = cells[0] ?? "";
-
-  if (firstCell && !isExcludedLabel(firstCell)) {
-    return firstCell;
-  }
-
-  return cells.find((cell, index) =>
-    index > 0 &&
-    cell &&
-    hasLetters(cell) &&
-    !isExcludedLabel(cell) &&
-    extractNumbers(cell).length === 0
-  ) ?? "";
-};
-
-const normalizeServiceSheet = (
-  sheet: SheetData,
-  profile: SheetProfile
-): { records: NormalizedImportRow[]; socialSkippedRows: number } => {
-  const metadata = {
-    area: profile.area ?? "otros",
-    department: profile.department,
-    slug: profile.canonicalSlug
-  };
-  const data = sheet.rows.slice(profile.rowsToSkip);
-  const records: NormalizedImportRow[] = [];
-  let currentSection = "";
-  let socialSkippedRows = 0;
-  // Bug 3 fix: tracks whether the immediately previous row contained a social-media
-  // context token.  Continuation rows (e.g. a blank col-0 row that follows a
-  // "COMUNICACIONES – REDES SOCIALES … INSTAGRAM" row) inherit that context.
-  let prevRowHadSocialContext = false;
-
-  data.forEach((row, rowIndex) => {
-    const cells = row.map((value) => clean(value));
-    const firstCell = cells[0] ?? "";
-    const nonEmpty = cells.filter(Boolean);
-
-    if (
-      nonEmpty.length === 1 &&
-      firstCell &&
-      !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
-    ) {
-      currentSection = firstCell;
-      prevRowHadSocialContext = sectionIsSocial(firstCell);
-      return;
-    }
-
-    // Fix (Bug B): isExcludedLabel uses an all-caps regex to catch section
-    // headers (e.g. a lone "URGENCIAS" banner row).  But ALL-CAPS service names
-    // like "BANCO DE SANGRE (ADMINISTRATIVO)" that appear in the same row as a
-    // phone number are contact rows, not section headers.
-    //
-    // Strategy: compute rowHasPhone BEFORE resolving the label so we can apply
-    // the phone-aware gate in two places:
-    //   1. resolveServiceRowLabel returns "" when the first cell is all-caps
-    //      excluded — if that happens but the row has a phone, fall back to the
-    //      raw firstCell so the label is never lost.
-    //   2. Gate all isExcludedLabel early-returns on !rowHasPhone so an
-    //      all-caps label that co-occurs with a phone is kept as a contact name.
-    const rowHasPhone = cells.slice(1).some((cell) => hasPhoneLikeNumber(cell));
-
-    const resolvedLabel = resolveServiceRowLabel(cells);
-    // When resolveServiceRowLabel excluded the first cell (returned "") but a
-    // phone is present, use firstCell directly — it is the contact name.
-    const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
-      ? firstCell
-      : resolvedLabel;
-
-    if (label && isExcludedLabel(label) && !rowHasPhone) {
-      return;
-    }
-
-    if (nonEmpty.length === 1 && label && cells[0] === label) {
-      currentSection = label;
-      prevRowHadSocialContext = sectionIsSocial(label);
-      return;
-    }
-
-    // Only drop an all-cells-excluded row when the row also has no phone.
-    if (nonEmpty.length > 0 && !rowHasPhone && nonEmpty.every((value) => isExcludedLabel(value))) {
-      return;
-    }
-
-    if (
-      !rowHasPhone &&
-      cells[0] === label &&
-      nonEmpty.length > 1 &&
-      nonEmpty.every((value, index) => index === 0 || isExcludedLabel(value) || extractNumbers(value).length === 0) &&
-      extractNumbers(label).length === 0
-    ) {
-      currentSection = label;
-      prevRowHadSocialContext = sectionIsSocial(label);
-      return;
-    }
-
-    if (!label) {
-      return;
-    }
-
-    const phoneNumbers: string[] = [];
-    const noteFragments: string[] = [];
-
-    for (const cell of cells.slice(1)) {
-      if (!cell) {
-        continue;
-      }
-
-      const extracted = extractNumbers(cell);
-
-      if (extracted.length > 0) {
-        phoneNumbers.push(...extracted);
-      }
-
-      if (hasLetters(cell) && cell !== label) {
-        noteFragments.push(...cleanNoteFragments([cell]));
-      }
-    }
-
-    const dedupedPhoneNumbers = dedupeKeepOrder(phoneNumbers);
-
-    if (dedupedPhoneNumbers.length === 0 && cells.slice(1).every((value) => !value)) {
-      return;
-    }
-
-    // INTERIM (OIR-102): Skip social-media handle rows silently.
-    //
-    // Some ODS sheets contain a row whose resolved label is a social-media
-    // handle (e.g. "hospitaldrnegrin" — the hospital's Instagram/Facebook
-    // handle) with no phone number.  The handle appears because the operator
-    // typed it next to the Comunicaciones/Redes Sociales phone row, and the
-    // parser picks it up as the "label" via resolveServiceRowLabel's fallback.
-    //
-    // We skip it here rather than emitting a rejected record, because the
-    // operator cannot fix it (there IS no phone number to add) and it blocks
-    // the import unnecessarily.  A "missing phone" on a real contact (e.g.
-    // "Dr. García" with no number yet) is NOT matched: real names are either
-    // multi-word (contain spaces) or start with a capital letter, whereas a
-    // social handle is all-lowercase, single-token, no digits, and 8+ chars.
-    //
-    // Social media as a contact method is a planned future feature; this guard
-    // is the minimal interim skip until that feature exists (sibling of OIR-102).
-    const thisCellsHaveSocialContext = rowContainsSocialToken(cells);
-    const effectiveSocialContext = sectionIsSocial(currentSection) || thisCellsHaveSocialContext || prevRowHadSocialContext;
-    prevRowHadSocialContext = thisCellsHaveSocialContext;
-
-    if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
-      socialSkippedRows += 1;
-      return;
-    }
-
-    const labelNotes: string[] = [];
-
-    if (currentSection && currentSection !== metadata.department) {
-      labelNotes.push(`Sección: ${currentSection}`);
-    }
-
-    if (noteFragments.length > 0) {
-      labelNotes.push(noteFragments.join(" | "));
-    }
-
-    const finalNotes = cleanNoteFragments(labelNotes).join(" | ");
-    const privacySource = cleanNoteFragments([label, currentSection, finalNotes]).join(" | ");
-    const privacy = detectPrivacy(privacySource);
-    const record = blankRecord();
-    const rowNumber = rowIndex + 1;
-
-    record.externalId = `${metadata.slug}-${buildStableExternalId([
-      metadata.department,
-      currentSection && currentSection !== metadata.department ? currentSection : label,
-      dedupedPhoneNumbers[0],
-      dedupedPhoneNumbers[1]
-    ])}`;
-    record.type = classifyType(label, metadata.slug);
-    record.displayName = label;
-    record.area = metadata.area;
-    record.department = metadata.department;
-    record.service = currentSection && currentSection !== metadata.department ? currentSection : label;
-    record.aliases = aliasesFromLabel(label);
-    record.notes = finalNotes;
-    record.status = "active";
-
-    // Serialize ALL deduped phone numbers into the structured `phones` JSON
-    // field so that the downstream buildPhones() can carry an unbounded list.
-    // The label for each entry is the source sheet name (most informative
-    // context for where the number came from). The first number is primary.
-    const phoneEntries: SerializedPhoneEntry[] = dedupedPhoneNumbers.map((number, index) => ({
-      number,
-      label: sheet.name,
-      kind: "internal",
-      isPrimary: index === 0,
-      confidential: privacy.confidential,
-      noPatientSharing: privacy.noPatientSharing,
-      notes: finalNotes || undefined
-    }));
-    record.phones = JSON.stringify(phoneEntries);
-
-    // Keep phone1/phone2 populated for backward compatibility with any reader
-    // that does not yet understand the phones JSON field.
-    record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
-    record.phone1Number = dedupedPhoneNumbers[0] ?? "";
-    record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
-    record.phone1IsPrimary = dedupedPhoneNumbers.length > 0 ? "true" : "false";
-    record.phone1Confidential = privacy.confidential ? "true" : "false";
-    record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
-    record.phone1Notes = finalNotes;
-
-    if (dedupedPhoneNumbers.length > 1) {
-      record.phone2Label = "Secundario";
-      record.phone2Number = dedupedPhoneNumbers[1] ?? "";
-      record.phone2Kind = "internal";
-      record.phone2IsPrimary = "false";
-      record.phone2Confidential = privacy.confidential ? "true" : "false";
-      record.phone2NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
-      record.phone2Notes = finalNotes;
-    }
-
-    records.push(record);
-  });
-
-  return { records, socialSkippedRows };
-};
-
-const splitCenterAddress = (raw: string) => {
-  const value = clean(raw);
-  let index = 0;
-  const prefixChars: string[] = [];
-
-  while (index < value.length) {
-    const char = value[index]!;
-
-    if (/[A-ZÁÉÍÓÚÜÑ ,.\-]/.test(char)) {
-      prefixChars.push(char);
-      index += 1;
-      continue;
-    }
-
-    break;
-  }
-
-  if (prefixChars.length === 0) {
-    return { center: value, address: "" };
-  }
-
-  let centerRaw = prefixChars.join("").trimEnd();
-  let address = value.slice(index).trimStart();
-  const nextThree = address.slice(0, 3);
-
-  if (
-    address &&
-    centerRaw &&
-    /[A-ZÁÉÍÓÚÜÑ]$/.test(centerRaw) &&
-    nextThree.length === 3 &&
-    /^[a-záéíóúüñ]{3}$/i.test(nextThree) &&
-    nextThree === nextThree.toLowerCase()
-  ) {
-    address = `${centerRaw.slice(-1)}${address}`;
-    centerRaw = centerRaw.slice(0, -1).trimEnd();
-  }
-
-  const center = clean(
-    centerRaw
-      .toLowerCase()
-      .replace(/\b\w/g, (match) => match.toUpperCase())
-  );
-
-  return {
-    center: center || value,
-    address: clean(address)
-  };
-};
-
-const normalizeCenterService = (value: string) => {
-  const text = clean(value);
-  return CENTER_SERVICE_LABELS[text.toUpperCase()] ?? text;
-};
-
-const looksLikeCenterHeader = (first: string, second: string) => {
-  if (!first || !second) {
-    return false;
-  }
-
-  if (!Object.values(CENTER_SERVICE_LABELS).includes(normalizeCenterService(second))) {
-    return false;
-  }
-
-  const firstClean = clean(first);
-
-  if (/\d/.test(firstClean)) {
-    return true;
-  }
-
-  return ["c/", "carretera", "avda", "calle", "plaza", "paseo", "doctor", "médico", "medico"]
-    .some((marker) => firstClean.toLowerCase().includes(marker));
-};
-
-const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) => {
-  const data = sheet.rows.slice(profile.rowsToSkip);
-  const records: NormalizedImportRow[] = [];
-  let currentCenter = "";
-  let currentAddress = "";
-
-  data.forEach((row, rowIndex) => {
-    const cells = row.map((value) => clean(value));
-    const first = cells[0] ?? "";
-    const second = cells[1] ?? "";
-    const third = cells[2] ?? "";
-    const fourth = cells[3] ?? "";
-
-    if (first && isExcludedLabel(first)) {
-      return;
-    }
-
-    let service = "";
-    let longNumber = "";
-    let shortNumber = "";
-
-    if (looksLikeCenterHeader(first, second)) {
-      const normalized = splitCenterAddress(first);
-      currentCenter = normalized.center;
-      currentAddress = normalized.address;
-      service = normalizeCenterService(second);
-      longNumber = third;
-      shortNumber = fourth;
-    } else {
-      if (!currentCenter) {
-        return;
-      }
-
-      service = normalizeCenterService(second);
-      longNumber = third;
-      shortNumber = fourth;
-    }
-
-    if (!service) {
-      return;
-    }
-
-    const phones = buildCenterPhones(longNumber, shortNumber);
-    const record = blankRecord();
-    record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([
-      currentCenter,
-      service,
-      phones[0]?.number,
-      phones[1]?.number
-    ])}`;
-    record.type = "external-center";
-    record.displayName = `${currentCenter} - ${service}`;
-    record.area = "otros";
-    record.department = "Centros de salud";
-    record.service = service;
-    record.locationText = currentAddress;
-    record.aliases = currentCenter.toLowerCase();
-    record.status = "active";
-
-    if (phones.length > 0) {
-      record.phone1Label = "General";
-      record.phone1Number = phones[0]?.number ?? "";
-      record.phone1Extension = phones[0]?.extension ?? "";
-      record.phone1Kind = "external";
-      record.phone1IsPrimary = "true";
-      record.phone1Confidential = "false";
-      record.phone1NoPatientSharing = "false";
-    }
-
-    if (phones.length > 1) {
-      record.phone2Label = "Secundario";
-      record.phone2Number = phones[1]?.number ?? "";
-      record.phone2Extension = phones[1]?.extension ?? "";
-      record.phone2Kind = "external";
-      record.phone2IsPrimary = "false";
-      record.phone2Confidential = "false";
-      record.phone2NoPatientSharing = "false";
-    }
-
-    records.push(record);
-  });
-
-  return records;
-};
-
-const readSheetRows = (sheet: XLSX.WorkSheet) =>
-  (XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: false,
-    defval: "",
-    blankrows: false
-  }) as Array<Array<string | number | boolean | null>>)
-    .map((row) => row.map((value) => clean(String(value ?? ""))))
-    .filter((row) => row.some((value) => value));
-
-const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
-  const workbook = XLSX.readFile(sourceFilePath, {
-    dense: true,
-    raw: false,
-    cellText: false
-  });
-  const fileSlug = normalizeAscii(path.parse(sourceFilePath).name);
-
-  return workbook.SheetNames.map((sheetName) => {
-    const rows = readSheetRows(workbook.Sheets[sheetName]!);
-    const normalizedName = normalizeAscii(sheetName);
-    const slug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
-
-    return {
-      name: sheetName,
-      slug,
-      rows
-    };
-  });
-};
-
-const readCsvHeaders = async (sourceFilePath: string) => {
-  const rawSource = await fs.readFile(sourceFilePath, "utf-8");
-  const headerResult = Papa.parse<string[]>(rawSource, {
-    preview: 1,
-    skipEmptyLines: "greedy",
-    transform: (value: string) => stripBom(value).trim()
-  });
-
-  return (headerResult.data[0] ?? []).map((header) => stripBom(header).trim());
-};
-
-const isNormalizedTemplateHeaders = (headers: string[]) => {
-  if (headers.length === 0) {
-    return false;
-  }
-
-  if (headers.some((header) => header.length === 0)) {
-    return false;
-  }
-
-  const headerSet = new Set(headers);
-  const recognizedTemplateHeaders = headers.filter((header) => NORMALIZED_TEMPLATE_HEADERS.has(header)).length;
-
-  return recognizedTemplateHeaders >= 2 && headerSet.has("type") && headerSet.has("displayName");
-};
-
-const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
-  const headers = await readCsvHeaders(sourceFilePath);
-
-  if (headers.length === 0) {
-    return false;
-  }
-
-  return isNormalizedTemplateHeaders(headers);
 };
 
 const centersHeaderAliases = {
@@ -1377,182 +470,80 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
   };
 };
 
-/**
- * Merges service-sheet NormalizedImportRows that share the same normalized
- * displayName (trim + lowercase + strip diacritics) into a single row.
- *
- * Merge rules (confirmed with operator):
- * - Identity key: exact normalized displayName equality only (no fuzzy match).
- * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
- *   digit string; keep first occurrence. Each phone retains the source sheet
- *   label it was tagged with in normalizeServiceSheet.
- * - externalId: the FIRST record's externalId is kept (deterministic, stable
- *   across re-imports of the same file PROVIDED sheet order in the workbook is
- *   unchanged — reordering tabs changes which sheet is "first" and therefore
- *   which externalId is selected, which can produce a duplicate on re-import).
- * - All other scalar fields (type, area, department, service, aliases, notes,
- *   status): taken from the first record in the group.
- * - phone1/phone2 flat fields: rewritten to match the merged phones list so
- *   any reader that uses only those fields still gets the primary number.
- * - Records without a `phones` JSON field (e.g. centers-parser records) are
- *   passed through unchanged — they are never merged.
- */
-export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
-  // Phase 1 — group mergeable records by normalized displayName.
-  //
-  // Bug 1 fix: skip grouping when the normalized key is empty (blank displayName).
-  // Such records are treated as passthroughs — each stays as its own record.
-  //
-  // Bug 2 fix: we do NOT separate mergeable from passthrough up front and then
-  // concatenate.  Instead we do a single ordered pass over the original array,
-  // emitting each group at the position of its first member so relative order
-  // is preserved.
+// ---------------------------------------------------------------------------
+// I/O helpers
+// ---------------------------------------------------------------------------
 
-  const groups = new Map<string, NormalizedImportRow[]>();
+const readSheetRows = (sheet: XLSX.WorkSheet) =>
+  (XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: false,
+    defval: "",
+    blankrows: false
+  }) as Array<Array<string | number | boolean | null>>)
+    .map((row) => row.map((value) => clean(String(value ?? ""))))
+    .filter((row) => row.some((value) => value));
 
-  for (const record of records) {
-    if (record.phones === undefined || record.phones === "") {
-      continue; // No phones JSON → passthrough, never merged.
-    }
+const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
+  const workbook = XLSX.readFile(sourceFilePath, {
+    dense: true,
+    raw: false,
+    cellText: false
+  });
+  const fileSlug = normalizeAscii(path.parse(sourceFilePath).name);
 
-    const key = normalizeDisplayNameForMerge(record.displayName);
+  return workbook.SheetNames.map((sheetName) => {
+    const rows = readSheetRows(workbook.Sheets[sheetName]!);
+    const normalizedName = normalizeAscii(sheetName);
+    const slug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
 
-    if (!key) {
-      continue; // Bug 1: blank normalized key → passthrough.
-    }
-
-    const existing = groups.get(key);
-
-    if (existing) {
-      existing.push(record);
-    } else {
-      groups.set(key, [record]);
-    }
-  }
-
-  // Phase 2 — single ordered pass emitting results in original encounter order.
-  // Each merge group materializes at its first member's position; later members
-  // of the same group are skipped; passthroughs emit inline.
-  const result: NormalizedImportRow[] = [];
-  const emittedKeys = new Set<string>();
-
-  for (const record of records) {
-    const hasPhonesJson = record.phones !== undefined && record.phones !== "";
-
-    if (!hasPhonesJson) {
-      // Passthrough (no phones JSON): emit as-is in place.
-      result.push(record);
-      continue;
-    }
-
-    const key = normalizeDisplayNameForMerge(record.displayName);
-
-    if (!key) {
-      // Bug 1 fix: blank normalized key → passthrough, emit in place.
-      result.push(record);
-      continue;
-    }
-
-    if (emittedKeys.has(key)) {
-      // Later member of an already-emitted group: skip (already folded in).
-      continue;
-    }
-
-    // First encounter of this key: build the merged record and emit it.
-    emittedKeys.add(key);
-    const group = groups.get(key)!;
-
-    if (group.length === 1) {
-      // Single-record group: no merging needed.
-      result.push(group[0]!);
-      continue;
-    }
-
-    // Combine all phone entries from every record in the group.
-    const combinedPhones: SerializedPhoneEntry[] = [];
-    const seenNormalized = new Set<string>();
-
-    for (const groupRecord of group) {
-      let entries: SerializedPhoneEntry[] = [];
-
-      try {
-        const parsed = JSON.parse(groupRecord.phones ?? "[]");
-        if (Array.isArray(parsed)) {
-          // Bug 4 (apply here too): validate each entry before using it.
-          entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
-        }
-      } catch {
-        // Malformed JSON is treated as no phones for this record.
-      }
-
-      for (const entry of entries) {
-        const normalized = normalizeNumberForDedup(entry.number);
-
-        if (normalized && !seenNormalized.has(normalized)) {
-          seenNormalized.add(normalized);
-          combinedPhones.push(entry);
-        }
-      }
-    }
-
-    // Re-assert primary: first phone is primary, rest are not.
-    const reassertedPhones = combinedPhones.map((phone, index) => ({
-      ...phone,
-      isPrimary: index === 0
-    }));
-
-    // Build the merged record from the first record in the group (keeps its
-    // externalId and other scalar fields stable for re-import).
-    const base = { ...group[0]! };
-    base.phones = JSON.stringify(reassertedPhones);
-
-    // Bug 5 fix: when a merge group resolves to zero phones, surface a warning
-    // so downstream readers can see it is not silently clean.
-    if (reassertedPhones.length === 0) {
-      const existingNotes = base.notes ? `${base.notes} | ` : "";
-      base.notes = `${existingNotes}[AVISO: registro combinado sin teléfonos válidos]`;
-      base.phone1Label = "";
-      base.phone1Number = "";
-      base.phone1Kind = "";
-      base.phone1IsPrimary = "false";
-      base.phone1Confidential = "false";
-      base.phone1NoPatientSharing = "false";
-      base.phone1Notes = "";
-      base.phone2Label = "";
-      base.phone2Number = "";
-      base.phone2Kind = "";
-      base.phone2IsPrimary = "false";
-      base.phone2Confidential = "false";
-      base.phone2NoPatientSharing = "false";
-      base.phone2Notes = "";
-      result.push(base);
-      continue;
-    }
-
-    // Rewrite phone1/phone2 flat fields to match merged result.
-    const first = reassertedPhones[0];
-    const second = reassertedPhones[1];
-
-    base.phone1Label = first ? "Principal" : "";
-    base.phone1Number = first?.number ?? "";
-    base.phone1Kind = first ? "internal" : "";
-    base.phone1IsPrimary = first ? "true" : "false";
-    base.phone1Confidential = first?.confidential ? "true" : "false";
-    base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
-    base.phone1Notes = first?.notes ?? "";
-    base.phone2Label = second ? "Secundario" : "";
-    base.phone2Number = second?.number ?? "";
-    base.phone2Kind = second ? "internal" : "";
-    base.phone2IsPrimary = "false";
-    base.phone2Confidential = second?.confidential ? "true" : "false";
-    base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
-    base.phone2Notes = second?.notes ?? "";
-
-    result.push(base);
-  }
-
-  return result;
+    return {
+      name: sheetName,
+      slug,
+      rows
+    };
+  });
 };
+
+const readCsvHeaders = async (sourceFilePath: string) => {
+  const rawSource = await fs.readFile(sourceFilePath, "utf-8");
+  const headerResult = Papa.parse<string[]>(rawSource, {
+    preview: 1,
+    skipEmptyLines: "greedy",
+    transform: (value: string) => stripBom(value).trim()
+  });
+
+  return (headerResult.data[0] ?? []).map((header) => stripBom(header).trim());
+};
+
+const isNormalizedTemplateHeaders = (headers: string[]) => {
+  if (headers.length === 0) {
+    return false;
+  }
+
+  if (headers.some((header) => header.length === 0)) {
+    return false;
+  }
+
+  const headerSet = new Set(headers);
+  const recognizedTemplateHeaders = headers.filter((header) => NORMALIZED_TEMPLATE_HEADERS.has(header)).length;
+
+  return recognizedTemplateHeaders >= 2 && headerSet.has("type") && headerSet.has("displayName");
+};
+
+const isNormalizedTemplateCsv = async (sourceFilePath: string) => {
+  const headers = await readCsvHeaders(sourceFilePath);
+
+  if (headers.length === 0) {
+    return false;
+  }
+
+  return isNormalizedTemplateHeaders(headers);
+};
+
+// ---------------------------------------------------------------------------
+// Main normalization entry point (sync — used by worker and Vitest)
+// ---------------------------------------------------------------------------
 
 export const normalizeWorkbookRowsFromFile = (
   sourceFilePath: string
@@ -1621,6 +612,10 @@ export const normalizeWorkbookRowsFromFile = (
     deferredSkippedRowCount
   };
 };
+
+// ---------------------------------------------------------------------------
+// Worker orchestration
+// ---------------------------------------------------------------------------
 
 type SpreadsheetImportWorkerResponse =
   | { type: "success"; result: SpreadsheetImportNormalizationResult }
@@ -1728,6 +723,10 @@ export const readWorkbookRowsInWorker = (
     });
   });
 };
+
+// ---------------------------------------------------------------------------
+// Public API entry point
+// ---------------------------------------------------------------------------
 
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
