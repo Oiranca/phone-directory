@@ -3070,4 +3070,157 @@ describe("AppDataService", () => {
     expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
     expect(times[1]).toBeGreaterThanOrEqual(times[2]!);
   });
+
+  // -------------------------------------------------------------------------
+  // OIR-108 characterization tests — lock observable behavior before extraction
+  // -------------------------------------------------------------------------
+
+  describe("OIR-108 characterization: audit-log delegation", () => {
+    it("getAuditLog returns an empty result when no entries have been appended", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+
+      const result = await service.getAuditLog({ page: 1, pageSize: 20 });
+
+      expect(result.entries).toHaveLength(0);
+      expect(result.totalCount).toBe(0);
+    });
+
+    it("exportAuditLog writes a CSV file and returns entry count and file path", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      // Create one record so an audit entry gets appended via importCsvDataset path
+      // (We drive it via createRecord which does NOT append audit entries, so we
+      // use a direct assertion on the empty-log export path.)
+      const exportPath = path.join(testRoot, "audit-export.csv");
+      const result = await service.exportAuditLog(exportPath, { page: 1, pageSize: 100 });
+
+      expect(result.filePath).toBe(exportPath);
+      expect(result.entryCount).toBe(0);
+
+      // File must exist and be a valid UTF-8 text file (CSV)
+      const contents = await fs.readFile(exportPath, "utf-8");
+      expect(typeof contents).toBe("string");
+    });
+
+    it("exportAuditLog creates the target directory if it does not exist", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+
+      const exportDir = path.join(testRoot, "nested", "export");
+      const exportPath = path.join(exportDir, "audit-export.csv");
+
+      await service.exportAuditLog(exportPath, { page: 1, pageSize: 100 });
+
+      const stat = await fs.stat(exportPath);
+      expect(stat.isFile()).toBe(true);
+    });
+  });
+
+  describe("OIR-108 characterization: write-queue ordering", () => {
+    it("concurrent createRecord calls serialize in submission order and all writes land", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const makeRecord = (name: string, phoneId: string, phone: string) => ({
+        type: "person" as const,
+        displayName: name,
+        person: { firstName: name, lastName: "Test" },
+        organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
+        contactMethods: {
+          phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
+          emails: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active" as const
+      });
+
+      // Fire three concurrent writes
+      const [r1, r2, r3] = await Promise.all([
+        service.createRecord(makeRecord("Alpha", "ph_alpha", "11111")),
+        service.createRecord(makeRecord("Beta",  "ph_beta",  "22222")),
+        service.createRecord(makeRecord("Gamma", "ph_gamma", "33333"))
+      ]);
+
+      // All must have succeeded with distinct IDs
+      expect(r1.savedRecordId).toMatch(/^cnt_/);
+      expect(r2.savedRecordId).toMatch(/^cnt_/);
+      expect(r3.savedRecordId).toMatch(/^cnt_/);
+      expect(new Set([r1.savedRecordId, r2.savedRecordId, r3.savedRecordId]).size).toBe(3);
+
+      // Final state from the last write must contain all three new records
+      // (the last resolved promise has the most up-to-date contacts snapshot)
+      const finalContacts = r3.contacts;
+      const names = finalContacts.records.map((r) => r.displayName);
+      expect(names).toContain("Alpha");
+      expect(names).toContain("Beta");
+      expect(names).toContain("Gamma");
+    });
+
+    it("a write failure does not corrupt subsequent writes (write-queue atomicity)", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const contactsFilePath = path.join(testRoot, "data", "contacts.json");
+
+      // Spy on fs.rename — writeJsonFile uses rename as the atomic commit step.
+      // Failing rename once simulates a disk error mid-write; the .tmp file is
+      // cleaned up internally and the original contacts.json is left intact.
+      const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+      let renameCallCount = 0;
+      const renameSpy = vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
+        renameCallCount += 1;
+        if (renameCallCount === 1) {
+          throw Object.assign(new Error("Simulated disk failure"), { code: "ENOSPC" });
+        }
+        return actualFs.rename(src, dest);
+      });
+
+      const makeRecord = (name: string, phoneId: string, phone: string) => ({
+        type: "person" as const,
+        displayName: name,
+        person: { firstName: name, lastName: "Test" },
+        organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
+        contactMethods: {
+          phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
+          emails: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active" as const
+      });
+
+      // First createRecord must fail because rename throws
+      await expect(service.createRecord(makeRecord("Failed Record", "ph_fail", "99999"))).rejects.toThrow();
+
+      // Restore rename so subsequent writes go through
+      renameSpy.mockRestore();
+
+      // Second createRecord must succeed — queue must not be permanently poisoned
+      const result = await service.createRecord(makeRecord("Recovered Record", "ph_recovered", "88888"));
+
+      expect(result.savedRecordId).toMatch(/^cnt_/);
+      expect(result.contacts.records.some((r) => r.displayName === "Recovered Record")).toBe(true);
+
+      // "Failed Record" must NOT be in the file since that write failed before rename
+      const diskContents = JSON.parse(await fs.readFile(contactsFilePath, "utf-8")) as { records: Array<{ displayName: string }> };
+      expect(diskContents.records.some((r) => r.displayName === "Failed Record")).toBe(false);
+      expect(diskContents.records.some((r) => r.displayName === "Recovered Record")).toBe(true);
+    });
+  });
 });
