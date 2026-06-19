@@ -5,6 +5,21 @@ import type {
   DuplicateRecordSummary
 } from "../../shared/types/duplicate.js";
 
+/**
+ * Thrown when detection is cancelled via AbortSignal (e.g. 30s IPC timeout).
+ * Callers must distinguish this from unexpected errors to surface the right
+ * user-facing message.
+ */
+export class DuplicateDetectionAbortError extends Error {
+  constructor(message = "Duplicate detection was aborted") {
+    super(message);
+    this.name = "DuplicateDetectionAbortError";
+  }
+}
+
+/** Outer-loop iterations between event-loop yields. Balances responsiveness vs overhead. */
+const CHUNK_SIZE = 2000;
+
 export class DuplicateDetectionService {
   /**
    * Detect potential duplicate ContactRecord entries in dataset.
@@ -15,8 +30,16 @@ export class DuplicateDetectionService {
    * IPC payload: returns DuplicateRecordSummary (not full ContactRecord) to keep
    * the IPC payload < 5 KB for 50 pairs. The `records` map deduplicates entries
    * that appear in multiple pairs.
+   *
+   * Cooperative scheduling: yields to the event loop every CHUNK_SIZE outer-loop
+   * iterations so the main process stays responsive during large scans. Pass an
+   * AbortSignal to cancel early (throws DuplicateDetectionAbortError).
    */
-  detectDuplicates(records: ContactRecord[]): DuplicateDetectionResult {
+  async detectDuplicates(
+    records: ContactRecord[],
+    options?: { signal?: AbortSignal }
+  ): Promise<DuplicateDetectionResult> {
+    const signal = options?.signal;
     const pairs: DuplicatePair[] = [];
     const seenPairKeys = new Set<string>();
     const recordSummaryMap = new Map<string, DuplicateRecordSummary>();
@@ -30,6 +53,19 @@ export class DuplicateDetectionService {
     }));
 
     for (let i = 0; i < signals.length; i++) {
+      // Yield to the event loop every CHUNK_SIZE outer iterations so the main
+      // process stays responsive. Check abort at the same boundary.
+      if (i > 0 && i % CHUNK_SIZE === 0) {
+        if (signal?.aborted) {
+          throw new DuplicateDetectionAbortError();
+        }
+        await new Promise<void>((r) => setImmediate(r));
+        // Re-check after yield in case abort was signalled during the await
+        if (signal?.aborted) {
+          throw new DuplicateDetectionAbortError();
+        }
+      }
+
       const signalA = signals[i]!;
 
       for (let j = i + 1; j < signals.length; j++) {

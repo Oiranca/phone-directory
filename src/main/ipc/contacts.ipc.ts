@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import type { WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
-import { DuplicateDetectionService } from "../services/duplicate-detection.service.js";
+import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../services/duplicate-detection.service.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -297,7 +297,19 @@ export const registerContactsIpc = (service: AppDataService) => {
     const records = bootstrapData.contacts.records;
     const duplicateService = new DuplicateDetectionService();
 
-    return duplicateService.detectDuplicates(records);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+    try {
+      return await duplicateService.detectDuplicates(records, { signal: controller.signal });
+    } catch (err) {
+      if (err instanceof DuplicateDetectionAbortError) {
+        throw new Error("La detección de duplicados tardó demasiado. Inténtelo de nuevo.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   });
 
   ipcMain.handle(CHANNELS.mergeDuplicates, async (_event, rawPayload: unknown) => {

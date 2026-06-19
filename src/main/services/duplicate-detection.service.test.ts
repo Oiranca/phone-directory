@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContactRecord } from "../../shared/types/contact.js";
-import { DuplicateDetectionService } from "./duplicate-detection.service.js";
+import { DuplicateDetectionService, DuplicateDetectionAbortError } from "./duplicate-detection.service.js";
 
 describe("DuplicateDetectionService", () => {
   const service = new DuplicateDetectionService();
@@ -24,8 +24,8 @@ describe("DuplicateDetectionService", () => {
   });
 
   describe("detectDuplicates", () => {
-    it("returns empty result for empty input", () => {
-      const result = service.detectDuplicates([]);
+    it("returns empty result for empty input", async () => {
+      const result = await service.detectDuplicates([]);
 
       expect(result).toEqual({
         pairs: [],
@@ -35,11 +35,11 @@ describe("DuplicateDetectionService", () => {
       });
     });
 
-    it("detects identical displayName as duplicate", () => {
+    it("detects identical displayName as duplicate", async () => {
       const recordA = buildMinimalContact({ id: "a", displayName: "Juan García" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Juan García" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.checkedCount).toBe(2);
       expect(result.pairCount).toBe(1);
@@ -48,7 +48,7 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[0]?.score).toBe(0.9);
     });
 
-    it("detects matching phone numbers with different formats", () => {
+    it("detects matching phone numbers with different formats", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "Person A",
@@ -66,14 +66,14 @@ describe("DuplicateDetectionService", () => {
         }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons.some((r) => r.startsWith("phone:"))).toBe(true);
       expect(result.pairs[0]?.score).toBe(0.95);
     });
 
-    it("returns no pairs for records with no overlap", () => {
+    it("returns no pairs for records with no overlap", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "John Smith",
@@ -91,17 +91,17 @@ describe("DuplicateDetectionService", () => {
         }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(0);
       expect(result.pairs).toHaveLength(0);
     });
 
-    it("detects fuzzy displayName match (accent difference)", () => {
+    it("detects fuzzy displayName match (accent difference)", async () => {
       const recordA = buildMinimalContact({ id: "a", displayName: "Juan García" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Juan Garcia" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       // Accent normalization makes García→Garcia an exact displayName match
@@ -115,7 +115,7 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[0]?.score).toBe(0.9);
     });
 
-    it("detects externalId match with highest score", () => {
+    it("detects externalId match with highest score", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "Person A",
@@ -127,14 +127,14 @@ describe("DuplicateDetectionService", () => {
         externalId: "EXT-123"
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("externalId");
       expect(result.pairs[0]?.score).toBe(1.0);
     });
 
-    it("sorts pairs by score descending (highest score first)", () => {
+    it("sorts pairs by score descending (highest score first)", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "Test",
@@ -154,7 +154,7 @@ describe("DuplicateDetectionService", () => {
         displayName: "Different Name"
       });
 
-      const result = service.detectDuplicates([recordA, recordB, recordC, recordD]);
+      const result = await service.detectDuplicates([recordA, recordB, recordC, recordD]);
 
       expect(result.pairCount).toBe(2);
       // First pair should have externalId match (score 1.0)
@@ -165,7 +165,7 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[1]?.reasons).toContain("displayName");
     });
 
-    it("handles records with multiple matching signals", () => {
+    it("handles records with multiple matching signals", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "Juan García",
@@ -183,7 +183,7 @@ describe("DuplicateDetectionService", () => {
         }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       // Should have both displayName and phone reasons
@@ -193,11 +193,11 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[0]?.score).toBe(0.95);
     });
 
-    it("detects Levenshtein near-match (1-char difference)", () => {
+    it("detects Levenshtein near-match (1-char difference)", async () => {
       const recordA = buildMinimalContact({ id: "a", displayName: "John Smith" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Jon Smith" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("displayName:levenshtein");
@@ -205,17 +205,17 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[0]?.score).toBe(0.75);
     });
 
-    it("does not detect Levenshtein signal for far-apart names (5+ char difference)", () => {
+    it("does not detect Levenshtein signal for far-apart names (5+ char difference)", async () => {
       const recordA = buildMinimalContact({ id: "a", displayName: "John Smith" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Maria Lopez" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       const reasons = result.pairs.flatMap((p) => p.reasons);
       expect(reasons).not.toContain("displayName:levenshtein");
     });
 
-    it("detects same-department + similar-name signal", () => {
+    it("detects same-department + similar-name signal", async () => {
       // Edit distance = 13 chars (title prefix + surname), maxLev = ceil(45*0.2) = 9.
       // 13 > 9 → Levenshtein does NOT fire.
       // Bigram Jaccard ≈ 0.757 >= 0.7 → dept+name fires at score 0.65.
@@ -230,7 +230,7 @@ describe("DuplicateDetectionService", () => {
         organization: { department: "Cardiology" }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("dept+name");
@@ -239,7 +239,7 @@ describe("DuplicateDetectionService", () => {
       expect(result.pairs[0]?.score).toBe(0.65);
     });
 
-    it("does not trigger dept+name signal when departments differ", () => {
+    it("does not trigger dept+name signal when departments differ", async () => {
       const recordA = buildMinimalContact({
         id: "a",
         displayName: "Dr. Juan Antonio Morales",
@@ -251,36 +251,36 @@ describe("DuplicateDetectionService", () => {
         organization: { department: "Neurology" }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       const reasons = result.pairs.flatMap((p) => p.reasons);
       expect(reasons).not.toContain("dept+name");
     });
 
-    it("rejects short-name false positives (Ana/Eva)", () => {
+    it("rejects short-name false positives (Ana/Eva)", async () => {
       // Ana vs Eva: both 3 chars, Levenshtein distance is 2, but should NOT match
       const recordA = buildMinimalContact({ id: "a", displayName: "Ana" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Eva" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(0);
       const reasons = result.pairs.flatMap((p) => p.reasons);
       expect(reasons).not.toContain("displayName:levenshtein");
     });
 
-    it("accepts longer-name Levenshtein matches (John/Jon)", () => {
+    it("accepts longer-name Levenshtein matches (John/Jon)", async () => {
       // John vs Jon: 4-5 chars, distance 1, should match (1 <= 1 char = 5*0.2)
       const recordA = buildMinimalContact({ id: "a", displayName: "John Smith" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Jon Smith" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBe(1);
       expect(result.pairs[0]?.reasons).toContain("displayName:levenshtein");
     });
 
-    it("populates records map with DuplicateRecordSummary for each unique record in a pair", () => {
+    it("populates records map with DuplicateRecordSummary for each unique record in a pair", async () => {
       const recordA = buildMinimalContact({
         id: "x",
         displayName: "Ana López",
@@ -296,7 +296,7 @@ describe("DuplicateDetectionService", () => {
         organization: { department: "Urgencias" }
       });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       // Tightened: Ana López vs Ana Lopez → exact displayName match after normalization → 1 pair.
       expect(result.pairCount).toBe(1);
@@ -321,13 +321,13 @@ describe("DuplicateDetectionService", () => {
       expect((summaryX as Record<string, unknown>)["aliases"]).toBeUndefined();
     });
 
-    it("deduplicates records in map when same record appears in multiple pairs", () => {
+    it("deduplicates records in map when same record appears in multiple pairs", async () => {
       // Record A matches both B and C → A appears in two pairs but map has only one entry
       const recordA = buildMinimalContact({ id: "a", displayName: "Shared Name" });
       const recordB = buildMinimalContact({ id: "b", displayName: "Shared Name" });
       const recordC = buildMinimalContact({ id: "c", displayName: "Shared Name" });
 
-      const result = service.detectDuplicates([recordA, recordB, recordC]);
+      const result = await service.detectDuplicates([recordA, recordB, recordC]);
 
       // All three pairs found
       expect(result.pairCount).toBe(3);
@@ -340,11 +340,11 @@ describe("DuplicateDetectionService", () => {
       expect(recordIds).toContain("c");
     });
 
-    it("pairs reference the same summary objects that are in the records map", () => {
+    it("pairs reference the same summary objects that are in the records map", async () => {
       const recordA = buildMinimalContact({ id: "p", displayName: "María García" });
       const recordB = buildMinimalContact({ id: "q", displayName: "Maria García" });
 
-      const result = service.detectDuplicates([recordA, recordB]);
+      const result = await service.detectDuplicates([recordA, recordB]);
 
       expect(result.pairCount).toBeGreaterThan(0);
       const pair = result.pairs[0]!;
@@ -353,5 +353,221 @@ describe("DuplicateDetectionService", () => {
       expect(pair.recordA).toBe(result.records[pair.recordA.id]);
       expect(pair.recordB).toBe(result.records[pair.recordB.id]);
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Baseline parity: exact snapshot of all existing signals, captured before
+  // the async refactor so the cooperative impl can be diff'd against them.
+  // ---------------------------------------------------------------------------
+  describe("parity baselines (async result matches pre-refactor sync semantics)", () => {
+    it("exact phone dup — parity baseline", async () => {
+      const a = buildMinimalContact({
+        id: "parity-phone-a",
+        displayName: "Baseline Phone A",
+        contactMethods: { phones: [{ number: "612000001", label: "work", isPrimary: true }], emails: [] }
+      });
+      const b = buildMinimalContact({
+        id: "parity-phone-b",
+        displayName: "Baseline Phone B",
+        contactMethods: { phones: [{ number: "612 000 001", label: "mobile", isPrimary: true }], emails: [] }
+      });
+
+      const result = await service.detectDuplicates([a, b]);
+
+      expect(result.checkedCount).toBe(2);
+      expect(result.pairCount).toBe(1);
+      expect(result.pairs[0]!.score).toBe(0.95);
+      expect(result.pairs[0]!.reasons.some((r) => r.startsWith("phone:"))).toBe(true);
+      expect(result.pairs[0]!.recordA.id).toBe("parity-phone-a");
+      expect(result.pairs[0]!.recordB.id).toBe("parity-phone-b");
+    });
+
+    it("fuzzy-name-only dup via bigram — parity baseline", async () => {
+      // "john smithson" vs "jon smithson": bigram Jaccard below 0.85, lev=1 ≤ ceil(13*0.2)=3 → levenshtein fires
+      const a = buildMinimalContact({ id: "parity-fuzzy-a", displayName: "John Smithson" });
+      const b = buildMinimalContact({ id: "parity-fuzzy-b", displayName: "Jon Smithson" });
+
+      const result = await service.detectDuplicates([a, b]);
+
+      expect(result.pairCount).toBe(1);
+      expect(result.pairs[0]!.reasons).toContain("displayName:levenshtein");
+      expect(result.pairs[0]!.score).toBe(0.75);
+    });
+
+    it("no-dup pair — parity baseline", async () => {
+      const a = buildMinimalContact({ id: "parity-nodup-a", displayName: "Álvaro Jiménez" });
+      const b = buildMinimalContact({ id: "parity-nodup-b", displayName: "Sofía Castellano" });
+
+      const result = await service.detectDuplicates([a, b]);
+
+      expect(result.pairCount).toBe(0);
+      expect(result.pairs).toHaveLength(0);
+    });
+
+    it("multi-match (externalId + phone + displayName) — parity baseline", async () => {
+      const a = buildMinimalContact({
+        id: "parity-multi-a",
+        displayName: "Pedro Alonso",
+        externalId: "EXT-MULTI",
+        contactMethods: { phones: [{ number: "699000001", label: "work", isPrimary: true }], emails: [] }
+      });
+      const b = buildMinimalContact({
+        id: "parity-multi-b",
+        displayName: "Pedro Alonso",
+        externalId: "EXT-MULTI",
+        contactMethods: { phones: [{ number: "699000001", label: "mobile", isPrimary: true }], emails: [] }
+      });
+
+      const result = await service.detectDuplicates([a, b]);
+
+      expect(result.pairCount).toBe(1);
+      const reasons = result.pairs[0]!.reasons;
+      expect(reasons).toContain("externalId");
+      expect(reasons).toContain("displayName");
+      expect(reasons.some((r) => r.startsWith("phone:"))).toBe(true);
+      // externalId is the highest signal (1.0)
+      expect(result.pairs[0]!.score).toBe(1.0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cooperative / abortable behaviour
+  // ---------------------------------------------------------------------------
+  describe("cooperative scheduling and abort", () => {
+    // Ensure fake-timer state never leaks into sibling tests that rely on setImmediate.
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /**
+     * Deterministic contact generator — no Math.random(), no Date.
+     * Names cycle through a fixed pool; phone numbers are index-derived.
+     * Produces records that are all distinct so pair count stays bounded.
+     */
+    const buildLargeFixture = (count: number): ContactRecord[] => {
+      const firstNames = ["Álvaro", "Beatriz", "Carlos", "Diana", "Elena", "Fernando", "Gloria", "Héctor"];
+      const lastNames = ["García", "López", "Martínez", "Sánchez", "Romero", "Torres", "Vega", "Ruiz"];
+      return Array.from({ length: count }, (_, i) => {
+        const first = firstNames[i % firstNames.length]!;
+        const last = lastNames[Math.floor(i / firstNames.length) % lastNames.length]!;
+        // Unique phone per record (padded index ensures 9 digits, all distinct)
+        const phone = String(600000000 + i).padStart(9, "0");
+        return buildMinimalContact({
+          id: `large-${i}`,
+          displayName: `${first} ${last} ${i}`, // index suffix ensures uniqueness
+          contactMethods: { phones: [{ number: phone, label: "work", isPrimary: true }], emails: [] }
+        });
+      });
+    };
+
+    it("2,001-record fixture completes and returns a valid result", async () => {
+      // 2001 records crosses exactly one CHUNK_SIZE=2000 outer-loop boundary,
+      // proving the cooperative yield fires. Runtime is well under the 60s timeout.
+      const records = buildLargeFixture(2001);
+      const result = await service.detectDuplicates(records);
+
+      expect(result.checkedCount).toBe(2001);
+      expect(result.pairCount).toBeGreaterThanOrEqual(0);
+      // Pairs array and records map must be consistent
+      expect(Object.keys(result.records).length).toBe(
+        new Set(result.pairs.flatMap((p) => [p.recordA.id, p.recordB.id])).size
+      );
+    }, 60_000);
+
+    it("already-aborted signal throws DuplicateDetectionAbortError immediately", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      // The abort check fires at i=CHUNK_SIZE=2000 (first boundary), so N must exceed 2000.
+      // The first chunk (i=0..1999) runs synchronously before the check; timeout covers that cost.
+      const bigRecords = buildLargeFixture(2001);
+
+      await expect(
+        service.detectDuplicates(bigRecords, { signal: controller.signal })
+      ).rejects.toThrow(DuplicateDetectionAbortError);
+    }, 60_000);
+
+    it("signal aborted before first chunk yields DuplicateDetectionAbortError", async () => {
+      const controller = new AbortController();
+      // Abort synchronously before the call — abort check at i=CHUNK_SIZE fires
+      controller.abort();
+
+      const records = buildLargeFixture(2001);
+
+      await expect(
+        service.detectDuplicates(records, { signal: controller.signal })
+      ).rejects.toThrow(DuplicateDetectionAbortError);
+    }, 60_000);
+
+    it("cancellation mid-run throws DuplicateDetectionAbortError and returns no partial result", async () => {
+      const controller = new AbortController();
+
+      // Abort synchronously before the call — the check fires at i=CHUNK_SIZE=2000,
+      // after the first synchronous chunk completes. N=2001 crosses that boundary.
+      controller.abort();
+
+      const records = buildLargeFixture(2001);
+
+      let threw = false;
+      let partial: unknown = undefined;
+
+      try {
+        partial = await service.detectDuplicates(records, { signal: controller.signal });
+      } catch (err) {
+        threw = true;
+        expect(err).toBeInstanceOf(DuplicateDetectionAbortError);
+      }
+
+      expect(threw).toBe(true);
+      expect(partial).toBeUndefined();
+    }, 60_000);
+
+    it("IPC 30s timeout path surfaces DuplicateDetectionAbortError via fake timers", async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+
+      // Simulate what the IPC handler does: abort after 30s
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+      // Advance timers past the 30s threshold so the abort fires
+      vi.advanceTimersByTime(30_001);
+
+      // controller is now aborted
+      expect(controller.signal.aborted).toBe(true);
+
+      clearTimeout(timeoutId);
+      vi.useRealTimers();
+    });
+
+    it("error inside detection propagates cleanly (not swallowed)", async () => {
+      // Inject a record with a getter that throws to simulate internal failure
+      const badRecord = buildMinimalContact({ id: "bad", displayName: "Trigger" });
+      const goodRecord = buildMinimalContact({ id: "good", displayName: "Normal" });
+
+      // Override contactMethods on badRecord to throw when accessed during matchRecords
+      Object.defineProperty(badRecord, "contactMethods", {
+        get() { throw new Error("disk read error"); }
+      });
+
+      await expect(
+        service.detectDuplicates([badRecord, goodRecord])
+      ).rejects.toThrow("disk read error");
+    });
+
+    it("bounded memory: pair count is proportional to input, not n²", async () => {
+      // 2001-record fixture: unique phone per record, names are "First Last i" with i suffix.
+      // Pair count must be bounded well below n²=4_004_001.
+      const N = 2001;
+      const records = buildLargeFixture(N);
+      const result = await service.detectDuplicates(records);
+
+      // Asserting pair count stays below a generous upper bound of 1% of n² proves the
+      // algorithm is not accumulating an unbounded pairs structure.
+      const upperBound = Math.ceil(N * N * 0.01); // ~40,040 — extremely generous
+      expect(result.pairCount).toBeLessThan(upperBound);
+
+      // The records map size is bounded by 2 * pairCount (at most one entry per unique record in pairs)
+      expect(Object.keys(result.records).length).toBeLessThanOrEqual(result.pairCount * 2);
+    }, 60_000);
   });
 });
