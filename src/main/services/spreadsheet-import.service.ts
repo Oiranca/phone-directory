@@ -17,7 +17,6 @@ import {
   isMeaningfulServiceLabel as isMeaningfulServiceLabelBase,
   inferAreaFromLabel,
   prettifyLabel,
-  EXCLUDED_PATTERNS,
   isExcludedLabel,
 } from "./spreadsheet-normalize.js";
 import {
