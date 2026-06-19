@@ -17,9 +17,15 @@ export const phoneContactSchema = z.object({
   extension: z.string().optional(),
   kind: z.string(),
   isPrimary: z.boolean(),
-  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105).
+  // Advisory presentation marker only — not an enforced access control; records and flagged values
+  // remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+  // NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
+  // phones when selecting the default displayed number — this is UI convenience, not a security gate.
   confidential: z.boolean(),
-  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105).
+  // Advisory presentation marker only — not an enforced access control; records and flagged values
+  // remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+  // NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
+  // phones when selecting the default displayed number — this is UI convenience, not a security gate.
   noPatientSharing: z.boolean(),
   notes: z.string().optional()
 });
