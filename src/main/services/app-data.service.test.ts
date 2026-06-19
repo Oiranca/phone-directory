@@ -3070,4 +3070,226 @@ describe("AppDataService", () => {
     expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
     expect(times[1]).toBeGreaterThanOrEqual(times[2]!);
   });
+
+  // ---------------------------------------------------------------------------
+  // Atomic backup claim (FIX 1) — fs.open('wx') / O_CREAT|O_EXCL tests
+  // ---------------------------------------------------------------------------
+
+  it("atomic claim: retries on EEXIST from fs.open and succeeds with a different path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const realOpen = fs.open.bind(fs);
+    let openCallCount = 0;
+    let eexistPath: string | undefined;
+
+    // Make the first fs.open('wx') call throw EEXIST to exercise the retry loop.
+    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (p, flags, ...rest) => {
+      if (flags === "wx" && openCallCount === 0) {
+        openCallCount += 1;
+        eexistPath = p as string;
+        throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST", path: p });
+      }
+      openCallCount += 1;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return realOpen(p, flags as any, ...(rest as []));
+    });
+
+    const resultPath = await service.createBackup();
+
+    // The spy must have been called at least twice (one EEXIST + one success).
+    const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
+    expect(wxCalls.length).toBeGreaterThanOrEqual(2);
+
+    // The successful path must differ from the one that got EEXIST.
+    expect(resultPath).not.toBe(eexistPath);
+
+    // The backup file must actually exist on disk.
+    await expect(fs.access(resultPath)).resolves.toBeUndefined();
+  });
+
+  it("atomic claim: two sequential backups at the same clock tick get distinct files (no TOCTOU collision)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Freeze time so both calls generate the same timestamp component, forcing
+    // the random-suffix path to be the only differentiator.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-19T12:00:00.000Z"));
+
+    let firstPath: string;
+    let secondPath: string;
+
+    try {
+      firstPath = await service.createBackup();
+      secondPath = await service.createBackup();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(firstPath).not.toBe(secondPath);
+    // Both files must exist on disk.
+    await expect(fs.access(firstPath)).resolves.toBeUndefined();
+    await expect(fs.access(secondPath)).resolves.toBeUndefined();
+  });
+
+  it("atomic claim: surfaces non-EEXIST errors from fs.open immediately without exhausting retries", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const realOpen = fs.open.bind(fs);
+    let wxCallCount = 0;
+
+    // Make every 'wx' open fail with EACCES (not EEXIST) so we know the retry
+    // loop does NOT keep retrying — it must surface the error immediately.
+    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (p, flags, ...rest) => {
+      if (flags === "wx") {
+        wxCallCount += 1;
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES", path: p });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return realOpen(p, flags as any, ...(rest as []));
+    });
+
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de backups/);
+
+    // Only the very first 'wx' open should have been attempted — no retries on EACCES.
+    const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
+    expect(wxCalls).toHaveLength(1);
+    expect(wxCallCount).toBe(1);
+  });
+
+  it("atomic claim: 0-byte placeholder is removed when copyFile fails, leaving no orphan in the backup directory", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Reject the copyFile so the placeholder written by fs.open('wx') would be
+    // left behind if createBackupCore does not clean it up.
+    vi.spyOn(fs, "copyFile").mockRejectedValueOnce(
+      Object.assign(new Error("ENOSPC: no space left on device"), {
+        code: "ENOSPC",
+        path: path.join(testRoot, "data", "contacts.json")
+      })
+    );
+
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear el backup/);
+
+    // The backup directory must contain no 0-byte placeholder files.
+    const entries = await fs.readdir(backupDir);
+    const jsonFiles = entries.filter((f) => f.endsWith(".json"));
+    for (const file of jsonFiles) {
+      const stats = await fs.stat(path.join(backupDir, file));
+      expect(stats.size, `Expected no 0-byte placeholder but found ${file} with size 0`).toBeGreaterThan(0);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // createAutoBackup delegation (FIX 2) — must delegate to createBackupCore
+  // ---------------------------------------------------------------------------
+
+  it("createAutoBackup delegates to createBackupCore: produces a valid backup file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    let autoBackupFailureMessage: string | undefined;
+    const service = new AppDataService({
+      onAutoBackupFailure: (msg) => { autoBackupFailureMessage = msg; }
+    });
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    // startAutoBackup fires runAutoBackupInBackground which enqueues createAutoBackup.
+    await service.startAutoBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    await waitForCondition(async () => {
+      const files = await fs.readdir(backupDir);
+      return files.some((f) => f.startsWith("auto-backup-") && f.endsWith(".json"));
+    });
+
+    expect(autoBackupFailureMessage).toBeUndefined();
+
+    const files = await fs.readdir(backupDir);
+    const autoBackupFiles = files.filter((f) => f.startsWith("auto-backup-") && f.endsWith(".json"));
+    expect(autoBackupFiles).toHaveLength(1);
+
+    // The backup must be a readable JSON file (proof that copyFile ran via createBackupCore).
+    const content = await fs.readFile(path.join(backupDir, autoBackupFiles[0]!), "utf-8");
+    expect(() => JSON.parse(content)).not.toThrow();
+  });
+
+  it("createAutoBackup does not double-enqueue: the write queue is not deadlocked", async () => {
+    // createAutoBackup is always called from inside an enqueueWrite slot
+    // (via runAutoBackupInBackground).  If it were to call enqueueWrite itself
+    // the queue would deadlock.  Verify the full flow completes promptly and
+    // a subsequent manual backup also resolves.
+    const { AppDataService } = await import("./app-data.service.js");
+
+    let autoBackupFailureMessage: string | undefined;
+    const service = new AppDataService({
+      onAutoBackupFailure: (msg) => { autoBackupFailureMessage = msg; }
+    });
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    // startAutoBackup enqueues one write slot that calls createAutoBackup internally.
+    // A subsequent createBackup must also complete without deadlock.
+    await service.startAutoBackup();
+    const manualBackupPath = await service.createBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    await waitForCondition(async () => {
+      const files = await fs.readdir(backupDir);
+      return files.some((f) => f.startsWith("auto-backup-"));
+    });
+
+    expect(autoBackupFailureMessage).toBeUndefined();
+    await expect(fs.access(manualBackupPath)).resolves.toBeUndefined();
+
+    const files = await fs.readdir(backupDir);
+    // auto-backup + manual backup both present.
+    const autoFiles = files.filter((f) => f.startsWith("auto-backup-"));
+    const manualFiles = files.filter((f) => f.startsWith("contacts-"));
+    expect(autoFiles).toHaveLength(1);
+    expect(manualFiles).toHaveLength(1);
+  });
 });

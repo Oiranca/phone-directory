@@ -10,6 +10,7 @@ import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../serv
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
+const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
 
 const CHANNELS = {
@@ -41,6 +42,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       sender: WebContents;
       navListener: () => void;
       timeout: NodeJS.Timeout;
+      wrongSenderAttempts: number;
     }
   >();
   const senderTokens = new Map<number, string>();
@@ -181,7 +183,8 @@ export const registerContactsIpc = (service: AppDataService) => {
       senderId,
       sender: event.sender,
       navListener,
-      timeout
+      timeout,
+      wrongSenderAttempts: 0
     });
     senderTokens.set(senderId, importToken);
 
@@ -214,7 +217,14 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     // Reject if the confirming sender is not the one that requested the preview.
     // This prevents another renderer in the same process from consuming a foreign token.
+    // To prevent indefinite token-validity probing by an adversarial renderer that knows
+    // or guesses a token, we bound the number of wrong-sender attempts. Once the cap is
+    // reached the token is invalidated so further probes fail with the same opaque error.
     if (event.sender.id !== pendingImport.senderId) {
+      pendingImport.wrongSenderAttempts += 1;
+      if (pendingImport.wrongSenderAttempts >= CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS) {
+        clearPendingCsvImport(importToken);
+      }
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
