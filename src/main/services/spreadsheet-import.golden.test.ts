@@ -614,7 +614,7 @@ describe("golden: error paths", () => {
     expect(result.deferredSkippedRowCount).toBeGreaterThanOrEqual(2);
   });
 
-  it("throws when row count exceeds 5000 (size guard)", () => {
+  it("normalizeWorkbookRowsFromFile returns all rows beyond 5000 (cap is enforced in buildSpreadsheetImportPreview)", () => {
     // Build a sheet with 5001 data rows
     const data: string[][] = [["SERVICIO", "NUMERO"]];
     for (let i = 0; i < 5001; i++) {
