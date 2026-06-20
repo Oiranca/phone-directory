@@ -320,11 +320,16 @@ export class AuditLogService {
 
       const str = typeof value === "object" ? JSON.stringify(value) : String(value);
 
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return `"${str.replace(/"/g, '""')}"`;
+      // Neutralize CSV formula injection (CWE-1236): if the first character is a
+      // formula trigger, prepend an apostrophe so spreadsheet apps treat the cell
+      // as text rather than executing it as a formula.
+      const neutralized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+
+      if (neutralized.includes(",") || neutralized.includes('"') || neutralized.includes("\n") || neutralized.includes("\r")) {
+        return `"${neutralized.replace(/"/g, '""')}"`;
       }
 
-      return str;
+      return neutralized;
     };
 
     const rows = entries.map((entry) =>
