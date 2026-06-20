@@ -1,16 +1,27 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+// SERVER_CHANNELS is a pure constant object with no Electron dependency — safe to
+// import statically so SEARCH_CHANNEL is defined at describe()-collection time and
+// the test-reporter title does not interpolate as "undefined".
+import { SERVER_CHANNELS } from "../../shared/ipc/channels.js";
 
-// Minimal stub for ipcMain that collects handler registrations
-const handlers = new Map<string, (...args: unknown[]) => unknown>();
-const ipcMainStub = {
-  handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
-    handlers.set(channel, fn);
-  }
-};
+// handlers and ipcMainStub are hoisted via vi.hoisted() so the vi.mock factory
+// below can reference them safely (vi.mock is hoisted to before all imports).
+const { handlers, ipcMainStub } = vi.hoisted(() => {
+  const handlers = new Map<string, (...args: unknown[]) => unknown>();
+  const ipcMainStub = {
+    handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+      handlers.set(channel, fn);
+    }
+  };
+  return { handlers, ipcMainStub };
+});
 
 vi.mock("electron", () => ({
   ipcMain: ipcMainStub
 }));
+
+// Alias for readability — value is "buscas:search" (defined in channels.ts).
+const SEARCH_CHANNEL = SERVER_CHANNELS.buscasSearch;
 
 // Helper to invoke a registered handler as if called from the renderer
 const invoke = async (channel: string, ...args: unknown[]): Promise<unknown> => {
@@ -219,11 +230,11 @@ describe("registerBuscasIpc", () => {
     });
   });
 
-  describe("search channel — buscas:search", () => {
+  describe(`search channel — ${SEARCH_CHANNEL}`, () => {
     it("coerces non-string query to empty string and calls service.search", async () => {
       serviceMock.search.mockResolvedValue([]);
 
-      await invoke("buscas:search", 42);
+      await invoke(SEARCH_CHANNEL, 42);
 
       expect(serviceMock.search).toHaveBeenCalledWith("");
     });
@@ -231,7 +242,7 @@ describe("registerBuscasIpc", () => {
     it("coerces null query to empty string", async () => {
       serviceMock.search.mockResolvedValue([]);
 
-      await invoke("buscas:search", null);
+      await invoke(SEARCH_CHANNEL, null);
 
       expect(serviceMock.search).toHaveBeenCalledWith("");
     });
@@ -239,7 +250,7 @@ describe("registerBuscasIpc", () => {
     it("coerces undefined query to empty string", async () => {
       serviceMock.search.mockResolvedValue([]);
 
-      await invoke("buscas:search");
+      await invoke(SEARCH_CHANNEL);
 
       expect(serviceMock.search).toHaveBeenCalledWith("");
     });
@@ -247,7 +258,7 @@ describe("registerBuscasIpc", () => {
     it("passes through a valid string query unchanged", async () => {
       serviceMock.search.mockResolvedValue([]);
 
-      await invoke("buscas:search", "urgencias");
+      await invoke(SEARCH_CHANNEL, "urgencias");
 
       expect(serviceMock.search).toHaveBeenCalledWith("urgencias");
     });

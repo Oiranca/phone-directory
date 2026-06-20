@@ -2,14 +2,7 @@ import { ipcMain } from "electron";
 import { ZodError } from "zod";
 import { editableBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
 import type { BuscasService } from "../services/buscas.service.js";
-
-const CHANNELS = {
-  list: "buscas:list",
-  add: "buscas:add",
-  update: "buscas:update",
-  remove: "buscas:delete",
-  search: "buscas:search"
-} as const;
+import { BUSCAS_CHANNELS, SERVER_CHANNELS } from "../../shared/ipc/channels.js";
 
 /**
  * Maps a caught error to a renderer-safe message.
@@ -31,24 +24,24 @@ const toRendererError = (err: unknown, channel: string): Error => {
 };
 
 export const registerBuscasIpc = (service: BuscasService) => {
-  ipcMain.handle(CHANNELS.list, async () => {
+  ipcMain.handle(BUSCAS_CHANNELS.list, async () => {
     try {
       return await service.list();
     } catch (err) {
-      throw toRendererError(err, CHANNELS.list);
+      throw toRendererError(err, BUSCAS_CHANNELS.list);
     }
   });
 
-  ipcMain.handle(CHANNELS.add, async (_event, rawPayload: unknown) => {
+  ipcMain.handle(BUSCAS_CHANNELS.add, async (_event, rawPayload: unknown) => {
     try {
       const parsed = editableBuscaRecordSchema.parse(rawPayload);
       return await service.add(parsed);
     } catch (err) {
-      throw toRendererError(err, CHANNELS.add);
+      throw toRendererError(err, BUSCAS_CHANNELS.add);
     }
   });
 
-  ipcMain.handle(CHANNELS.update, async (_event, id: unknown, rawPayload: unknown) => {
+  ipcMain.handle(BUSCAS_CHANNELS.update, async (_event, id: unknown, rawPayload: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
       throw new Error("ID de busca inválido.");
     }
@@ -56,29 +49,29 @@ export const registerBuscasIpc = (service: BuscasService) => {
       const parsed = editableBuscaRecordSchema.parse(rawPayload);
       return await service.update(id, parsed);
     } catch (err) {
-      throw toRendererError(err, CHANNELS.update);
+      throw toRendererError(err, BUSCAS_CHANNELS.update);
     }
   });
 
-  ipcMain.handle(CHANNELS.remove, async (_event, id: unknown) => {
+  ipcMain.handle(BUSCAS_CHANNELS.remove, async (_event, id: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
       throw new Error("ID de busca inválido.");
     }
     try {
       return await service.remove(id);
     } catch (err) {
-      throw toRendererError(err, CHANNELS.remove);
+      throw toRendererError(err, BUSCAS_CHANNELS.remove);
     }
   });
 
-  ipcMain.handle(CHANNELS.search, async (_event, query: unknown) => {
+  ipcMain.handle(SERVER_CHANNELS.buscasSearch, async (_event, query: unknown) => {
     try {
       const q = typeof query === "string" ? query : "";
       return await service.search(q);
     } catch (err) {
-      throw toRendererError(err, CHANNELS.search);
+      throw toRendererError(err, SERVER_CHANNELS.buscasSearch);
     }
   });
 };
 
-export type BuscasChannels = typeof CHANNELS;
+export type BuscasChannels = typeof BUSCAS_CHANNELS;
