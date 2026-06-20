@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { PathDisplay } from "../components/feedback/PathDisplay";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
@@ -498,11 +499,15 @@ export const SettingsPage = () => {
               </div>
               <div>
                 <dt className="font-medium text-slate-500">Archivo de datos</dt>
-                <dd className="mt-1 break-all">{settings.dataFilePath}</dd>
+                <dd className="mt-1">
+                  <PathDisplay path={settings.dataFilePath} />
+                </dd>
               </div>
               <div>
                 <dt className="font-medium text-slate-500">Carpeta de backups</dt>
-                <dd className="mt-1 break-all">{settings.backupDirectoryPath}</dd>
+                <dd className="mt-1">
+                  <PathDisplay path={settings.backupDirectoryPath} />
+                </dd>
               </div>
               <div>
                 <dt className="font-medium text-slate-500">Inactivos al iniciar</dt>

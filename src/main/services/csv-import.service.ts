@@ -14,6 +14,13 @@ import type {
   PhoneContact,
   EmailContact
 } from "../../shared/types/contact.js";
+
+/**
+ * Internal-only extension of CsvImportPreview that carries the absolute
+ * sourceFilePath.  This field is stripped at the IPC boundary (OIR-115) and
+ * must never reach the renderer.
+ */
+export type CsvImportPreviewInternal = CsvImportPreview & { sourceFilePath: string };
 import { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
 import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
@@ -362,7 +369,7 @@ const buildDataset = (records: ContactRecord[], editorName: string) => {
 export const buildCsvImportPreview = async (
   sourceFilePath: string,
   editorName: string
-): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const sourceStats = await fs.stat(sourceFilePath);
 
   if (sourceStats.size > MAX_CSV_IMPORT_SIZE_BYTES) {
@@ -404,7 +411,7 @@ export const buildImportPreviewFromRows = async (
     /** INTERIM (OIR-102): rows silently skipped by deferred-feature guards. Default 0 (CSV path). */
     deferredSkippedRowCount?: number;
   }
-): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const records: ContactRecord[] = [];
   const rowIssues: CsvImportIssue[] = [];
   const warnings: CsvImportWarning[] = [];

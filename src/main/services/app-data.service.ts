@@ -6,6 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
   AutoBackupSettings,
@@ -408,7 +409,10 @@ export class AppDataService {
     });
   }
 
-  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts> {
+  // Return type carries sourceFilePath so the IPC handler can destructure it out
+  // at the boundary (OIR-115).  The renderer-facing CsvImportPreviewWithConflicts
+  // intentionally omits sourceFilePath; this widens it with the internal field.
+  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
     const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,

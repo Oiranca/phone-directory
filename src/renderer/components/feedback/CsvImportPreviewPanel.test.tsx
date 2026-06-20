@@ -5,7 +5,6 @@ import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
 
 const basePreview: CsvImportPreviewWithConflicts = {
   importToken: "test-token",
-  sourceFilePath: "/tmp/incoming/test.csv",
   fileName: "test.csv",
   totalRowCount: 0,
   validRowCount: 0,

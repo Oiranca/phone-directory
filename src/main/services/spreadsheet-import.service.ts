@@ -5,8 +5,8 @@ import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Papa from "papaparse";
 import XLSX from "xlsx-republish";
-import { buildCsvImportPreview, buildImportPreviewFromRows, type NormalizedImportRow } from "./csv-import.service.js";
-import type { CsvImportPreview, DirectoryDataset } from "../../shared/types/contact.js";
+import { buildCsvImportPreview, buildImportPreviewFromRows, type CsvImportPreviewInternal, type NormalizedImportRow } from "./csv-import.service.js";
+import type { DirectoryDataset } from "../../shared/types/contact.js";
 import {
   clean,
   stripBom,
@@ -730,7 +730,7 @@ export const readWorkbookRowsInWorker = (
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
   editorName: string
-): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreview }> => {
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const extension = path.extname(sourceFilePath).toLowerCase();
   const sourceStats = await fs.stat(sourceFilePath);
 

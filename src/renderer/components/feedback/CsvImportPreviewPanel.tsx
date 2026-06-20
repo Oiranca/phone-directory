@@ -72,7 +72,6 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             Vista previa importación
           </p>
           <h3 className="mt-2 text-xl font-semibold text-emerald-950">{preview.fileName}</h3>
-          <p className="mt-1 text-sm text-emerald-900/80">{preview.sourceFilePath}</p>
           {preview.detectedFormat && (
             <p className="mt-2 text-sm text-emerald-900/80">
               Formato detectado: {preview.detectedFormat}
