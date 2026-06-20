@@ -97,6 +97,8 @@ These controls are production assets. Refactors must retain them and their tests
 - Impact: any workstation user can search and reveal values marked confidential.
 - Change: define the intended policy first. If flags are security controls, create main-process safe view models, exclude flagged values from default search, and mask them unless privileged reveal is explicitly supported. If they are advisory only, rename them and document that limitation.
 - Tests: search exclusion, masked rendering, clipboard/export behavior, and privileged reveal authorization if added.
+- **Resolution (OIR-105, 2026-06-18):** Decided ADVISORY-ONLY. `confidential` / `noPatientSharing` are presentation markers, not enforced access controls — the product ships as a single shared USB workstation with no per-user auth boundary to enforce at. Flagged values remain searchable and visible by design; the confidential badge is a visual cue for operators only. Revisit if a real multi-user / authenticated workflow is introduced.
+- **Tests added (OIR-105):** search-inclusion tests confirming flagged phone numbers (both `confidential`-only and `noPatientSharing`-only variants) remain in the Fuse index (search.service.test.ts). The original finding's access-control enforcement, clipboard gating, and privileged reveal authorization tests are OUT OF SCOPE under the advisory-only decision: no enforcement boundary exists to test. `getPreferredResultPhone()` intentionally deprioritizes flagged phones for default display (UI convenience only, not a security control) and is covered by its own unit tests.
 
 #### P1-04: Duplicate merge leaves renderer state stale
 
@@ -304,7 +306,7 @@ Goal: remove the highest-impact integrity and security defects.
 
 - [ ] F1-01 Fail closed on audit-log corruption; quarantine and preserve damaged files.
 - [ ] F1-02 Neutralize spreadsheet formulas in audit CSV exports.
-- [ ] F1-03 Define and enforce the confidentiality/no-sharing policy in main-process view models.
+- [x] F1-03 Define the confidentiality/no-sharing policy — resolved as advisory-only (see P1-03 resolution); no enforcement required.
 - [ ] F1-04 Bind import tokens to sender, expiry, and single use.
 - [ ] F1-05 Make backup identity collision-resistant.
 - [ ] F1-06 Reconcile renderer state after duplicate merge.

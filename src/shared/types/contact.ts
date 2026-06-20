@@ -7,7 +7,19 @@ export interface PhoneContact {
   extension?: string;
   kind: string;
   isPrimary: boolean;
+  /**
+   * Advisory presentation marker only — not an enforced access control; records and flagged values
+   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
+   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
+   */
   confidential: boolean;
+  /**
+   * Advisory presentation marker only — not an enforced access control; records and flagged values
+   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
+   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
+   */
   noPatientSharing: boolean;
   notes?: string;
 }
@@ -144,7 +156,19 @@ export interface EditablePhoneContact {
   extension?: string;
   kind: string;
   isPrimary: boolean;
+  /**
+   * Advisory presentation marker only — not an enforced access control; records and flagged values
+   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
+   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
+   */
   confidential: boolean;
+  /**
+   * Advisory presentation marker only — not an enforced access control; records and flagged values
+   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
+   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
+   */
   noPatientSharing: boolean;
   notes?: string;
 }
