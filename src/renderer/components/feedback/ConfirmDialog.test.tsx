@@ -132,4 +132,65 @@ describe('ConfirmDialog', () => {
     const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
     expect(confirmButton).toHaveClass('state-destructive');
   });
+
+  // ── Acceptance criterion 1: disabled-confirm state ──────────────────────────
+
+  it('marks confirm button as disabled when confirmDisabled is true', () => {
+    render(<ConfirmDialog {...defaultProps} confirmDisabled={true} />);
+    const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
+    expect(confirmButton).toBeDisabled();
+  });
+
+  it('confirm button is not disabled by default', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
+    expect(confirmButton).not.toBeDisabled();
+  });
+
+  it('does not mark confirm button as disabled when confirmDisabled is false', () => {
+    render(<ConfirmDialog {...defaultProps} confirmDisabled={false} />);
+    const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
+    expect(confirmButton).not.toBeDisabled();
+  });
+
+  it('marks cancel button as disabled when cancelDisabled is true', () => {
+    render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
+    const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
+    expect(cancelButton).toBeDisabled();
+  });
+
+  it('does not fire onCancel when cancel button is clicked while cancelDisabled is true', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} cancelDisabled={true} />);
+    // The onClick guard (`if (!cancelDisabled) onCancel()`) prevents the call
+    // even when fireEvent.click bypasses the disabled attribute.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  // ── Acceptance criterion 2: Escape-to-dismiss ────────────────────────────────
+
+  it('fires onCancel when the native cancel event (Escape) is dispatched on the dialog', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
+    const dialog = screen.getByRole('dialog');
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('prevents the native cancel event default to keep dialog state under React control', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    const dialog = screen.getByRole('dialog');
+    const cancelEvent = new Event('cancel', { cancelable: true });
+    fireEvent(dialog, cancelEvent);
+    expect(cancelEvent.defaultPrevented).toBe(true);
+  });
+
+  it('does not fire onCancel on Escape when cancelDisabled is true', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} cancelDisabled={true} />);
+    const dialog = screen.getByRole('dialog');
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });
