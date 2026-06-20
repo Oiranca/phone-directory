@@ -5,6 +5,28 @@ import type {
   DuplicateRecordSummary
 } from "../../shared/types/duplicate.js";
 
+/**
+ * Thrown when detection is cancelled via AbortSignal (e.g. 30s IPC timeout).
+ * Callers must distinguish this from unexpected errors to surface the right
+ * user-facing message.
+ */
+export class DuplicateDetectionAbortError extends Error {
+  constructor(message = "Duplicate detection was aborted") {
+    super(message);
+    this.name = "DuplicateDetectionAbortError";
+  }
+}
+
+/** Outer-loop iterations between event-loop yields. Balances responsiveness vs overhead. */
+const CHUNK_SIZE = 2000;
+
+/**
+ * Inner-loop iterations between abort-signal checks inside a single outer iteration.
+ * Bounds the worst-case blocked time when an abort arrives mid-row without adding
+ * any per-iteration await (the only yield points remain at chunk boundaries).
+ */
+const INNER_ABORT_INTERVAL = 512;
+
 export class DuplicateDetectionService {
   /**
    * Detect potential duplicate ContactRecord entries in dataset.
@@ -15,29 +37,59 @@ export class DuplicateDetectionService {
    * IPC payload: returns DuplicateRecordSummary (not full ContactRecord) to keep
    * the IPC payload < 5 KB for 50 pairs. The `records` map deduplicates entries
    * that appear in multiple pairs.
+   *
+   * Cooperative scheduling: yields to the event loop every CHUNK_SIZE outer-loop
+   * iterations so the main process stays responsive during large scans. Pass an
+   * AbortSignal to cancel early (throws DuplicateDetectionAbortError).
    */
-  detectDuplicates(records: ContactRecord[]): DuplicateDetectionResult {
+  async detectDuplicates(
+    records: ContactRecord[],
+    options?: { signal?: AbortSignal }
+  ): Promise<DuplicateDetectionResult> {
+    const signal = options?.signal;
     const pairs: DuplicatePair[] = [];
-    const seenPairKeys = new Set<string>();
+    const seenPairKeys = new Set<string>(); // defense against duplicate-ID input
     const recordSummaryMap = new Map<string, DuplicateRecordSummary>();
 
     // Precompute signals for each record (cheap cache to skip impossible pairs)
     const signals = records.map((r) => ({
       record: r,
       hasExternalId: !!r.externalId,
-      hasPhones: r.contactMethods.phones.length > 0,
-      namePrefix: this.normalizeDisplayName(r.displayName).slice(0, 3)
+      hasPhones: r.contactMethods.phones.length > 0
     }));
 
     for (let i = 0; i < signals.length; i++) {
+      // Unconditional abort check on every outer iteration — guarantees an
+      // already-aborted signal is caught immediately, even for tiny datasets
+      // that never reach a chunk boundary (including i=0).
+      if (signal?.aborted) {
+        throw new DuplicateDetectionAbortError();
+      }
+
+      // Yield to the event loop every CHUNK_SIZE outer iterations so the main
+      // process stays responsive during large scans.
+      if (i > 0 && i % CHUNK_SIZE === 0) {
+        await new Promise<void>((r) => setImmediate(r));
+        // Re-check after yield in case abort was signalled during the await
+        if (signal?.aborted) {
+          throw new DuplicateDetectionAbortError();
+        }
+      }
+
       const signalA = signals[i]!;
 
       for (let j = i + 1; j < signals.length; j++) {
+        // Abort check inside the inner loop every INNER_ABORT_INTERVAL iterations.
+        // The i<j loop visits each unordered pair exactly once, so this check fires
+        // at most once per INNER_ABORT_INTERVAL inner steps — cheap modulo, no yield.
+        if (j % INNER_ABORT_INTERVAL === 0 && signal?.aborted) {
+          throw new DuplicateDetectionAbortError();
+        }
+
         const signalB = signals[j]!;
 
         // Fast pre-check: skip pairs with zero possible matches
         // A pair can match on: externalId, phone, displayName, or dept+name
-        // Note: namePrefix is heuristic only - Levenshtein matches may cross prefix boundaries
         const hasExternalIdChance =
           signalA.hasExternalId && signalB.hasExternalId;
         const hasPhoneChance =
