@@ -1,0 +1,708 @@
+/**
+ * spreadsheet-parsers.ts — Format-specific contact-record parsers for the
+ * spreadsheet import pipeline.
+ *
+ * This module contains:
+ *   - normalizeCentersSheet — parses the "Centros de salud" multi-column format
+ *   - normalizeServiceSheet — parses internal service/department sheets
+ *   - mergeRecordsByDisplayName — merges cross-sheet records with the same name
+ *
+ * All functions are PURE (no I/O, no worker, no heuristics). They receive
+ * already-loaded sheet data and a profile produced by the heuristics layer
+ * (detectSheetProfile in spreadsheet-import.service.ts), then return
+ * NormalizedImportRow arrays.
+ *
+ * Extracted from spreadsheet-import.service.ts as part of OIR-109.
+ * The heuristics that decide WHICH parser applies deliberately remain in the
+ * main service.
+ */
+
+import type { NormalizedImportRow } from "./csv-import.service.js";
+import {
+  clean,
+  hasLetters,
+  hasPhoneLikeNumber,
+  extractNumbers,
+  detectPrivacy,
+  cleanNoteFragments,
+  dedupeKeepOrder,
+  classifyType,
+  aliasesFromLabel,
+  normalizeDisplayNameForMerge,
+  normalizeNumberForDedup,
+  isSerializedPhoneEntry,
+  normalizeMarker,
+  normalizeAscii,
+  isExcludedLabel,
+} from "./spreadsheet-normalize.js";
+
+// ---------------------------------------------------------------------------
+// Record construction helpers (moved here from spreadsheet-normalize.ts to
+// break the csv-import ↔ normalize circular dependency)
+// ---------------------------------------------------------------------------
+
+/** Returns a NormalizedImportRow with all fields set to empty strings. */
+export const blankRecord = (): NormalizedImportRow => ({
+  externalId: "",
+  type: "",
+  displayName: "",
+  firstName: "",
+  lastName: "",
+  area: "",
+  department: "",
+  service: "",
+  specialty: "",
+  building: "",
+  floor: "",
+  room: "",
+  locationText: "",
+  phone1Label: "",
+  phone1Number: "",
+  phone1Extension: "",
+  phone1Kind: "",
+  phone1IsPrimary: "",
+  phone1Confidential: "",
+  phone1NoPatientSharing: "",
+  phone1Notes: "",
+  phone2Label: "",
+  phone2Number: "",
+  phone2Extension: "",
+  phone2Kind: "",
+  phone2IsPrimary: "",
+  phone2Confidential: "",
+  phone2NoPatientSharing: "",
+  phone2Notes: "",
+  email1: "",
+  email1Label: "",
+  email1IsPrimary: "",
+  email2: "",
+  email2Label: "",
+  email2IsPrimary: "",
+  tags: "",
+  aliases: "",
+  notes: "",
+  status: ""
+});
+
+/**
+ * Builds a stable external ID by normalizing and joining the given parts
+ * with dashes. Falls back to "row" when all parts are empty.
+ */
+export const buildStableExternalId = (parts: Array<string | undefined>) =>
+  parts
+    .map((part) => normalizeAscii(part ?? ""))
+    .filter(Boolean)
+    .join("-") || "row";
+
+// ---------------------------------------------------------------------------
+// Shared sheet data type (mirrors the private type in the main service)
+// ---------------------------------------------------------------------------
+
+export type SheetData = {
+  name: string;
+  slug: string;
+  rows: string[][];
+};
+
+export type DetectionConfidence = "high" | "medium" | "low";
+
+export type SheetProfile = {
+  parser: "centers" | "service";
+  canonicalSlug: string;
+  department: string;
+  area?: string;
+  rowsToSkip: number;
+  detectedFormat: string;
+  detectionConfidence: DetectionConfidence;
+};
+
+// ---------------------------------------------------------------------------
+// Centers-sheet constants and helpers
+// ---------------------------------------------------------------------------
+
+const CENTER_SERVICE_LABELS: Record<string, string> = {
+  "INF.": "Información",
+  "ADM.": "Administración",
+  "URG.": "Urgencias",
+  URGENCIAS: "Urgencias",
+  "FAX.": "Fax",
+  FAX: "Fax"
+};
+
+const normalizeCenterService = (value: string) => {
+  const text = clean(value);
+  return CENTER_SERVICE_LABELS[text.toUpperCase()] ?? text;
+};
+
+const looksLikeCenterHeader = (first: string, second: string) => {
+  if (!first || !second) {
+    return false;
+  }
+
+  if (!Object.values(CENTER_SERVICE_LABELS).includes(normalizeCenterService(second))) {
+    return false;
+  }
+
+  const firstClean = clean(first);
+
+  if (/\d/.test(firstClean)) {
+    return true;
+  }
+
+  return ["c/", "carretera", "avda", "calle", "plaza", "paseo", "doctor", "médico", "medico"]
+    .some((marker) => firstClean.toLowerCase().includes(marker));
+};
+
+const splitCenterAddress = (raw: string) => {
+  const value = clean(raw);
+  let index = 0;
+  const prefixChars: string[] = [];
+
+  while (index < value.length) {
+    const char = value[index]!;
+
+    if (/[A-ZÁÉÍÓÚÜÑ ,.\-]/.test(char)) {
+      prefixChars.push(char);
+      index += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  if (prefixChars.length === 0) {
+    return { center: value, address: "" };
+  }
+
+  let centerRaw = prefixChars.join("").trimEnd();
+  let address = value.slice(index).trimStart();
+  const nextThree = address.slice(0, 3);
+
+  if (
+    address &&
+    centerRaw &&
+    /[A-ZÁÉÍÓÚÜÑ]$/.test(centerRaw) &&
+    nextThree.length === 3 &&
+    /^[a-záéíóúüñ]{3}$/i.test(nextThree) &&
+    nextThree === nextThree.toLowerCase()
+  ) {
+    address = `${centerRaw.slice(-1)}${address}`;
+    centerRaw = centerRaw.slice(0, -1).trimEnd();
+  }
+
+  const center = clean(
+    centerRaw
+      .toLowerCase()
+      .replace(/\b\w/g, (match) => match.toUpperCase())
+  );
+
+  return {
+    center: center || value,
+    address: clean(address)
+  };
+};
+
+const buildCenterPhones = (longNumber: string, shortNumber: string) => {
+  const longNumbers = extractNumbers(longNumber);
+  const shortNumbers = extractNumbers(shortNumber);
+
+  return longNumbers.slice(0, 2).map((number, index) => ({
+    number,
+    extension: shortNumbers[index] ?? undefined
+  }));
+};
+
+// ---------------------------------------------------------------------------
+// Centers-sheet parser
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses a "Centros de salud" sheet (multi-column format: center, service,
+ * long number, short number) into NormalizedImportRow records.
+ */
+export const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) => {
+  const data = sheet.rows.slice(profile.rowsToSkip);
+  const records: NormalizedImportRow[] = [];
+  let currentCenter = "";
+  let currentAddress = "";
+
+  data.forEach((row) => {
+    const cells = row.map((value) => clean(value));
+    const first = cells[0] ?? "";
+    const second = cells[1] ?? "";
+    const third = cells[2] ?? "";
+    const fourth = cells[3] ?? "";
+
+    if (first && isExcludedLabel(first)) {
+      return;
+    }
+
+    let service = "";
+    let longNumber = "";
+    let shortNumber = "";
+
+    if (looksLikeCenterHeader(first, second)) {
+      const normalized = splitCenterAddress(first);
+      currentCenter = normalized.center;
+      currentAddress = normalized.address;
+      service = normalizeCenterService(second);
+      longNumber = third;
+      shortNumber = fourth;
+    } else {
+      if (!currentCenter) {
+        return;
+      }
+
+      service = normalizeCenterService(second);
+      longNumber = third;
+      shortNumber = fourth;
+    }
+
+    if (!service) {
+      return;
+    }
+
+    const phones = buildCenterPhones(longNumber, shortNumber);
+    const record = blankRecord();
+    record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([
+      currentCenter,
+      service,
+      phones[0]?.number,
+      phones[1]?.number
+    ])}`;
+    record.type = "external-center";
+    record.displayName = `${currentCenter} - ${service}`;
+    record.area = "otros";
+    record.department = "Centros de salud";
+    record.service = service;
+    record.locationText = currentAddress;
+    record.aliases = currentCenter.toLowerCase();
+    record.status = "active";
+
+    if (phones.length > 0) {
+      record.phone1Label = "General";
+      record.phone1Number = phones[0]?.number ?? "";
+      record.phone1Extension = phones[0]?.extension ?? "";
+      record.phone1Kind = "external";
+      record.phone1IsPrimary = "true";
+      record.phone1Confidential = "false";
+      record.phone1NoPatientSharing = "false";
+    }
+
+    if (phones.length > 1) {
+      record.phone2Label = "Secundario";
+      record.phone2Number = phones[1]?.number ?? "";
+      record.phone2Extension = phones[1]?.extension ?? "";
+      record.phone2Kind = "external";
+      record.phone2IsPrimary = "false";
+      record.phone2Confidential = "false";
+      record.phone2NoPatientSharing = "false";
+    }
+
+    records.push(record);
+  });
+
+  return records;
+};
+
+// ---------------------------------------------------------------------------
+// Service-sheet helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Social context detection (INTERIM OIR-102 — see main service for full docs).
+ */
+const SOCIAL_CONTEXT_TOKENS = [
+  "REDESSOCIALES",
+  "RRSS",
+  "INSTAGRAM",
+  "FACEBOOK",
+  "TWITTER",
+  "LINKEDIN",
+  "TIKTOK",
+  "YOUTUBE"
+] as const;
+
+const rowContainsSocialToken = (cells: string[]): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) =>
+    cells.some((cell) => normalizeMarker(cell).includes(token))
+  );
+
+const sectionIsSocial = (section: string): boolean =>
+  SOCIAL_CONTEXT_TOKENS.some((token) => normalizeMarker(section).includes(token));
+
+const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean => {
+  if (!hasSocialContext) {
+    return false;
+  }
+
+  if (/\s/.test(label)) return false;
+  if (/\d/.test(label)) return false;
+  if (label.length < 8) return false;
+  if (label !== label.toLowerCase()) return false;
+
+  return /[a-z]/.test(label);
+};
+
+/**
+ * Resolves the display label for a service-sheet row from its cells.
+ * Prefers the first non-empty, non-excluded, letter-bearing cell at index 0;
+ * falls back to the first cell at a later index that has letters but no numbers.
+ */
+export const resolveServiceRowLabel = (cells: string[]) => {
+  const firstCell = cells[0] ?? "";
+
+  if (firstCell && !isExcludedLabel(firstCell)) {
+    return firstCell;
+  }
+
+  return cells.find((cell, index) =>
+    index > 0 &&
+    cell &&
+    hasLetters(cell) &&
+    !isExcludedLabel(cell) &&
+    extractNumbers(cell).length === 0
+  ) ?? "";
+};
+
+// ---------------------------------------------------------------------------
+// Service-sheet parser
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses an internal service/department sheet into NormalizedImportRow records.
+ * Returns both the records and a count of rows silently skipped as social media.
+ */
+export const normalizeServiceSheet = (
+  sheet: SheetData,
+  profile: SheetProfile
+): { records: NormalizedImportRow[]; socialSkippedRows: number } => {
+  const metadata = {
+    area: profile.area ?? "otros",
+    department: profile.department,
+    slug: profile.canonicalSlug
+  };
+  const data = sheet.rows.slice(profile.rowsToSkip);
+  const records: NormalizedImportRow[] = [];
+  let currentSection = "";
+  let socialSkippedRows = 0;
+  let prevRowHadSocialContext = false;
+
+  data.forEach((row) => {
+    const cells = row.map((value) => clean(value));
+    const firstCell = cells[0] ?? "";
+    const nonEmpty = cells.filter(Boolean);
+
+    if (
+      nonEmpty.length === 1 &&
+      firstCell &&
+      !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
+    ) {
+      currentSection = firstCell;
+      prevRowHadSocialContext = sectionIsSocial(firstCell);
+      return;
+    }
+
+    const rowHasPhone = cells.slice(1).some((cell) => hasPhoneLikeNumber(cell));
+
+    const resolvedLabel = resolveServiceRowLabel(cells);
+    const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
+      ? firstCell
+      : resolvedLabel;
+
+    if (label && isExcludedLabel(label) && !rowHasPhone) {
+      return;
+    }
+
+    if (nonEmpty.length === 1 && label && cells[0] === label) {
+      currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
+      return;
+    }
+
+    if (nonEmpty.length > 0 && !rowHasPhone && nonEmpty.every((value) => isExcludedLabel(value))) {
+      return;
+    }
+
+    if (
+      !rowHasPhone &&
+      cells[0] === label &&
+      nonEmpty.length > 1 &&
+      nonEmpty.every((value, index) => index === 0 || isExcludedLabel(value) || extractNumbers(value).length === 0) &&
+      extractNumbers(label).length === 0
+    ) {
+      currentSection = label;
+      prevRowHadSocialContext = sectionIsSocial(label);
+      return;
+    }
+
+    if (!label) {
+      return;
+    }
+
+    const phoneNumbers: string[] = [];
+    const noteFragments: string[] = [];
+
+    for (const cell of cells.slice(1)) {
+      if (!cell) {
+        continue;
+      }
+
+      const extracted = extractNumbers(cell);
+
+      if (extracted.length > 0) {
+        phoneNumbers.push(...extracted);
+      }
+
+      if (hasLetters(cell) && cell !== label) {
+        noteFragments.push(...cleanNoteFragments([cell]));
+      }
+    }
+
+    const dedupedPhoneNumbers = dedupeKeepOrder(phoneNumbers);
+
+    if (dedupedPhoneNumbers.length === 0 && cells.slice(1).every((value) => !value)) {
+      return;
+    }
+
+    const thisCellsHaveSocialContext = rowContainsSocialToken(cells);
+    const effectiveSocialContext = sectionIsSocial(currentSection) || thisCellsHaveSocialContext || prevRowHadSocialContext;
+    prevRowHadSocialContext = thisCellsHaveSocialContext;
+
+    if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
+      socialSkippedRows += 1;
+      return;
+    }
+
+    const labelNotes: string[] = [];
+
+    if (currentSection && currentSection !== metadata.department) {
+      labelNotes.push(`Sección: ${currentSection}`);
+    }
+
+    if (noteFragments.length > 0) {
+      labelNotes.push(noteFragments.join(" | "));
+    }
+
+    const finalNotes = cleanNoteFragments(labelNotes).join(" | ");
+    const privacySource = cleanNoteFragments([label, currentSection, finalNotes]).join(" | ");
+    const privacy = detectPrivacy(privacySource);
+    const record = blankRecord();
+
+    record.externalId = `${metadata.slug}-${buildStableExternalId([
+      metadata.department,
+      currentSection && currentSection !== metadata.department ? currentSection : label,
+      dedupedPhoneNumbers[0],
+      dedupedPhoneNumbers[1]
+    ])}`;
+    record.type = classifyType(label, metadata.slug);
+    record.displayName = label;
+    record.area = metadata.area;
+    record.department = metadata.department;
+    record.service = currentSection && currentSection !== metadata.department ? currentSection : label;
+    record.aliases = aliasesFromLabel(label);
+    record.notes = finalNotes;
+    record.status = "active";
+
+    const phoneEntries = dedupedPhoneNumbers.map((number, index) => ({
+      number,
+      label: sheet.name,
+      kind: "internal",
+      isPrimary: index === 0,
+      confidential: privacy.confidential,
+      noPatientSharing: privacy.noPatientSharing,
+      notes: finalNotes || undefined
+    }));
+    record.phones = JSON.stringify(phoneEntries);
+
+    record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
+    record.phone1Number = dedupedPhoneNumbers[0] ?? "";
+    record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
+    record.phone1IsPrimary = dedupedPhoneNumbers.length > 0 ? "true" : "false";
+    record.phone1Confidential = privacy.confidential ? "true" : "false";
+    record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
+    record.phone1Notes = finalNotes;
+
+    if (dedupedPhoneNumbers.length > 1) {
+      record.phone2Label = "Secundario";
+      record.phone2Number = dedupedPhoneNumbers[1] ?? "";
+      record.phone2Kind = "internal";
+      record.phone2IsPrimary = "false";
+      record.phone2Confidential = privacy.confidential ? "true" : "false";
+      record.phone2NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
+      record.phone2Notes = finalNotes;
+    }
+
+    records.push(record);
+  });
+
+  return { records, socialSkippedRows };
+};
+
+// ---------------------------------------------------------------------------
+// Cross-sheet merge
+// ---------------------------------------------------------------------------
+
+/**
+ * Merges service-sheet NormalizedImportRows that share the same normalized
+ * displayName (trim + lowercase + strip diacritics) into a single row.
+ *
+ * Merge rules (confirmed with operator):
+ * - Identity key: exact normalized displayName equality only (no fuzzy match).
+ * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
+ *   digit string; keep first occurrence. Each phone retains the source sheet
+ *   label it was tagged with in normalizeServiceSheet.
+ * - externalId: the FIRST record's externalId is kept (deterministic, stable
+ *   across re-imports of the same file PROVIDED sheet order in the workbook is
+ *   unchanged).
+ * - All other scalar fields: taken from the first record in the group.
+ * - phone1/phone2 flat fields: rewritten to match the merged phones list.
+ * - Records without a `phones` JSON field (e.g. centers-parser records) are
+ *   passed through unchanged — they are never merged.
+ */
+export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): NormalizedImportRow[] => {
+  const groups = new Map<string, NormalizedImportRow[]>();
+
+  for (const record of records) {
+    if (record.phones === undefined || record.phones === "") {
+      continue;
+    }
+
+    const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      continue;
+    }
+
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.push(record);
+    } else {
+      groups.set(key, [record]);
+    }
+  }
+
+  const result: NormalizedImportRow[] = [];
+  const emittedKeys = new Set<string>();
+
+  for (const record of records) {
+    const hasPhonesJson = record.phones !== undefined && record.phones !== "";
+
+    if (!hasPhonesJson) {
+      result.push(record);
+      continue;
+    }
+
+    const key = normalizeDisplayNameForMerge(record.displayName);
+
+    if (!key) {
+      result.push(record);
+      continue;
+    }
+
+    if (emittedKeys.has(key)) {
+      continue;
+    }
+
+    emittedKeys.add(key);
+    const group = groups.get(key)!;
+
+    if (group.length === 1) {
+      result.push(group[0]!);
+      continue;
+    }
+
+    const combinedPhones: Array<{
+      number: string;
+      label: string;
+      kind: string;
+      isPrimary: boolean;
+      confidential: boolean;
+      noPatientSharing: boolean;
+      notes?: string;
+    }> = [];
+    const seenNormalized = new Set<string>();
+
+    for (const groupRecord of group) {
+      let entries: Array<{
+        number: string;
+        label: string;
+        kind: string;
+        isPrimary: boolean;
+        confidential: boolean;
+        noPatientSharing: boolean;
+        notes?: string;
+      }> = [];
+
+      try {
+        const parsed = JSON.parse(groupRecord.phones ?? "[]");
+        if (Array.isArray(parsed)) {
+          entries = (parsed as unknown[]).filter(isSerializedPhoneEntry);
+        }
+      } catch {
+        // Malformed JSON is treated as no phones for this record.
+      }
+
+      for (const entry of entries) {
+        const normalized = normalizeNumberForDedup(entry.number);
+
+        if (normalized && !seenNormalized.has(normalized)) {
+          seenNormalized.add(normalized);
+          combinedPhones.push(entry);
+        }
+      }
+    }
+
+    const reassertedPhones = combinedPhones.map((phone, index) => ({
+      ...phone,
+      isPrimary: index === 0
+    }));
+
+    const base = { ...group[0]! };
+    base.phones = JSON.stringify(reassertedPhones);
+
+    if (reassertedPhones.length === 0) {
+      const existingNotes = base.notes ? `${base.notes} | ` : "";
+      base.notes = `${existingNotes}[AVISO: registro combinado sin teléfonos válidos]`;
+      base.phone1Label = "";
+      base.phone1Number = "";
+      base.phone1Kind = "";
+      base.phone1IsPrimary = "false";
+      base.phone1Confidential = "false";
+      base.phone1NoPatientSharing = "false";
+      base.phone1Notes = "";
+      base.phone2Label = "";
+      base.phone2Number = "";
+      base.phone2Kind = "";
+      base.phone2IsPrimary = "false";
+      base.phone2Confidential = "false";
+      base.phone2NoPatientSharing = "false";
+      base.phone2Notes = "";
+      result.push(base);
+      continue;
+    }
+
+    const first = reassertedPhones[0];
+    const second = reassertedPhones[1];
+
+    base.phone1Label = first ? "Principal" : "";
+    base.phone1Number = first?.number ?? "";
+    base.phone1Kind = first ? "internal" : "";
+    base.phone1IsPrimary = first ? "true" : "false";
+    base.phone1Confidential = first?.confidential ? "true" : "false";
+    base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
+    base.phone1Notes = first?.notes ?? "";
+    base.phone2Label = second ? "Secundario" : "";
+    base.phone2Number = second?.number ?? "";
+    base.phone2Kind = second ? "internal" : "";
+    base.phone2IsPrimary = "false";
+    base.phone2Confidential = second?.confidential ? "true" : "false";
+    base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
+    base.phone2Notes = second?.notes ?? "";
+
+    result.push(base);
+  }
+
+  return result;
+};
