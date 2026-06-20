@@ -6,7 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
-import { AuditLogIntegrityError, AuditLogService } from "./audit-log.service.js";
+import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
   AutoBackupSettings,
   AppSettings,
@@ -36,13 +36,13 @@ import type {
 } from "../../shared/types/contact.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
-import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
-  private auditLog = new AuditLogService();
+  private readonly auditFacade = new AppDataAuditFacade();
   private autoBackupTimer: NodeJS.Timeout | null = null;
   private autoBackupPending = false;
   private autoBackupEditCount = 0;
@@ -1765,39 +1765,29 @@ export class AppDataService {
   }
 
   async getAuditLog(params: AuditLogQueryParams): Promise<AuditLogResult> {
-    return this.auditLog.query(params);
+    return this.auditFacade.getAuditLog(params);
   }
 
   async exportAuditLog(targetFilePath: string, params: AuditLogQueryParams): Promise<ExportAuditLogResult> {
-    const result = await this.auditLog.query(params);
-    const csv = this.auditLog.toCsv(result.entries);
-    const directory = path.dirname(targetFilePath);
-    await ensureDirectory(directory);
-    await fs.writeFile(targetFilePath, csv, "utf-8");
-    return {
-      filePath: targetFilePath,
-      exportedAt: new Date().toISOString(),
-      entryCount: result.entries.length
-    };
+    return this.auditFacade.exportAuditLog(targetFilePath, params);
   }
 
   private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
-    try {
-      await this.auditLog.append(entry);
-    } catch (error) {
-      if (error instanceof AuditLogIntegrityError) {
-        // The audit log is corrupt.  The service has already quarantined the
-        // original bytes.  We surface a distinct log message so operators can
-        // identify the quarantine sidecar and call recoverFromIntegrityError().
-        console.error(
-          "[AuditLog] INTEGRITY ERROR — audit log is corrupt and all further appends are blocked.",
-          "Quarantine sidecar:", error.quarantineFilePath ?? "(quarantine failed)",
-          "Log file:", error.logFilePath,
-        );
-      } else {
-        console.error("[AuditLog] Failed to append entry:", error);
-      }
-      // Audit failure does not block the contact mutation — intentional.
-    }
+    // FIX 3 (PR #67): use await so this frame appears in async stack traces and
+    // a future throw is caught by this method's own context rather than silently
+    // escaping as an unhandled promise rejection.
+    await this.auditFacade.appendEntry(entry);
+  }
+
+  /**
+   * Clear the latched integrity-error state on the audit log so that subsequent
+   * appends are attempted again.
+   *
+   * An IPC entrypoint can call this after the operator has resolved the
+   * underlying file corruption (no new IPC channel is needed — wire the
+   * existing audit-related IPC handler to this method if recovery is desired).
+   */
+  async recoverAuditLog(): Promise<void> {
+    return this.auditFacade.recoverFromIntegrityError();
   }
 }
