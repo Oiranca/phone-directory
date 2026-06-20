@@ -2,11 +2,52 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { auditLogEntrySchema, auditLogSchema } from "../../shared/schemas/contact.js";
 import type { AuditLogEntry, AuditLogQueryParams, AuditLogResult } from "../../shared/types/contact.js";
-import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
+import { ensureDirectory, writeJsonFile } from "../utils/fs-json.js";
 import { getAuditLogFilePath } from "../utils/paths.js";
+
+/**
+ * Raised when the audit-log file cannot be parsed (malformed JSON, failed
+ * schema validation, or unreadable file).  The original bytes are quarantined
+ * before this error reaches callers.
+ *
+ * Callers MUST NOT silently swallow this error and write over the damaged file.
+ * Explicit recovery (see `AuditLogService.recoverFromIntegrityError`) is
+ * required before normal appends can resume.
+ */
+export class AuditLogIntegrityError extends Error {
+  /** Absolute path to the original (damaged) audit-log file. */
+  readonly logFilePath: string;
+  /** Absolute path to the quarantine sidecar file, if quarantine succeeded. */
+  readonly quarantineFilePath: string | null;
+  /** Underlying parse / read error. */
+  readonly cause: unknown;
+
+  constructor(opts: {
+    logFilePath: string;
+    quarantineFilePath: string | null;
+    cause: unknown;
+  }) {
+    super(
+      opts.quarantineFilePath
+        ? "Audit log integrity error: the file is corrupt or unreadable. Original bytes preserved in quarantine sidecar."
+        : "Audit log integrity error: the file is corrupt or unreadable. Quarantine of the original bytes failed — manual recovery required."
+    );
+    this.name = "AuditLogIntegrityError";
+    this.logFilePath = opts.logFilePath;
+    this.quarantineFilePath = opts.quarantineFilePath;
+    this.cause = opts.cause;
+  }
+}
 
 export class AuditLogService {
   private writeQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Tracks whether a read/parse failure has been detected for this service
+   * instance.  Once set, appends are refused until
+   * `recoverFromIntegrityError()` is called.
+   */
+  private integrityError: AuditLogIntegrityError | null = null;
 
   private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.writeQueue.then(fn);
@@ -27,37 +68,173 @@ export class AuditLogService {
 
     try {
       await fs.access(filePath);
-    } catch {
+    } catch (accessErr) {
+      // Only create a fresh empty log when the file genuinely does not exist.
+      // Any other error (EACCES, EMFILE, …) means the file may exist but is
+      // transiently unreadable — silently overwriting it with [] would destroy
+      // audit history with no quarantine.  Rethrow and let the caller handle it.
+      if ((accessErr as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        throw accessErr;
+      }
       await writeJsonFile(filePath, []);
+    }
+  }
+
+  /**
+   * Transient OS error codes that should NOT latch `integrityError`.
+   *
+   * These four codes are safe-transient because they are purely resource
+   * exhaustion or scheduling signals — they carry no information about the
+   * file's contents and resolve automatically once the kernel releases the
+   * resource.  The service self-heals on the next call.
+   *
+   * EACCES is intentionally excluded: a file that is both corrupt AND has its
+   * permissions set to 0o000 would escape quarantine permanently if we treated
+   * EACCES as transient.  EACCES therefore falls through to the existing
+   * quarantine-and-latch path, preserving the fail-closed guarantee.
+   */
+  private static readonly TRANSIENT_FS_CODES = new Set([
+    "EMFILE",  // process fd table exhausted
+    "ENFILE",  // system-wide fd table exhausted
+    "EAGAIN",  // resource temporarily unavailable (non-blocking fd)
+    "EBUSY",   // device or resource busy (e.g. Windows file lock analogue)
+  ]);
+
+  /**
+   * Attempt to read and parse the audit-log file.
+   *
+   * On success: returns the parsed entries array.
+   * On ENOENT: returns an empty array (no quarantine needed).
+   * On a transient OS error (EMFILE, ENFILE, EAGAIN, EBUSY): rethrows
+   *   the original error as-is WITHOUT latching `integrityError` so the service
+   *   self-heals on the next call.
+   * On any other failure (IO error, malformed JSON, schema mismatch):
+   *   quarantines the original bytes to a timestamped sidecar in the same
+   *   directory, records the integrity error on the instance, and throws an
+   *   `AuditLogIntegrityError`.
+   */
+  private async readEntries(filePath: string): Promise<AuditLogEntry[]> {
+    let rawBytes: Buffer;
+    try {
+      rawBytes = await fs.readFile(filePath);
+    } catch (readErr) {
+      const code = (readErr as NodeJS.ErrnoException)?.code ?? "";
+
+      // File simply does not exist — return empty, no quarantine needed.
+      if (code === "ENOENT") {
+        return [];
+      }
+
+      // Transient OS error — rethrow without latching integrityError.
+      // The service will self-heal once the OS condition resolves.
+      if (AuditLogService.TRANSIENT_FS_CODES.has(code)) {
+        throw readErr;
+      }
+
+      // Unreadable file (unknown IO error) — quarantine & fail closed.
+      const quarantineFilePath = await this.quarantine(filePath, undefined);
+      const integrityError = new AuditLogIntegrityError({
+        logFilePath: filePath,
+        quarantineFilePath,
+        cause: readErr,
+      });
+      this.integrityError = integrityError;
+      throw integrityError;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBytes.toString("utf-8"));
+    } catch (jsonErr) {
+      const quarantineFilePath = await this.quarantine(filePath, rawBytes);
+      const integrityError = new AuditLogIntegrityError({
+        logFilePath: filePath,
+        quarantineFilePath,
+        cause: jsonErr,
+      });
+      this.integrityError = integrityError;
+      throw integrityError;
+    }
+
+    let entries: AuditLogEntry[];
+    try {
+      entries = auditLogSchema.parse(parsed);
+    } catch (zodErr) {
+      const quarantineFilePath = await this.quarantine(filePath, rawBytes);
+      const integrityError = new AuditLogIntegrityError({
+        logFilePath: filePath,
+        quarantineFilePath,
+        cause: zodErr,
+      });
+      this.integrityError = integrityError;
+      throw integrityError;
+    }
+
+    return entries;
+  }
+
+  /**
+   * Copy `bytes` to a timestamped sidecar next to `originalFilePath`.
+   * Returns the sidecar path on success, `null` on failure or when bytes are
+   * unavailable (e.g. the file was unreadable — there is nothing to preserve).
+   * Never throws.  The original file is NOT modified.
+   */
+  private async quarantine(originalFilePath: string, bytes: Buffer | undefined): Promise<string | null> {
+    if (bytes === undefined) {
+      // No bytes to preserve (file was unreadable before we could read it).
+      return null;
+    }
+    try {
+      const safeTs = new Date().toISOString().replace(/[:.]/g, "-");
+      const dir = path.dirname(originalFilePath);
+      const base = path.basename(originalFilePath, ".json");
+      const sidecar = path.join(dir, `${base}.corrupt-${safeTs}.json`);
+      await ensureDirectory(dir);
+      // Write exactly the original bytes — faithful copy of what was on disk.
+      await fs.writeFile(sidecar, bytes);
+      return sidecar;
+    } catch {
+      return null;
     }
   }
 
   async append(entry: AuditLogEntry): Promise<void> {
     return this.enqueueWrite(async () => {
+      // Refuse append while in integrity-error state.  The caller must call
+      // recoverFromIntegrityError() explicitly before writes can resume.
+      if (this.integrityError !== null) {
+        throw this.integrityError;
+      }
+
       const validated = auditLogEntrySchema.parse(entry);
       const filePath = this.getFilePath();
-      let entries: AuditLogEntry[] = [];
 
-      try {
-        entries = auditLogSchema.parse(await readJsonFile(filePath));
-      } catch {
-        entries = [];
-      }
+      // readEntries will set this.integrityError and throw AuditLogIntegrityError
+      // if the file is corrupt.  We never reach writeJsonFile in that case.
+      const entries = await this.readEntries(filePath);
 
       entries.push(validated);
       await writeJsonFile(filePath, entries);
     });
   }
 
+  /**
+   * Query the audit log.  Unlike the old implementation, corruption now
+   * surfaces as a thrown `AuditLogIntegrityError` rather than silently
+   * returning an empty result set, so callers can distinguish "no entries"
+   * from "log is damaged".
+   *
+   * Symmetrical with `append()`: if an integrity error has already been cached
+   * on this instance, short-circuit immediately without re-reading the file.
+   * This prevents repeated quarantine sidecar proliferation on every query.
+   */
   async query(params: AuditLogQueryParams): Promise<AuditLogResult> {
-    const filePath = this.getFilePath();
-    let entries: AuditLogEntry[] = [];
-
-    try {
-      entries = auditLogSchema.parse(await readJsonFile(filePath));
-    } catch {
-      return { entries: [], totalCount: 0 };
+    if (this.integrityError !== null) {
+      throw this.integrityError;
     }
+
+    const filePath = this.getFilePath();
+    const entries = await this.readEntries(filePath);
 
     let filtered = entries;
 
@@ -89,6 +266,38 @@ export class AuditLogService {
       entries: filtered.slice().reverse(),
       totalCount: filtered.length
     };
+  }
+
+  /**
+   * Explicit recovery path.
+   *
+   * After a corruption event the service refuses all appends.  Call this
+   * method deliberately (after reviewing the quarantine sidecar) to clear the
+   * integrity-error state and start a fresh, empty audit log.
+   *
+   * The write is enqueued so it cannot race any already-queued append on the
+   * same `.tmp` path.  `this.integrityError` is cleared only after the atomic
+   * write succeeds, so a failed recovery write leaves the service still blocked
+   * and retryable.
+   *
+   * The quarantine sidecar produced during the corruption detection is NOT
+   * deleted here — it must be removed by the operator.
+   */
+  async recoverFromIntegrityError(): Promise<void> {
+    return this.enqueueWrite(async () => {
+      // No-op guard: do not destroy a healthy log when there is no active
+      // integrity error.  Calling this method on a healthy service is a
+      // programming mistake, not a recovery event.
+      if (this.integrityError === null) {
+        return;
+      }
+
+      const filePath = this.getFilePath();
+      await ensureDirectory(path.dirname(filePath));
+      await writeJsonFile(filePath, []);
+      // Only clear the error state once the write has succeeded atomically.
+      this.integrityError = null;
+    });
   }
 
   toCsv(entries: AuditLogEntry[]): string {
