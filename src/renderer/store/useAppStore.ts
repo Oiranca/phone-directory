@@ -32,6 +32,7 @@ interface AppStore {
   setSelectedRecordId: (id: string | null) => void;
   setSettings: (settings: EditableAppSettings) => void;
   setContacts: (contacts: DirectoryDataset) => void;
+  applyMergeResult: (survivor: ContactRecord, discardedId: string) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -77,7 +78,20 @@ export const useAppStore = create<AppStore>((set) => ({
   setShowInactive: (showInactive) => set({ showInactive }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setSettings: (settings) => set({ settings }),
-  setContacts: (contacts) => set({ contacts })
+  setContacts: (contacts) => set({ contacts }),
+  applyMergeResult: (survivor, discardedId) =>
+    set((state) => {
+      if (!state.contacts) return {};
+      const records = state.contacts.records
+        .filter((r) => r.id !== discardedId)
+        .map((r) => (r.id === survivor.id ? survivor : r));
+      const selectedRecordId =
+        state.selectedRecordId === discardedId ? survivor.id : state.selectedRecordId;
+      return {
+        contacts: { ...state.contacts, records },
+        selectedRecordId
+      };
+    })
 }));
 
 export const selectVisibleRecords = (
