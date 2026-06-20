@@ -4,11 +4,13 @@ import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
+import type { WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 import { DuplicateDetectionService } from "../services/duplicate-detection.service.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
+const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
 
 const CHANNELS = {
@@ -30,7 +32,19 @@ const CHANNELS = {
 };
 
 export const registerContactsIpc = (service: AppDataService) => {
-  const pendingCsvImports = new Map<string, { sourceFilePath: string; senderId: number; timeout: NodeJS.Timeout }>();
+  // sourceFilePath and senderId identify the import; sender/navListener are held so
+  // cleanup can detach the navigation listener without a secondary lookup.
+  const pendingCsvImports = new Map<
+    string,
+    {
+      sourceFilePath: string;
+      senderId: number;
+      sender: WebContents;
+      navListener: () => void;
+      timeout: NodeJS.Timeout;
+      wrongSenderAttempts: number;
+    }
+  >();
   const senderTokens = new Map<number, string>();
   const senderCleanupAttached = new Set<number>();
   const pendingE2eOpenDialogPaths = [...env.e2eOpenDialogPaths];
@@ -51,6 +65,13 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     if (senderTokens.get(pendingImport.senderId) === importToken) {
       senderTokens.delete(pendingImport.senderId);
+    }
+
+    // Detach the navigation listener — sender may already be destroyed, so guard.
+    try {
+      pendingImport.sender.removeListener("did-start-navigation", pendingImport.navListener);
+    } catch {
+      // sender destroyed before cleanup; nothing to remove.
     }
   };
 
@@ -149,10 +170,21 @@ export const registerContactsIpc = (service: AppDataService) => {
       clearPendingCsvImport(importToken);
     }, CSV_IMPORT_TOKEN_TTL_MS);
 
+    // Invalidate the token when the sender navigates away — a navigation means the
+    // import preview UI is gone and any pending confirmation would be from a stale tab.
+    const navListener = () => {
+      clearPendingCsvImport(importToken);
+    };
+
+    event.sender.on("did-start-navigation", navListener);
+
     pendingCsvImports.set(importToken, {
       sourceFilePath,
       senderId,
-      timeout
+      sender: event.sender,
+      navListener,
+      timeout,
+      wrongSenderAttempts: 0
     });
     senderTokens.set(senderId, importToken);
 
@@ -174,10 +206,25 @@ export const registerContactsIpc = (service: AppDataService) => {
       importToken
     };
   });
-  ipcMain.handle(CHANNELS.importCsvDataset, async (_event, importToken: string, rawPolicies: unknown = []) => {
+  ipcMain.handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
+    // Atomically take the token before any await — a second concurrent confirmation
+    // will find nothing in the map and be rejected immediately.
     const pendingImport = pendingCsvImports.get(importToken);
 
     if (!pendingImport) {
+      throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
+    }
+
+    // Reject if the confirming sender is not the one that requested the preview.
+    // This prevents another renderer in the same process from consuming a foreign token.
+    // To prevent indefinite token-validity probing by an adversarial renderer that knows
+    // or guesses a token, we bound the number of wrong-sender attempts. Once the cap is
+    // reached the token is invalidated so further probes fail with the same opaque error.
+    if (event.sender.id !== pendingImport.senderId) {
+      pendingImport.wrongSenderAttempts += 1;
+      if (pendingImport.wrongSenderAttempts >= CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS) {
+        clearPendingCsvImport(importToken);
+      }
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
@@ -198,6 +245,8 @@ export const registerContactsIpc = (service: AppDataService) => {
       return item as CsvImportPolicySelection;
     });
 
+    // Synchronously consume the token before the first await so concurrent
+    // confirmations cannot race past this point with the same token.
     clearPendingCsvImport(importToken);
     return service.importCsvDataset(pendingImport.sourceFilePath, policies);
   });
