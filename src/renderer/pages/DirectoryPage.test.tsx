@@ -2,10 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectoryPage } from "./DirectoryPage";
-import { useAppStore } from "../store/useAppStore";
+import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 
 const resetStore = () => {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -16,7 +17,10 @@ const resetStore = () => {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 };
 
@@ -56,13 +60,18 @@ describe("DirectoryPage", () => {
     fireEvent.click(await screen.findByRole("option", { name: optionLabel }));
   };
 
-  it("shows a recovery state when bootstrap loading fails", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
+  it("shows a loading state while bootstrap is in progress", async () => {
+    let resolveBootstrap: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.getBootstrapData>>) => void) | null = null;
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
+      () => new Promise((resolve) => { resolveBootstrap = resolve; })
+    );
 
     renderPage();
 
-    expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando datos locales");
+
+    resolveBootstrap?.({ contacts: defaultContacts, settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } } });
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
   });
 
   it("loads records after a successful bootstrap request", async () => {
@@ -123,28 +132,39 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
   });
 
-  it("retries bootstrap loading after an initial failure", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn()
-      .mockRejectedValueOnce(new Error("broken file"))
-      .mockResolvedValueOnce({
-        contacts: defaultContacts,
-        settings: {
-          editorName: "",
-          dataFilePath: "/tmp/data/contacts.json",
-          backupDirectoryPath: "/tmp/backups",
-          ui: {
-            showInactiveByDefault: false
-          }
-        }
-      });
+  it("calls ensureBootstrapLoaded on mount (direct route entry)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
 
     renderPage();
 
-    expect(await screen.findByText("No se pudieron cargar los datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload bootstrap when navigating back to the page (already loaded)", async () => {
+    // Pre-load bootstrap in the store so bootstrapStatus is "success"
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    // Page renders immediately from store — no IPC call
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
   it("filters by type and can reveal inactive records", async () => {
@@ -310,7 +330,10 @@ describe("DirectoryPage", () => {
       settings,
       selectedTags: ["Admisión"],
       selectedRecordId: contacts.records[0]!.id,
-      isLoading: false
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
     });
 
     renderPage();

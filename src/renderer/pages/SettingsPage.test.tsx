@@ -4,9 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { SettingsPage } from "./SettingsPage";
-import { useAppStore } from "../store/useAppStore";
+import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 
 const resetStore = () => {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -17,7 +18,10 @@ const resetStore = () => {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 };
 
@@ -193,15 +197,6 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("shows recovery actions when bootstrap loading fails", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockRejectedValue(new Error("broken file"));
-
-    renderPage();
-
-    expect(await screen.findByText("Configuración no disponible")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
-  });
-
   it("exposes a busy status while settings are still loading", () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
       () => new Promise(() => undefined)
@@ -214,21 +209,32 @@ describe("SettingsPage", () => {
     expect(loadingState).toHaveTextContent("Cargando configuración");
   });
 
-  it("retries bootstrap loading after an initial failure", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn()
-      .mockRejectedValueOnce(new Error("broken file"))
-      .mockResolvedValueOnce({
-        contacts: defaultContacts,
-        settings: editableSettings
-      });
+  it("calls ensureBootstrapLoaded on mount and shows settings after load (direct route entry)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: editableSettings
+    });
 
     renderPage();
 
-    expect(await screen.findByText("Configuración no disponible")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload bootstrap when store already has settings (route transition)", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
-    expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(2);
+    expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
   it("shows a save error without mutating the store", async () => {
@@ -302,7 +308,10 @@ describe("SettingsPage", () => {
       selectedArea: "all",
       selectedTags: [],
       showInactive: false,
-      isLoading: false
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
     });
     window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("Ruta inválida"));
 

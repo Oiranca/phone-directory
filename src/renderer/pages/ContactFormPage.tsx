@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
-import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
 import { useToast } from "../components/feedback/ToastRegion";
@@ -200,15 +199,14 @@ export const ContactFormPage = () => {
   const {
     contacts,
     settings,
-    initialize,
     isLoading,
     setContacts,
     setSettings,
-    setSelectedRecordId
+    setSelectedRecordId,
+    ensureBootstrapLoaded
   } = useAppStore();
   const { pushToast } = useToast();
   const [formState, setFormState] = useState<ContactFormState>(() => createEmptyFormState());
-  const [bootstrapError, setBootstrapError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
@@ -223,27 +221,9 @@ export const ContactFormPage = () => {
     [contacts, id]
   );
 
-  // NOTE: App.tsx handles global bootstrap and blocks navigation during loading/recovery.
-  // This local loader is retained only for page-level retry and test isolation.
   useEffect(() => {
-    if (contacts) {
-      return;
-    }
-
-    void (async () => {
-      try {
-        setBootstrapError("");
-        const payload = await window.hospitalDirectory.getBootstrapData();
-        if (isRecoveryBootstrap(payload)) {
-          setBootstrapError(payload.recovery.message);
-          return;
-        }
-        initialize(payload);
-      } catch {
-        setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
-      }
-    })();
-  }, [contacts, initialize]);
+    void ensureBootstrapLoaded();
+  }, []);
 
   useEffect(() => {
     if (isEditing && existingRecord) {
@@ -425,45 +405,6 @@ export const ContactFormPage = () => {
       setIsSubmitting(false);
     }
   };
-
-  if (bootstrapError) {
-    return (
-      <section className="rounded-3xl bg-white p-6 shadow-panel">
-        <h2 className="text-2xl font-semibold text-scs-blueDark">No se pudo abrir el formulario</h2>
-        <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setBootstrapError("");
-              void window.hospitalDirectory
-                .getBootstrapData()
-                .then((payload) => {
-                  if (isRecoveryBootstrap(payload)) {
-                    setBootstrapError(payload.recovery.message);
-                    return;
-                  }
-
-                  initialize(payload);
-                })
-                .catch(() => {
-                  setBootstrapError("No se pudieron cargar los datos locales para preparar el formulario.");
-                });
-            }}
-            className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-          >
-            Reintentar
-          </button>
-          <Link
-            to="/"
-            className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
-          >
-            Volver al directorio
-          </Link>
-        </div>
-      </section>
-    );
-  }
 
   if (isLoading || !contacts || !settings) {
     return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;

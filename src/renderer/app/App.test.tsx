@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { App } from "./App";
 import { ToastProvider } from "../components/feedback/ToastRegion";
-import { useAppStore } from "../store/useAppStore";
+import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 
 const originalHTMLDialogElement = globalThis.HTMLDialogElement;
@@ -28,6 +28,7 @@ const editableSettings = {
 };
 
 const resetStore = () => {
+  resetBootstrapInFlight();
   useAppStore.setState({
     contacts: null,
     settings: null,
@@ -38,7 +39,10 @@ const resetStore = () => {
     selectedArea: "all",
     selectedTags: [],
     showInactive: false,
-    isLoading: true
+    isLoading: true,
+    bootstrapStatus: "idle",
+    bootstrapError: "",
+    bootstrapHelp: ""
   });
 };
 

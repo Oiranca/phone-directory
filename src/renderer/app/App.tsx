@@ -155,53 +155,20 @@ const RecoveryPanel = () => {
 };
 
 export const App = () => {
-  const { contacts, settings, recovery, isLoading, initialize, initializeRecovery, setIsLoading } = useAppStore();
-  const [bootstrapError, setBootstrapError] = useState("");
-  const [bootstrapHelp, setBootstrapHelp] = useState("");
-  const hasAttempted = useRef(false);
+  const {
+    contacts,
+    settings,
+    recovery,
+    isLoading,
+    bootstrapError,
+    bootstrapHelp,
+    ensureBootstrapLoaded
+  } = useAppStore();
   const { pushToast } = useToast();
 
-  const loadBootstrapData = async () => {
-    try {
-      setIsLoading(true);
-      setBootstrapError("");
-      setBootstrapHelp("");
-
-      if (typeof window.hospitalDirectory?.getBootstrapData !== "function") {
-        setBootstrapError("La interfaz abierta en el navegador no puede acceder a los datos locales.");
-        setBootstrapHelp("Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.");
-        setIsLoading(false);
-        return;
-      }
-
-      const payload = await window.hospitalDirectory.getBootstrapData();
-
-      if (isRecoveryBootstrap(payload)) {
-        initializeRecovery(payload.recovery, payload.settings);
-        return;
-      }
-
-      initialize(payload);
-    } catch (error) {
-      console.error('[App] Bootstrap failed:', error);
-      setBootstrapError("No se pudieron cargar los datos locales. Revisa la configuración o importa una copia válida.");
-      setBootstrapHelp("");
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (hasAttempted.current) {
-      return;
-    }
-
-    if (contacts || (settings && recovery)) {
-      return;
-    }
-
-    hasAttempted.current = true;
-    void loadBootstrapData();
-  }, [contacts, recovery, settings]);
+    void ensureBootstrapLoaded();
+  }, []);
 
   useEffect(() => {
     if (typeof window.hospitalDirectory?.onAutoBackupFailure !== "function") {
@@ -226,7 +193,7 @@ export const App = () => {
           <button
             type="button"
             onClick={() => {
-              void loadBootstrapData();
+              void ensureBootstrapLoaded();
             }}
             className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
           >
