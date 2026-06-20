@@ -2951,4 +2951,408 @@ describe("AppDataService", () => {
     expect(ids).toContain(r1.savedRecordId);
     expect(ids).toContain(r2.savedRecordId);
   });
+
+  it("createBackup produces distinct file names even when the clock returns the same tick", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Freeze Date so both backups land in the same timestamp tick.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    try {
+      const firstPath = await service.createBackup();
+      const secondPath = await service.createBackup();
+
+      expect(firstPath).not.toBe(secondPath);
+      expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("parallel createBackup calls all produce distinct files and none are overwritten", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const count = 5;
+    const paths = await Promise.all(
+      Array.from({ length: count }, () => service.createBackup())
+    );
+
+    const uniquePaths = new Set(paths);
+    expect(uniquePaths.size).toBe(count);
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = await fs.readdir(backupDir);
+    const backupFiles = files.filter((f) => f.startsWith("contacts-") && f.endsWith(".json"));
+    expect(backupFiles).toHaveLength(count);
+  });
+
+  it("createBackup retries and succeeds when the first candidate name already exists", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Intercept the first suffix to be a predictable collision, then let the rest through.
+    const originalRandomUUID = globalThis.crypto.randomUUID.bind(globalThis.crypto);
+    let callCount = 0;
+    const collidingSuffix = "aaaaaa";
+
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
+      callCount += 1;
+      // Return a UUID whose first 6 non-hyphen chars match the colliding suffix on the first call.
+      if (callCount === 1) {
+        return `${collidingSuffix.slice(0, 4)}-${collidingSuffix.slice(4)}-0000-0000-000000000000` as ReturnType<typeof crypto.randomUUID>;
+      }
+      return originalRandomUUID();
+    });
+
+    // Pre-create the file that would collide with the first suffix.
+    const frozenDate = new Date("2026-06-01T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(frozenDate);
+    const safeTimestamp = frozenDate.toISOString().replace(/[:.]/g, "-");
+    const collidingPath = path.join(backupDir, `contacts-${safeTimestamp}-${collidingSuffix}.json`);
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.writeFile(collidingPath, "{}");
+
+    let resultPath: string;
+    try {
+      resultPath = await service.createBackup();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Must have succeeded with a different name.
+    expect(resultPath).not.toBe(collidingPath);
+    expect(path.basename(resultPath)).not.toBe(path.basename(collidingPath));
+
+    // Both the pre-existing collision file and the new backup exist.
+    const files = await fs.readdir(backupDir);
+    const backupFiles = files.filter((f) => f.startsWith("contacts-") && f.endsWith(".json"));
+    expect(backupFiles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("backup retention ordering is correct under the new name format with random suffix", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Create three backups with a deliberate time gap so mtime ordering is deterministic.
+    const firstPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const thirdPath = await service.createBackup();
+
+    const backups = await service.listBackups();
+
+    // listBackups returns descending by createdAt (newest first).
+    expect(backups).toHaveLength(3);
+    expect(backups[0]?.filePath).toBe(thirdPath);
+    expect(backups[1]?.filePath).toBe(secondPath);
+    expect(backups[2]?.filePath).toBe(firstPath);
+
+    const times = backups.map((b) => new Date(b.createdAt).getTime());
+    expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+    expect(times[1]).toBeGreaterThanOrEqual(times[2]!);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Atomic backup claim (FIX 1) — fs.open('wx') / O_CREAT|O_EXCL tests
+  // ---------------------------------------------------------------------------
+
+  it("atomic claim: retries on EEXIST from fs.open and succeeds with a different path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const realOpen = fs.open.bind(fs);
+    let openCallCount = 0;
+    let eexistPath: string | undefined;
+
+    // Make the first fs.open('wx') call throw EEXIST to exercise the retry loop.
+    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (p, flags, ...rest) => {
+      if (flags === "wx" && openCallCount === 0) {
+        openCallCount += 1;
+        eexistPath = p as string;
+        throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST", path: p });
+      }
+      openCallCount += 1;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return realOpen(p, flags as any, ...(rest as []));
+    });
+
+    const resultPath = await service.createBackup();
+
+    // The spy must have been called at least twice (one EEXIST + one success).
+    const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
+    expect(wxCalls.length).toBeGreaterThanOrEqual(2);
+
+    // The successful path must differ from the one that got EEXIST.
+    expect(resultPath).not.toBe(eexistPath);
+
+    // The backup file must actually exist on disk.
+    await expect(fs.access(resultPath)).resolves.toBeUndefined();
+  });
+
+  it("atomic claim: two sequential backups at the same clock tick get distinct files (no TOCTOU collision)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Freeze time so both calls generate the same timestamp component, forcing
+    // the random-suffix path to be the only differentiator.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-19T12:00:00.000Z"));
+
+    let firstPath: string;
+    let secondPath: string;
+
+    try {
+      firstPath = await service.createBackup();
+      secondPath = await service.createBackup();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(firstPath).not.toBe(secondPath);
+    // Both files must exist on disk.
+    await expect(fs.access(firstPath)).resolves.toBeUndefined();
+    await expect(fs.access(secondPath)).resolves.toBeUndefined();
+  });
+
+  it("atomic claim: surfaces non-EEXIST errors from fs.open immediately without exhausting retries", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const realOpen = fs.open.bind(fs);
+    let wxCallCount = 0;
+
+    // Make every 'wx' open fail with EACCES (not EEXIST) so we know the retry
+    // loop does NOT keep retrying — it must surface the error immediately.
+    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (p, flags, ...rest) => {
+      if (flags === "wx") {
+        wxCallCount += 1;
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES", path: p });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return realOpen(p, flags as any, ...(rest as []));
+    });
+
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de backups/);
+
+    // Only the very first 'wx' open should have been attempted — no retries on EACCES.
+    const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
+    expect(wxCalls).toHaveLength(1);
+    expect(wxCallCount).toBe(1);
+  });
+
+  it("atomic claim: 0-byte placeholder is removed when copyFile fails, leaving no orphan in the backup directory", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Reject the copyFile so the placeholder written by fs.open('wx') would be
+    // left behind if createBackupCore does not clean it up.
+    vi.spyOn(fs, "copyFile").mockRejectedValueOnce(
+      Object.assign(new Error("ENOSPC: no space left on device"), {
+        code: "ENOSPC",
+        path: path.join(testRoot, "data", "contacts.json")
+      })
+    );
+
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear el backup/);
+
+    // The backup directory must contain no 0-byte placeholder files.
+    const entries = await fs.readdir(backupDir);
+    const jsonFiles = entries.filter((f) => f.endsWith(".json"));
+    for (const file of jsonFiles) {
+      const stats = await fs.stat(path.join(backupDir, file));
+      expect(stats.size, `Expected no 0-byte placeholder but found ${file} with size 0`).toBeGreaterThan(0);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // createAutoBackup delegation (FIX 2) — must delegate to createBackupCore
+  // ---------------------------------------------------------------------------
+
+  it("createAutoBackup delegates to createBackupCore: produces a valid backup file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    let autoBackupFailureMessage: string | undefined;
+    const service = new AppDataService({
+      onAutoBackupFailure: (msg) => { autoBackupFailureMessage = msg; }
+    });
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    // startAutoBackup fires runAutoBackupInBackground which enqueues createAutoBackup.
+    await service.startAutoBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    await waitForCondition(async () => {
+      const files = await fs.readdir(backupDir);
+      return files.some((f) => f.startsWith("auto-backup-") && f.endsWith(".json"));
+    });
+
+    expect(autoBackupFailureMessage).toBeUndefined();
+
+    const files = await fs.readdir(backupDir);
+    const autoBackupFiles = files.filter((f) => f.startsWith("auto-backup-") && f.endsWith(".json"));
+    expect(autoBackupFiles).toHaveLength(1);
+
+    // The backup must be a readable JSON file (proof that copyFile ran via createBackupCore).
+    const content = await fs.readFile(path.join(backupDir, autoBackupFiles[0]!), "utf-8");
+    expect(() => JSON.parse(content)).not.toThrow();
+  });
+
+  it("createAutoBackup does not double-enqueue: the write queue is not deadlocked", async () => {
+    // createAutoBackup is always called from inside an enqueueWrite slot
+    // (via runAutoBackupInBackground).  If it were to call enqueueWrite itself
+    // the queue would deadlock.  Verify the full flow completes promptly and
+    // a subsequent manual backup also resolves.
+    const { AppDataService } = await import("./app-data.service.js");
+
+    let autoBackupFailureMessage: string | undefined;
+    const service = new AppDataService({
+      onAutoBackupFailure: (msg) => { autoBackupFailureMessage = msg; }
+    });
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: true,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 5
+          }
+        }
+      })
+    );
+
+    // startAutoBackup enqueues one write slot that calls createAutoBackup internally.
+    // A subsequent createBackup must also complete without deadlock.
+    await service.startAutoBackup();
+    const manualBackupPath = await service.createBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    await waitForCondition(async () => {
+      const files = await fs.readdir(backupDir);
+      return files.some((f) => f.startsWith("auto-backup-"));
+    });
+
+    expect(autoBackupFailureMessage).toBeUndefined();
+    await expect(fs.access(manualBackupPath)).resolves.toBeUndefined();
+
+    const files = await fs.readdir(backupDir);
+    // auto-backup + manual backup both present.
+    const autoFiles = files.filter((f) => f.startsWith("auto-backup-"));
+    const manualFiles = files.filter((f) => f.startsWith("contacts-"));
+    expect(autoFiles).toHaveLength(1);
+    expect(manualFiles).toHaveLength(1);
+  });
+
+  it("excludes 0-byte crash-orphaned placeholder files from listBackups", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Place a real backup so we confirm valid entries still appear.
+    const realBackupPath = await service.createBackup();
+
+    // Simulate the crash-orphaned 0-byte placeholder left when a copy fails
+    // mid-flight (createBackupCore opens the file exclusively, copy crashes,
+    // unlink never runs).
+    const orphanPath = path.join(backupDir, "contacts-orphan-crash.json");
+    await fs.writeFile(orphanPath, "", "utf-8");
+
+    const backups = await service.listBackups();
+
+    expect(backups.some((b) => b.filePath === orphanPath)).toBe(false);
+    expect(backups.some((b) => b.filePath === realBackupPath)).toBe(true);
+    expect(backups.every((b) => b.sizeBytes > 0)).toBe(true);
+  });
+
+  it("rejects restoreBackup on an empty (0-byte) backup file with a clear error", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+    const emptyBackupPath = path.join(backupDir, "contacts-empty-crash.json");
+    await fs.writeFile(emptyBackupPath, "", "utf-8");
+
+    await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
+      /El archivo de backup está vacío y no puede restaurarse/
+    );
+  });
+
+  it("still lists and restores valid backups after the 0-byte filter is applied", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const backupDir = path.join(testRoot, "backups");
+
+    // Drop a 0-byte orphan alongside a valid backup.
+    const orphanPath = path.join(backupDir, "contacts-zero-orphan.json");
+    await fs.writeFile(orphanPath, "", "utf-8");
+
+    const realBackupPath = await service.createBackup();
+
+    // listBackups should include only the real backup.
+    const backups = await service.listBackups();
+    expect(backups).toHaveLength(1);
+    expect(backups[0]!.filePath).toBe(realBackupPath);
+
+    // restoreBackup on the real backup should succeed.
+    const result = await service.restoreBackup(realBackupPath);
+    expect(result.recordCount).toBeGreaterThanOrEqual(0);
+  });
 });
