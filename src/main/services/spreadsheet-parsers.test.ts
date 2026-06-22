@@ -5,10 +5,12 @@
  *   - blankRecord: full shape assertion (all expected fields, correct types)
  *   - buildStableExternalId: determinism, ASCII-fold/join behavior,
  *     accent normalization, order sensitivity, empty/edge inputs
+ *   - normalizeServiceSheet: rowHasPhone gating regression tests (OIR-134)
  */
 
 import { describe, expect, it } from "vitest";
-import { blankRecord, buildStableExternalId } from "./spreadsheet-parsers.js";
+import { blankRecord, buildStableExternalId, normalizeServiceSheet } from "./spreadsheet-parsers.js";
+import type { SheetData, SheetProfile } from "./spreadsheet-parsers.js";
 
 // ---------------------------------------------------------------------------
 // blankRecord
@@ -279,5 +281,56 @@ describe("buildStableExternalId", () => {
     // When phone1 is also present (two phones), no undefined slot:
     const suffixTwo = buildStableExternalId(["Urgencias", "Triaje", "12345", "67890"]);
     expect(suffixTwo).toBe("urgencias-triaje-12345-67890");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeServiceSheet — rowHasPhone gating regression (OIR-134)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal sheet profile fixture for service-sheet regression tests.
+ */
+const makeProfile = (department: string): SheetProfile => ({
+  parser: "service",
+  canonicalSlug: "test",
+  department,
+  rowsToSkip: 0,
+  detectedFormat: "service",
+  detectionConfidence: "high"
+});
+
+const makeSheet = (name: string, rows: string[][]): SheetData => ({
+  name,
+  slug: "test",
+  rows
+});
+
+describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", () => {
+  it("does NOT emit a contact when the only tail cell is a date (dd/mm/yyyy) — date must not gate rowHasPhone", () => {
+    // Bug: `phoneNumbers.length > 0` caused extractNumbers("12/03/2024") → "2024"
+    // (4 digits) to set rowHasPhone=true, emitting a spurious contact with phone "2024".
+    // Fix: date cells are excluded from the rowHasPhone predicate.
+    const sheet = makeSheet("Guardia", [["Guardia", "12/03/2024"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("Guardia"));
+    expect(records).toHaveLength(0);
+  });
+
+  it("does NOT gate rowHasPhone true from a 10-digit number alone (outside 4–9 digit range)", () => {
+    // Bug: `phoneNumbers.length > 0` caused extractNumbers("1234567890") → ["1234567890"]
+    // (10 digits, out of 4–9 range) to set rowHasPhone=true.
+    // Fix: only numbers with 4–9 digits qualify as phone-like for the gate.
+    // A row with only an out-of-range number (and no real phone) must not emit a contact.
+    const sheet = makeSheet("Control", [["Control", "1234567890"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("Control"));
+    expect(records).toHaveLength(0);
+  });
+
+  it("DOES emit a contact when the tail cell is a real 4–9 digit phone (positive control)", () => {
+    // Ensures the fix did not over-block legitimate phone rows.
+    const sheet = makeSheet("Urgencias", [["Urgencias", "928 123 456"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("Urgencias"));
+    expect(records).toHaveLength(1);
+    expect(records[0]!.phone1Number).toBe("928123456");
   });
 });

@@ -583,6 +583,19 @@ describe("CsvImportPreviewPanel", () => {
       expect(notes[0]).toHaveTextContent("1 fila omitida");
     });
 
+    it("uses singular 'fila omitida' when exactly one social-handle row is skipped", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 1,
+        socialHandleSkippedRowCount: 1,
+        previewRows: []
+      });
+
+      const notes = screen.getAllByRole("note");
+      expect(notes[0]).toHaveTextContent("1 fila omitida");
+      expect(notes[0]).toHaveTextContent("redes sociales");
+    });
+
     it("does not render any note when both counts are 0", () => {
       renderPanel({ ...basePreview, buscasSkippedRowCount: 0, socialHandleSkippedRowCount: 0 });
 

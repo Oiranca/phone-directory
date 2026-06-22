@@ -22,6 +22,7 @@ import {
   clean,
   hasLetters,
   hasPhoneLikeNumber,
+  looksLikeDateValue,
   extractNumbers,
   detectPrivacy,
   cleanNoteFragments,
@@ -416,9 +417,12 @@ export const normalizeServiceSheet = (
     // Single-pass over non-first cells: extract phone numbers and note fragments
     // together so we don't call extractNumbers twice per cell (once for rowHasPhone,
     // once for the phone-list build).
+    // rowHasPhone uses the SAME predicate as the OLD hasPhoneLikeNumber gate:
+    // date cells and numbers outside the 4–9 digit range do NOT count as phones.
     const tailCells = cells.slice(1);
     const phoneNumbers: string[] = [];
     const noteFragments: string[] = [];
+    let rowHasPhone = false;
 
     for (const cell of tailCells) {
       if (!cell) continue;
@@ -426,12 +430,13 @@ export const normalizeServiceSheet = (
       if (extracted.length > 0) {
         phoneNumbers.push(...extracted);
       }
+      if (!rowHasPhone && !looksLikeDateValue(cell) && extracted.some((n) => n.length >= 4 && n.length <= 9)) {
+        rowHasPhone = true;
+      }
       if (hasLetters(cell)) {
         noteFragments.push(cell);
       }
     }
-
-    const rowHasPhone = phoneNumbers.length > 0;
 
     const resolvedLabel = resolveServiceRowLabel(cells);
     const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
