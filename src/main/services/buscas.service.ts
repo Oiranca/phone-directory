@@ -4,6 +4,7 @@ import type { BuscaRecord, BuscasDataset, EditableBuscaRecord, ImportedBuscaReco
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getBuscasFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import type { BuscasSheetParseResult } from "./spreadsheet-buscas-parser.js";
+import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
 
 const BUSCAS_VERSION = "1.0.0";
 
@@ -163,6 +164,10 @@ export class BuscasService {
    */
   async importFromOds(parseResult: BuscasSheetParseResult): Promise<number> {
     return this.enqueueWrite(async () => {
+      if (parseResult.records.length > MAX_SPREADSHEET_IMPORT_ROWS) {
+        throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+      }
+
       const dataset = await this.readDataset();
       const existingIds = new Set<string>();
 

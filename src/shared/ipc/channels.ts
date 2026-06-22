@@ -55,6 +55,5 @@ export const PUSH_CHANNELS = {
  * part of HospitalDirectoryApi. They must NOT appear in REQUIRED_CHANNELS.
  */
 export const SERVER_CHANNELS = {
-  buscasSearch:        "buscas:search",
-  buscasImportFromOds: "buscas:import-from-ods"
+  buscasSearch: "buscas:search"
 } as const;

@@ -575,4 +575,26 @@ describe("BuscasService — importFromOds + listImported", () => {
     const imported = await service.listImported();
     expect(imported).toHaveLength(0);
   });
+
+  it("importFromOds — rejects parse result exceeding MAX_SPREADSHEET_IMPORT_ROWS with the same error as the contacts path", async () => {
+    const { BuscasService } = await import("./buscas.service.js");
+    const { MAX_SPREADSHEET_IMPORT_ROWS } = await import("./spreadsheet-import.service.js");
+    const service = new BuscasService();
+
+    const oversizedRecords = Array.from({ length: MAX_SPREADSHEET_IMPORT_ROWS + 1 }, (_, i) => ({
+      deviceNumber: String(7000 + i),
+      department: "Test",
+      holderType: "Principal",
+      sourceSheet: "S1",
+      sourceRow: i
+    }));
+
+    await expect(
+      service.importFromOds({ records: oversizedRecords, parsedCellCount: oversizedRecords.length, skippedRowCount: 0 })
+    ).rejects.toThrow(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+
+    // Nothing should have been persisted
+    const imported = await service.listImported();
+    expect(imported).toHaveLength(0);
+  });
 });

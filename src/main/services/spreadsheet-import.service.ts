@@ -34,7 +34,7 @@ export { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
 export { mergeRecordsByDisplayName } from "./spreadsheet-parsers.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
-const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
+export const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
 const MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS = 5_000;
 const IS_VITEST_RUNTIME = process.env.VITEST === "true";
 
