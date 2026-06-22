@@ -84,18 +84,12 @@ export const hasLetters = (value: string) => /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.
 // ---------------------------------------------------------------------------
 
 /**
- * Normalizes a displayName for cross-sheet identity matching:
- * trim + lowercase + strip diacritics/accents.
+ * Normalizes a displayName for cross-sheet identity matching.
+ * Re-exported alias for the canonical NFKD normalizer in shared/utils/matching.ts.
  * Two names that are equal after this transform are considered the same contact.
  * Exact normalized equality only — no fuzzy matching.
  */
-export const normalizeDisplayNameForMerge = (name: string): string =>
-  name
-    .trim()
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+export { normalizeDisplayName as normalizeDisplayNameForMerge } from "../../shared/utils/matching.js";
 
 /**
  * Normalizes a phone number for deduplication purposes:

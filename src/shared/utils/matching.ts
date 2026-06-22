@@ -1,7 +1,8 @@
 /**
- * matching.ts — Pure shared helpers for phone normalization and dataset
- * metadata counting, extracted from duplicate-detection.service.ts and
- * csv-import.service.ts as part of OIR-119.
+ * matching.ts — Pure shared helpers for phone normalization, display-name
+ * normalization, and dataset metadata counting, extracted from
+ * duplicate-detection.service.ts and csv-import.service.ts as part of OIR-119.
+ * OIR-134 superseded the OIR-119 display-name divergence — now unified to NFKD.
  *
  * All functions are PURE: no I/O, no side effects, no Node.js built-ins.
  *
@@ -13,21 +14,19 @@
  *      - duplicate-detection.service.ts `normalizePhoneNumber` (private method)
  *      - app-data.service.ts inline in `buildStableMergeKeys` / `mergeImportedRecordFields`
  *
- * 2. `computeMetadataCounts` — count records by type and area. Logic is
+ * 2. `normalizeDisplayName` — canonical NFKD display-name normalizer:
+ *    trim + NFKD + strip diacritics (\p{Diacritic}) + lowercase + collapse spaces.
+ *    Used by:
+ *      - duplicate-detection.service.ts (formerly NFD + char-range — unified here)
+ *      - spreadsheet-normalize.ts `normalizeDisplayNameForMerge` (re-exported alias)
+ *      - spreadsheet-parsers.ts cross-sheet merge key
+ *
+ * 3. `computeMetadataCounts` — count records by type and area. Logic is
  *    byte-identical across:
  *      - csv-import.service.ts `buildDataset`
  *      - app-data.service.ts `buildNextDataset`
  *
  * ## What is deliberately NOT shared
- *
- * - `normalizeDisplayName` in duplicate-detection.service.ts uses NFD +
- *   character-range `[̀-ͯ]`.
- * - `normalizeDisplayNameForMerge` in spreadsheet-normalize.ts uses NFKD +
- *   `\p{Diacritic}`.
- *
- *   These differ in Unicode normalization form and diacritic removal regex.
- *   The divergence is intentional (different callers, different match semantics)
- *   and is locked by the parity test in matching.parity.test.ts.
  *
  * - `normalizePhoneNumber` in app-data.service.ts `mergeDuplicates` (line ~626)
  *   additionally applies `.slice(-9)` for the merge-dedup step. This variant is
@@ -48,6 +47,33 @@ import type { ContactRecord } from "../types/contact.js";
  *   - app-data mergeImportedRecordFields: `phone.number.replace(/\D/g, "")`
  */
 export const normalizePhoneForDedup = (phone: string): string => phone.replace(/\D/g, "");
+
+/**
+ * Canonical display-name normalizer (NFKD form).
+ *
+ * Applies: trim → NFKD normalize → strip all \p{Diacritic} code points →
+ * lowercase → collapse internal whitespace.
+ *
+ * Two names that are equal after this transform are considered the same
+ * contact for deduplication and cross-sheet merge purposes.
+ *
+ * OIR-134: supersedes the separate NFD+char-range form that lived in
+ * duplicate-detection.service.ts (OIR-119 had deliberately kept them apart;
+ * OIR-134 unifies both callers to NFKD). The NFKD form handles compatibility
+ * characters (ligatures, halfwidth) that NFD does not decompose.
+ *
+ * Used by:
+ *   - duplicate-detection.service.ts (was NFD + char-range, now points here)
+ *   - spreadsheet-normalize.ts `normalizeDisplayNameForMerge` (re-exported alias)
+ *   - spreadsheet-parsers.ts cross-sheet merge key (via normalizeDisplayNameForMerge)
+ */
+export const normalizeDisplayName = (name: string): string =>
+  name
+    .trim()
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 
 /**
  * Counts records by `type` and by `organization.area`, returning the two

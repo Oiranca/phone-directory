@@ -190,12 +190,15 @@ export interface CsvImportPreview {
   createdCount: number;
   updatedCount: number;
   /**
-   * INTERIM (OIR-102): Number of rows silently skipped because they belong to
-   * a deferred feature (Buscas pager sheets or social-media handle rows).
-   * Not contacts, do not block import, but operators should know they were omitted.
-   * Always 0 for the CSV import path.
+   * INTERIM (OIR-102 / OIR-134): Rows silently skipped because they belong to
+   * Buscas (pager) sheets — a deferred import path. Always 0 for the CSV path.
    */
-  deferredSkippedRowCount: number;
+  buscasSkippedRowCount: number;
+  /**
+   * INTERIM (OIR-102 / OIR-134): Rows silently skipped because they are
+   * social-media handle rows inside service sheets. Always 0 for the CSV path.
+   */
+  socialHandleSkippedRowCount: number;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];

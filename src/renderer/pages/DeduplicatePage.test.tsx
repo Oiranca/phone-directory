@@ -288,7 +288,7 @@ describe("DeduplicatePage", () => {
       expect(screen.queryByText(/No se pudo fusionar/)).not.toBeInTheDocument();
     });
 
-    it("removes the merged pair from the UI via the optimistic filter when refresh fails", async () => {
+    it("shows the warning toast and preserves the pair in the UI when refresh fails (OIR-134: no optimistic filter)", async () => {
       await triggerMerge();
       // Success toast must appear first (merge committed before refresh was attempted)
       expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
@@ -296,10 +296,10 @@ describe("DeduplicatePage", () => {
       expect(
         await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/)
       ).toBeInTheDocument();
-      // The pair cards must be gone from the page (optimistic filter applied)
-      await waitFor(() => {
-        expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
-      });
+      // OIR-134: the optimistic filter was removed to avoid a misleading partial state.
+      // The pair remains visible in the UI; the operator must reload to see the updated list.
+      // (The warning toast instructs them to do so.)
+      expect(screen.queryByText("Similitud 90%")).toBeInTheDocument();
     });
 
     it("keeps the store reconciled (survivor upserted, discard removed) when refresh fails", async () => {

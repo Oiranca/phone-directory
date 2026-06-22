@@ -592,7 +592,7 @@ describe("golden: error paths", () => {
     }
   });
 
-  it("skips buscas (pager) sheets and counts them in deferredSkippedRowCount", () => {
+  it("skips buscas (pager) sheets and counts them in buscasSkippedRowCount", () => {
     const filePath = writeWorkbook(testRoot, "with-buscas.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["90001"] },
@@ -612,8 +612,9 @@ describe("golden: error paths", () => {
     for (const row of result.rows) {
       expect(row.displayName).not.toMatch(/PRINCIPAL|RESIDENTE/i);
     }
-    // Deferred count: 2 data rows (buscas sheet had 3 rows total − 1 header)
-    expect(result.deferredSkippedRowCount).toBeGreaterThanOrEqual(2);
+    // Buscas count: 2 data rows (buscas sheet had 3 rows total − 1 header)
+    expect(result.buscasSkippedRowCount).toBeGreaterThanOrEqual(2);
+    expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 
   it("normalizeWorkbookRowsFromFile returns all rows beyond 5000 (cap is enforced in buildSpreadsheetImportPreview)", () => {
@@ -844,11 +845,11 @@ describe("golden: isSerializedPhoneEntry type guard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. deferredSkippedRowCount aggregation
+// 8. buscasSkippedRowCount / socialHandleSkippedRowCount aggregation (OIR-134)
 // ---------------------------------------------------------------------------
 
-describe("golden: deferredSkippedRowCount", () => {
-  it("returns 0 when no Buscas sheets and no social rows", () => {
+describe("golden: buscasSkippedRowCount / socialHandleSkippedRowCount", () => {
+  it("returns both counts as 0 when no Buscas sheets and no social rows", () => {
     const filePath = writeWorkbook(testRoot, "zero-deferred.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["12001"] },
@@ -856,10 +857,11 @@ describe("golden: deferredSkippedRowCount", () => {
     ]);
 
     const result = normalizeWorkbookRowsFromFile(filePath);
-    expect(result.deferredSkippedRowCount).toBe(0);
+    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 
-  it("counts multiple Buscas sheets combined", () => {
+  it("counts multiple Buscas sheets in buscasSkippedRowCount only", () => {
     const filePath = writeWorkbook(testRoot, "multi-buscas.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["12001"] },
@@ -885,7 +887,8 @@ describe("golden: deferredSkippedRowCount", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     // Buscas_Facultativos: 4 rows total − 1 header = 3 data rows
     // Buscas_Enfermeria: 2 rows total − 1 header = 1 data row
-    // Total: 4
-    expect(result.deferredSkippedRowCount).toBeGreaterThanOrEqual(4);
+    // Total buscas: 4, social: 0
+    expect(result.buscasSkippedRowCount).toBeGreaterThanOrEqual(4);
+    expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 });

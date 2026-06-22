@@ -4,7 +4,7 @@ import type {
   DuplicatePair,
   DuplicateRecordSummary
 } from "../../shared/types/duplicate.js";
-import { normalizePhoneForDedup } from "../../shared/utils/matching.js";
+import { normalizePhoneForDedup, normalizeDisplayName } from "../../shared/utils/matching.js";
 
 /**
  * Thrown when detection is cancelled via AbortSignal (e.g. 30s IPC timeout).
@@ -265,12 +265,7 @@ export class DuplicateDetectionService {
   }
 
   private normalizeDisplayName(name: string): string {
-    return name
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/\s+/g, " ");
+    return normalizeDisplayName(name);
   }
 
   /**

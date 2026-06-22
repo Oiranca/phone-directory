@@ -331,6 +331,9 @@ const rowContainsSocialToken = (cells: string[]): boolean =>
 const sectionIsSocial = (section: string): boolean =>
   SOCIAL_CONTEXT_TOKENS.some((token) => normalizeMarker(section).includes(token));
 
+/** Minimum character length for a label to be treated as a social-media handle. */
+const MIN_SOCIAL_HANDLE_LENGTH = 8;
+
 const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean => {
   if (!hasSocialContext) {
     return false;
@@ -338,7 +341,7 @@ const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean =
 
   if (/\s/.test(label)) return false;
   if (/\d/.test(label)) return false;
-  if (label.length < 8) return false;
+  if (label.length < MIN_SOCIAL_HANDLE_LENGTH) return false;
   if (label !== label.toLowerCase()) return false;
 
   return /[a-z]/.test(label);
@@ -369,6 +372,13 @@ export const resolveServiceRowLabel = (cells: string[]) => {
 // Service-sheet parser
 // ---------------------------------------------------------------------------
 
+/** Return shape of normalizeServiceSheet. */
+export type NormalizeServiceSheetResult = {
+  records: NormalizedImportRow[];
+  /** Rows silently skipped because they are social-media handle rows. */
+  socialSkippedRows: number;
+};
+
 /**
  * Parses an internal service/department sheet into NormalizedImportRow records.
  * Returns both the records and a count of rows silently skipped as social media.
@@ -376,7 +386,7 @@ export const resolveServiceRowLabel = (cells: string[]) => {
 export const normalizeServiceSheet = (
   sheet: SheetData,
   profile: SheetProfile
-): { records: NormalizedImportRow[]; socialSkippedRows: number } => {
+): NormalizeServiceSheetResult => {
   const metadata = {
     area: profile.area ?? "otros",
     department: profile.department,
@@ -403,7 +413,25 @@ export const normalizeServiceSheet = (
       return;
     }
 
-    const rowHasPhone = cells.slice(1).some((cell) => hasPhoneLikeNumber(cell));
+    // Single-pass over non-first cells: extract phone numbers and note fragments
+    // together so we don't call extractNumbers twice per cell (once for rowHasPhone,
+    // once for the phone-list build).
+    const tailCells = cells.slice(1);
+    const phoneNumbers: string[] = [];
+    const noteFragments: string[] = [];
+
+    for (const cell of tailCells) {
+      if (!cell) continue;
+      const extracted = extractNumbers(cell);
+      if (extracted.length > 0) {
+        phoneNumbers.push(...extracted);
+      }
+      if (hasLetters(cell)) {
+        noteFragments.push(cell);
+      }
+    }
+
+    const rowHasPhone = phoneNumbers.length > 0;
 
     const resolvedLabel = resolveServiceRowLabel(cells);
     const label = resolvedLabel === "" && rowHasPhone && firstCell && hasLetters(firstCell)
@@ -440,24 +468,10 @@ export const normalizeServiceSheet = (
       return;
     }
 
-    const phoneNumbers: string[] = [];
-    const noteFragments: string[] = [];
-
-    for (const cell of cells.slice(1)) {
-      if (!cell) {
-        continue;
-      }
-
-      const extracted = extractNumbers(cell);
-
-      if (extracted.length > 0) {
-        phoneNumbers.push(...extracted);
-      }
-
-      if (hasLetters(cell) && cell !== label) {
-        noteFragments.push(...cleanNoteFragments([cell]));
-      }
-    }
+    // Filter note fragments: exclude the label itself, then clean.
+    const filteredNoteFragments = cleanNoteFragments(
+      noteFragments.filter((cell) => cell !== label)
+    );
 
     const dedupedPhoneNumbers = dedupeKeepOrder(phoneNumbers);
 
@@ -480,8 +494,8 @@ export const normalizeServiceSheet = (
       labelNotes.push(`Sección: ${currentSection}`);
     }
 
-    if (noteFragments.length > 0) {
-      labelNotes.push(noteFragments.join(" | "));
+    if (filteredNoteFragments.length > 0) {
+      labelNotes.push(filteredNoteFragments.join(" | "));
     }
 
     const finalNotes = cleanNoteFragments(labelNotes).join(" | ");

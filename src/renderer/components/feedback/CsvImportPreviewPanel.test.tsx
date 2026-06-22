@@ -14,7 +14,8 @@ const basePreview: CsvImportPreviewWithConflicts = {
   mergedRecordCount: 0,
   createdCount: 0,
   updatedCount: 0,
-  deferredSkippedRowCount: 0,
+  buscasSkippedRowCount: 0,
+  socialHandleSkippedRowCount: 0,
   typeCounts: {},
   areaCounts: {},
   rowIssues: [],
@@ -528,47 +529,75 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
-  describe("deferred-skip informational note (OIR-102)", () => {
-    it("shows the informational note when deferredSkippedRowCount > 0", () => {
+  describe("deferred-skip informational notes (OIR-102 / OIR-134)", () => {
+    it("shows the buscas note when buscasSkippedRowCount > 0", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 3,
-        deferredSkippedRowCount: 5,
+        buscasSkippedRowCount: 5,
         previewRows: []
       });
 
-      const note = screen.getByRole("note");
-      expect(note).toBeInTheDocument();
-      expect(note).toHaveTextContent("5 filas omitidas");
-      expect(note).toHaveTextContent("hojas de buscas / redes sociales");
+      const notes = screen.getAllByRole("note");
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toHaveTextContent("5 filas omitidas");
+      expect(notes[0]).toHaveTextContent("hojas de buscas");
     });
 
-    it("uses singular 'fila omitida' when exactly one row is deferred", () => {
+    it("shows the social note when socialHandleSkippedRowCount > 0", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 3,
+        socialHandleSkippedRowCount: 2,
+        previewRows: []
+      });
+
+      const notes = screen.getAllByRole("note");
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toHaveTextContent("2 filas omitidas");
+      expect(notes[0]).toHaveTextContent("redes sociales");
+    });
+
+    it("shows both notes when buscasSkippedRowCount and socialHandleSkippedRowCount are both > 0", () => {
+      renderPanel({
+        ...basePreview,
+        validRowCount: 3,
+        buscasSkippedRowCount: 3,
+        socialHandleSkippedRowCount: 1,
+        previewRows: []
+      });
+
+      const notes = screen.getAllByRole("note");
+      expect(notes).toHaveLength(2);
+    });
+
+    it("uses singular 'fila omitida' when exactly one buscas row is skipped", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 1,
-        deferredSkippedRowCount: 1,
+        buscasSkippedRowCount: 1,
         previewRows: []
       });
 
-      expect(screen.getByRole("note")).toHaveTextContent("1 fila omitida");
+      const notes = screen.getAllByRole("note");
+      expect(notes[0]).toHaveTextContent("1 fila omitida");
     });
 
-    it("does not render the informational note when deferredSkippedRowCount is 0", () => {
-      renderPanel({ ...basePreview, deferredSkippedRowCount: 0 });
+    it("does not render any note when both counts are 0", () => {
+      renderPanel({ ...basePreview, buscasSkippedRowCount: 0, socialHandleSkippedRowCount: 0 });
 
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
 
-    it("does not disable the confirm button when deferredSkippedRowCount > 0", () => {
+    it("does not disable the confirm button when skip counts are > 0", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 2,
-        deferredSkippedRowCount: 3,
+        buscasSkippedRowCount: 3,
         previewRows: []
       });
 
-      // deferredSkippedRowCount alone does not block import.
+      // Skip counts alone do not block import.
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
   });
