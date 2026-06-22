@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
   CsvImportPreviewWithConflicts,
@@ -187,6 +188,57 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
   const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || preview.validRowCount === 0;
 
+  // ---------------------------------------------------------------------------
+  // OIR-133 — multi-select state (purely local UI, no IPC/main change needed).
+  // selectedIndices tracks the set of conflict recordIndex values the operator
+  // has checked.  bulkPolicy is the policy the operator wants to apply to the
+  // selection in one click.
+  // ---------------------------------------------------------------------------
+  const [selectedIndices, setSelectedIndices] = useState<ReadonlySet<number>>(new Set());
+  const [bulkPolicy, setBulkPolicy] = useState<MergePolicy>("skip");
+
+  const allIndices = conflictedRecords.map((c) => c.recordIndex);
+  const allSelected = allIndices.length > 0 && allIndices.every((idx) => selectedIndices.has(idx));
+  const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
+  const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
+
+  const handleToggleOne = useCallback((recordIndex: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordIndex)) {
+        next.delete(recordIndex);
+      } else {
+        next.add(recordIndex);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIndices(new Set(allIndices));
+  }, [allIndices]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIndices(new Set());
+  }, []);
+
+  const handleApplyToSelected = useCallback(() => {
+    for (const idx of allIndices) {
+      if (selectedIndices.has(idx)) {
+        onPolicyChange(idx, bulkPolicy);
+      }
+    }
+    // Deselect all after applying so the UI resets cleanly.
+    setSelectedIndices(new Set());
+  }, [allIndices, selectedIndices, bulkPolicy, onPolicyChange]);
+
+  const handleApplyToAll = useCallback((policy: MergePolicy) => {
+    for (const idx of allIndices) {
+      onPolicyChange(idx, policy);
+    }
+    setSelectedIndices(new Set());
+  }, [allIndices, onPolicyChange]);
+
   return (
     <section
       aria-label="Vista previa de importación"
@@ -332,6 +384,74 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
 
       {conflictedRecords.length > 0 && (
         <div className="mt-6">
+          {/* OIR-133 — bulk-apply toolbar */}
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+            {/* Select-all / deselect-all */}
+            <label className="flex items-center gap-2 text-sm font-medium text-amber-900">
+              <input
+                type="checkbox"
+                aria-label="Seleccionar todos los conflictos"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                disabled={isMutating || conflictedRecords.length === 0}
+                onChange={() => {
+                  if (allSelected) {
+                    handleDeselectAll();
+                  } else {
+                    handleSelectAll();
+                  }
+                }}
+                className="h-4 w-4 accent-amber-700"
+              />
+              {allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+            </label>
+
+            {/* Bulk-policy selector + apply button — shown only when ≥1 conflict selected */}
+            {selectedCount > 0 && (
+              <>
+                <span className="text-xs text-amber-700">
+                  {selectedCount} {selectedCount === 1 ? "seleccionado" : "seleccionados"}
+                </span>
+                <select
+                  aria-label="Política para seleccionados"
+                  value={bulkPolicy}
+                  disabled={isMutating}
+                  onChange={(e) => setBulkPolicy(e.target.value as MergePolicy)}
+                  className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-sm text-slate-800"
+                >
+                  {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((p) => (
+                    <option key={p} value={p}>{POLICY_LABELS[p]}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={isMutating}
+                  onClick={handleApplyToSelected}
+                  className="rounded-full bg-amber-700 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  Aplicar a seleccionados
+                </button>
+              </>
+            )}
+
+            {/* Apply-to-all shortcuts — always visible */}
+            <div className="ml-auto flex flex-wrap gap-2">
+              {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  disabled={isMutating}
+                  onClick={() => handleApplyToAll(p)}
+                  className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                >
+                  {POLICY_LABELS[p]} a todos
+                </button>
+              ))}
+            </div>
+          </div>
+
           <p className="text-sm font-semibold text-emerald-950">
             Conflictos ({conflictedRecords.length})
           </p>
@@ -343,7 +463,6 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                 : reasonLabel;
 
               // BUG-1: compute normalized intersection for phones and emails.
-              // Highlight a field only when its normalized value appears on BOTH sides.
               const importedPhones = conflict.importedRecord.phones ?? [];
               const matchingPhones = conflict.matchingRecord.phones ?? [];
               const importedEmails = conflict.importedRecord.emails ?? [];
@@ -362,15 +481,30 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                 )
               );
 
+              const isSelected = selectedIndices.has(conflict.recordIndex);
+
               return (
                 <article
                   key={`conflict-${conflict.recordIndex}`}
-                  className="rounded-2xl border border-amber-200 bg-white/80 p-4"
+                  className={[
+                    "rounded-2xl border bg-white/80 p-4",
+                    isSelected ? "border-amber-400 ring-2 ring-amber-300" : "border-amber-200"
+                  ].join(" ")}
                 >
-                  {/* Match signal badge */}
-                  <p className="mb-3 text-xs font-semibold text-amber-800">
-                    {matchSignal}
-                  </p>
+                  {/* Row header: checkbox + match signal */}
+                  <div className="mb-3 flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Seleccionar conflicto ${conflict.recordIndex + 1}`}
+                      checked={isSelected}
+                      disabled={isMutating}
+                      onChange={() => handleToggleOne(conflict.recordIndex)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-700"
+                    />
+                    <p className="text-xs font-semibold text-amber-800">
+                      {matchSignal}
+                    </p>
+                  </div>
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(220px,0.8fr)]">
                     <ConflictRecordCol
                       label="Entrante"
