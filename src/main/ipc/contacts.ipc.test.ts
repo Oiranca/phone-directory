@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CsvImportPreviewWithConflicts } from "../../shared/types/contact.js";
 
 const getPathMock = vi.fn();
 
@@ -305,7 +306,8 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     mergedRecordCount: 1,
     createdCount: 1,
     updatedCount: 0,
-    deferredSkippedRowCount: 0,
+    buscasSkippedRowCount: 0,
+    socialHandleSkippedRowCount: 0,
     typeCounts: {},
     areaCounts: {},
     rowIssues: [],
@@ -314,7 +316,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     conflictCount: 0,
     conflictedRecords: [],
     policiesResolved: false
-  };
+  } satisfies CsvImportPreviewWithConflicts & { sourceFilePath: string };
 
   // showOpenDialog mock — kept in module scope so runPreview can configure it per-call
   let showOpenDialogMock: ReturnType<typeof vi.fn>;
