@@ -1,3 +1,4 @@
+import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -56,17 +57,31 @@ const formatDetectionConfidence = (value: CsvImportPreviewWithConflicts["detecti
 type ConflictRecordColProps = {
   label: string;
   record: ConflictRecordSummary;
-  /** The specific value that triggered the match — used to highlight the matching field. */
-  matchingFieldValue?: string;
-  /** Type of match so we know which field to highlight. */
+  /** Normalized phone numbers that are shared between both sides of the conflict. */
+  matchingPhoneNorms: ReadonlySet<string>;
+  /** Normalized email addresses that are shared between both sides of the conflict. */
+  matchingEmailNorms: ReadonlySet<string>;
+  /** Type of match so we know which field category to highlight. */
   conflictType: ConflictedImportRecord["conflictType"];
 };
 
-const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: ConflictRecordColProps) => {
+const ConflictRecordCol = ({
+  label,
+  record,
+  matchingPhoneNorms,
+  matchingEmailNorms,
+  conflictType
+}: ConflictRecordColProps) => {
+  // BUG-2: defensively default arrays — runtime IPC payload may omit them.
+  const phones = record.phones ?? [];
+  const emails = record.emails ?? [];
+  const socials = record.socials ?? [];
+
+  // BUG-1: highlight by normalized intersection, not raw string equality.
   const isMatchingPhone = (num: string) =>
-    conflictType === "phone-match" && matchingFieldValue !== undefined && num === matchingFieldValue;
+    conflictType === "phone-match" && matchingPhoneNorms.has(normalizePhoneForDedup(num));
   const isMatchingEmail = (addr: string) =>
-    conflictType === "email-match" && matchingFieldValue !== undefined && addr.toLowerCase() === matchingFieldValue.toLowerCase();
+    conflictType === "email-match" && matchingEmailNorms.has(addr.trim().toLowerCase());
 
   return (
     <div>
@@ -78,7 +93,10 @@ const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: 
         <div className="mt-1 text-xs text-slate-500">
           {record.department && <span>{record.department}</span>}
           {record.service && <span>{record.department ? " · " : ""}{record.service}</span>}
-          {record.specialty && <span> · {record.specialty}</span>}
+          {/* BUG-3: only render separator when there is a preceding sibling */}
+          {record.specialty && (
+            <span>{(record.department ?? record.service) ? " · " : ""}{record.specialty}</span>
+          )}
         </div>
       )}
       {record.locationSummary && (
@@ -86,9 +104,9 @@ const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: 
       )}
 
       {/* Phones */}
-      {record.phones.length > 0 && (
+      {phones.length > 0 && (
         <ul className="mt-2 space-y-0.5" aria-label="Teléfonos">
-          {record.phones.map((phone, i) => (
+          {phones.map((phone, i) => (
             <li
               key={i}
               className={[
@@ -109,9 +127,9 @@ const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: 
       )}
 
       {/* Emails */}
-      {record.emails.length > 0 && (
+      {emails.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Correos">
-          {record.emails.map((email, i) => (
+          {emails.map((email, i) => (
             <li
               key={i}
               className={[
@@ -132,9 +150,9 @@ const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: 
       )}
 
       {/* Socials */}
-      {record.socials.length > 0 && (
+      {socials.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Redes sociales">
-          {record.socials.map((social, i) => (
+          {socials.map((social, i) => (
             <li key={i} className="text-xs text-slate-600">
               {social.platform}
               {social.handle && <span className="ml-1">@{social.handle}</span>}
@@ -145,7 +163,7 @@ const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: 
         </ul>
       )}
 
-      {record.phones.length === 0 && record.emails.length === 0 && (
+      {phones.length === 0 && emails.length === 0 && (
         <p className="mt-1 text-xs italic text-slate-400">Sin teléfonos ni correos</p>
       )}
     </div>
@@ -324,6 +342,26 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                 ? `${reasonLabel}: ${conflict.matchingFieldValue}`
                 : reasonLabel;
 
+              // BUG-1: compute normalized intersection for phones and emails.
+              // Highlight a field only when its normalized value appears on BOTH sides.
+              const importedPhones = conflict.importedRecord.phones ?? [];
+              const matchingPhones = conflict.matchingRecord.phones ?? [];
+              const importedEmails = conflict.importedRecord.emails ?? [];
+              const matchingEmails = conflict.matchingRecord.emails ?? [];
+
+              const importedPhoneNorms = new Set(importedPhones.map((p) => normalizePhoneForDedup(p.number)));
+              const matchingPhoneNorms = new Set(
+                [...matchingPhones.map((p) => normalizePhoneForDedup(p.number))].filter((n) =>
+                  importedPhoneNorms.has(n)
+                )
+              );
+              const importedEmailNorms = new Set(importedEmails.map((e) => e.address.trim().toLowerCase()));
+              const matchingEmailNorms = new Set(
+                [...matchingEmails.map((e) => e.address.trim().toLowerCase())].filter((n) =>
+                  importedEmailNorms.has(n)
+                )
+              );
+
               return (
                 <article
                   key={`conflict-${conflict.recordIndex}`}
@@ -337,13 +375,15 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                     <ConflictRecordCol
                       label="Entrante"
                       record={conflict.importedRecord}
-                      matchingFieldValue={conflict.matchingFieldValue}
+                      matchingPhoneNorms={matchingPhoneNorms}
+                      matchingEmailNorms={matchingEmailNorms}
                       conflictType={conflict.conflictType}
                     />
                     <ConflictRecordCol
                       label="Existente"
                       record={conflict.matchingRecord}
-                      matchingFieldValue={conflict.matchingFieldValue}
+                      matchingPhoneNorms={matchingPhoneNorms}
+                      matchingEmailNorms={matchingEmailNorms}
                       conflictType={conflict.conflictType}
                     />
                     <fieldset>
