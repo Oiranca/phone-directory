@@ -432,16 +432,13 @@ export class AppDataService {
   // intentionally omits sourceFilePath; this widens it with the internal field.
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
     const settings = await this.readSettings(true);
-    const { dataset, preview, buscasParseResult } = await buildSpreadsheetImportPreview(
+    const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       this.getEditorName(settings)
     );
 
-    // OIR-130: Persist buscas records parsed from buscas sheets in the workbook.
-    // This replaces the interim skip — buscas rows now land in buscas.json.
-    if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
-      await this.options.buscasService.importFromOds(buscasParseResult);
-    }
+    // previewCsvImport is side-effect-free: buscas are NOT persisted here.
+    // Buscas are persisted only when the user confirms via importCsvDataset.
 
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
@@ -465,7 +462,7 @@ export class AppDataService {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
-    const { dataset, preview } = await buildSpreadsheetImportPreview(
+    const { dataset, preview, buscasParseResult } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       editorName
     );
@@ -499,6 +496,16 @@ export class AppDataService {
         conflictPolicyCounts: { new: merged.conflictPolicyCounts }
       }
     });
+
+    // OIR-130: Persist buscas records after contacts are successfully written.
+    // A buscas failure must NOT roll back or suppress the contacts import result.
+    if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
+      try {
+        await this.options.buscasService.importFromOds(buscasParseResult);
+      } catch {
+        // Non-fatal: contacts import succeeded; buscas persist failed silently.
+      }
+    }
 
     return {
       contacts: merged.contacts,

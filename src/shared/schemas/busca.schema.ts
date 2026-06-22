@@ -52,7 +52,11 @@ export const importedBuscaRecordSchema = z.object({
 export const buscasDatasetSchema = z.object({
   version: z.literal("1.0.0"),
   records: z.array(buscaRecordSchema),
-  importedRecords: z.array(importedBuscaRecordSchema).optional().default([])
+  importedRecords: z
+    .array(importedBuscaRecordSchema)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? [])
 });
 
 export type BuscaRecord = z.infer<typeof buscaRecordSchema>;

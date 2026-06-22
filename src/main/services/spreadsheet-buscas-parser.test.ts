@@ -275,6 +275,23 @@ describe("parseBuscasSheet", () => {
     expect(result.records[1]!.holderType).toBe("Residente");
   });
 
+  it("normalizes internal whitespace in pager numbers (BUG-2: '7 321' → '7321')", () => {
+    const sheet = {
+      name: "Buscas_Facultativos",
+      rows: [
+        ["SERVICIO", "PRINCIPAL", "RESIDENTE"],
+        ["ANESTESIA", "7 321", "73 22"]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(2);
+    // Internal whitespace is stripped so the stored number is lookup-ready.
+    expect(result.records[0]!.deviceNumber).toBe("7321");
+    expect(result.records[1]!.deviceNumber).toBe("7322");
+  });
+
   it("does not treat text cells as pager numbers", () => {
     const sheet = {
       name: "Buscas_Test",

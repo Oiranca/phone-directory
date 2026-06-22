@@ -107,6 +107,14 @@ const isPagerNumber = (value: string): boolean => {
   return /^\d[\d\s.\-]*$/.test(trimmed) && trimmed.length <= 20;
 };
 
+/**
+ * Normalises a pager number for storage: strips all internal whitespace so
+ * that "7 321" → "7321" and lookups by typing "7321" always succeed.
+ * Leading/trailing whitespace is already removed by the caller (.trim()) before
+ * isPagerNumber is called; this strips only internal spaces.
+ */
+const normalizePagerNumber = (value: string): string => value.replace(/\s+/g, "");
+
 // ---------------------------------------------------------------------------
 // Public parse function
 // ---------------------------------------------------------------------------
@@ -175,7 +183,7 @@ export const parseBuscasSheet = (
       }
 
       records.push({
-        deviceNumber: cellValue,
+        deviceNumber: normalizePagerNumber(cellValue),
         department,
         holderType,
         sourceSheet: sheetName,
