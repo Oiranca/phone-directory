@@ -4,6 +4,7 @@ import type {
   DuplicatePair,
   DuplicateRecordSummary
 } from "../../shared/types/duplicate.js";
+import { normalizePhoneForDedup } from "../../shared/utils/matching.js";
 
 /**
  * Thrown when detection is cancelled via AbortSignal (e.g. 30s IPC timeout).
@@ -260,8 +261,7 @@ export class DuplicateDetectionService {
   }
 
   private normalizePhoneNumber(phone: string): string {
-    // Strip all non-digit chars (matches app-data.service.ts pattern)
-    return phone.replace(/\D/g, "");
+    return normalizePhoneForDedup(phone);
   }
 
   private normalizeDisplayName(name: string): string {
