@@ -160,11 +160,12 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
 // B. Social-handle row skip (isSocialHandle)
 // ---------------------------------------------------------------------------
 
-describe("Social-handle row skip (isSocialHandle)", () => {
-  it("does not emit a record for a social-handle label with no phone", () => {
-    // Simulates: ["REDES SOCIALES … INSTAGRAM", "hospitaldrnegrin", "", ...]
-    // The parser resolves "hospitaldrnegrin" as the label (first cell is
-    // ALL-CAPS excluded; fallback finds the all-lowercase token in col 1).
+describe("Social-handle row import (OIR-131: social rows are first-class contacts)", () => {
+  it("imports a social-handle row as a contact with the handle as a social method", () => {
+    // OIR-131 removed the old isSocialHandle skip. Social rows are now imported
+    // as first-class contacts. The parser resolves "hospitaldrnegrin" as the
+    // label (first cell is ALL-CAPS excluded; fallback finds the all-lowercase
+    // token in col 1). The platform is inferred from the row cells (INSTAGRAM).
     const filePath = writeWorkbook(testRoot, "social-handle.xlsx", [
       {
         name: "urgencias",
@@ -172,7 +173,7 @@ describe("Social-handle row skip (isSocialHandle)", () => {
           ["SERVICIO", "NUMERO"],
           ["Triaje", "12345"],
           ["Mostrador urgencias", "12346"],
-          // Social-media row: label would resolve to "hospitaldrnegrin"
+          // Social-media row: label resolves to "hospitaldrnegrin"; platform from cells.
           ["REDES SOCIALES HOSPITAL - INSTAGRAM", "hospitaldrnegrin", "", ""],
           // Continuation row with empty col-0 and handle in col-2
           ["", "", "hospitaldrnegrin", "", ""],
@@ -184,8 +185,12 @@ describe("Social-handle row skip (isSocialHandle)", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     const names = result.rows.map((r) => r.displayName);
 
-    // Social handle must NOT appear — not as a contact, not as a rejected row.
-    expect(names).not.toContain("hospitaldrnegrin");
+    // Social handle IS now imported as a contact (OIR-131).
+    expect(names).toContain("hospitaldrnegrin");
+    // Verify social fields are set on the imported contact.
+    const socialRow = result.rows.find((r) => r.displayName === "hospitaldrnegrin");
+    expect(socialRow?.social1Handle).toBe("hospitaldrnegrin");
+    expect(socialRow?.social1Platform).toBe("instagram");
     // Real contacts are preserved.
     expect(names).toContain("Triaje");
     expect(names).toContain("Mostrador urgencias");

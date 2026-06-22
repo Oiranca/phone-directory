@@ -360,18 +360,23 @@ const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean =
 };
 
 /**
- * Infers the social-media platform from a section name for ODS social rows (OIR-131).
- * Maps known social platform tokens from the section heading to the platform enum.
- * Falls back to "other" when no known platform is found.
+ * Infers the social-media platform from one or more text sources (OIR-131).
+ * Checks each source in order and returns the first recognized platform.
+ * Falls back to "other" when no known platform is found in any source.
+ * Accepts multiple sources so the call site can pass both the current section
+ * heading and the raw row cells as fallbacks (handles the case where the
+ * platform token appears in the same row as the handle, not a prior header).
  */
-const inferSocialPlatformFromSection = (section: string): string => {
-  const normalized = normalizeMarker(section);
-  if (normalized.includes("INSTAGRAM")) return "instagram";
-  if (normalized.includes("TWITTER")) return "twitter";
-  if (normalized.includes("FACEBOOK")) return "facebook";
-  if (normalized.includes("LINKEDIN")) return "linkedin";
-  if (normalized.includes("YOUTUBE")) return "youtube";
-  if (normalized.includes("TIKTOK")) return "tiktok";
+const inferSocialPlatformFromSection = (...sources: string[]): string => {
+  for (const source of sources) {
+    const normalized = normalizeMarker(source);
+    if (normalized.includes("INSTAGRAM")) return "instagram";
+    if (normalized.includes("TWITTER")) return "twitter";
+    if (normalized.includes("FACEBOOK")) return "facebook";
+    if (normalized.includes("LINKEDIN")) return "linkedin";
+    if (normalized.includes("YOUTUBE")) return "youtube";
+    if (normalized.includes("TIKTOK")) return "tiktok";
+  }
   return "other";
 };
 
@@ -548,8 +553,11 @@ export const normalizeServiceSheet = (
     // OIR-131: Social-handle rows are now first-class contacts, not skipped.
     // When a row has no phone numbers but is a social-context handle, map it
     // to a social contact entry using the inferred platform from the section name.
+    // Pass the raw row cells as a fallback so that a platform token that appears
+    // in the same row as the handle (rather than a preceding section header) is
+    // still detected correctly.
     if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
-      const inferredPlatform = inferSocialPlatformFromSection(currentSection);
+      const inferredPlatform = inferSocialPlatformFromSection(currentSection, ...cells);
       const record = blankRecord();
       record.externalId = `${metadata.slug}-${buildStableExternalId([
         metadata.department,
