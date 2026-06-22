@@ -826,3 +826,275 @@ describe("H-01 regression — socials survive createRecord + updateRecord (OIR-1
     expect(updatedRecord?.contactMethods.socials[0]?.handle).toBe("hospitaldemo");
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. BUG1 regression — socials deduped by content, not positional id (OIR-131)
+// ---------------------------------------------------------------------------
+
+describe("BUG1 — social dedup by content key in mergeDuplicates (OIR-131)", () => {
+  let bug1Root: string;
+
+  beforeEach(async () => {
+    bug1Root = await fs.mkdtemp(path.join(os.tmpdir(), "oir131-bug1-merge-"));
+    getPathMock_h01.mockImplementation(() => bug1Root);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    getPathMock_h01.mockReset();
+    await fs.rm(bug1Root, { recursive: true, force: true });
+  });
+
+  const saveSettings = async (service: { saveSettings: Function }, root: string) => {
+    await service.saveSettings({
+      editorName: "Test",
+      dataFilePath: path.join(root, "data", "contacts.json"),
+      backupDirectoryPath: path.join(root, "backups"),
+      ui: {
+        showInactiveByDefault: false,
+        autoBackup: {
+          enabled: false,
+          trigger: "launch",
+          intervalHours: 2,
+          editCountThreshold: 10,
+          retentionCount: 5
+        }
+      }
+    });
+  };
+
+  it("same (platform+handle) with different positional ids appears exactly once after merge", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await saveSettings(service, bug1Root);
+
+    // keepRecord: instagram/@hospital — id = soc_1_0 (row 1, index 0)
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Hospital Keep",
+      organization: { department: "Admin" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [{ id: "soc_1_0", platform: "instagram", handle: "hospital", isPrimary: true }]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    // discardRecord: instagram/@hospital — id = soc_2_0 (different positional id, same content)
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Hospital Discard",
+      organization: { department: "Admin" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [{ id: "soc_2_0", platform: "instagram", handle: "hospital", isPrimary: false }]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(keepRecord.savedRecordId, discardRecord.savedRecordId);
+
+    // Content is the same, so should appear exactly once
+    expect(merged.contactMethods.socials).toHaveLength(1);
+    expect(merged.contactMethods.socials[0]?.handle).toBe("hospital");
+  });
+
+  it("two distinct socials that share the same positional id are BOTH kept after merge", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await saveSettings(service, bug1Root);
+
+    // keepRecord: instagram/@hospitalinstagram — id = soc_1_0
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Hospital Keep",
+      organization: { department: "Admin" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [{ id: "soc_1_0", platform: "instagram", handle: "hospitalinstagram", isPrimary: true }]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    // discardRecord: facebook/@hospitalfb — ALSO id = soc_1_0, but different platform+handle
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Hospital Discard",
+      organization: { department: "Admin" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [{ id: "soc_1_0", platform: "facebook", handle: "hospitalfb", isPrimary: false }]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(keepRecord.savedRecordId, discardRecord.savedRecordId);
+
+    // Different content → both must be kept
+    expect(merged.contactMethods.socials).toHaveLength(2);
+    const platforms = merged.contactMethods.socials.map((s) => s.platform);
+    expect(platforms).toContain("instagram");
+    expect(platforms).toContain("facebook");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. BUG2 — url:"" in persistence schema does not crash parse (OIR-131)
+// ---------------------------------------------------------------------------
+
+describe("BUG2 — socialContactSchema accepts url:'' (treated as absent) (OIR-131)", () => {
+  it("parses a social with url:'' without throwing", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "instagram",
+        handle: "hospital",
+        url: "",
+        isPrimary: true
+      })
+    ).not.toThrow();
+  });
+
+  it("contactRecordSchema.parse succeeds for a record with url:'' in socials", () => {
+    const record = {
+      id: "cnt_0001",
+      type: "service",
+      displayName: "Hospital Demo",
+      organization: { department: "Admin" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [{ id: "soc_001", platform: "instagram", handle: "hospital", url: "", isPrimary: true }]
+      },
+      aliases: [],
+      tags: [],
+      status: "active",
+      audit: {
+        createdAt: "2026-04-13T00:00:00Z",
+        updatedAt: "2026-04-13T00:00:00Z",
+        createdBy: "System",
+        updatedBy: "System"
+      }
+    };
+    expect(() => contactRecordSchema.parse(record)).not.toThrow();
+  });
+
+  it("still rejects url:'javascript:alert(1)' (XSS vector is still blocked)", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        handle: "x",
+        url: "javascript:alert(1)",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+
+  it("url:'  ' (whitespace-only) does not crash parse — isSafeHttpUrl returns true for it", () => {
+    // The persistence schema does not trim; whitespace-only url is truthy so at-least-one passes,
+    // and isSafeHttpUrl returns true (empty/whitespace treated as absent). No crash.
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "  ",
+        isPrimary: false
+      })
+    ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. LOW UX — getSafeSocialUrl: web/other + full-URL handle is clickable (OIR-131)
+// ---------------------------------------------------------------------------
+
+describe("LOW UX — getSafeSocialUrl: web/other with full-URL handle (OIR-131)", () => {
+  // Inline replica kept in sync with DirectoryPage.tsx getSafeSocialUrl (post-fix version)
+  const SAFE_SOCIAL_BASE_URLS_LOCAL: Partial<Record<string, string>> = {
+    instagram: "https://instagram.com/",
+    twitter: "https://twitter.com/",
+    facebook: "https://facebook.com/",
+    linkedin: "https://linkedin.com/in/",
+    youtube: "https://youtube.com/@",
+    tiktok: "https://tiktok.com/@"
+  };
+
+  const ALLOWED_URL_SCHEMES_LOCAL = new Set(["https:", "http:"]);
+
+  const getSafeSocialUrl = (social: { platform: string; handle?: string; url?: string }): string | null => {
+    if (social.url) {
+      try {
+        const parsed = new URL(social.url);
+        if (ALLOWED_URL_SCHEMES_LOCAL.has(parsed.protocol)) {
+          return social.url;
+        }
+      } catch {
+        // Malformed URL — fall through.
+      }
+    }
+
+    if (social.handle) {
+      const base = SAFE_SOCIAL_BASE_URLS_LOCAL[social.platform];
+      if (base) {
+        return `${base}${encodeURIComponent(social.handle)}`;
+      }
+      // For platforms without a known base URL (web, other), attempt to treat
+      // the handle itself as a direct URL if it is http(s):.
+      try {
+        const parsed = new URL(social.handle);
+        if (ALLOWED_URL_SCHEMES_LOCAL.has(parsed.protocol)) {
+          return social.handle;
+        }
+      } catch {
+        // Not a valid URL — fall through to null.
+      }
+    }
+
+    return null;
+  };
+
+  it("returns the URL when platform=web and handle is https://...", () => {
+    const result = getSafeSocialUrl({ platform: "web", handle: "https://example.com" });
+    expect(result).toBe("https://example.com");
+  });
+
+  it("returns the URL when platform=other and handle is http://...", () => {
+    const result = getSafeSocialUrl({ platform: "other", handle: "http://hospital.local/page" });
+    expect(result).toBe("http://hospital.local/page");
+  });
+
+  it("returns null for platform=web, handle='javascript:bad' (scheme not in allowlist)", () => {
+    const result = getSafeSocialUrl({ platform: "web", handle: "javascript:bad" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null for platform=web, handle='ftp://file.example.com'", () => {
+    const result = getSafeSocialUrl({ platform: "web", handle: "ftp://file.example.com" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null for platform=web, handle='plaintext' (not a URL)", () => {
+    const result = getSafeSocialUrl({ platform: "web", handle: "plaintext" });
+    expect(result).toBeNull();
+  });
+
+  it("still returns base-URL-derived link for instagram+handle (existing behaviour unaffected)", () => {
+    const result = getSafeSocialUrl({ platform: "instagram", handle: "hospitaldrnegrin" });
+    expect(result).toBe("https://instagram.com/hospitaldrnegrin");
+  });
+});

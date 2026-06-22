@@ -107,6 +107,16 @@ const getSafeSocialUrl = (social: SocialContact): string | null => {
       // Encode the handle to prevent injection via handle values.
       return `${base}${encodeURIComponent(social.handle)}`;
     }
+    // For platforms without a known base URL (web, other), attempt to treat
+    // the handle itself as a direct URL if it is http(s):.
+    try {
+      const parsed = new URL(social.handle);
+      if (ALLOWED_URL_SCHEMES.has(parsed.protocol)) {
+        return social.handle;
+      }
+    } catch {
+      // Not a valid URL — fall through to null (rendered as plain text).
+    }
   }
 
   return null;

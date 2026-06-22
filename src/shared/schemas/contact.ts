@@ -62,7 +62,7 @@ export const socialPlatformSchema = z.enum([
  * Rejects javascript:, data:, vbscript:, file:, and any other scheme.
  */
 const isSafeHttpUrl = (url: string | undefined): boolean => {
-  if (url === undefined) return true;
+  if (url === undefined || url.trim() === "") return true;
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:";

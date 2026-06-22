@@ -647,11 +647,13 @@ export class AppDataService {
     const extraEmails = discardRecord.contactMethods.emails.filter(
       (e) => !existingEmailAddresses.has(normalizeEmail(e.address))
     );
-    const existingSocialIds = new Set(
-      keepRecord.contactMethods.socials.map((s) => s.id)
+    const socialContentKey = (s: { platform: string; handle?: string; url?: string }): string =>
+      `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
+    const existingSocialKeys = new Set(
+      keepRecord.contactMethods.socials.map(socialContentKey)
     );
     const extraSocials = discardRecord.contactMethods.socials.filter(
-      (s) => !existingSocialIds.has(s.id)
+      (s) => !existingSocialKeys.has(socialContentKey(s))
     );
     const extraTags = discardRecord.tags.filter(
       (t) => !existingTags.has(normalizeTag(t))
@@ -1463,7 +1465,9 @@ export class AppDataService {
   ): ContactRecord {
     const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => normalizePhoneForDedup(phone.number)));
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
-    const hasSocialId = new Set(currentRecord.contactMethods.socials.map((s) => s.id));
+    const socialMergeKey = (s: { platform: string; handle?: string; url?: string }): string =>
+      `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
+    const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
     const nextPhones = [
       ...currentRecord.contactMethods.phones,
       ...importedRecord.contactMethods.phones.filter((phone) => {
@@ -1480,7 +1484,7 @@ export class AppDataService {
     ];
     const nextSocials = [
       ...currentRecord.contactMethods.socials,
-      ...importedRecord.contactMethods.socials.filter((s) => !hasSocialId.has(s.id))
+      ...importedRecord.contactMethods.socials.filter((s) => !hasSocialKey.has(socialMergeKey(s)))
     ];
 
     return contactRecordSchema.parse({
