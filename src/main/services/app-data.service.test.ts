@@ -1782,6 +1782,151 @@ describe("AppDataService", () => {
     expect(preview.conflictedRecords[1]?.matchingRecord.id).toBe(existing.id);
   });
 
+  // ---------------------------------------------------------------------------
+  // OIR-132 — toConflictRecordSummary: phones, emails, socials, locationSummary, matchingFieldValue
+  // ---------------------------------------------------------------------------
+  describe("OIR-132: conflict field-level diff — toConflictRecordSummary population", () => {
+    it("populates phones array in the conflict summary payload", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      // Use externalId match so the conflict is deterministic
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phones.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,phone1Number,phone2Number,status",
+          `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},77701,77702,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      // phones must be present in the lean summary — not nested under contactMethods
+      expect(Array.isArray(conflict.importedRecord.phones)).toBe(true);
+      expect(conflict.importedRecord.phones.some((p) => p.number === "77701")).toBe(true);
+      // The full contactMethods shape must NOT be present (payload minimization)
+      expect(conflict.importedRecord).not.toHaveProperty("contactMethods");
+      expect(conflict.importedRecord).not.toHaveProperty("audit");
+    });
+
+    it("populates emails array in the conflict summary payload", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-emails.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,email1,status",
+          `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},diff@hospital.com,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      expect(Array.isArray(conflict.importedRecord.emails)).toBe(true);
+      expect(conflict.importedRecord.emails[0]?.address).toBe("diff@hospital.com");
+    });
+
+    it("populates socials array (possibly empty) in the conflict summary payload", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-socials.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,phone1Number,status",
+          `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},99901,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      // socials array must be present on both sides (may be [] for CSV records)
+      expect(Array.isArray(conflict.importedRecord.socials)).toBe(true);
+      expect(Array.isArray(conflict.matchingRecord.socials)).toBe(true);
+    });
+
+    it("sets matchingFieldValue to the externalId for external-id-match conflicts", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-extid-match.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,phone1Number,status",
+          `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},11111,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      expect(conflict.conflictType).toBe("external-id-match");
+      expect(conflict.matchingFieldValue).toBe(existing.externalId);
+    });
+
+    it("sets matchingFieldValue to the shared phone number for phone-match conflicts", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      // Two CSV rows with NO externalId — shared phone number triggers phone-match
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "type,displayName,department,phone1Number,status",
+          "service,Mostrador A,Recepción,88801,active",
+          "service,Mostrador B,Recepción,88801,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      expect(conflict.conflictType).toBe("phone-match");
+      expect(conflict.matchingFieldValue).toBe("88801");
+    });
+  });
+
   it("localizes unsupported phone kind warnings during CSV preview", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

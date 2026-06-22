@@ -1575,6 +1575,19 @@ export class AppDataService {
       source: "existing" | "import";
     };
 
+    /** Extract the human-readable match value from a stable key (OIR-132). */
+    const extractMatchingFieldValue = (key: string, conflictType: ConflictType): string | undefined => {
+      if (conflictType === "phone-match") {
+        const m = /phones:([^|]+)/.exec(key);
+        return m ? m[1]!.split(",")[0] : undefined;
+      }
+      if (conflictType === "email-match") {
+        const m = /emails:([^|]+)/.exec(key);
+        return m ? m[1]!.split(",")[0] : undefined;
+      }
+      return undefined;
+    };
+
     // Build lookup indexes from the current dataset
     const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
     const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
@@ -1606,6 +1619,7 @@ export class AppDataService {
     importedDataset.records.forEach((importedRecord, importRecordIndex) => {
       let match: ConflictIndexEntry | undefined;
       let conflictReasonKey = "";
+      let matchingFieldValue: string | undefined;
 
       // Prefer externalId match (most precise)
       if (importedRecord.externalId) {
@@ -1613,6 +1627,7 @@ export class AppDataService {
         if (indexed !== undefined) {
           match = indexed;
           conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
+          matchingFieldValue = importedRecord.externalId;
         }
       }
 
@@ -1623,6 +1638,7 @@ export class AppDataService {
           if (indexed !== undefined) {
             match = indexed;
             conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
+            matchingFieldValue = extractMatchingFieldValue(key, indexed.conflictType);
             break;
           }
         }
@@ -1637,6 +1653,7 @@ export class AppDataService {
           matchingRecordSource: match.source,
           conflictType: match.conflictType,
           conflictReasonKey,
+          matchingFieldValue,
           selectedPolicy: undefined
         });
       }
@@ -1664,6 +1681,15 @@ export class AppDataService {
   }
 
   private toConflictRecordSummary(record: ContactRecord): ConflictRecordSummary {
+    // Build a compact single-line location summary string (OIR-132).
+    const loc = record.location;
+    const locationParts: string[] = [];
+    if (loc?.building) locationParts.push(loc.building);
+    if (loc?.floor) locationParts.push(`Planta ${loc.floor}`);
+    if (loc?.room) locationParts.push(`Hab ${loc.room}`);
+    if (loc?.text && locationParts.length === 0) locationParts.push(loc.text);
+    const locationSummary = locationParts.length > 0 ? locationParts.join(" · ") : undefined;
+
     return {
       id: record.id,
       externalId: record.externalId,
@@ -1672,7 +1698,25 @@ export class AppDataService {
       department: record.organization.department,
       service: record.organization.service,
       area: record.organization.area,
-      status: record.status
+      specialty: record.organization.specialty,
+      locationSummary,
+      status: record.status,
+      // Lean contact method lists for field-level diff (OIR-132).
+      phones: record.contactMethods.phones.map((p) => ({
+        number: p.number,
+        label: p.label,
+        kind: p.kind
+      })),
+      emails: record.contactMethods.emails.map((e) => ({
+        address: e.address,
+        label: e.label
+      })),
+      socials: (record.contactMethods.socials ?? []).map((s) => ({
+        platform: s.platform,
+        handle: s.handle,
+        url: s.url,
+        label: s.label
+      }))
     };
   }
 

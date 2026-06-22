@@ -1,4 +1,10 @@
-import type { CsvImportPreviewWithConflicts, CsvImportPreviewRow, MergePolicy } from "../../../shared/types/contact";
+import type {
+  CsvImportPreviewWithConflicts,
+  CsvImportPreviewRow,
+  ConflictedImportRecord,
+  ConflictRecordSummary,
+  MergePolicy
+} from "../../../shared/types/contact";
 
 const STATUS_LABELS: Record<CsvImportPreviewRow["status"], string> = {
   accepted: "Aceptada",
@@ -41,6 +47,109 @@ const formatDetectionConfidence = (value: CsvImportPreviewWithConflicts["detecti
   if (value === "medium") return "media";
   if (value === "low") return "baja";
   return "";
+};
+
+// ---------------------------------------------------------------------------
+// ConflictFieldDiff — field-level diff for a single conflict pair (OIR-132).
+// ---------------------------------------------------------------------------
+
+type ConflictRecordColProps = {
+  label: string;
+  record: ConflictRecordSummary;
+  /** The specific value that triggered the match — used to highlight the matching field. */
+  matchingFieldValue?: string;
+  /** Type of match so we know which field to highlight. */
+  conflictType: ConflictedImportRecord["conflictType"];
+};
+
+const ConflictRecordCol = ({ label, record, matchingFieldValue, conflictType }: ConflictRecordColProps) => {
+  const isMatchingPhone = (num: string) =>
+    conflictType === "phone-match" && matchingFieldValue !== undefined && num === matchingFieldValue;
+  const isMatchingEmail = (addr: string) =>
+    conflictType === "email-match" && matchingFieldValue !== undefined && addr.toLowerCase() === matchingFieldValue.toLowerCase();
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">{label}</p>
+      <p className="mt-1 font-semibold text-slate-900">{record.displayName}</p>
+
+      {/* Org fields */}
+      {(record.department ?? record.service ?? record.specialty) && (
+        <div className="mt-1 text-xs text-slate-500">
+          {record.department && <span>{record.department}</span>}
+          {record.service && <span>{record.department ? " · " : ""}{record.service}</span>}
+          {record.specialty && <span> · {record.specialty}</span>}
+        </div>
+      )}
+      {record.locationSummary && (
+        <p className="mt-0.5 text-xs text-slate-500">{record.locationSummary}</p>
+      )}
+
+      {/* Phones */}
+      {record.phones.length > 0 && (
+        <ul className="mt-2 space-y-0.5" aria-label="Teléfonos">
+          {record.phones.map((phone, i) => (
+            <li
+              key={i}
+              className={[
+                "rounded px-1.5 py-0.5 text-xs",
+                isMatchingPhone(phone.number)
+                  ? "bg-amber-100 font-semibold text-amber-900 ring-1 ring-amber-400"
+                  : "text-slate-700"
+              ].join(" ")}
+            >
+              {isMatchingPhone(phone.number) && (
+                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+              )}
+              {phone.number}
+              {phone.label && <span className="ml-1 text-slate-500">({phone.label})</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Emails */}
+      {record.emails.length > 0 && (
+        <ul className="mt-1 space-y-0.5" aria-label="Correos">
+          {record.emails.map((email, i) => (
+            <li
+              key={i}
+              className={[
+                "rounded px-1.5 py-0.5 text-xs",
+                isMatchingEmail(email.address)
+                  ? "bg-amber-100 font-semibold text-amber-900 ring-1 ring-amber-400"
+                  : "text-slate-700"
+              ].join(" ")}
+            >
+              {isMatchingEmail(email.address) && (
+                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+              )}
+              {email.address}
+              {email.label && <span className="ml-1 text-slate-500">({email.label})</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Socials */}
+      {record.socials.length > 0 && (
+        <ul className="mt-1 space-y-0.5" aria-label="Redes sociales">
+          {record.socials.map((social, i) => (
+            <li key={i} className="text-xs text-slate-600">
+              {social.platform}
+              {social.handle && <span className="ml-1">@{social.handle}</span>}
+              {!social.handle && social.url && <span className="ml-1">{social.url}</span>}
+              {social.label && <span className="ml-1 text-slate-400">({social.label})</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {record.phones.length === 0 && record.emails.length === 0 && (
+        <p className="mt-1 text-xs italic text-slate-400">Sin teléfonos ni correos</p>
+      )}
+    </div>
+  );
 };
 
 type Props = {
@@ -208,52 +317,63 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="text-sm font-semibold text-emerald-950">
             Conflictos ({conflictedRecords.length})
           </p>
-          <div className="mt-3 space-y-3">
-            {conflictedRecords.map((conflict) => (
-              <article
-                key={`conflict-${conflict.recordIndex}`}
-                className="rounded-2xl border border-amber-200 bg-white/80 p-4"
-              >
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(220px,0.8fr)]">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">Importado</p>
-                    <p className="mt-1 font-semibold text-slate-900">{conflict.importedRecord.displayName}</p>
-                    <p className="text-sm text-slate-600">{conflict.importedRecord.department ?? "Sin departamento"}</p>
+          <div className="mt-3 space-y-4">
+            {conflictedRecords.map((conflict) => {
+              const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
+              const matchSignal = conflict.matchingFieldValue
+                ? `${reasonLabel}: ${conflict.matchingFieldValue}`
+                : reasonLabel;
+
+              return (
+                <article
+                  key={`conflict-${conflict.recordIndex}`}
+                  className="rounded-2xl border border-amber-200 bg-white/80 p-4"
+                >
+                  {/* Match signal badge */}
+                  <p className="mb-3 text-xs font-semibold text-amber-800">
+                    {matchSignal}
+                  </p>
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(220px,0.8fr)]">
+                    <ConflictRecordCol
+                      label="Entrante"
+                      record={conflict.importedRecord}
+                      matchingFieldValue={conflict.matchingFieldValue}
+                      conflictType={conflict.conflictType}
+                    />
+                    <ConflictRecordCol
+                      label="Existente"
+                      record={conflict.matchingRecord}
+                      matchingFieldValue={conflict.matchingFieldValue}
+                      conflictType={conflict.conflictType}
+                    />
+                    <fieldset>
+                      <legend className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
+                        Política
+                      </legend>
+                      <div className="mt-2 grid gap-2">
+                        {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((policy) => (
+                          <label
+                            key={policy}
+                            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800"
+                          >
+                            <input
+                              type="radio"
+                              name={`conflict-policy-${conflict.recordIndex}`}
+                              value={policy}
+                              checked={conflict.selectedPolicy === policy}
+                              disabled={isMutating}
+                              onChange={() => onPolicyChange(conflict.recordIndex, policy)}
+                              className="h-4 w-4"
+                            />
+                            {POLICY_LABELS[policy]}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">Coincide con</p>
-                    <p className="mt-1 font-semibold text-slate-900">{conflict.matchingRecord.displayName}</p>
-                    <p className="text-sm text-slate-600">
-                      {CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada"}
-                    </p>
-                  </div>
-                  <fieldset>
-                    <legend className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
-                      Política
-                    </legend>
-                    <div className="mt-2 grid gap-2">
-                      {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((policy) => (
-                        <label
-                          key={policy}
-                          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800"
-                        >
-                          <input
-                            type="radio"
-                            name={`conflict-policy-${conflict.recordIndex}`}
-                            value={policy}
-                            checked={conflict.selectedPolicy === policy}
-                            disabled={isMutating}
-                            onChange={() => onPolicyChange(conflict.recordIndex, policy)}
-                            className="h-4 w-4"
-                          />
-                          {POLICY_LABELS[policy]}
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </div>
       )}

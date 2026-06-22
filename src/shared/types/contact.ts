@@ -230,6 +230,34 @@ export interface CsvImportPolicySelection {
   policy: MergePolicy;
 }
 
+/**
+ * Lean phone entry for conflict diff display (OIR-132).
+ * Carries only what the diff renderer needs: number, label, kind.
+ */
+export interface ConflictPhoneSummary {
+  number: string;
+  label?: string;
+  kind: string;
+}
+
+/**
+ * Lean email entry for conflict diff display (OIR-132).
+ */
+export interface ConflictEmailSummary {
+  address: string;
+  label?: string;
+}
+
+/**
+ * Lean social-media entry for conflict diff display (OIR-132).
+ */
+export interface ConflictSocialSummary {
+  platform: import("../schemas/contact.js").SocialPlatform;
+  handle?: string;
+  url?: string;
+  label?: string;
+}
+
 /** Minimal record data safe to expose in import conflict previews. */
 export interface ConflictRecordSummary {
   id?: string;
@@ -239,7 +267,16 @@ export interface ConflictRecordSummary {
   department?: string;
   service?: string;
   area?: AreaType;
+  specialty?: string;
+  /** Compact single-line location string, e.g. "Edificio A · Planta 2 · Hab 301". */
+  locationSummary?: string;
   status: ContactRecord["status"];
+  /** Lean phone list for field-level diff (OIR-132). */
+  phones: ConflictPhoneSummary[];
+  /** Lean email list for field-level diff (OIR-132). */
+  emails: ConflictEmailSummary[];
+  /** Lean social list for field-level diff (OIR-132). */
+  socials: ConflictSocialSummary[];
 }
 
 /** Represents a single imported record that collides with an existing record in the directory. */
@@ -258,6 +295,12 @@ export interface ConflictedImportRecord {
   conflictType: ConflictType;
   /** I18n key for conflict reason (e.g., "conflict_reason.phone_match"). Resolved in the renderer for localization. */
   conflictReasonKey: string;
+  /**
+   * The specific value that triggered the match (OIR-132).
+   * For phone-match: the normalized phone number. For email-match: the email address.
+   * For external-id-match: the externalId. Used to highlight the matching field in the diff UI.
+   */
+  matchingFieldValue?: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
   selectedPolicy?: MergePolicy;
 }
