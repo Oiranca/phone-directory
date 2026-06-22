@@ -57,6 +57,20 @@ export const socialPlatformSchema = z.enum([
  * At least one of `handle` or `url` is required (enforced by .refine).
  * BACKWARD COMPAT: contactMethods.socials uses .default([]) so old records parse fine.
  */
+/**
+ * Validates that `url`, when present, uses only http: or https: scheme.
+ * Rejects javascript:, data:, vbscript:, file:, and any other scheme.
+ */
+const isSafeHttpUrl = (url: string | undefined): boolean => {
+  if (url === undefined) return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 export const socialContactSchema = z.object({
   id: z.string(),
   platform: socialPlatformSchema,
@@ -67,6 +81,9 @@ export const socialContactSchema = z.object({
 }).refine(
   (entry) => Boolean(entry.handle ?? entry.url),
   { message: "Cada entrada de red social necesita al menos un handle o una URL." }
+).refine(
+  (entry) => isSafeHttpUrl(entry.url),
+  { message: "La URL de la red social debe usar http o https.", path: ["url"] }
 );
 
 export const contactRecordSchema = z.object({
@@ -198,6 +215,9 @@ export const editableSocialContactSchema = z.object({
 }).refine(
   (entry) => Boolean(entry.handle ?? entry.url),
   { message: "Introduce un handle o una URL para la red social." }
+).refine(
+  (entry) => isSafeHttpUrl(entry.url),
+  { message: "La URL de la red social debe usar http o https.", path: ["url"] }
 );
 
 export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "dataset-replace", "restore-from-backup", "reset"]);

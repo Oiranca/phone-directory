@@ -575,3 +575,254 @@ describe("getSafeSocialUrl — scheme allowlist (XSS-safe URL derivation)", () =
     expect(result).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. L-01 — socialContactSchema url scheme validation (OIR-131)
+// ---------------------------------------------------------------------------
+
+import { editableSocialContactSchema } from "../../shared/schemas/contact.js";
+
+describe("socialContactSchema — url scheme validation (L-01)", () => {
+  it("accepts https: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "instagram",
+        url: "https://instagram.com/x",
+        isPrimary: true
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts http: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "http://hospital.es",
+        isPrimary: false
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts handle-only entry (no url field)", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "instagram",
+        handle: "hospitaldrnegrin",
+        isPrimary: true
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects javascript: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "javascript:alert(1)",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+
+  it("rejects data: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "data:text/html,<script>alert(1)</script>",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+
+  it("rejects vbscript: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "vbscript:msgbox(1)",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+
+  it("rejects file: url", () => {
+    expect(() =>
+      socialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "file:///etc/passwd",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+});
+
+describe("editableSocialContactSchema — url scheme validation (L-01)", () => {
+  it("accepts https: url", () => {
+    expect(() =>
+      editableSocialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "https://hospital.es",
+        isPrimary: true
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts handle-only entry (url empty string → undefined)", () => {
+    expect(() =>
+      editableSocialContactSchema.parse({
+        id: "soc_001",
+        platform: "instagram",
+        handle: "hospitaldrnegrin",
+        url: "",
+        isPrimary: true
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects javascript: url", () => {
+    expect(() =>
+      editableSocialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "javascript:alert(1)",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+
+  it("rejects data: url", () => {
+    expect(() =>
+      editableSocialContactSchema.parse({
+        id: "soc_001",
+        platform: "web",
+        url: "data:text/html,<h1>xss</h1>",
+        handle: "x",
+        isPrimary: false
+      })
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. H-01 regression — socials survive create + updateRecord (OIR-131)
+// ---------------------------------------------------------------------------
+
+import nodeFs_h01 from "node:fs";
+import * as XLSX_h01 from "xlsx-republish";
+import { vi } from "vitest";
+
+XLSX_h01.set_fs(nodeFs_h01);
+
+const getPathMock_h01 = vi.fn();
+
+vi.mock("electron", () => ({
+  app: {
+    getPath: getPathMock_h01
+  }
+}));
+
+describe("H-01 regression — socials survive createRecord + updateRecord (OIR-131)", () => {
+  let h01TestRoot: string;
+
+  beforeEach(async () => {
+    h01TestRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir131-h01-"));
+    getPathMock_h01.mockImplementation(() => h01TestRoot);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    getPathMock_h01.mockReset();
+    await fs.rm(h01TestRoot, { recursive: true, force: true });
+  });
+
+  it("socials are persisted by createRecord and survive a subsequent updateRecord", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings({
+      editorName: "Test",
+      dataFilePath: path.join(h01TestRoot, "data", "contacts.json"),
+      backupDirectoryPath: path.join(h01TestRoot, "backups"),
+      ui: {
+        showInactiveByDefault: false,
+        autoBackup: {
+          enabled: false,
+          trigger: "launch",
+          intervalHours: 2,
+          editCountThreshold: 10,
+          retentionCount: 5
+        }
+      }
+    });
+
+    // Step 1: create a contact WITH a social entry.
+    const created = await service.createRecord({
+      type: "service",
+      displayName: "Hospital Demo",
+      organization: { department: "Administración" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [
+          {
+            id: "soc_001",
+            platform: "instagram",
+            handle: "hospitaldemo",
+            isPrimary: true
+          }
+        ]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const createdRecord = created.contacts.records.find(
+      (r) => r.id === created.savedRecordId
+    );
+    expect(createdRecord?.contactMethods.socials).toHaveLength(1);
+    expect(createdRecord?.contactMethods.socials[0]?.handle).toBe("hospitaldemo");
+
+    // Step 2: updateRecord — change only displayName; socials must survive.
+    const updated = await service.updateRecord(created.savedRecordId, {
+      type: "service",
+      displayName: "Hospital Demo (actualizado)",
+      organization: { department: "Administración" },
+      contactMethods: {
+        phones: [],
+        emails: [],
+        socials: [
+          {
+            id: "soc_001",
+            platform: "instagram",
+            handle: "hospitaldemo",
+            isPrimary: true
+          }
+        ]
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const updatedRecord = updated.contacts.records.find(
+      (r) => r.id === created.savedRecordId
+    );
+    expect(updatedRecord?.displayName).toBe("Hospital Demo (actualizado)");
+    // H-01 regression assertion: socials must NOT be wiped
+    expect(updatedRecord?.contactMethods.socials).toHaveLength(1);
+    expect(updatedRecord?.contactMethods.socials[0]?.handle).toBe("hospitaldemo");
+  });
+});
