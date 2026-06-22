@@ -4,7 +4,7 @@ import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
-import type { PhoneContact } from "../../shared/types/contact";
+import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { SelectField } from "../components/inputs/SelectField";
 
 const typeLabels = {
@@ -57,6 +57,59 @@ const getPaginationItems = (currentPage: number, totalPages: number): Array<numb
 
   const middleWindowStart = currentPage - Math.floor(PAGINATION_WINDOW / 2);
   return [1, "ellipsis-left", ...getPageRange(middleWindowStart, PAGINATION_WINDOW), "ellipsis-right", totalPages];
+};
+
+const socialPlatformLabels: Record<SocialPlatform, string> = {
+  instagram: "Instagram",
+  twitter: "Twitter / X",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  web: "Sitio web",
+  other: "Otro"
+};
+
+/**
+ * Derives a safe external URL for a social contact (OIR-131).
+ * XSS-safe approach: only `http:` and `https:` schemes are allowed.
+ * For handle-only entries, a platform-specific base URL is used.
+ * Returns null when no safe URL can be derived.
+ */
+const SAFE_SOCIAL_BASE_URLS: Partial<Record<SocialPlatform, string>> = {
+  instagram: "https://instagram.com/",
+  twitter: "https://twitter.com/",
+  facebook: "https://facebook.com/",
+  linkedin: "https://linkedin.com/in/",
+  youtube: "https://youtube.com/@",
+  tiktok: "https://tiktok.com/@"
+};
+
+const ALLOWED_URL_SCHEMES = new Set(["https:", "http:"]);
+
+const getSafeSocialUrl = (social: SocialContact): string | null => {
+  // Prefer explicit URL when present.
+  if (social.url) {
+    try {
+      const parsed = new URL(social.url);
+      if (ALLOWED_URL_SCHEMES.has(parsed.protocol)) {
+        return social.url;
+      }
+    } catch {
+      // Malformed URL — fall through to handle derivation.
+    }
+  }
+
+  // Derive from handle + platform base URL.
+  if (social.handle) {
+    const base = SAFE_SOCIAL_BASE_URLS[social.platform];
+    if (base) {
+      // Encode the handle to prevent injection via handle values.
+      return `${base}${encodeURIComponent(social.handle)}`;
+    }
+  }
+
+  return null;
 };
 
 const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
@@ -720,6 +773,61 @@ export const DirectoryPage = () => {
                     <p className="text-sm text-slate-500 italic">No hay correos registrados.</p>
                   )}
                 </div>
+
+                {(selectedRecord.contactMethods.socials ?? []).length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Redes sociales</p>
+                      <p className="text-xs font-medium text-slate-400">
+                        {(selectedRecord.contactMethods.socials ?? []).length} disponibles
+                      </p>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {(selectedRecord.contactMethods.socials ?? []).map((social) => {
+                        const safeUrl = getSafeSocialUrl(social);
+                        return (
+                          <div key={social.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                  {social.label ?? socialPlatformLabels[social.platform]}
+                                </p>
+                                {/* XSS-safe: only render anchor when URL passes scheme allowlist.
+                                    Never use dangerouslySetInnerHTML. React auto-escapes text nodes. */}
+                                {safeUrl ? (
+                                  <a
+                                    href={safeUrl}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      // In Electron, open external URLs through the IPC-safe path.
+                                      // window.open with noopener is the renderer-safe fallback.
+                                      window.open(safeUrl, "_blank", "noopener,noreferrer");
+                                    }}
+                                    rel="noopener noreferrer"
+                                    className="mt-2 block break-words text-base font-semibold text-scs-blue underline underline-offset-2 hover:text-scs-blueDark [overflow-wrap:anywhere]"
+                                  >
+                                    {social.handle ?? safeUrl}
+                                  </a>
+                                ) : (
+                                  <p className="mt-2 break-words text-base font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
+                                    {social.handle ?? social.url ?? "—"}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-2 shrink-0">
+                                {social.isPrimary ? (
+                                  <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                    Principal
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {selectedRecord.notes && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">

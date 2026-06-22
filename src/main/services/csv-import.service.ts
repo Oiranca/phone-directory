@@ -3,7 +3,7 @@ import path from "node:path";
 import Papa from "papaparse";
 import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
 import type { AreaType } from "../../shared/constants/catalogs.js";
-import { contactRecordSchema, directoryDatasetSchema } from "../../shared/schemas/contact.js";
+import { contactRecordSchema, directoryDatasetSchema, socialPlatformSchema } from "../../shared/schemas/contact.js";
 import type {
   ContactRecord,
   CsvImportIssue,
@@ -12,7 +12,9 @@ import type {
   CsvImportWarning,
   DirectoryDataset,
   PhoneContact,
-  EmailContact
+  EmailContact,
+  SocialContact,
+  SocialPlatform
 } from "../../shared/types/contact.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
@@ -62,6 +64,17 @@ const SUPPORTED_COLUMNS = [
   "email2",
   "email2Label",
   "email2IsPrimary",
+  // Social media columns (OIR-131)
+  "social1Platform",
+  "social1Handle",
+  "social1Url",
+  "social1Label",
+  "social1IsPrimary",
+  "social2Platform",
+  "social2Handle",
+  "social2Url",
+  "social2Label",
+  "social2IsPrimary",
   "tags",
   "aliases",
   "notes",
@@ -335,6 +348,74 @@ const buildEmails = (
   );
 };
 
+/**
+ * Parses social1/social2 flat CSV columns into SocialContact entries (OIR-131).
+ * Only `instagram`, `twitter`, `facebook`, `linkedin`, `youtube`, `tiktok`, `web`, `other`
+ * are valid platforms; unknown values are normalized to "other" with a warning.
+ */
+const buildSocials = (
+  row: NormalizedImportRow,
+  rowNumber: number,
+  displayName: string | undefined,
+  warnings: CsvImportWarning[]
+): SocialContact[] => {
+  const socials: SocialContact[] = [];
+
+  for (const prefix of ["social1", "social2"] as const) {
+    const rawPlatform = maybe(row[`${prefix}Platform`])?.toLowerCase() as SocialPlatform | undefined;
+    const handle = maybe(row[`${prefix}Handle`]);
+    const url = maybe(row[`${prefix}Url`]);
+
+    // Skip if no platform AND no handle/url — nothing to map.
+    if (!rawPlatform && !handle && !url) {
+      continue;
+    }
+
+    // Require at least one of handle/url.
+    if (!handle && !url) {
+      warnings.push({
+        rowNumber,
+        displayName,
+        message: `La entrada de red social "${rawPlatform ?? prefix}" no tiene handle ni URL y se omitirá.`
+      });
+      continue;
+    }
+
+    let platform: SocialPlatform = "other";
+    if (rawPlatform) {
+      const parsed = socialPlatformSchema.safeParse(rawPlatform);
+      if (parsed.success) {
+        platform = parsed.data;
+      } else {
+        warnings.push({
+          rowNumber,
+          displayName,
+          message: `La plataforma social "${rawPlatform}" no está reconocida y se normalizó como "other".`
+        });
+      }
+    }
+
+    socials.push(
+      compactObject({
+        id: `soc_${rowNumber}_${socials.length + 1}`,
+        platform,
+        handle,
+        url,
+        label: maybe(row[`${prefix}Label`]),
+        isPrimary: parseBoolean(row[`${prefix}IsPrimary`])
+      }) as SocialContact
+    );
+  }
+
+  return ensureSinglePrimary(
+    socials,
+    "Se marcaron varias redes sociales como principales. Solo la primera se conservará como principal.",
+    warnings,
+    rowNumber,
+    displayName
+  );
+};
+
 const buildDataset = (records: ContactRecord[], editorName: string) => {
   const exportedAt = new Date().toISOString();
   const { typeCounts, areaCounts } = computeMetadataCounts(records);
@@ -463,6 +544,7 @@ export const buildImportPreviewFromRows = async (
 
     const phones = buildPhones(row, rowNumber, displayName, rowWarnings);
     const emails = buildEmails(row, rowNumber, displayName, rowWarnings);
+    const socials = buildSocials(row, rowNumber, displayName, rowWarnings);
     const location = compactObject({
       building: maybe(row.building),
       floor: maybe(row.floor),
@@ -470,8 +552,9 @@ export const buildImportPreviewFromRows = async (
       text: maybe(row.locationText)
     });
 
-    if (phones.length === 0 && emails.length === 0 && Object.keys(location).length === 0) {
-      issues.push("Cada fila necesita al menos un teléfono, un correo o un dato de ubicación.");
+    // (OIR-131): socials count as a valid contact method — a social-only row is accepted.
+    if (phones.length === 0 && emails.length === 0 && socials.length === 0 && Object.keys(location).length === 0) {
+      issues.push("Cada fila necesita al menos un teléfono, un correo, una red social o un dato de ubicación.");
     }
 
     const rawStatus = maybe(row.status)?.toLowerCase();
@@ -523,7 +606,8 @@ export const buildImportPreviewFromRows = async (
         location: Object.keys(location).length > 0 ? location : undefined,
         contactMethods: {
           phones,
-          emails
+          emails,
+          socials
         },
         aliases,
         tags,

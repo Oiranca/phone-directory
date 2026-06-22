@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
-import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact } from "../../shared/types/contact";
+import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact, EditableSocialContact, SocialPlatform } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
 import { useToast } from "../components/feedback/ToastRegion";
 import { SelectField } from "../components/inputs/SelectField";
@@ -82,6 +82,26 @@ const createEmailDraft = (): EditableEmailContact => ({
   isPrimary: true
 });
 
+const socialPlatformOptions: Array<{ value: SocialPlatform; label: string }> = [
+  { value: "instagram", label: "Instagram" },
+  { value: "twitter", label: "Twitter / X" },
+  { value: "facebook", label: "Facebook" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "youtube", label: "YouTube" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "web", label: "Sitio web" },
+  { value: "other", label: "Otro" }
+];
+
+const createSocialDraft = (): EditableSocialContact => ({
+  id: createId("soc"),
+  platform: "instagram",
+  handle: "",
+  url: "",
+  label: "",
+  isPrimary: true
+});
+
 const createEmptyFormState = (): ContactFormState => ({
   type: "person",
   displayName: "",
@@ -104,7 +124,8 @@ const createEmptyFormState = (): ContactFormState => ({
   },
   contactMethods: {
     phones: [createPhoneDraft()],
-    emails: []
+    emails: [],
+    socials: []
   },
   aliases: [],
   tags: [],
@@ -133,7 +154,8 @@ const toFormState = (record: EditableContactRecord): ContactFormState => ({
   },
   contactMethods: {
     phones: record.contactMethods.phones.length > 0 ? record.contactMethods.phones : [createPhoneDraft()],
-    emails: record.contactMethods.emails
+    emails: record.contactMethods.emails,
+    socials: record.contactMethods.socials ?? []
   },
   aliases: record.aliases,
   tags: record.tags,
@@ -362,6 +384,40 @@ export const ContactFormPage = () => {
     }));
     setLiveMessage(`Correo ${removedIndex + 1} eliminado.`);
     setPendingFocusTarget({ kind: "email", fallback: "add-email" });
+  };
+
+  const updateSocial = (socialId: string, patch: Partial<EditableSocialContact>) => {
+    setFormState((current) => ({
+      ...current,
+      contactMethods: {
+        ...current.contactMethods,
+        socials: (() => {
+          const nextSocials = current.contactMethods.socials.map((social) => {
+            if (social.id !== socialId) {
+              return patch.isPrimary ? { ...social, isPrimary: false } : social;
+            }
+            return { ...social, ...patch };
+          });
+          return patch.isPrimary === false
+            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextSocials, socialId))
+            : normalizePrimaryEntries(nextSocials);
+        })()
+      }
+    }));
+  };
+
+  const removeSocial = (socialId: string) => {
+    const removedIndex = formState.contactMethods.socials.findIndex((s) => s.id === socialId);
+    setFormState((current) => ({
+      ...current,
+      contactMethods: {
+        ...current.contactMethods,
+        socials: normalizePrimaryEntries(
+          current.contactMethods.socials.filter((s) => s.id !== socialId)
+        )
+      }
+    }));
+    setLiveMessage(`Red social ${removedIndex + 1} eliminada.`);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -937,6 +993,101 @@ export const ContactFormPage = () => {
                   />
                   Principal
                 </label>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-lg font-semibold text-scs-blueDark">Redes sociales</h3>
+            <button
+              type="button"
+              onClick={() => {
+                const nextSocial = {
+                  ...createSocialDraft(),
+                  isPrimary: formState.contactMethods.socials.length === 0
+                };
+                setFormState((current) => ({
+                  ...current,
+                  contactMethods: {
+                    ...current.contactMethods,
+                    socials: [...current.contactMethods.socials, nextSocial]
+                  }
+                }));
+                setLiveMessage(`Red social ${formState.contactMethods.socials.length + 1} añadida.`);
+              }}
+              className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+            >
+              Añadir red social
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {formState.contactMethods.socials.map((social, index) => (
+              <div key={social.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-slate-700">Red social {index + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() => removeSocial(social.id)}
+                    className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                  <div>
+                    <SelectField
+                      id={`social-platform-${social.id}`}
+                      label="Plataforma"
+                      value={social.platform}
+                      onChange={(value) => updateSocial(social.id, { platform: value as SocialPlatform })}
+                      options={socialPlatformOptions}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`social-handle-${social.id}`} className="text-sm font-medium text-slate-700">Handle / usuario</label>
+                    <input
+                      id={`social-handle-${social.id}`}
+                      value={social.handle ?? ""}
+                      onChange={(event) => updateSocial(social.id, { handle: event.target.value })}
+                      placeholder="@hospitalejemplo"
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`social-url-${social.id}`} className="text-sm font-medium text-slate-700">URL</label>
+                    <input
+                      id={`social-url-${social.id}`}
+                      value={social.url ?? ""}
+                      onChange={(event) => updateSocial(social.id, { url: event.target.value })}
+                      placeholder="https://instagram.com/hospital"
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  <div>
+                    <label htmlFor={`social-label-${social.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
+                    <input
+                      id={`social-label-${social.id}`}
+                      value={social.label ?? ""}
+                      onChange={(event) => updateSocial(social.id, { label: event.target.value })}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                    />
+                  </div>
+                  <label className="mt-4 flex items-center gap-2 text-sm text-slate-700 xl:mt-8">
+                    <input
+                      type="checkbox"
+                      checked={social.isPrimary}
+                      onChange={(event) => updateSocial(social.id, { isPrimary: event.target.checked })}
+                    />
+                    Principal
+                  </label>
+                </div>
               </div>
             ))}
           </div>

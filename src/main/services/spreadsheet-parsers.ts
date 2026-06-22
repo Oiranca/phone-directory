@@ -79,6 +79,17 @@ export const blankRecord = (): NormalizedImportRow => ({
   email2: "",
   email2Label: "",
   email2IsPrimary: "",
+  // Social media columns (OIR-131)
+  social1Platform: "",
+  social1Handle: "",
+  social1Url: "",
+  social1Label: "",
+  social1IsPrimary: "",
+  social2Platform: "",
+  social2Handle: "",
+  social2Url: "",
+  social2Label: "",
+  social2IsPrimary: "",
   tags: "",
   aliases: "",
   notes: "",
@@ -349,6 +360,22 @@ const isSocialContextRow = (label: string, hasSocialContext: boolean): boolean =
 };
 
 /**
+ * Infers the social-media platform from a section name for ODS social rows (OIR-131).
+ * Maps known social platform tokens from the section heading to the platform enum.
+ * Falls back to "other" when no known platform is found.
+ */
+const inferSocialPlatformFromSection = (section: string): string => {
+  const normalized = normalizeMarker(section);
+  if (normalized.includes("INSTAGRAM")) return "instagram";
+  if (normalized.includes("TWITTER")) return "twitter";
+  if (normalized.includes("FACEBOOK")) return "facebook";
+  if (normalized.includes("LINKEDIN")) return "linkedin";
+  if (normalized.includes("YOUTUBE")) return "youtube";
+  if (normalized.includes("TIKTOK")) return "tiktok";
+  return "other";
+};
+
+/**
  * Resolves the display label for a service-sheet row from its cells.
  * Prefers the first non-empty, non-excluded, letter-bearing cell at index 0;
  * falls back to the first cell at a later index that has letters but no numbers.
@@ -376,7 +403,12 @@ export const resolveServiceRowLabel = (cells: string[]) => {
 /** Return shape of normalizeServiceSheet. */
 export type NormalizeServiceSheetResult = {
   records: NormalizedImportRow[];
-  /** Rows silently skipped because they are social-media handle rows. */
+  /**
+   * (OIR-131): Social-handle rows are now imported as first-class contacts,
+   * not skipped. This counter remains for interface stability but will always
+   * be 0 for rows that have a valid handle. Only genuinely unmappable social
+   * rows (no handle, no phone — effectively empty) are still skipped here.
+   */
   socialSkippedRows: number;
 };
 
@@ -409,9 +441,19 @@ export const normalizeServiceSheet = (
       firstCell &&
       !["INDICEAGENDA", "INDICEAGENDAHOSPITALARIA"].includes(normalizeMarker(firstCell))
     ) {
-      currentSection = firstCell;
-      prevRowHadSocialContext = sectionIsSocial(firstCell);
-      return;
+      // OIR-131: Do NOT treat a single-cell row as a section header when it
+      // looks like a social-media handle (prevRowHadSocialContext or the cell
+      // itself is social-context). Social handles are all-lowercase, 8+ chars,
+      // no spaces, no digits — exactly what isSocialContextRow checks.
+      // We peek at effective social context here to avoid consuming the handle
+      // as a section header before we can map it to a social contact.
+      const wouldBeSocialHandle = isSocialContextRow(firstCell, prevRowHadSocialContext || sectionIsSocial(firstCell));
+      if (!wouldBeSocialHandle) {
+        currentSection = firstCell;
+        prevRowHadSocialContext = sectionIsSocial(firstCell);
+        return;
+      }
+      // Fall through: let this single-cell social row be processed as a contact below.
     }
 
     // Single-pass over non-first cells: extract phone numbers and note fragments
@@ -448,9 +490,15 @@ export const normalizeServiceSheet = (
     }
 
     if (nonEmpty.length === 1 && label && cells[0] === label) {
-      currentSection = label;
-      prevRowHadSocialContext = sectionIsSocial(label);
-      return;
+      // OIR-131: same guard as the first section-header path — skip this
+      // for social-handle rows that fell through from the early-return above.
+      const wouldBeSocialHandle = isSocialContextRow(label, prevRowHadSocialContext || sectionIsSocial(label));
+      if (!wouldBeSocialHandle) {
+        currentSection = label;
+        prevRowHadSocialContext = sectionIsSocial(label);
+        return;
+      }
+      // Fall through to social contact creation below.
     }
 
     if (nonEmpty.length > 0 && !rowHasPhone && nonEmpty.every((value) => isExcludedLabel(value))) {
@@ -480,16 +528,46 @@ export const normalizeServiceSheet = (
 
     const dedupedPhoneNumbers = dedupeKeepOrder(phoneNumbers);
 
-    if (dedupedPhoneNumbers.length === 0 && cells.slice(1).every((value) => !value)) {
-      return;
-    }
-
+    // Compute social context before the "all-empty tail cells" early-exit so that
+    // social-handle rows (single cell with empty tail cells) are not dropped here
+    // (OIR-131). prevRowHadSocialContext is updated now; the early-exit only fires
+    // when the row is neither a phone row nor a social handle.
     const thisCellsHaveSocialContext = rowContainsSocialToken(cells);
     const effectiveSocialContext = sectionIsSocial(currentSection) || thisCellsHaveSocialContext || prevRowHadSocialContext;
     prevRowHadSocialContext = thisCellsHaveSocialContext;
 
+    if (
+      dedupedPhoneNumbers.length === 0 &&
+      cells.slice(1).every((value) => !value) &&
+      // OIR-131: Don't drop a social-handle row just because its tail cells are all empty.
+      !isSocialContextRow(label, effectiveSocialContext)
+    ) {
+      return;
+    }
+
+    // OIR-131: Social-handle rows are now first-class contacts, not skipped.
+    // When a row has no phone numbers but is a social-context handle, map it
+    // to a social contact entry using the inferred platform from the section name.
     if (dedupedPhoneNumbers.length === 0 && isSocialContextRow(label, effectiveSocialContext)) {
-      socialSkippedRows += 1;
+      const inferredPlatform = inferSocialPlatformFromSection(currentSection);
+      const record = blankRecord();
+      record.externalId = `${metadata.slug}-${buildStableExternalId([
+        metadata.department,
+        currentSection && currentSection !== metadata.department ? currentSection : "social",
+        label
+      ])}`;
+      record.type = classifyType(label, metadata.slug);
+      record.displayName = label;
+      record.area = metadata.area;
+      record.department = metadata.department;
+      record.service = currentSection && currentSection !== metadata.department ? currentSection : label;
+      record.aliases = aliasesFromLabel(label);
+      record.notes = currentSection && currentSection !== metadata.department ? `Sección: ${currentSection}` : "";
+      record.status = "active";
+      record.social1Platform = inferredPlatform;
+      record.social1Handle = label;
+      record.social1IsPrimary = "true";
+      records.push(record);
       return;
     }
 

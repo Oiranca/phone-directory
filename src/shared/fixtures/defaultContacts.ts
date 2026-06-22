@@ -58,7 +58,8 @@ export const defaultContacts: DirectoryDataset = {
             noPatientSharing: true
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: ["mostrador admisión"],
       tags: ["admisión"],
@@ -100,7 +101,8 @@ export const defaultContacts: DirectoryDataset = {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: ["cs demo"],
       tags: [],
