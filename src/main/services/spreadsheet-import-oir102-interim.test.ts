@@ -265,8 +265,11 @@ describe("Social-handle row import (OIR-131: social rows are first-class contact
 // ---------------------------------------------------------------------------
 
 describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
-  it("counts data rows from a Buscas sheet in buscasSkippedRowCount", () => {
-    // Buscas_Celadores has 1 header row + 2 data rows = 2 buscas rows.
+  it("OIR-130: buscasSkippedRowCount counts genuinely-unparseable buscas rows only (empty/comment rows)", () => {
+    // OIR-130: buscas sheets are now parsed into buscasParseResult, not simply skipped.
+    // buscasSkippedRowCount reflects only rows that yielded no pager record
+    // (empty department label or all holder cells empty/non-numeric).
+    // Buscas_Celadores: 2 data rows, both have pager numbers → 0 skipped buscas rows.
     const filePath = writeWorkbook(testRoot, "buscas-count.xlsx", [
       {
         name: "Buscas_Celadores",
@@ -283,9 +286,12 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    // 2 data rows in Buscas_Celadores (header excluded), 0 social rows.
-    expect(result.buscasSkippedRowCount).toBe(2);
+    // Both buscas rows have pager numbers → 0 genuinely-skipped buscas rows.
+    expect(result.buscasSkippedRowCount).toBe(0);
     expect(result.socialHandleSkippedRowCount).toBe(0);
+    // buscasParseResult carries the parsed records.
+    expect(result.buscasParseResult.parsedCellCount).toBe(2);
+    expect(result.buscasParseResult.records).toHaveLength(2);
     // Real contacts unaffected.
     expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
   });
@@ -327,9 +333,10 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(socialRow?.social1IsPrimary).toBe("true");
   });
 
-  it("tracks buscas rows separately from social rows (OIR-131: social no longer skipped)", () => {
-    // Buscas_Varios: 1 header + 3 data = 3 buscas rows.
-    // urgencias sheet: 1 social-handle row (now imported as contact, not skipped).
+  it("OIR-130: buscas rows are parsed into buscasParseResult; social rows are imported as contacts", () => {
+    // OIR-130: Buscas_Varios data rows are parsed into buscasParseResult.records,
+    // not counted in buscasSkippedRowCount (which is now empty/comment-only rows).
+    // OIR-131: social-handle row is imported as a contact.
     const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
       {
         name: "Buscas_Varios",
@@ -353,7 +360,10 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    expect(result.buscasSkippedRowCount).toBe(3);
+    // All 3 buscas data rows have pager numbers → 0 genuinely-skipped buscas rows.
+    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.buscasParseResult.parsedCellCount).toBe(3);
+    expect(result.buscasParseResult.records).toHaveLength(3);
     // Social row is imported (not skipped), so counter stays 0.
     expect(result.socialHandleSkippedRowCount).toBe(0);
     const names = result.rows.map((r) => r.displayName);
@@ -377,9 +387,10 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(result.rows).toHaveLength(2);
   });
 
-  it("preview carries buscasSkippedRowCount from the normalization result", async () => {
-    // Integration: buildSpreadsheetImportPreview (sync path) returns a preview
-    // with buscasSkippedRowCount reflecting actual buscas rows.
+  it("OIR-130: buildSpreadsheetImportPreview returns buscasParseResult with parsed records", async () => {
+    // OIR-130: buildSpreadsheetImportPreview now returns buscasParseResult alongside the preview.
+    // The preview.buscasSkippedRowCount reflects genuinely-unparseable buscas rows only.
+    // Buscas_Enfermería: 2 data rows both have pager numbers → 0 skipped.
     const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");
     const filePath = writeWorkbook(testRoot, "preview-count.xlsx", [
       {
@@ -395,12 +406,15 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
       ])
     ]);
 
-    const { preview } = await buildSpreadsheetImportPreview(filePath, "test-editor");
+    const { preview, buscasParseResult } = await buildSpreadsheetImportPreview(filePath, "test-editor");
 
-    // 2 data rows in Buscas_Enfermería.
-    expect(preview.buscasSkippedRowCount).toBe(2);
+    // Both buscas rows have pager numbers → parsed, not skipped.
+    expect(buscasParseResult.parsedCellCount).toBe(2);
+    expect(buscasParseResult.records).toHaveLength(2);
+    // preview.buscasSkippedRowCount = genuinely-skipped rows only (0 here).
+    expect(preview.buscasSkippedRowCount).toBe(0);
     expect(preview.socialHandleSkippedRowCount).toBe(0);
-    // Import is not blocked.
+    // Import is not blocked by buscas rows.
     expect(preview.invalidRowCount).toBe(0);
   });
 });

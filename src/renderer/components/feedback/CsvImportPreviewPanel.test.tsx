@@ -529,8 +529,8 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
-  describe("deferred-skip informational notes (OIR-102 / OIR-134)", () => {
-    it("shows the buscas note when buscasSkippedRowCount > 0", () => {
+  describe("deferred-skip informational notes (OIR-102 / OIR-130 / OIR-134)", () => {
+    it("shows the buscas note when buscasSkippedRowCount > 0 (OIR-130: empty/comment buscas rows)", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 3,
@@ -540,7 +540,7 @@ describe("CsvImportPreviewPanel", () => {
 
       const notes = screen.getAllByRole("note");
       expect(notes).toHaveLength(1);
-      expect(notes[0]).toHaveTextContent("5 filas omitidas");
+      expect(notes[0]).toHaveTextContent("5 filas de buscas sin número");
       expect(notes[0]).toHaveTextContent("hojas de buscas");
     });
 
@@ -571,7 +571,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(notes).toHaveLength(2);
     });
 
-    it("uses singular 'fila omitida' when exactly one buscas row is skipped", () => {
+    it("uses singular 'fila de buscas sin número' when exactly one buscas row is skipped (OIR-130)", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 1,
@@ -580,7 +580,7 @@ describe("CsvImportPreviewPanel", () => {
       });
 
       const notes = screen.getAllByRole("note");
-      expect(notes[0]).toHaveTextContent("1 fila omitida");
+      expect(notes[0]).toHaveTextContent("1 fila de buscas sin número");
     });
 
     it("uses singular 'fila omitida' when exactly one social-handle row is skipped", () => {

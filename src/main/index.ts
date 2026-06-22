@@ -87,15 +87,16 @@ const bootstrap = async () => {
     );
   }
 
+  const buscasService = new BuscasService();
   const service = new AppDataService({
     onAutoBackupFailure: (message) => {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(PUSH_CHANNELS.autoBackupFailed, { message });
       }
-    }
+    },
+    buscasService
   });
   await service.ensureInitialFiles();
-  const buscasService = new BuscasService();
   registerContactsIpc(service);
   registerBuscasIpc(buscasService);
   registerSettingsIpc(service);

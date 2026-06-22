@@ -56,6 +56,7 @@ const API_METHOD_MAP: Record<keyof HospitalDirectoryApi, true> = {
   addBusca:              true,
   updateBusca:           true,
   deleteBusca:           true,
+  listImportedBuscas:    true,
   detectDuplicates:      true,
   mergeContacts:         true,
   onAutoBackupFailure:   true
@@ -193,6 +194,7 @@ describe("Renderer mock helper — typed as HospitalDirectoryApi", () => {
       addBusca:            vi.fn(),
       updateBusca:         vi.fn(),
       deleteBusca:         vi.fn(),
+      listImportedBuscas:  vi.fn(),
       detectDuplicates:    vi.fn(),
       mergeContacts:       vi.fn(),
       onAutoBackupFailure: vi.fn().mockReturnValue(() => undefined)

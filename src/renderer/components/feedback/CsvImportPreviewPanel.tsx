@@ -144,16 +144,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* INTERIM (OIR-102/OIR-134): Deferred-skip informational notes */}
+      {/* OIR-130: Buscas rows are now parsed and imported into the Buscas section. */}
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
-            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
+            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila de buscas sin número" : "filas de buscas sin número"}
           </span>{" "}
-          (hojas de buscas — pendientes de su sección)
+          omitidas (filas vacías o solo comentarios en las hojas de buscas)
         </div>
       )}
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (

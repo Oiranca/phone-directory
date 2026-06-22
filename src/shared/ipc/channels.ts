@@ -38,10 +38,11 @@ export const SETTINGS_CHANNELS = {
 } as const;
 
 export const BUSCAS_CHANNELS = {
-  list:   "buscas:list",
-  add:    "buscas:add",
-  update: "buscas:update",
-  remove: "buscas:delete"
+  list:          "buscas:list",
+  add:           "buscas:add",
+  update:        "buscas:update",
+  remove:        "buscas:delete",
+  listImported:  "buscas:list-imported"
 } as const;
 
 export const PUSH_CHANNELS = {
@@ -54,5 +55,6 @@ export const PUSH_CHANNELS = {
  * part of HospitalDirectoryApi. They must NOT appear in REQUIRED_CHANNELS.
  */
 export const SERVER_CHANNELS = {
-  buscasSearch: "buscas:search"
+  buscasSearch:        "buscas:search",
+  buscasImportFromOds: "buscas:import-from-ods"
 } as const;

@@ -6,6 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import type { BuscasService } from "./buscas.service.js";
 import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
@@ -52,6 +53,7 @@ export class AppDataService {
   constructor(
     private readonly options: {
       onAutoBackupFailure?: (message: string) => void;
+      buscasService?: BuscasService;
     } = {}
   ) {}
 
@@ -430,10 +432,17 @@ export class AppDataService {
   // intentionally omits sourceFilePath; this widens it with the internal field.
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
     const settings = await this.readSettings(true);
-    const { dataset, preview } = await buildSpreadsheetImportPreview(
+    const { dataset, preview, buscasParseResult } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       this.getEditorName(settings)
     );
+
+    // OIR-130: Persist buscas records parsed from buscas sheets in the workbook.
+    // This replaces the interim skip — buscas rows now land in buscas.json.
+    if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
+      await this.options.buscasService.importFromOds(buscasParseResult);
+    }
+
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
     const conflictedRecords = this.detectConflicts(currentContacts, dataset);
