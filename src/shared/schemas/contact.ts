@@ -206,3 +206,48 @@ export const editableContactRecordSchema = z.object({
     errorMap: () => ({ message: "Selecciona un estado válido." })
   })
 });
+
+// ---------------------------------------------------------------------------
+// Derived types — stable persisted/IPC domain types derived from Zod schemas.
+// These are the single source of truth for serialization shape.
+// UX-only types (form state, view models) remain in types/contact.ts.
+// ---------------------------------------------------------------------------
+
+/** Persisted phone entry — derived from the persistence schema. */
+export type PhoneContact = z.infer<typeof phoneContactSchema>;
+
+/** Persisted email entry — derived from the persistence schema. */
+export type EmailContact = z.infer<typeof emailContactSchema>;
+
+/** Persisted contact record — derived from the persistence schema. */
+export type ContactRecord = z.infer<typeof contactRecordSchema>;
+
+/** Persisted directory dataset — derived from the persistence schema. */
+export type DirectoryDataset = z.infer<typeof directoryDatasetSchema>;
+
+/**
+ * Auto-backup trigger union — derived from the persistence schema.
+ * Named alias for use in AppSettings sub-type exports.
+ */
+export type AutoBackupTrigger = z.infer<typeof appSettingsSchema>["ui"]["autoBackup"]["trigger"];
+
+/**
+ * Auto-backup settings block — derived from the persistence schema.
+ * Named alias for use in AppSettings sub-type exports.
+ */
+export type AutoBackupSettings = z.infer<typeof appSettingsSchema>["ui"]["autoBackup"];
+
+/** Full persisted application settings — derived from the persistence schema. */
+export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+/** Editable slice of app settings sent over IPC — derived from the persistence schema. */
+export type EditableAppSettings = z.infer<typeof editableAppSettingsSchema>;
+
+/** Audit action union — derived from the audit schema. */
+export type AuditAction = z.infer<typeof auditActionSchema>;
+
+/** Persisted audit log entry — derived from the audit schema. */
+export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
+
+/** Audit log query parameters — derived from the audit schema. */
+export type AuditLogQueryParams = z.infer<typeof auditLogQueryParamsSchema>;
