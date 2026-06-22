@@ -308,28 +308,47 @@ const makeSheet = (name: string, rows: string[][]): SheetData => ({
 
 describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", () => {
   it("does NOT emit a contact when the only tail cell is a date (dd/mm/yyyy) — date must not gate rowHasPhone", () => {
-    // Bug: `phoneNumbers.length > 0` caused extractNumbers("12/03/2024") → "2024"
-    // (4 digits) to set rowHasPhone=true, emitting a spurious contact with phone "2024".
-    // Fix: date cells are excluded from the rowHasPhone predicate.
-    const sheet = makeSheet("Guardia", [["Guardia", "12/03/2024"]]);
-    const { records } = normalizeServiceSheet(sheet, makeProfile("Guardia"));
+    // The label must be ALL-CAPS so that isExcludedLabel() returns true, making
+    // the rowHasPhone guard (`if (label && isExcludedLabel(label) && !rowHasPhone)`)
+    // observable. Mixed-case labels like "Guardia" are NOT excluded by isExcludedLabel,
+    // so that guard never fires regardless of rowHasPhone, and the test cannot isolate
+    // the regression.
+    //
+    // Bug: `phoneNumbers.length > 0` caused extractNumbers("12/03/2024") → ["2024"]
+    // (4 digits, within range) to set rowHasPhone=true. rowHasPhone=true then triggers
+    // the fallback `label = firstCell` → label becomes "GUARDIA", so the
+    // `isExcludedLabel && !rowHasPhone` guard does NOT fire → record is emitted.
+    // Fix: looksLikeDateValue("12/03/2024") short-circuits the rowHasPhone check
+    // → rowHasPhone stays false → label fallback not triggered → label stays ""
+    // → `if (!label) return` fires → no record emitted.
+    const sheet = makeSheet("GUARDIA", [["GUARDIA", "12/03/2024"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("GUARDIA"));
     expect(records).toHaveLength(0);
   });
 
   it("does NOT gate rowHasPhone true from a 10-digit number alone (outside 4–9 digit range)", () => {
+    // Same rationale as the date test: ALL-CAPS label required so isExcludedLabel()
+    // returns true and the rowHasPhone gating path is exercised.
+    //
     // Bug: `phoneNumbers.length > 0` caused extractNumbers("1234567890") → ["1234567890"]
-    // (10 digits, out of 4–9 range) to set rowHasPhone=true.
-    // Fix: only numbers with 4–9 digits qualify as phone-like for the gate.
-    // A row with only an out-of-range number (and no real phone) must not emit a contact.
-    const sheet = makeSheet("Control", [["Control", "1234567890"]]);
-    const { records } = normalizeServiceSheet(sheet, makeProfile("Control"));
+    // (10 digits, out of 4–9 range) to set rowHasPhone=true, restoring label "CONTROL"
+    // via the fallback and bypassing the guard → record emitted.
+    // Fix: only numbers with 4–9 digits qualify for rowHasPhone. The 10-digit number
+    // does not qualify → rowHasPhone stays false → label stays "" → `if (!label) return`
+    // → no record emitted.
+    const sheet = makeSheet("CONTROL", [["CONTROL", "1234567890"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("CONTROL"));
     expect(records).toHaveLength(0);
   });
 
-  it("DOES emit a contact when the tail cell is a real 4–9 digit phone (positive control)", () => {
-    // Ensures the fix did not over-block legitimate phone rows.
-    const sheet = makeSheet("Urgencias", [["Urgencias", "928 123 456"]]);
-    const { records } = normalizeServiceSheet(sheet, makeProfile("Urgencias"));
+  it("DOES emit a contact when an ALL-CAPS excluded-label row has a real 4–9 digit phone (positive control)", () => {
+    // "URGENCIAS" is all-caps → isExcludedLabel() returns true. But "928123456"
+    // is 9 digits (within 4–9 range) and not a date → rowHasPhone=true.
+    // rowHasPhone=true triggers the label fallback → label = "URGENCIAS" AND
+    // causes `isExcludedLabel(label) && !rowHasPhone` to NOT fire → record is emitted.
+    // Proves the fix only skips rows that genuinely have no phone-like number.
+    const sheet = makeSheet("URGENCIAS", [["URGENCIAS", "928123456"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("URGENCIAS"));
     expect(records).toHaveLength(1);
     expect(records[0]!.phone1Number).toBe("928123456");
   });
