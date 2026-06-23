@@ -185,19 +185,4 @@ export class BuscasService {
       return importedRecords.length;
     });
   }
-
-  async search(query: string): Promise<BuscaRecord[]> {
-    const dataset = await this.readDataset();
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return dataset.records;
-    }
-    return dataset.records.filter(
-      (r) =>
-        r.deviceNumber.toLowerCase().includes(q) ||
-        r.assignedTo.toLowerCase().includes(q) ||
-        r.department.toLowerCase().includes(q) ||
-        r.role.toLowerCase().includes(q)
-    );
-  }
 }
