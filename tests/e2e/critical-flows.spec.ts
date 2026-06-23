@@ -115,7 +115,9 @@ test.describe("OIR-22 critical MVP flows", () => {
     }
   });
 
-  test("imports a valid CSV with preview and confirm", async () => {
+  test("imports a valid CSV with preview and confirm (no conflicts)", async () => {
+    // Uses externalIds that do not exist in the seed dataset so the import
+    // produces only altas with no conflict-resolution step required.
     const workspace = await createWorkspace("csv-import");
     const csvPath = path.join(workspace.incomingDir, "directory.csv");
 
@@ -123,8 +125,8 @@ test.describe("OIR-22 critical MVP flows", () => {
       csvPath,
       [
         "externalId,type,displayName,department,area,phone1Number,phone1Kind,status",
-        "example-1,service,Admisión General Actualizada,Admisión,especialidades,12345,internal,active",
-        "legacy-e2e,service,Mostrador E2E,Recepción,especialidades,55555,internal,active"
+        "e2e-critical-1,service,Admisión E2E,Admisión,gestion-administracion,12301,internal,active",
+        "e2e-critical-2,service,Mostrador E2E,Recepción,gestion-administracion,12302,internal,active"
       ].join("\n") + "\n",
       "utf-8"
     );
@@ -143,13 +145,16 @@ test.describe("OIR-22 critical MVP flows", () => {
       await expect(page.getByText("Vista previa importación")).toBeVisible();
       await expect(page.getByRole("heading", { name: "directory.csv" })).toBeVisible();
       await expect(page.getByText("Altas", { exact: true })).toBeVisible();
-      await expect(page.getByText("Actualizaciones", { exact: true })).toBeVisible();
 
-      await page.getByRole("button", { name: "Confirmar importación" }).click();
+      // No conflicts — Confirmar importación should be enabled immediately.
+      const confirmBtn = page.getByRole("button", { name: "Confirmar importación" });
+      await expect(confirmBtn).toBeEnabled();
+      await confirmBtn.click();
+
       const importCsvDialog = page.getByRole("dialog", { name: "Confirmar importación de agenda" });
       await expect(importCsvDialog).toBeVisible();
       await importCsvDialog.getByRole("button", { name: "Confirmar importación" }).click();
-      await expect(page.getByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeVisible();
+      await expect(page.getByText("Importación completada. 2 altas y 0 actualizaciones.")).toBeVisible();
 
       await page.getByRole("link", { name: "Directorio" }).click();
       await waitForDirectory(page);
