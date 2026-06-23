@@ -1,11 +1,48 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
-import {
-  CONTACTS_CHANNELS,
-  SETTINGS_CHANNELS,
-  BUSCAS_CHANNELS,
-  PUSH_CHANNELS
-} from "../shared/ipc/channels.js";
+
+// Channel constants are inlined here to avoid requiring an ESM module
+// (src/shared/ipc/channels.ts compiles to ESM because of "type":"module" in
+// package.json, and a sandboxed CJS preload cannot require() ESM files).
+// Any rename here must also be reflected in src/shared/ipc/channels.ts and
+// vice-versa — tsc will catch mismatches on both sides via the type assertion
+// on `api` below.
+const CONTACTS_CHANNELS = {
+  bootstrap:        "contacts:get-bootstrap-data",
+  createBackup:     "contacts:create-backup",
+  resetDataset:     "contacts:reset-dataset",
+  createRecord:     "contacts:create-record",
+  updateRecord:     "contacts:update-record",
+  listBackups:      "contacts:list-backups",
+  restoreBackup:    "contacts:restore-backup",
+  exportDataset:    "contacts:export-dataset",
+  importDataset:    "contacts:import-dataset",
+  previewCsvImport: "contacts:preview-csv-import",
+  importCsvDataset: "contacts:import-csv-dataset",
+  getAuditLog:      "contacts:get-audit-log",
+  exportAuditLog:   "contacts:export-audit-log",
+  recoverAuditLog:  "contacts:recover-audit-log",
+  detectDuplicates: "contacts:detect-duplicates",
+  mergeDuplicates:  "contacts:merge-duplicates"
+} as const;
+
+const SETTINGS_CHANNELS = {
+  save:       "settings:save",
+  defaults:   "settings:defaults",
+  browsePath: "settings:browse-path"
+} as const;
+
+const BUSCAS_CHANNELS = {
+  list:         "buscas:list",
+  add:          "buscas:add",
+  update:       "buscas:update",
+  remove:       "buscas:delete",
+  listImported: "buscas:list-imported"
+} as const;
+
+const PUSH_CHANNELS = {
+  autoBackupFailed: "app:auto-backup-failed"
+} as const;
 
 // Type assertion: `api` must satisfy HospitalDirectoryApi exactly.
 // If a method is missing, renamed, or has the wrong signature, tsc (tsconfig.electron.json)
