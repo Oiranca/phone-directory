@@ -10,6 +10,12 @@ import { AppDataService } from "./services/app-data.service.js";
 import { BuscasService } from "./services/buscas.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
+import {
+  buildContentSecurityPolicy,
+  denyWindowOpen,
+  isAllowedNavigationUrl,
+  WINDOW_WEB_PREFERENCES
+} from "./security.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -29,22 +35,6 @@ if (portableUserDataPath) {
   app.setPath("userData", path.resolve(env.userDataPath));
 }
 
-const isAllowedNavigationUrl = (targetUrl: string) => {
-  if (isDev) {
-    return targetUrl.startsWith(`${DEV_SERVER_URL}/`) || targetUrl === DEV_SERVER_URL;
-  }
-
-  return targetUrl.startsWith("file://");
-};
-
-const devOrigin = isDev ? new URL(DEV_SERVER_URL).origin : "";
-const devWsOrigin = isDev ? devOrigin.replace(/^https?:/, (m) => (m === "https:" ? "wss:" : "ws:")) : "";
-const DEV_CSP = isDev
-  ? `default-src 'self'; script-src 'self' 'unsafe-inline' ${devOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ${devOrigin} ${devWsOrigin};`
-  : "";
-const PROD_CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';";
-
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1440,
@@ -54,15 +44,13 @@ const createWindow = () => {
     backgroundColor: "#f8fafc",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
+      ...WINDOW_WEB_PREFERENCES
     }
   });
 
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(denyWindowOpen);
   window.webContents.on("will-navigate", (event, targetUrl) => {
-    if (!isAllowedNavigationUrl(targetUrl)) {
+    if (!isAllowedNavigationUrl(targetUrl, { isDev, devServerUrl: DEV_SERVER_URL })) {
       event.preventDefault();
     }
   });
@@ -109,7 +97,9 @@ const bootstrap = async () => {
     callback({
       responseHeaders: {
         ...filteredHeaders,
-        "Content-Security-Policy": [isDev ? DEV_CSP : PROD_CSP],
+        "Content-Security-Policy": [
+          buildContentSecurityPolicy({ isDev, devServerUrl: DEV_SERVER_URL })
+        ],
       },
     });
   });

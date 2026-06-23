@@ -1,12 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
 
-// Channel constants are inlined here to avoid requiring an ESM module
-// (src/shared/ipc/channels.ts compiles to ESM because of "type":"module" in
-// package.json, and a sandboxed CJS preload cannot require() ESM files).
+// Channel constants are inlined here — they cannot be required from a
+// separate module because Electron's sandboxed preload (sandbox: true) only
+// allows requiring built-in Node/Electron modules, not relative file paths.
+// This is the same constraint that prevented importing channels.ts (ESM) in
+// OIR-103. The sister module src/preload/api.cts holds the same constants and
+// buildApi() factory for unit testing; the source-guard tests in
+// src/preload/index.test.ts verify that this file and api.cts stay in sync.
 // Any rename here must also be reflected in src/shared/ipc/channels.ts and
-// vice-versa — tsc will catch mismatches on both sides via the type assertion
-// on `api` below.
+// in src/preload/api.cts — tsc (tsconfig.electron.json) catches drift via the
+// HospitalDirectoryApi type assertion on `api` below.
 const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
   createBackup:     "contacts:create-backup",
@@ -45,8 +49,8 @@ const PUSH_CHANNELS = {
 } as const;
 
 // Type assertion: `api` must satisfy HospitalDirectoryApi exactly.
-// If a method is missing, renamed, or has the wrong signature, tsc (tsconfig.electron.json)
-// will error here — before the code ever runs.
+// If a method is missing, renamed, or has the wrong signature, tsc
+// (tsconfig.electron.json) will error here before the code ever runs.
 const api: HospitalDirectoryApi = {
   getBootstrapData: () => ipcRenderer.invoke(CONTACTS_CHANNELS.bootstrap) as ReturnType<HospitalDirectoryApi["getBootstrapData"]>,
   getSettingsDefaults: () => ipcRenderer.invoke(SETTINGS_CHANNELS.defaults) as ReturnType<HospitalDirectoryApi["getSettingsDefaults"]>,
