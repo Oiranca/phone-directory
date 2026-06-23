@@ -1,8 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-// SERVER_CHANNELS is a pure constant object with no Electron dependency — safe to
-// import statically so SEARCH_CHANNEL is defined at describe()-collection time and
-// the test-reporter title does not interpolate as "undefined".
-import { SERVER_CHANNELS } from "../../shared/ipc/channels.js";
 
 // handlers and ipcMainStub are hoisted via vi.hoisted() so the vi.mock factory
 // below can reference them safely (vi.mock is hoisted to before all imports).
@@ -20,9 +16,6 @@ vi.mock("electron", () => ({
   ipcMain: ipcMainStub
 }));
 
-// Alias for readability — value is "buscas:search" (defined in channels.ts).
-const SEARCH_CHANNEL = SERVER_CHANNELS.buscasSearch;
-
 // Helper to invoke a registered handler as if called from the renderer
 const invoke = async (channel: string, ...args: unknown[]): Promise<unknown> => {
   const fn = handlers.get(channel);
@@ -38,8 +31,7 @@ describe("registerBuscasIpc", () => {
     add: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
-    listImported: vi.fn().mockResolvedValue([]),
-    search: vi.fn().mockResolvedValue([])
+    listImported: vi.fn().mockResolvedValue([])
   };
 
   // Dynamic import so the vi.mock above is applied before the module loads
@@ -50,6 +42,30 @@ describe("registerBuscasIpc", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Handler-registration snapshot
+  //
+  // Asserts the EXACT set of channels registerBuscasIpc registers so that:
+  // (a) buscas:search is provably absent, and
+  // (b) any future dead handler addition is caught automatically.
+  // ---------------------------------------------------------------------------
+  describe("registered channel set", () => {
+    it("registers exactly the expected channels and no others", () => {
+      const registeredChannels = Array.from(handlers.keys()).sort();
+      expect(registeredChannels).toEqual([
+        "buscas:add",
+        "buscas:delete",
+        "buscas:list",
+        "buscas:list-imported",
+        "buscas:update"
+      ]);
+    });
+
+    it("does NOT register the removed buscas:search channel", () => {
+      expect(handlers.has("buscas:search")).toBe(false);
+    });
   });
 
   describe("update channel — buscas:update", () => {
@@ -228,40 +244,6 @@ describe("registerBuscasIpc", () => {
         "raw string rejection"
       );
       consoleSpy.mockRestore();
-    });
-  });
-
-  describe(`search channel — ${SEARCH_CHANNEL}`, () => {
-    it("coerces non-string query to empty string and calls service.search", async () => {
-      serviceMock.search.mockResolvedValue([]);
-
-      await invoke(SEARCH_CHANNEL, 42);
-
-      expect(serviceMock.search).toHaveBeenCalledWith("");
-    });
-
-    it("coerces null query to empty string", async () => {
-      serviceMock.search.mockResolvedValue([]);
-
-      await invoke(SEARCH_CHANNEL, null);
-
-      expect(serviceMock.search).toHaveBeenCalledWith("");
-    });
-
-    it("coerces undefined query to empty string", async () => {
-      serviceMock.search.mockResolvedValue([]);
-
-      await invoke(SEARCH_CHANNEL);
-
-      expect(serviceMock.search).toHaveBeenCalledWith("");
-    });
-
-    it("passes through a valid string query unchanged", async () => {
-      serviceMock.search.mockResolvedValue([]);
-
-      await invoke(SEARCH_CHANNEL, "urgencias");
-
-      expect(serviceMock.search).toHaveBeenCalledWith("urgencias");
     });
   });
 

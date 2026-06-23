@@ -70,8 +70,6 @@ const API_METHODS = Object.keys(API_METHOD_MAP) as Array<keyof HospitalDirectory
 //
 // PUSH_CHANNELS (app:auto-backup-failed) is excluded: it is a one-way push
 // registered with ipcMain.on() on the renderer side, not an ipcMain.handle().
-// SEARCH_CHANNEL (buscas:search) is excluded: it is server-only and not
-// exposed to the renderer via contextBridge.
 // ---------------------------------------------------------------------------
 
 const REQUIRED_CHANNELS: ReadonlyArray<string> = [
