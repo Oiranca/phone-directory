@@ -24,9 +24,6 @@ export const CONTACTS_CHANNELS = {
   importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
   importCsvDataset: "contacts:import-csv-dataset",
-  getAuditLog:      "contacts:get-audit-log",
-  exportAuditLog:   "contacts:export-audit-log",
-  recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
 } as const;

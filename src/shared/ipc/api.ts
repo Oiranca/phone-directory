@@ -23,9 +23,6 @@ import type {
   EditableAppSettings,
   EditableContactRecord,
   ExportContactsResult,
-  AuditLogQueryParams,
-  AuditLogResult,
-  ExportAuditLogResult,
   ImportContactsResult,
   ResetContactsResult,
   SaveContactResult
@@ -59,11 +56,6 @@ export interface HospitalDirectoryApi {
   // CSV import
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
-
-  // Audit log
-  getAuditLog: (params: AuditLogQueryParams) => Promise<AuditLogResult>;
-  exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
-  recoverAuditLog: () => Promise<void>;
 
   // Buscas — manual registry
   listBuscas: () => Promise<BuscaRecord[]>;

@@ -1,3 +1,14 @@
+/**
+ * OIR-124 decision (2026-06-23): The audit log is an internal JSON record only.
+ * The renderer audit UI (AuditLogPage) and its renderer-facing IPC boundary
+ * (getAuditLog / exportAuditLog / recoverAuditLog channels + HospitalDirectoryApi
+ * methods) were removed in OIR-124. Backend capture (appendEntry on every
+ * create/update/merge) and the service-layer recovery path
+ * (recoverFromIntegrityError / AppDataService.recoverAuditLog) are retained so
+ * future operator tooling can wire recovery without touching this layer.
+ * The integrityError latch remains deliberately fail-closed: once set, all
+ * appends are blocked until an explicit recoverFromIntegrityError() call clears it.
+ */
 import path from "node:path";
 import fs from "node:fs/promises";
 import { auditLogEntrySchema, auditLogSchema } from "../../shared/schemas/contact.js";
