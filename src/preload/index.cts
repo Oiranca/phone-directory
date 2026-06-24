@@ -1,12 +1,34 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
+// Type-only imports from shared/ipc/channels.ts — erased completely at compile
+// time so no require() is emitted in the CJS output. These are used solely for
+// the compile-time parity assertions on the inline maps below.
+//
+// Why runtime import is not possible (OIR-103 constraint):
+//   shared/ipc/channels.ts is ESM ("type":"module" in package.json). Electron's
+//   sandboxed preload (sandbox: true) can only require() built-in Node/Electron
+//   modules — relative file paths are blocked at runtime. A type-import is safe
+//   because tsc strips all import type declarations before emitting .cjs output.
+import type {
+  CONTACTS_CHANNELS as _CanonicalContacts,
+  SETTINGS_CHANNELS as _CanonicalSettings,
+  BUSCAS_CHANNELS   as _CanonicalBuscas,
+  PUSH_CHANNELS     as _CanonicalPush
+} from "../shared/ipc/channels.js";
 
-// Channel constants are inlined here to avoid requiring an ESM module
-// (src/shared/ipc/channels.ts compiles to ESM because of "type":"module" in
-// package.json, and a sandboxed CJS preload cannot require() ESM files).
-// Any rename here must also be reflected in src/shared/ipc/channels.ts and
-// vice-versa — tsc will catch mismatches on both sides via the type assertion
-// on `api` below.
+// Channel constants are inlined here — they cannot be required from a
+// separate module at runtime (see OIR-103 constraint above).
+//
+// Compile-time parity: each map below uses `satisfies` against the type of
+// the corresponding export in shared/ipc/channels.ts. If a key is added,
+// removed, or its string value changes in channels.ts, tsc errors here before
+// any code runs — making channel renames compile-time safe without requiring
+// runtime hand-syncing across duplicated maps.
+//
+// The sister module src/preload/api.cts holds the same constants and
+// buildApi() factory for unit testing; the source-guard tests in
+// src/preload/index.test.ts verify that this file and api.cts stay in sync at
+// the text/value level.
 const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
   createBackup:     "contacts:create-backup",
@@ -24,13 +46,13 @@ const CONTACTS_CHANNELS = {
   recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
-} as const;
+} as const satisfies typeof _CanonicalContacts;
 
 const SETTINGS_CHANNELS = {
   save:       "settings:save",
   defaults:   "settings:defaults",
   browsePath: "settings:browse-path"
-} as const;
+} as const satisfies typeof _CanonicalSettings;
 
 const BUSCAS_CHANNELS = {
   list:         "buscas:list",
@@ -38,15 +60,15 @@ const BUSCAS_CHANNELS = {
   update:       "buscas:update",
   remove:       "buscas:delete",
   listImported: "buscas:list-imported"
-} as const;
+} as const satisfies typeof _CanonicalBuscas;
 
 const PUSH_CHANNELS = {
   autoBackupFailed: "app:auto-backup-failed"
-} as const;
+} as const satisfies typeof _CanonicalPush;
 
 // Type assertion: `api` must satisfy HospitalDirectoryApi exactly.
-// If a method is missing, renamed, or has the wrong signature, tsc (tsconfig.electron.json)
-// will error here — before the code ever runs.
+// If a method is missing, renamed, or has the wrong signature, tsc
+// (tsconfig.electron.json) will error here before the code ever runs.
 const api: HospitalDirectoryApi = {
   getBootstrapData: () => ipcRenderer.invoke(CONTACTS_CHANNELS.bootstrap) as ReturnType<HospitalDirectoryApi["getBootstrapData"]>,
   getSettingsDefaults: () => ipcRenderer.invoke(SETTINGS_CHANNELS.defaults) as ReturnType<HospitalDirectoryApi["getSettingsDefaults"]>,
