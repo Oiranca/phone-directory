@@ -139,6 +139,7 @@ build_sandbox_repo() {
   mkdir -p "$sandbox/scripts/lib" "$sandbox/usb-launchers"
   cp "$REPO_ROOT/scripts/release-usb.sh" "$sandbox/scripts/release-usb.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate.sh" "$sandbox/scripts/lib/audit-gate.sh"
+  cp "$REPO_ROOT/scripts/lib/audit-gate-core.mjs" "$sandbox/scripts/lib/audit-gate-core.mjs"
   cp "$REPO_ROOT/scripts/audit-allowlist.json" "$sandbox/scripts/audit-allowlist.json"
   # Copy ALL platform launchers so win/mac/linux paths can each be exercised.
   cp "$REPO_ROOT/usb-launchers/launch.sh" "$sandbox/usb-launchers/launch.sh"
@@ -630,22 +631,20 @@ rm -rf "$TMP4e"
 # --- CommitB: pnpm_exit arg validation (fail-closed on missing/non-numeric) --
 
 # Test 4f: invoke filter WITHOUT pnpm_exit arg → exit 3 (fail-closed)
-# A caller that omits argv[2] would previously have parseInt(undefined,10) → NaN
-# → || 0 → pnpmExitCode=0, disabling the non-zero-exit check. Now it exits 3.
-# We invoke the filter via `node -e` (same as the bash caller) so process.argv
-# is correctly indexed: argv[0]=node, argv[1]=allowlist, argv[2]=pnpm_exit.
+# The advisory-processing module (audit-gate-core.mjs) validates that argv[3]
+# (pnpm-exit-code) is a non-negative integer string; an absent argument exits 3.
+# argv layout when run as a file: argv[0]=node, argv[1]=script, argv[2]=allowlist, argv[3]=pnpm_exit.
 printf '\nTest 4f (CommitB): filter invoked without pnpm_exit arg → exit 3 (fail-closed)\n'
-# Extract _AUDIT_FILTER_SCRIPT from the gate into a shell variable.
-_filter_script="$(bash -c "source '$GATE_SCRIPT' 2>/dev/null; printf '%s' \"\$_AUDIT_FILTER_SCRIPT\"")"
+_AUDIT_CORE_MODULE="$REPO_ROOT/scripts/lib/audit-gate-core.mjs"
 _filter_exit=0
-_filter_out="$(printf '%s' "$CLEAN_JSON" | node -e "$_filter_script" "$ALLOWLIST" 2>&1)" || _filter_exit=$?
+_filter_out="$(printf '%s' "$CLEAN_JSON" | node "$_AUDIT_CORE_MODULE" "$ALLOWLIST" 2>&1)" || _filter_exit=$?
 if [[ $_filter_exit -eq 3 ]]; then
   pass "CommitB: filter without pnpm_exit arg → exit 3"
 else
   fail "CommitB: filter without pnpm_exit arg → expected exit 3, got $_filter_exit (output: $_filter_out)"
 fi
-if printf '%s' "$_filter_out" | grep -q 'argv\[2\]'; then
-  pass "CommitB: filter without pnpm_exit arg → diagnostic message references argv[2]"
+if printf '%s' "$_filter_out" | grep -q 'argv\[3\]'; then
+  pass "CommitB: filter without pnpm_exit arg → diagnostic message references argv[3]"
 else
   fail "CommitB: filter without pnpm_exit arg → diagnostic missing from output: $_filter_out"
 fi
@@ -653,24 +652,24 @@ fi
 # Test 4g: invoke filter WITH non-numeric pnpm_exit arg → exit 3 (fail-closed)
 printf '\nTest 4g (CommitB): filter invoked with non-numeric pnpm_exit arg → exit 3 (fail-closed)\n'
 _filter_exit=0
-_filter_out="$(printf '%s' "$CLEAN_JSON" | node -e "$_filter_script" "$ALLOWLIST" 'notanumber' 2>&1)" || _filter_exit=$?
+_filter_out="$(printf '%s' "$CLEAN_JSON" | node "$_AUDIT_CORE_MODULE" "$ALLOWLIST" 'notanumber' 2>&1)" || _filter_exit=$?
 if [[ $_filter_exit -eq 3 ]]; then
   pass "CommitB: filter with non-numeric pnpm_exit → exit 3"
 else
   fail "CommitB: filter with non-numeric pnpm_exit → expected exit 3, got $_filter_exit (output: $_filter_out)"
 fi
 
-# Test 4h: normal invocation with numeric argv[2]="0" → still PASSES (regression)
+# Test 4h: normal invocation with numeric argv[3]="0" → still PASSES (regression)
 printf '\nTest 4h (CommitB, regression): filter with numeric pnpm_exit arg "0" → still PASSES\n'
 _filter_exit=0
-_filter_out="$(printf '%s' "$CLEAN_JSON" | node -e "$_filter_script" "$ALLOWLIST" '0' 2>&1)" || _filter_exit=$?
+_filter_out="$(printf '%s' "$CLEAN_JSON" | node "$_AUDIT_CORE_MODULE" "$ALLOWLIST" '0' 2>&1)" || _filter_exit=$?
 if [[ $_filter_exit -eq 0 ]] && printf '%s' "$_filter_out" | grep -q '^PASSED:'; then
-  pass "CommitB regression: numeric argv[2]='0' → filter exits 0 with PASSED token"
+  pass "CommitB regression: numeric argv[3]='0' → filter exits 0 with PASSED token"
 else
-  fail "CommitB regression: numeric argv[2]='0' → unexpected: exit=$_filter_exit output=$_filter_out"
+  fail "CommitB regression: numeric argv[3]='0' → unexpected: exit=$_filter_exit output=$_filter_out"
 fi
 
-unset _filter_exit _filter_out _filter_script
+unset _filter_exit _filter_out _AUDIT_CORE_MODULE
 
 # Test 5a: SKIP_AUDIT=1 without SKIP_AUDIT_REASON → aborts
 printf '\nTest 5a: SKIP_AUDIT=1 without reason → aborts\n'
