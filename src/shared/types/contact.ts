@@ -1,131 +1,31 @@
+// ---------------------------------------------------------------------------
+// Stable persisted/IPC domain types — derived from Zod schemas.
+// Do NOT hand-write these; edit schemas/contact.ts instead.
+// ---------------------------------------------------------------------------
+export type {
+  PhoneContact,
+  EmailContact,
+  ContactRecord,
+  DirectoryDataset,
+  AutoBackupTrigger,
+  AutoBackupSettings,
+  AppSettings,
+  EditableAppSettings,
+  AuditAction,
+  AuditLogEntry,
+  AuditLogQueryParams,
+} from "../schemas/contact.js";
+
 import type { AreaType, RecordType } from "../constants/catalogs.js";
+import type { AuditLogEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
 
-export interface PhoneContact {
-  id: string;
-  label?: string;
-  number: string;
-  extension?: string;
-  kind: string;
-  isPrimary: boolean;
-  /**
-   * Advisory presentation marker only — not an enforced access control; records and flagged values
-   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
-   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
-   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
-   */
-  confidential: boolean;
-  /**
-   * Advisory presentation marker only — not an enforced access control; records and flagged values
-   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
-   * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
-   * phones when selecting the default displayed number — this is UI convenience, not a security gate.
-   */
-  noPatientSharing: boolean;
-  notes?: string;
-}
-
-export interface EmailContact {
-  id: string;
-  address: string;
-  label?: string;
-  isPrimary: boolean;
-}
-
-export interface ContactRecord {
-  id: string;
-  externalId?: string;
-  type: RecordType;
-  displayName: string;
-  person?: {
-    firstName?: string;
-    lastName?: string;
-  };
-  organization: {
-    department?: string;
-    service?: string;
-    area?: AreaType;
-    specialty?: string;
-  };
-  location?: {
-    building?: string;
-    floor?: string;
-    room?: string;
-    text?: string;
-  };
-  contactMethods: {
-    phones: PhoneContact[];
-    emails: EmailContact[];
-  };
-  aliases: string[];
-  tags: string[];
-  notes?: string;
-  status: "active" | "inactive";
-  source?: {
-    externalId?: string;
-    sheetSlug?: string;
-    sheetRow?: string;
-  };
-  audit: {
-    createdAt: string;
-    updatedAt: string;
-    createdBy: string;
-    updatedBy: string;
-  };
-}
-
-export interface DirectoryDataset {
-  version: string;
-  exportedAt: string;
-  metadata: {
-    recordCount: number;
-    generatedFrom: string;
-    generatedBy: string;
-    editorName: string;
-    typeCounts: Partial<Record<RecordType, number>>;
-    areaCounts: Partial<Record<AreaType, number>>;
-  };
-  catalogs: {
-    recordTypes: RecordType[];
-    areas: AreaType[];
-  };
-  records: ContactRecord[];
-}
-
-export interface AppSettings {
-  editorName: string;
-  dataFilePath: string;
-  backupDirectoryPath: string;
-  managedPaths?: {
-    dataFilePath: boolean;
-    backupDirectoryPath: boolean;
-  };
-  ui: {
-    showInactiveByDefault: boolean;
-    autoBackup: AutoBackupSettings;
-  };
-}
-
-export type AutoBackupTrigger = "launch" | "intervalHours" | "editCount";
-
-export interface AutoBackupSettings {
-  enabled: boolean;
-  trigger: AutoBackupTrigger;
-  intervalHours: number;
-  editCountThreshold: number;
-  retentionCount: number;
-}
+// ---------------------------------------------------------------------------
+// UX-only and composite types — not duplicated by any Zod schema.
+// ---------------------------------------------------------------------------
 
 export interface AutoBackupFailureEvent {
   message: string;
 }
-
-// EditableAppSettings is structurally derived from AppSettings so that adding a
-// field to AppSettings.ui forces a review of this type. If AppSettings.ui gains
-// new fields they will automatically appear here too.
-export type EditableAppSettings = Pick<
-  AppSettings,
-  "editorName" | "dataFilePath" | "backupDirectoryPath" | "ui"
->;
 
 export interface BootstrapData {
   contacts: DirectoryDataset;
@@ -148,6 +48,17 @@ export type BootstrapResult = BootstrapData | RecoveryBootstrapData;
 
 export const isRecoveryBootstrap = (payload: BootstrapResult): payload is RecoveryBootstrapData =>
   "recovery" in payload;
+
+// ---------------------------------------------------------------------------
+// Editable (form/IPC-input) types — intentionally kept separate from the
+// persisted-schema derived types above. The editablePhoneContactSchema,
+// editableEmailContactSchema, and editableContactRecordSchema apply string
+// transforms (.trim(), empty→undefined) and stricter validators (.email(),
+// .min(1)) so their z.infer outputs differ from these hand-written interfaces.
+// Using the schema-inferred types here would constrain the IPC payload shape
+// more than necessary and would propagate transform side-effects into callers
+// that don't go through Zod parsing.
+// ---------------------------------------------------------------------------
 
 export interface EditablePhoneContact {
   id: string;
@@ -352,28 +263,6 @@ export interface CsvImportResult extends ImportContactsResult {
   updatedCount: number;
   conflictCount: number;
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
-}
-
-export type AuditAction = "create" | "update" | "delete" | "bulk-import" | "dataset-replace" | "restore-from-backup" | "reset";
-
-export interface AuditLogEntry {
-  timestamp: string;
-  editor: string;
-  action: AuditAction;
-  recordId?: string;
-  recordName?: string;
-  changes?: Record<string, { old?: unknown; new?: unknown }> | null;
-  reason?: string | null;
-  recordsAffected?: number;
-  importSource?: string;
-}
-
-export interface AuditLogQueryParams {
-  fromDate?: string;
-  toDate?: string;
-  editor?: string;
-  action?: AuditAction;
-  recordName?: string;
 }
 
 export interface AuditLogResult {

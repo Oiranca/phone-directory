@@ -105,3 +105,9 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [14:17] Router + AppShell nav + keyboard shortcuts updated
 - [14:20] All tests passing: 772 pass, 2 skipped. Build + typecheck clean.
 - [14:21] ✅ Complete — pushed to feat/oir-60-build-duplicate-review-and-safe-merge-workflow
+
+#### [OIR-118] software-engineer — Zod schema derivation
+- [10:00] Starting analysis of shared/types/contact.ts vs shared/schemas/contact.ts
+- [10:01] Identified types to derive: PhoneContact, EmailContact, ContactRecord, DirectoryDataset, AppSettings, AutoBackupSettings, AutoBackupTrigger, EditableAppSettings, AuditAction, AuditLogEntry, AuditLogQueryParams
+- [10:01] Editable types (EditablePhoneContact, EditableEmailContact, EditableContactRecord) intentionally differ — schema has transforms/validation, kept separate with comment
+- [10:02] Implementing derivation in contact.ts
