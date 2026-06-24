@@ -65,9 +65,6 @@ const EXPECTED_METHODS = [
   "resetDataset",
   "previewCsvImport",
   "importCsvDataset",
-  "getAuditLog",
-  "exportAuditLog",
-  "recoverAuditLog",
   "listBuscas",
   "addBusca",
   "updateBusca",
@@ -249,15 +246,6 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
     });
     it("importCsvDataset → contacts:import-csv-dataset", async () => {
       await expectChannel("importCsvDataset", CONTACTS_CHANNELS.importCsvDataset, "tok", []);
-    });
-    it("getAuditLog → contacts:get-audit-log", async () => {
-      await expectChannel("getAuditLog", CONTACTS_CHANNELS.getAuditLog, { page: 1, pageSize: 20 });
-    });
-    it("exportAuditLog → contacts:export-audit-log", async () => {
-      await expectChannel("exportAuditLog", CONTACTS_CHANNELS.exportAuditLog, { page: 1, pageSize: 20 });
-    });
-    it("recoverAuditLog → contacts:recover-audit-log", async () => {
-      await expectChannel("recoverAuditLog", CONTACTS_CHANNELS.recoverAuditLog);
     });
     it("detectDuplicates → contacts:detect-duplicates", async () => {
       await expectChannel("detectDuplicates", CONTACTS_CHANNELS.detectDuplicates);

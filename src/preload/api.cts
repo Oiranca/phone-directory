@@ -36,9 +36,6 @@ export const CONTACTS_CHANNELS = {
   importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
   importCsvDataset: "contacts:import-csv-dataset",
-  getAuditLog:      "contacts:get-audit-log",
-  exportAuditLog:   "contacts:export-audit-log",
-  recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
 } as const satisfies typeof _CanonicalContacts;
@@ -86,12 +83,6 @@ export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
       ipcRenderer.invoke(CONTACTS_CHANNELS.importCsvDataset, importToken, policies) as ReturnType<HospitalDirectoryApi["importCsvDataset"]>,
     browseForPath: (type) =>
       ipcRenderer.invoke(SETTINGS_CHANNELS.browsePath, type) as ReturnType<HospitalDirectoryApi["browseForPath"]>,
-    getAuditLog: (params) =>
-      ipcRenderer.invoke(CONTACTS_CHANNELS.getAuditLog, params) as ReturnType<HospitalDirectoryApi["getAuditLog"]>,
-    exportAuditLog: (params) =>
-      ipcRenderer.invoke(CONTACTS_CHANNELS.exportAuditLog, params) as ReturnType<HospitalDirectoryApi["exportAuditLog"]>,
-    recoverAuditLog: () =>
-      ipcRenderer.invoke(CONTACTS_CHANNELS.recoverAuditLog) as ReturnType<HospitalDirectoryApi["recoverAuditLog"]>,
     listBuscas: () => ipcRenderer.invoke(BUSCAS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBuscas"]>,
     addBusca: (record) =>
       ipcRenderer.invoke(BUSCAS_CHANNELS.add, record) as ReturnType<HospitalDirectoryApi["addBusca"]>,

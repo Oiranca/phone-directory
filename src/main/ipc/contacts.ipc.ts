@@ -1,5 +1,4 @@
 import type { CsvImportPolicySelection, EditableContactRecord, MergePolicy } from "../../shared/types/contact.js";
-import { auditLogQueryParamsSchema } from "../../shared/schemas/contact.js";
 import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.js";
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
@@ -239,54 +238,6 @@ export const registerContactsIpc = (service: AppDataService) => {
     // confirmations cannot race past this point with the same token.
     clearPendingCsvImport(importToken);
     return service.importCsvDataset(pendingImport.sourceFilePath, policies);
-  });
-
-  ipcMain.handle(CHANNELS.recoverAuditLog, () => service.recoverAuditLog());
-
-  ipcMain.handle(CHANNELS.getAuditLog, async (_event, rawParams: unknown) => {
-    const parsed = auditLogQueryParamsSchema.safeParse(rawParams ?? {});
-    if (!parsed.success) {
-      throw new Error("Invalid query parameters");
-    }
-    try {
-      return await service.getAuditLog(parsed.data);
-    } catch (err) {
-      console.error("[contacts:get-audit-log]", err);
-      throw new Error("Internal server error");
-    }
-  });
-
-  ipcMain.handle(CHANNELS.exportAuditLog, async (event, rawParams: unknown) => {
-    const parsed = auditLogQueryParamsSchema.safeParse(rawParams ?? {});
-    if (!parsed.success) {
-      throw new Error("Invalid query parameters");
-    }
-    try {
-      const e2eFilePath = consumeE2eSaveDialogPath();
-
-      if (e2eFilePath) {
-        return await service.exportAuditLog(e2eFilePath, parsed.data);
-      }
-
-      const browserWindow = BrowserWindow.fromWebContents(event.sender);
-      const saveOptions = {
-        title: "Exportar registro de auditoría",
-        defaultPath: path.join(app.getPath("downloads"), "audit-log-export.csv"),
-        filters: [{ name: "CSV", extensions: ["csv"] }]
-      };
-      const { canceled, filePath } = browserWindow
-        ? await dialog.showSaveDialog(browserWindow, saveOptions)
-        : await dialog.showSaveDialog(saveOptions);
-
-      if (canceled || !filePath) {
-        return null;
-      }
-
-      return await service.exportAuditLog(filePath, parsed.data);
-    } catch (err) {
-      console.error("[contacts:export-audit-log]", err);
-      throw new Error("Internal server error");
-    }
   });
 
   ipcMain.handle(CHANNELS.detectDuplicates, async () => {
