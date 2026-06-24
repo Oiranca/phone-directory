@@ -12,12 +12,17 @@
  * Channel constants are inlined here (not imported from channels.ts) for the
  * same reason as the original index.cts: src/shared/ipc/channels.ts is ESM
  * (package.json "type":"module") and a sandboxed CJS preload cannot require()
- * ESM files. Any rename here must also be reflected in channels.ts — tsc
- * (tsconfig.electron.json) catches drift via the HospitalDirectoryApi type
- * assertion on the returned api object.
+ * ESM files at runtime. Type-only imports (erased before .cjs emit) are used
+ * for compile-time parity assertions via `satisfies` — see each map below.
  */
 import type { IpcRenderer } from "electron";
 import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
+import type {
+  CONTACTS_CHANNELS as _CanonicalContacts,
+  SETTINGS_CHANNELS as _CanonicalSettings,
+  BUSCAS_CHANNELS   as _CanonicalBuscas,
+  PUSH_CHANNELS     as _CanonicalPush
+} from "../shared/ipc/channels.js";
 
 export const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
@@ -36,13 +41,13 @@ export const CONTACTS_CHANNELS = {
   recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
-} as const;
+} as const satisfies _CanonicalContacts;
 
 export const SETTINGS_CHANNELS = {
   save:       "settings:save",
   defaults:   "settings:defaults",
   browsePath: "settings:browse-path"
-} as const;
+} as const satisfies _CanonicalSettings;
 
 export const BUSCAS_CHANNELS = {
   list:         "buscas:list",
@@ -50,11 +55,11 @@ export const BUSCAS_CHANNELS = {
   update:       "buscas:update",
   remove:       "buscas:delete",
   listImported: "buscas:list-imported"
-} as const;
+} as const satisfies _CanonicalBuscas;
 
 export const PUSH_CHANNELS = {
   autoBackupFailed: "app:auto-backup-failed"
-} as const;
+} as const satisfies _CanonicalPush;
 
 export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
   // Type assertion: api must satisfy HospitalDirectoryApi exactly.
