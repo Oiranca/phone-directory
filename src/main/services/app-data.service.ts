@@ -471,7 +471,9 @@ export class AppDataService {
       throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
     }
 
-    if (preview.validRowCount === 0) {
+    // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
+    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook.
+    if (preview.validRowCount === 0 && buscasParseResult.parsedCellCount === 0) {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
@@ -502,8 +504,11 @@ export class AppDataService {
     if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
       try {
         await this.options.buscasService.importFromOds(buscasParseResult);
-      } catch {
-        // Non-fatal: contacts import succeeded; buscas persist failed silently.
+      } catch (err) {
+        // Non-fatal: contacts import succeeded; log so operators can diagnose.
+        // Surfacing to the UI would require a contract change — out of scope here.
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[BuscasImport] Failed to persist buscas records — ${errMsg}`);
       }
     }
 

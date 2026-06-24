@@ -3653,4 +3653,50 @@ describe("AppDataService", () => {
     const result = await service.importCsvDataset(sourceFilePath);
     expect(result.createdCount).toBeGreaterThan(0);
   });
+
+  it("OIR-130: importCsvDataset persists buscas records when workbook has zero contact rows (buscas-only ODS)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BuscasService } = await import("./buscas.service.js");
+
+    const buscasService = new BuscasService();
+    const service = new AppDataService({ buscasService });
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Build a workbook with ONLY a buscas sheet — no contact sheet at all.
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
+        ["CARDIOLOGIA", "8801", "8802", ""],
+        ["NEUROLOGIA", "8803", "", "guardia"]
+      ]),
+      "Buscas_Facultativos"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "buscas-only.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    // Preview must succeed (buscas-only is a valid, confirmable workbook).
+    await service.previewCsvImport(sourceFilePath);
+
+    // Confirm must NOT throw even though validRowCount === 0 (no contact rows).
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    // No contacts were created or updated — existing contacts are untouched.
+    expect(result.createdCount).toBe(0);
+    expect(result.updatedCount).toBe(0);
+
+    // buscas.json must contain the imported pager records.
+    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as {
+      importedRecords: Array<{ deviceNumber: string }>;
+    };
+    const numbers = raw.importedRecords.map((r) => r.deviceNumber);
+    expect(numbers).toContain("8801");
+    expect(numbers).toContain("8802");
+    expect(numbers).toContain("8803");
+  });
 });

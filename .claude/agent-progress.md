@@ -157,3 +157,6 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [13:36] Tests: 40 pass in social-contact-oir131.test.ts (13 new), full suite 896 pass (1 pre-existing flaky race)
 - [13:37] tsc app + electron: clean. pnpm build: clean.
 - [13:37] ✅ Complete — commit + push to fix/oir-131-social-media-contact
+
+#### [OIR-130-fix] software-engineer — buscas-only lost write
+- [10:00] Task started — fixing buscas-only workbook zero-row guard + silent catch logging in app-data.service.ts
