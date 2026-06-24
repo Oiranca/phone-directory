@@ -322,12 +322,12 @@ describe("evaluateAudit — infra / malformed payload → exit 3", () => {
     [
       "pnpmExitCode is not a number → exit 3",
       CLEAN_JSON, [], /** @type {any} */ ("notanumber"),
-      { exitCode: 3, stderrContains: "argv[2]" },
+      { exitCode: 3, stderrContains: "argv[3]" },
     ],
     [
       "pnpmExitCode is undefined → exit 3",
       CLEAN_JSON, [], /** @type {any} */ (undefined),
-      { exitCode: 3, stderrContains: "argv[2]" },
+      { exitCode: 3, stderrContains: "argv[3]" },
     ],
   ];
 

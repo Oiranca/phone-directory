@@ -481,7 +481,7 @@ export function evaluateAudit(rawJsonString, allowlistEntries, pnpmExitCode) {
   //
   // pnpmExitCode MUST be a non-negative integer; anything else is a caller bug — fail closed.
   if (typeof pnpmExitCode !== "number" || !Number.isInteger(pnpmExitCode) || pnpmExitCode < 0) {
-    err += "[audit-gate] Internal error: pnpm exit code argument (argv[2]) is missing or non-numeric " +
+    err += "[audit-gate] Internal error: pnpm exit code argument (argv[3]) is missing or non-numeric " +
       "(got: " + JSON.stringify(pnpmExitCode) + ") — this is a bug in the gate caller.\n";
     return { exitCode: 3, stdout: out, stderr: err };
   }
@@ -536,7 +536,7 @@ if (_isDirectRun) {
   // Validate pnpm exit code argument before reading stdin.
   if (pnpmExitArg === undefined || pnpmExitArg === null || !/^\d+$/.test(pnpmExitArg)) {
     process.stderr.write(
-      "[audit-gate] Internal error: pnpm exit code argument (argv[2]) is missing or non-numeric " +
+      "[audit-gate] Internal error: pnpm exit code argument (argv[3]) is missing or non-numeric " +
       "(got: " + JSON.stringify(pnpmExitArg) + ") — this is a bug in the gate caller.\n"
     );
     process.exit(3);

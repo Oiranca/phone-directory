@@ -643,8 +643,8 @@ if [[ $_filter_exit -eq 3 ]]; then
 else
   fail "CommitB: filter without pnpm_exit arg → expected exit 3, got $_filter_exit (output: $_filter_out)"
 fi
-if printf '%s' "$_filter_out" | grep -q 'argv\[2\]'; then
-  pass "CommitB: filter without pnpm_exit arg → diagnostic message references argv[2]"
+if printf '%s' "$_filter_out" | grep -q 'argv\[3\]'; then
+  pass "CommitB: filter without pnpm_exit arg → diagnostic message references argv[3]"
 else
   fail "CommitB: filter without pnpm_exit arg → diagnostic missing from output: $_filter_out"
 fi
