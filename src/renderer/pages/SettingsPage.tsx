@@ -489,8 +489,8 @@ export const SettingsPage = () => {
         </div>
         </section>
 
-        <aside className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5 xl:sticky xl:top-6 xl:self-start">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <div>
             <p className="text-sm font-semibold text-slate-500">Estado actual</p>
             <dl className="mt-3 space-y-3 text-sm text-slate-700">
               <div>
@@ -527,6 +527,8 @@ export const SettingsPage = () => {
               </div>
             </dl>
           </div>
+
+          <hr className="border-slate-200" />
 
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
             <h3 className="text-sm font-semibold text-scs-blueDark">Qué cambia al guardar</h3>

@@ -473,4 +473,40 @@ describe("SettingsPage", () => {
     expect((await screen.findAllByText(/dialog failed/)).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
   });
+
+  it("sidebar aside renders status block, hr separator, and help heading in order — no decorative card wrappers", async () => {
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    // Status block is present
+    const statusLabel = screen.getByText("Estado actual");
+    expect(statusLabel).toBeInTheDocument();
+
+    // The <hr> separator is present (role="separator")
+    const separator = screen.getByRole("separator");
+    expect(separator).toBeInTheDocument();
+
+    // Help block heading is present
+    const helpHeading = screen.getByRole("heading", { name: "Qué cambia al guardar" });
+    expect(helpHeading).toBeInTheDocument();
+
+    // DOM order: status label -> separator -> help heading
+    const bodyHTML = document.body.innerHTML;
+    const statusPos = bodyHTML.indexOf("Estado actual");
+    const separatorPos = bodyHTML.indexOf("<hr");
+    const helpPos = bodyHTML.indexOf("Qué cambia al guardar");
+    expect(statusPos).toBeLessThan(separatorPos);
+    expect(separatorPos).toBeLessThan(helpPos);
+
+    // The aside must NOT carry the old outer decorative card classes
+    const aside = statusLabel.closest("aside");
+    expect(aside).not.toBeNull();
+    expect(aside!.className).not.toContain("rounded-3xl");
+    expect(aside!.className).not.toContain("bg-slate-50");
+
+    // The status block container must NOT carry the old inner card class
+    const statusContainer = statusLabel.parentElement;
+    expect(statusContainer).not.toBeNull();
+    expect(statusContainer!.className).not.toContain("shadow-sm");
+  });
 });
