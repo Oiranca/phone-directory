@@ -5,6 +5,8 @@
 export type {
   PhoneContact,
   EmailContact,
+  SocialPlatform,
+  SocialContact,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -91,6 +93,16 @@ export interface EditableEmailContact {
   isPrimary: boolean;
 }
 
+/** Editable social-media contact entry (OIR-131). Mirrors EditablePhoneContact pattern. */
+export interface EditableSocialContact {
+  id: string;
+  platform: import("../schemas/contact.js").SocialPlatform;
+  handle?: string;
+  url?: string;
+  label?: string;
+  isPrimary: boolean;
+}
+
 export interface EditableContactRecord {
   id?: string;
   externalId?: string;
@@ -115,6 +127,7 @@ export interface EditableContactRecord {
   contactMethods: {
     phones: EditablePhoneContact[];
     emails: EditableEmailContact[];
+    socials: EditableSocialContact[];
   };
   aliases: string[];
   tags: string[];

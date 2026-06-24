@@ -37,6 +37,55 @@ export const emailContactSchema = z.object({
   isPrimary: z.boolean()
 });
 
+/**
+ * Platform enum for social-media contacts (OIR-131).
+ * Naming mirrors the existing kind/type enum convention: lowercase slug.
+ */
+export const socialPlatformSchema = z.enum([
+  "instagram",
+  "twitter",
+  "facebook",
+  "linkedin",
+  "youtube",
+  "tiktok",
+  "web",
+  "other"
+]);
+
+/**
+ * Persisted social-media contact entry (OIR-131).
+ * At least one of `handle` or `url` is required (enforced by .refine).
+ * BACKWARD COMPAT: contactMethods.socials uses .default([]) so old records parse fine.
+ */
+/**
+ * Validates that `url`, when present, uses only http: or https: scheme.
+ * Rejects javascript:, data:, vbscript:, file:, and any other scheme.
+ */
+const isSafeHttpUrl = (url: string | undefined): boolean => {
+  if (url === undefined || url.trim() === "") return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+export const socialContactSchema = z.object({
+  id: z.string(),
+  platform: socialPlatformSchema,
+  handle: z.string().optional(),
+  url: z.string().optional(),
+  label: z.string().optional(),
+  isPrimary: z.boolean()
+}).refine(
+  (entry) => Boolean(entry.handle ?? entry.url),
+  { message: "Cada entrada de red social necesita al menos un handle o una URL." }
+).refine(
+  (entry) => isSafeHttpUrl(entry.url),
+  { message: "La URL de la red social debe usar http o https.", path: ["url"] }
+);
+
 export const contactRecordSchema = z.object({
   id: z.string(),
   externalId: z.string().optional(),
@@ -60,7 +109,10 @@ export const contactRecordSchema = z.object({
   }).optional(),
   contactMethods: z.object({
     phones: z.array(phoneContactSchema),
-    emails: z.array(emailContactSchema)
+    emails: z.array(emailContactSchema),
+    // BACKWARD COMPAT (OIR-131): existing persisted records have no `socials` field.
+    // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
+    socials: z.array(socialContactSchema).default([])
   }),
   aliases: z.array(z.string()),
   tags: z.array(z.string()),
@@ -148,6 +200,26 @@ export const editableEmailContactSchema = z.object({
   isPrimary: z.boolean()
 });
 
+/**
+ * Editable social-media contact entry (OIR-131).
+ * Mirrors the EditablePhoneContact pattern: trim transforms applied,
+ * at-least-one-of handle/url validated.
+ */
+export const editableSocialContactSchema = z.object({
+  id: z.string().min(1),
+  platform: socialPlatformSchema,
+  handle: optionalTextField(),
+  url: optionalTextField(),
+  label: optionalTextField(),
+  isPrimary: z.boolean()
+}).refine(
+  (entry) => Boolean(entry.handle ?? entry.url),
+  { message: "Introduce un handle o una URL para la red social." }
+).refine(
+  (entry) => isSafeHttpUrl(entry.url),
+  { message: "La URL de la red social debe usar http o https.", path: ["url"] }
+);
+
 export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "dataset-replace", "restore-from-backup", "reset"]);
 
 export const auditLogEntrySchema = z.object({
@@ -197,7 +269,8 @@ export const editableContactRecordSchema = z.object({
   }).optional(),
   contactMethods: z.object({
     phones: z.array(editablePhoneContactSchema),
-    emails: z.array(editableEmailContactSchema)
+    emails: z.array(editableEmailContactSchema),
+    socials: z.array(editableSocialContactSchema).default([])
   }),
   aliases: z.array(z.string().trim().min(1)).default([]),
   tags: z.array(z.string().trim().min(1)).default([]),
@@ -218,6 +291,12 @@ export type PhoneContact = z.infer<typeof phoneContactSchema>;
 
 /** Persisted email entry — derived from the persistence schema. */
 export type EmailContact = z.infer<typeof emailContactSchema>;
+
+/** Social-media platform enum — derived from the persistence schema (OIR-131). */
+export type SocialPlatform = z.infer<typeof socialPlatformSchema>;
+
+/** Persisted social-media contact entry — derived from the persistence schema (OIR-131). */
+export type SocialContact = z.infer<typeof socialContactSchema>;
 
 /** Persisted contact record — derived from the persistence schema. */
 export type ContactRecord = z.infer<typeof contactRecordSchema>;

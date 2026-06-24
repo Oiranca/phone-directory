@@ -160,11 +160,12 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
 // B. Social-handle row skip (isSocialHandle)
 // ---------------------------------------------------------------------------
 
-describe("Social-handle row skip (isSocialHandle)", () => {
-  it("does not emit a record for a social-handle label with no phone", () => {
-    // Simulates: ["REDES SOCIALES … INSTAGRAM", "hospitaldrnegrin", "", ...]
-    // The parser resolves "hospitaldrnegrin" as the label (first cell is
-    // ALL-CAPS excluded; fallback finds the all-lowercase token in col 1).
+describe("Social-handle row import (OIR-131: social rows are first-class contacts)", () => {
+  it("imports a social-handle row as a contact with the handle as a social method", () => {
+    // OIR-131 removed the old isSocialHandle skip. Social rows are now imported
+    // as first-class contacts. The parser resolves "hospitaldrnegrin" as the
+    // label (first cell is ALL-CAPS excluded; fallback finds the all-lowercase
+    // token in col 1). The platform is inferred from the row cells (INSTAGRAM).
     const filePath = writeWorkbook(testRoot, "social-handle.xlsx", [
       {
         name: "urgencias",
@@ -172,7 +173,7 @@ describe("Social-handle row skip (isSocialHandle)", () => {
           ["SERVICIO", "NUMERO"],
           ["Triaje", "12345"],
           ["Mostrador urgencias", "12346"],
-          // Social-media row: label would resolve to "hospitaldrnegrin"
+          // Social-media row: label resolves to "hospitaldrnegrin"; platform from cells.
           ["REDES SOCIALES HOSPITAL - INSTAGRAM", "hospitaldrnegrin", "", ""],
           // Continuation row with empty col-0 and handle in col-2
           ["", "", "hospitaldrnegrin", "", ""],
@@ -184,8 +185,12 @@ describe("Social-handle row skip (isSocialHandle)", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     const names = result.rows.map((r) => r.displayName);
 
-    // Social handle must NOT appear — not as a contact, not as a rejected row.
-    expect(names).not.toContain("hospitaldrnegrin");
+    // Social handle IS now imported as a contact (OIR-131).
+    expect(names).toContain("hospitaldrnegrin");
+    // Verify social fields are set on the imported contact.
+    const socialRow = result.rows.find((r) => r.displayName === "hospitaldrnegrin");
+    expect(socialRow?.social1Handle).toBe("hospitaldrnegrin");
+    expect(socialRow?.social1Platform).toBe("instagram");
     // Real contacts are preserved.
     expect(names).toContain("Triaje");
     expect(names).toContain("Mostrador urgencias");
@@ -285,8 +290,11 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
   });
 
-  it("counts social-handle rows in socialHandleSkippedRowCount", () => {
-    // Sheet contains one social-handle row (label: "hospitaldrnegrin", no phone).
+  it("OIR-131: social-handle rows are now imported as contacts (socialHandleSkippedRowCount stays 0)", () => {
+    // OIR-131: social rows are no longer skipped — they are mapped to social contacts.
+    // Previously this test asserted socialHandleSkippedRowCount === 1 and that
+    // "hospitaldrnegrin" was NOT in the result. Now the row becomes a contact
+    // with social1Handle = "hospitaldrnegrin" and socialHandleSkippedRowCount === 0.
     const filePath = writeWorkbook(testRoot, "social-count.xlsx", [
       {
         name: "urgencias",
@@ -303,20 +311,25 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    // Exactly 1 social-handle row was skipped.
+    // Social rows are now imported — not skipped.
     expect(result.buscasSkippedRowCount).toBe(0);
-    expect(result.socialHandleSkippedRowCount).toBe(1);
-    // Real contacts unaffected.
+    expect(result.socialHandleSkippedRowCount).toBe(0);
     const names = result.rows.map((r) => r.displayName);
     expect(names).toContain("Triaje");
     expect(names).toContain("Mostrador urgencias");
     expect(names).toContain("Control cajas");
-    expect(names).not.toContain("hospitaldrnegrin");
+    // hospitaldrnegrin is now a valid social contact, not skipped.
+    expect(names).toContain("hospitaldrnegrin");
+    // Verify it was mapped as a social entry.
+    const socialRow = result.rows.find((r) => r.displayName === "hospitaldrnegrin");
+    expect(socialRow?.social1Handle).toBe("hospitaldrnegrin");
+    expect(socialRow?.social1Platform).toBe("instagram");
+    expect(socialRow?.social1IsPrimary).toBe("true");
   });
 
-  it("tracks buscas rows and social rows in separate counters", () => {
+  it("tracks buscas rows separately from social rows (OIR-131: social no longer skipped)", () => {
     // Buscas_Varios: 1 header + 3 data = 3 buscas rows.
-    // urgencias sheet: 1 social-handle row.
+    // urgencias sheet: 1 social-handle row (now imported as contact, not skipped).
     const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
       {
         name: "Buscas_Varios",
@@ -341,10 +354,12 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     const result = normalizeWorkbookRowsFromFile(filePath);
 
     expect(result.buscasSkippedRowCount).toBe(3);
-    expect(result.socialHandleSkippedRowCount).toBe(1);
+    // Social row is imported (not skipped), so counter stays 0.
+    expect(result.socialHandleSkippedRowCount).toBe(0);
     const names = result.rows.map((r) => r.displayName);
     expect(names).toContain("Triaje");
     expect(names).toContain("Mostrador");
+    expect(names).toContain("hospitaldrnegrin");
   });
 
   it("returns both counts as 0 when there are no deferred skips", () => {

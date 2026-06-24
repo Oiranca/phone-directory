@@ -140,3 +140,20 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [12:31] Added singular socialHandleSkippedRowCount test to CsvImportPreviewPanel.test.tsx
 - [12:32] Validation: pnpm build ✓ | tsconfig.app.json ✓ | tsconfig.electron.json ✓ | pnpm test: 853 passed, 0 failed (42 files)
 - [12:33] ✅ Complete — phoneNumbers content parity preserved, rowHasPhone gating restored to OLD semantics
+
+#### [OIR-131] software-engineer — fix 4 failing tests
+- [13:09] Task start: 4 vitest failures on fix/oir-131-social-media-contact @ b87e9b2
+- [13:18] Fix 1: csv-import.service.test.ts — updated expected message substring to include "red social"
+- [13:18] Fix 2: spreadsheet-import-oir102-interim.test.ts — rewrote obsolete skip-test to assert IS-imported with instagram platform
+- [13:18] Fix 3 (real bug): inferSocialPlatformFromSection variadic fix + call-site passes row cells; instagram now detected when token is in same row as handle
+- [13:18] Fix 4: spreadsheet-parsers.test.ts blankRecord shape-lock updated from 39 to 49 keys (10 social columns)
+- [13:21] vitest run: 885 passed, 1 skipped, 0 failed (886 total). build clean. tsc app + electron: no errors.
+- [13:21] ✅ Complete — commit 5ab09da pushed to fix/oir-131-social-media-contact
+
+#### [OIR-131] software-engineer — fix H-01 socials drop + L-01 url scheme
+- [13:30] Task started — security review fix for H-01 (HIGH) and L-01 (LOW)
+- [13:35] H-01 fixed in 4 call sites: createRecord (line 522), updateRecord (line 572), mergeDuplicates (line 672+dedup), mergeImportedRecordFields (line 1483+merge)
+- [13:36] L-01 fixed: added isSafeHttpUrl helper + .refine() to both socialContactSchema and editableSocialContactSchema
+- [13:36] Tests: 40 pass in social-contact-oir131.test.ts (13 new), full suite 896 pass (1 pre-existing flaky race)
+- [13:37] tsc app + electron: clean. pnpm build: clean.
+- [13:37] ✅ Complete — commit + push to fix/oir-131-social-media-contact

@@ -521,7 +521,8 @@ export class AppDataService {
       id: savedRecordId,
       contactMethods: {
         phones: normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails),
+        socials: normalizePrimaryEntries(parsed.contactMethods.socials)
       },
       audit: {
         createdAt: now,
@@ -571,7 +572,8 @@ export class AppDataService {
       source: currentRecord.source,
       contactMethods: {
         phones: normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: normalizePrimaryEntries(parsed.contactMethods.emails)
+        emails: normalizePrimaryEntries(parsed.contactMethods.emails),
+        socials: normalizePrimaryEntries(parsed.contactMethods.socials)
       },
       audit: {
         ...currentRecord.audit,
@@ -645,6 +647,14 @@ export class AppDataService {
     const extraEmails = discardRecord.contactMethods.emails.filter(
       (e) => !existingEmailAddresses.has(normalizeEmail(e.address))
     );
+    const socialContentKey = (s: { platform: string; handle?: string; url?: string }): string =>
+      `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
+    const existingSocialKeys = new Set(
+      keepRecord.contactMethods.socials.map(socialContentKey)
+    );
+    const extraSocials = discardRecord.contactMethods.socials.filter(
+      (s) => !existingSocialKeys.has(socialContentKey(s))
+    );
     const extraTags = discardRecord.tags.filter(
       (t) => !existingTags.has(normalizeTag(t))
     );
@@ -671,7 +681,8 @@ export class AppDataService {
       // Merge contact methods with deduplication
       contactMethods: {
         phones: normalizePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
-        emails: normalizePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails])
+        emails: normalizePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails]),
+        socials: normalizePrimaryEntries([...keepRecord.contactMethods.socials, ...extraSocials])
       },
       // Merge aliases
       aliases: [...keepRecord.aliases, ...extraAliases],
@@ -1454,6 +1465,9 @@ export class AppDataService {
   ): ContactRecord {
     const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => normalizePhoneForDedup(phone.number)));
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
+    const socialMergeKey = (s: { platform: string; handle?: string; url?: string }): string =>
+      `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
+    const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
     const nextPhones = [
       ...currentRecord.contactMethods.phones,
       ...importedRecord.contactMethods.phones.filter((phone) => {
@@ -1467,6 +1481,10 @@ export class AppDataService {
         const key = email.address.trim().toLowerCase();
         return key && !hasEmail.has(key);
       })
+    ];
+    const nextSocials = [
+      ...currentRecord.contactMethods.socials,
+      ...importedRecord.contactMethods.socials.filter((s) => !hasSocialKey.has(socialMergeKey(s)))
     ];
 
     return contactRecordSchema.parse({
@@ -1482,7 +1500,8 @@ export class AppDataService {
       location: currentRecord.location ?? importedRecord.location,
       contactMethods: {
         phones: normalizePrimaryEntries(nextPhones),
-        emails: normalizePrimaryEntries(nextEmails)
+        emails: normalizePrimaryEntries(nextEmails),
+        socials: normalizePrimaryEntries(nextSocials)
       },
       aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
       tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
