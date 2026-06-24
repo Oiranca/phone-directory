@@ -2,7 +2,7 @@ import { ipcMain } from "electron";
 import { ZodError } from "zod";
 import { editableBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
 import type { BuscasService } from "../services/buscas.service.js";
-import { BUSCAS_CHANNELS, SERVER_CHANNELS } from "../../shared/ipc/channels.js";
+import { BUSCAS_CHANNELS } from "../../shared/ipc/channels.js";
 
 /**
  * Maps a caught error to a renderer-safe message.
@@ -72,14 +72,6 @@ export const registerBuscasIpc = (service: BuscasService) => {
     }
   });
 
-  ipcMain.handle(SERVER_CHANNELS.buscasSearch, async (_event, query: unknown) => {
-    try {
-      const q = typeof query === "string" ? query : "";
-      return await service.search(q);
-    } catch (err) {
-      throw toRendererError(err, SERVER_CHANNELS.buscasSearch);
-    }
-  });
 };
 
 export type BuscasChannels = typeof BUSCAS_CHANNELS;
