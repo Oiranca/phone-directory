@@ -84,6 +84,9 @@ pnpm test
 log "Building renderer and Electron main/preload"
 pnpm run build
 
+log "Running E2E tests (critical import flow gate)"
+pnpm run test:e2e
+
 log "Building portable app artifact"
 case "$PLATFORM" in
   win) pnpm exec electron-builder --win --dir ;;
