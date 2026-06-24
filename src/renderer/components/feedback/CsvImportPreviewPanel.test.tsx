@@ -1468,5 +1468,59 @@ describe("CsvImportPreviewPanel", () => {
 
       expect(screen.queryByText(/filas 1–/)).not.toBeInTheDocument();
     });
+
+    it("resets to page 1 when a new preview with a different importToken is provided", () => {
+      const previewA: CsvImportPreviewWithConflicts = {
+        ...makeRowsPreview(101),
+        importToken: "token-A"
+      };
+      const previewB: CsvImportPreviewWithConflicts = {
+        ...makeRowsPreview(101),
+        importToken: "token-B",
+        previewRows: Array.from({ length: 101 }, (_, i) => ({
+          rowNumber: i + 2,
+          status: "accepted" as const,
+          displayName: `Preview B ${i + 1}`
+        }))
+      };
+
+      const onConfirm = vi.fn();
+      const onClose = vi.fn();
+      const onPolicyChange = vi.fn();
+
+      const { rerender } = render(
+        <CsvImportPreviewPanel
+          preview={previewA}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={onConfirm}
+          onPolicyChange={onPolicyChange}
+          onClose={onClose}
+        />
+      );
+
+      // Navigate to page 2 on preview A.
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+      expect(screen.queryByText("Registro 1")).not.toBeInTheDocument();
+      expect(screen.getByText("Registro 101")).toBeInTheDocument();
+
+      // Swap in a completely new preview (different importToken).
+      rerender(
+        <CsvImportPreviewPanel
+          preview={previewB}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={onConfirm}
+          onPolicyChange={onPolicyChange}
+          onClose={onClose}
+        />
+      );
+
+      // Pager must be back on page 1: indicator reads "1" and first-page rows are visible.
+      expect(screen.getByRole("navigation", { name: /Paginación de filas/ })).toBeInTheDocument();
+      expect(screen.getByText(/Página/)).toHaveTextContent("Página 1 de 2");
+      expect(screen.getByText("Preview B 1")).toBeInTheDocument();
+      expect(screen.queryByText("Preview B 101")).not.toBeInTheDocument();
+    });
   });
 });
