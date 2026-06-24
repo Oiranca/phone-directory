@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
   CsvImportPreviewWithConflicts,
@@ -37,6 +37,9 @@ const POLICY_LABELS: Record<MergePolicy, string> = {
   overwrite: "Sobrescribir",
   "merge-fields": "Combinar"
 };
+
+/** Maximum rows rendered in the DOM at one time for the preview row table. */
+const PREVIEW_ROWS_PER_PAGE = 100;
 
 const CONFLICT_REASON_LABELS: Record<string, string> = {
   "conflict_reason.external_id": "Mismo identificador externo",
@@ -199,6 +202,24 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // ---------------------------------------------------------------------------
   const [selectedIndices, setSelectedIndices] = useState<ReadonlySet<number>>(new Set());
   const [bulkPolicy, setBulkPolicy] = useState<MergePolicy>("skip");
+
+  // ---------------------------------------------------------------------------
+  // OIR-122 — preview row pagination.
+  // previewPage is 1-based. Reset to page 1 whenever a new file is previewed.
+  // ---------------------------------------------------------------------------
+  const [previewPage, setPreviewPage] = useState(1);
+  const totalPreviewRows = preview.previewRows.length;
+  const totalPreviewPages = Math.max(1, Math.ceil(totalPreviewRows / PREVIEW_ROWS_PER_PAGE));
+
+  // Guard against the current page going out of range when the dataset shrinks.
+  const safePage = Math.min(previewPage, totalPreviewPages);
+
+  useEffect(() => {
+    setPreviewPage(1);
+  }, [preview.importToken]);
+
+  const previewPageStart = (safePage - 1) * PREVIEW_ROWS_PER_PAGE;
+  const currentPageRows = preview.previewRows.slice(previewPageStart, previewPageStart + PREVIEW_ROWS_PER_PAGE);
 
   const allIndices = conflictedRecords.map((c) => c.recordIndex);
   const allSelected = allIndices.length > 0 && allIndices.every((idx) => selectedIndices.has(idx));
@@ -592,6 +613,11 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         <div className="mt-6">
           <p className="text-sm font-semibold text-emerald-950">
             Filas del archivo ({preview.previewRows.length})
+            {totalPreviewPages > 1 && (
+              <span className="ml-2 text-xs font-normal text-emerald-700">
+                — filas {previewPageStart + 1}–{Math.min(previewPageStart + PREVIEW_ROWS_PER_PAGE, totalPreviewRows)} de {totalPreviewRows}
+              </span>
+            )}
           </p>
           <div className="mt-3 overflow-x-auto rounded-2xl border border-emerald-200">
             <table className="w-full border-collapse text-sm" aria-label="Filas de importación">
@@ -627,7 +653,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                 </tr>
               </thead>
               <tbody>
-                {preview.previewRows.map((row) => (
+                {currentPageRows.map((row) => (
                   <tr
                     key={`row-${row.rowNumber}`}
                     className={["border-b border-emerald-100 last:border-0", STATUS_ROW_STYLES[row.status]].join(" ")}
@@ -694,6 +720,39 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
               </tbody>
             </table>
           </div>
+
+          {/* Pager — only shown when there are multiple pages */}
+          {totalPreviewPages > 1 && (
+            <nav aria-label="Paginación de filas de importación" className="mt-3 rounded-2xl border border-emerald-200 bg-white/80 p-2">
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  aria-label="Página anterior"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+                <span className="text-sm text-emerald-900">
+                  Página <span aria-current="page" className="font-semibold">{safePage}</span> de <span className="font-semibold">{totalPreviewPages}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
+                  disabled={safePage === totalPreviewPages}
+                  aria-label="Página siguiente"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+              </div>
+            </nav>
+          )}
         </div>
       )}
 

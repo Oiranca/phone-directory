@@ -1339,4 +1339,216 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.queryByRole("button", { name: /a todos/ })).not.toBeInTheDocument();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-122 — preview row pagination
+  // ---------------------------------------------------------------------------
+  describe("preview row pagination (OIR-122)", () => {
+    /** Build a preview with N accepted rows, rowNumber 2..N+1. */
+    const makeRowsPreview = (count: number): CsvImportPreviewWithConflicts => ({
+      ...basePreview,
+      fileName: "large.csv",
+      totalRowCount: count,
+      validRowCount: count,
+      recordCount: count,
+      mergedRecordCount: count,
+      createdCount: count,
+      previewRows: Array.from({ length: count }, (_, i) => ({
+        rowNumber: i + 2,
+        status: "accepted" as const,
+        displayName: `Registro ${i + 1}`
+      }))
+    });
+
+    it("renders first-page rows when dataset fits in one page", () => {
+      renderPanel(makeRowsPreview(3));
+
+      expect(screen.getByText("Registro 1")).toBeInTheDocument();
+      expect(screen.getByText("Registro 2")).toBeInTheDocument();
+      expect(screen.getByText("Registro 3")).toBeInTheDocument();
+    });
+
+    it("does not render a pager when all rows fit on one page", () => {
+      renderPanel(makeRowsPreview(3));
+
+      expect(screen.queryByRole("navigation", { name: /Paginación de filas/ })).not.toBeInTheDocument();
+    });
+
+    it("renders a pager when rows exceed PREVIEW_ROWS_PER_PAGE (101 rows)", () => {
+      renderPanel(makeRowsPreview(101));
+
+      expect(screen.getByRole("navigation", { name: /Paginación de filas/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Página siguiente" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Página anterior" })).toBeInTheDocument();
+    });
+
+    it("first page shows exactly the first 100 rows and not row 101", () => {
+      renderPanel(makeRowsPreview(101));
+
+      expect(screen.getByText("Registro 1")).toBeInTheDocument();
+      expect(screen.getByText("Registro 100")).toBeInTheDocument();
+      // Row 101 is on page 2 — must not be in the DOM
+      expect(screen.queryByText("Registro 101")).not.toBeInTheDocument();
+    });
+
+    it("navigating to the last page shows the final row", () => {
+      renderPanel(makeRowsPreview(101));
+
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      expect(screen.getByText("Registro 101")).toBeInTheDocument();
+      // First page rows are no longer in the DOM
+      expect(screen.queryByText("Registro 1")).not.toBeInTheDocument();
+    });
+
+    it("Página anterior button navigates back to page 1", () => {
+      renderPanel(makeRowsPreview(101));
+
+      const nextBtn = screen.getByRole("button", { name: "Página siguiente" });
+      const prevBtn = screen.getByRole("button", { name: "Página anterior" });
+
+      fireEvent.click(nextBtn); // → page 2
+      expect(screen.getByText("Registro 101")).toBeInTheDocument();
+
+      fireEvent.click(prevBtn); // → page 1
+      expect(screen.getByText("Registro 1")).toBeInTheDocument();
+      expect(screen.queryByText("Registro 101")).not.toBeInTheDocument();
+    });
+
+    it("Página anterior is disabled on page 1 and Página siguiente is disabled on the last page", () => {
+      renderPanel(makeRowsPreview(101));
+
+      expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Página siguiente" })).not.toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Página anterior" })).not.toBeDisabled();
+    });
+
+    it("DOM row count never exceeds PREVIEW_ROWS_PER_PAGE even with 5000 rows", () => {
+      renderPanel(makeRowsPreview(5000));
+
+      const rows = document.querySelectorAll("tbody tr");
+      expect(rows.length).toBeLessThanOrEqual(100);
+    });
+
+    it("conflict selection persists across page navigation", () => {
+      // Build a preview that has both a conflict AND enough rows to show a pager.
+      const bigPreview: CsvImportPreviewWithConflicts = {
+        ...makeRowsPreview(101),
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-pg-0",
+              type: "service",
+              displayName: "Servicio Paginado importado",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-pg-0",
+              type: "service",
+              displayName: "Servicio Paginado actual",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      };
+
+      renderPanel(bigPreview);
+
+      // Select the conflict
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+
+      // Navigate to page 2
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      // Navigate back to page 1
+      fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
+
+      // Conflict checkbox must still be checked — selection persisted
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+    });
+
+    it("shows the page range indicator when there are multiple pages", () => {
+      renderPanel(makeRowsPreview(150));
+
+      expect(screen.getByText(/filas 1–100 de 150/)).toBeInTheDocument();
+    });
+
+    it("does not show the page range indicator when all rows fit on one page", () => {
+      renderPanel(makeRowsPreview(50));
+
+      expect(screen.queryByText(/filas 1–/)).not.toBeInTheDocument();
+    });
+
+    it("resets to page 1 when a new preview with a different importToken is provided", () => {
+      const previewA: CsvImportPreviewWithConflicts = {
+        ...makeRowsPreview(101),
+        importToken: "token-A"
+      };
+      const previewB: CsvImportPreviewWithConflicts = {
+        ...makeRowsPreview(101),
+        importToken: "token-B",
+        previewRows: Array.from({ length: 101 }, (_, i) => ({
+          rowNumber: i + 2,
+          status: "accepted" as const,
+          displayName: `Preview B ${i + 1}`
+        }))
+      };
+
+      const onConfirm = vi.fn();
+      const onClose = vi.fn();
+      const onPolicyChange = vi.fn();
+
+      const { rerender } = render(
+        <CsvImportPreviewPanel
+          preview={previewA}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={onConfirm}
+          onPolicyChange={onPolicyChange}
+          onClose={onClose}
+        />
+      );
+
+      // Navigate to page 2 on preview A.
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+      expect(screen.queryByText("Registro 1")).not.toBeInTheDocument();
+      expect(screen.getByText("Registro 101")).toBeInTheDocument();
+
+      // Swap in a completely new preview (different importToken).
+      rerender(
+        <CsvImportPreviewPanel
+          preview={previewB}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={onConfirm}
+          onPolicyChange={onPolicyChange}
+          onClose={onClose}
+        />
+      );
+
+      // Pager must be back on page 1: indicator reads "1" and first-page rows are visible.
+      expect(screen.getByRole("navigation", { name: /Paginación de filas/ })).toBeInTheDocument();
+      expect(screen.getByText(/Página/)).toHaveTextContent("Página 1 de 2");
+      expect(screen.getByText("Preview B 1")).toBeInTheDocument();
+      expect(screen.queryByText("Preview B 101")).not.toBeInTheDocument();
+    });
+  });
 });
