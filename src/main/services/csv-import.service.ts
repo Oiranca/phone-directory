@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import Papa from "papaparse";
 import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
-import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
+import type { AreaType } from "../../shared/constants/catalogs.js";
 import { contactRecordSchema, directoryDatasetSchema } from "../../shared/schemas/contact.js";
 import type {
   ContactRecord,
@@ -14,6 +14,7 @@ import type {
   PhoneContact,
   EmailContact
 } from "../../shared/types/contact.js";
+import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
 /**
  * Internal-only extension of CsvImportPreview that carries the absolute
@@ -336,16 +337,7 @@ const buildEmails = (
 
 const buildDataset = (records: ContactRecord[], editorName: string) => {
   const exportedAt = new Date().toISOString();
-  const typeCounts: Partial<Record<RecordType, number>> = {};
-  const areaCounts: Partial<Record<AreaType, number>> = {};
-
-  for (const record of records) {
-    typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
-
-    if (record.organization.area) {
-      areaCounts[record.organization.area] = (areaCounts[record.organization.area] ?? 0) + 1;
-    }
-  }
+  const { typeCounts, areaCounts } = computeMetadataCounts(records);
 
   return directoryDatasetSchema.parse({
     version: "1.0.0",

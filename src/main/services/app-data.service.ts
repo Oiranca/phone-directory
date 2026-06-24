@@ -35,11 +35,11 @@ import type {
   SaveContactResult,
   MergePolicy
 } from "../../shared/types/contact.js";
-import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
+import { computeMetadataCounts, normalizePhoneForDedup } from "../../shared/utils/matching.js";
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -1302,16 +1302,7 @@ export class AppDataService {
     editorName: string,
     exportedAt: string
   ): DirectoryDataset {
-    const typeCounts: Partial<Record<RecordType, number>> = {};
-    const areaCounts: Partial<Record<AreaType, number>> = {};
-
-    for (const record of records) {
-      typeCounts[record.type] = (typeCounts[record.type] ?? 0) + 1;
-
-      if (record.organization.area) {
-        areaCounts[record.organization.area] = (areaCounts[record.organization.area] ?? 0) + 1;
-      }
-    }
+    const { typeCounts, areaCounts } = computeMetadataCounts(records);
 
     return directoryDatasetSchema.parse({
       ...currentDataset,
@@ -1461,12 +1452,12 @@ export class AppDataService {
     exportedAt: string,
     editorName: string
   ): ContactRecord {
-    const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => phone.number.replace(/\D/g, "")));
+    const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => normalizePhoneForDedup(phone.number)));
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
     const nextPhones = [
       ...currentRecord.contactMethods.phones,
       ...importedRecord.contactMethods.phones.filter((phone) => {
-        const key = phone.number.replace(/\D/g, "");
+        const key = normalizePhoneForDedup(phone.number);
         return key && !hasPhone.has(key);
       })
     ];
@@ -1507,7 +1498,7 @@ export class AppDataService {
   private buildStableMergeKeys(record: ContactRecord): string[] {
     const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
     const phoneNumbers = record.contactMethods.phones
-      .map((phone) => phone.number.replace(/\D/g, ""))
+      .map((phone) => normalizePhoneForDedup(phone.number))
       .filter(Boolean)
       .sort();
     const emailAddresses = record.contactMethods.emails

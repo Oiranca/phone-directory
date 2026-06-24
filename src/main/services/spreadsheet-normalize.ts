@@ -100,8 +100,11 @@ export const normalizeDisplayNameForMerge = (name: string): string =>
 /**
  * Normalizes a phone number for deduplication purposes:
  * strip all non-digit characters.
+ *
+ * Re-exported from shared/utils/matching.ts (normalizePhoneForDedup) so that
+ * spreadsheet-parsers.ts consumers keep their existing import path.
  */
-export const normalizeNumberForDedup = (number: string): string => number.replace(/\D/g, "");
+export { normalizePhoneForDedup as normalizeNumberForDedup } from "../../shared/utils/matching.js";
 
 /** ASCII-slug normalization: lower, strip diacritics, replace non-alnum with "-". */
 export const normalizeAscii = (value: string) =>
