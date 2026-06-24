@@ -1080,4 +1080,263 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-133 — multi-select and bulk-apply conflict resolution
+  // ---------------------------------------------------------------------------
+  describe("conflict multi-select and bulk-apply (OIR-133)", () => {
+    /** Two-conflict preview — provides the surface needed for all multi-select tests. */
+    const twoConflictPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "multi-conflict.csv",
+      totalRowCount: 2,
+      validRowCount: 2,
+      recordCount: 2,
+      mergedRecordCount: 2,
+      updatedCount: 2,
+      conflictCount: 2,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-mc-0",
+            type: "service",
+            displayName: "Servicio A importado",
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-mc-0",
+            type: "service",
+            displayName: "Servicio A actual",
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        },
+        {
+          recordIndex: 1,
+          importedRecord: {
+            id: "import-mc-1",
+            type: "service",
+            displayName: "Servicio B importado",
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-mc-1",
+            type: "service",
+            displayName: "Servicio B actual",
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    // --- checkbox presence ---
+
+    it("renders a per-conflict checkbox for each conflict card", () => {
+      renderPanel(twoConflictPreview);
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeInTheDocument();
+    });
+
+    it("renders a select-all checkbox in the bulk toolbar", () => {
+      renderPanel(twoConflictPreview);
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar todos/ })).toBeInTheDocument();
+    });
+
+    // --- select-all / deselect-all ---
+
+    it("select-all checks all per-conflict checkboxes", () => {
+      renderPanel(twoConflictPreview);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todos/ }));
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeChecked();
+    });
+
+    it("clicking select-all when all are selected deselects all", () => {
+      renderPanel(twoConflictPreview);
+
+      // Select all then deselect all
+      const selectAllCb = screen.getByRole("checkbox", { name: /Seleccionar todos/ });
+      fireEvent.click(selectAllCb); // select all
+      fireEvent.click(selectAllCb); // now label says "Deseleccionar todos" — same element
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).not.toBeChecked();
+    });
+
+    it("selecting one conflict individually makes it checked", () => {
+      renderPanel(twoConflictPreview);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).not.toBeChecked();
+    });
+
+    // --- bulk-apply to selected ---
+
+    it("shows bulk-apply controls only when at least one conflict is selected", () => {
+      renderPanel(twoConflictPreview);
+
+      // Initially hidden
+      expect(screen.queryByRole("button", { name: /Aplicar a seleccionados/ })).not.toBeInTheDocument();
+
+      // Select one conflict
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+
+      expect(screen.getByRole("button", { name: /Aplicar a seleccionados/ })).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /Política para seleccionados/ })).toBeInTheDocument();
+    });
+
+    it("apply-to-selected calls onPolicyChange for each selected conflict with the chosen policy", () => {
+      const { onPolicyChange } = renderPanel(twoConflictPreview);
+
+      // Select both conflicts
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todos/ }));
+
+      // Choose "overwrite" in the bulk selector
+      fireEvent.change(screen.getByRole("combobox", { name: /Política para seleccionados/ }), {
+        target: { value: "overwrite" }
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar a seleccionados/ }));
+
+      expect(onPolicyChange).toHaveBeenCalledWith(0, "overwrite");
+      expect(onPolicyChange).toHaveBeenCalledWith(1, "overwrite");
+      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+    });
+
+    it("apply-to-selected only targets selected conflicts, not all", () => {
+      const { onPolicyChange } = renderPanel(twoConflictPreview);
+
+      // Select only conflict 0
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+
+      // Apply "skip" to selected
+      fireEvent.change(screen.getByRole("combobox", { name: /Política para seleccionados/ }), {
+        target: { value: "skip" }
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar a seleccionados/ }));
+
+      expect(onPolicyChange).toHaveBeenCalledWith(0, "skip");
+      expect(onPolicyChange).toHaveBeenCalledTimes(1);
+      // conflict 1 must not be touched
+      expect(onPolicyChange).not.toHaveBeenCalledWith(1, expect.anything());
+    });
+
+    it("bulk-apply deselects all after applying", () => {
+      renderPanel(twoConflictPreview);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todos/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar a seleccionados/ }));
+
+      // After apply, selection is cleared and the apply button disappears
+      expect(screen.queryByRole("button", { name: /Aplicar a seleccionados/ })).not.toBeInTheDocument();
+    });
+
+    // --- apply-to-all shortcuts ---
+
+    it("renders apply-to-all shortcut buttons for each policy", () => {
+      renderPanel(twoConflictPreview);
+
+      expect(screen.getByRole("button", { name: /Omitir a todos/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Sobrescribir a todos/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Combinar a todos/ })).toBeInTheDocument();
+    });
+
+    it("apply-to-all calls onPolicyChange for every conflict", () => {
+      const { onPolicyChange } = renderPanel(twoConflictPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Combinar a todos/ }));
+
+      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
+      expect(onPolicyChange).toHaveBeenCalledWith(1, "merge-fields");
+      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+    });
+
+    // --- individual override after bulk apply ---
+
+    it("individual radio still works after a bulk apply (per-conflict override)", () => {
+      const { onPolicyChange } = renderPanel(twoConflictPreview);
+
+      // Bulk apply "skip" to all
+      fireEvent.click(screen.getByRole("button", { name: /Omitir a todos/ }));
+      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+
+      // Now override conflict 0 individually to "merge-fields"
+      const radios = screen.getAllByRole("radio", { name: "Combinar" });
+      fireEvent.click(radios[0]!);
+
+      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
+      expect(onPolicyChange).toHaveBeenCalledTimes(3);
+    });
+
+    // --- resolved-gate still holds ---
+
+    it("confirm button is still disabled when conflicts are unresolved after bulk deselect", () => {
+      renderPanel(twoConflictPreview);
+
+      // policiesResolved is false on twoConflictPreview — gate must hold
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+    });
+
+    it("confirm button is enabled after all policies are resolved (policiesResolved: true)", () => {
+      renderPanel({
+        ...twoConflictPreview,
+        policiesResolved: true,
+        conflictedRecords: twoConflictPreview.conflictedRecords.map((c) => ({
+          ...c,
+          selectedPolicy: "merge-fields" as const
+        }))
+      });
+
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+
+    // --- disabled state while mutating ---
+
+    it("disables all multi-select controls while isMutating is true", () => {
+      renderPanel(twoConflictPreview, { isMutating: true });
+
+      expect(screen.getByRole("checkbox", { name: /Seleccionar todos/ })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Omitir a todos/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Sobrescribir a todos/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Combinar a todos/ })).toBeDisabled();
+    });
+
+    // --- no bulk toolbar for zero conflicts ---
+
+    it("does not render the bulk toolbar when there are no conflicts", () => {
+      renderPanel(basePreview);
+
+      expect(screen.queryByRole("checkbox", { name: /Seleccionar todos/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /a todos/ })).not.toBeInTheDocument();
+    });
+  });
 });
