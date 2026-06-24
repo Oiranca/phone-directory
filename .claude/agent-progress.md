@@ -95,6 +95,11 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [13:48] ✅ Done — PR: https://github.com/Oiranca/phone-directory/pull/56
 - [13:47] ✅ Done — PR: https://github.com/Oiranca/phone-directory/pull/56
 
+#### [OIR-132-pr79] software-engineer — trim conflict payload
+- [14:24] Task started — PR #79 reviewer comment: data-minimize ConflictRecordSummary payload
+- [14:25] Analyzed CsvImportPreviewPanel.tsx: locationSummary IS rendered (line 102); phones/emails/socials all rendered; area/status/type NOT rendered in conflict diff card
+- [14:25] Plan: drop area, status, type from ConflictRecordSummary type + toConflictRecordSummary builder; keep id (test/identity use), keep externalId (external-id-match correlation), keep all rendered fields
+
 #### [OIR-60] software-engineer — Build duplicate review and safe merge workflow
 - [14:01] Task started: implementing full OIR-60 scope on feat/oir-60-build-duplicate-review-and-safe-merge-workflow
 - [14:05] DuplicateDetectionService created with diacritics normalization (NFD)

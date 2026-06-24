@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
+import type { ConflictRecordSummary, CsvImportPreview, CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
 
 const basePreview: CsvImportPreviewWithConflicts = {
@@ -418,18 +418,20 @@ describe("CsvImportPreviewPanel", () => {
           importedRecord: {
             id: "import-1",
             externalId: "legacy-1",
-            type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
-            status: "active"
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecord: {
             id: "existing-1",
             externalId: "legacy-1",
-            type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
-            status: "active"
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecordIndex: 0,
           matchingRecordSource: "existing",
@@ -468,6 +470,443 @@ describe("CsvImportPreviewPanel", () => {
 
       expect(screen.getByRole("status")).toHaveTextContent("Todas las políticas");
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-132 — field-level diff display in conflict cards
+  // ---------------------------------------------------------------------------
+  describe("conflict field-level diff (OIR-132)", () => {
+    const phoneConflictPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "phone-conflict.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-ph-1",
+            displayName: "Urgencias Importada",
+            department: "Urgencias",
+            service: "Triaje",
+            specialty: "Triage avanzado",
+            locationSummary: "Edificio A · Planta 1",
+            phones: [
+              { number: "12345", kind: "direct" },
+              { number: "99999", kind: "fax", label: "Fax" }
+            ],
+            emails: [{ address: "urgencias@hospital.com", label: "Principal" }],
+            socials: [{ platform: "instagram", handle: "urgencias_h" }]
+          },
+          matchingRecord: {
+            id: "existing-ph-1",
+            displayName: "Urgencias Actual",
+            department: "Urgencias",
+            service: "Triaje",
+            phones: [
+              { number: "12345", kind: "direct" },
+              { number: "11111", kind: "other" }
+            ],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "phone-match",
+          conflictReasonKey: "conflict_reason.phone_match",
+          matchingFieldValue: "12345"
+        }
+      ]
+    };
+
+    it("shows the match signal with the matching phone number in the reason label", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText(/Teléfono coincidente: 12345/)).toBeInTheDocument();
+    });
+
+    it("renders both record columns with Entrante and Existente labels", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText("Entrante")).toBeInTheDocument();
+      expect(screen.getByText("Existente")).toBeInTheDocument();
+    });
+
+    it("renders display names for both sides of the conflict", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText("Urgencias Importada")).toBeInTheDocument();
+      expect(screen.getByText("Urgencias Actual")).toBeInTheDocument();
+    });
+
+    it("highlights the matching phone number on both sides", () => {
+      renderPanel(phoneConflictPreview);
+
+      // Both columns show the matching phone with highlighted styling
+      const highlightedPhones = screen.getAllByText(/^12345$/);
+      expect(highlightedPhones.length).toBeGreaterThanOrEqual(2);
+      for (const el of highlightedPhones) {
+        expect(el.closest("li")).toHaveClass("bg-amber-100");
+      }
+    });
+
+    it("renders non-matching phones without highlight", () => {
+      renderPanel(phoneConflictPreview);
+
+      const faxPhoneEl = screen.getByText("99999");
+      expect(faxPhoneEl.closest("li")).not.toHaveClass("bg-amber-100");
+    });
+
+    it("renders email addresses in both columns", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText("urgencias@hospital.com")).toBeInTheDocument();
+    });
+
+    it("renders social handles", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText("@urgencias_h")).toBeInTheDocument();
+    });
+
+    it("renders specialty and location summary when present", () => {
+      renderPanel(phoneConflictPreview);
+
+      expect(screen.getByText(/Triage avanzado/)).toBeInTheDocument();
+      expect(screen.getByText("Edificio A · Planta 1")).toBeInTheDocument();
+    });
+
+    it("renders a 'Sin teléfonos ni correos' placeholder when a record has none", () => {
+      renderPanel({
+        ...phoneConflictPreview,
+        conflictedRecords: [
+          {
+            ...phoneConflictPreview.conflictedRecords[0]!,
+            importedRecord: {
+              ...phoneConflictPreview.conflictedRecords[0]!.importedRecord,
+              phones: [],
+              emails: [],
+              socials: []
+            }
+          }
+        ]
+      });
+
+      expect(screen.getByText("Sin teléfonos ni correos")).toBeInTheDocument();
+    });
+
+    it("does NOT show 'Sin teléfonos ni correos' when the record has socials but no phones or emails (Bug-3)", () => {
+      // Regression guard for OIR-132 Bug-3: a record with socials only was showing
+      // both the social list AND the empty-state note simultaneously.  The note must
+      // only appear when phones, emails AND socials are all empty.
+      renderPanel({
+        ...phoneConflictPreview,
+        conflictedRecords: [
+          {
+            ...phoneConflictPreview.conflictedRecords[0]!,
+            importedRecord: {
+              ...phoneConflictPreview.conflictedRecords[0]!.importedRecord,
+              phones: [],
+              emails: [],
+              socials: [{ platform: "instagram", handle: "urgencias_h" }]
+            }
+          }
+        ]
+      });
+
+      // The social handle must be visible
+      expect(screen.getByText("@urgencias_h")).toBeInTheDocument();
+      // The contradictory empty-state note must NOT appear
+      expect(screen.queryByText("Sin teléfonos ni correos")).not.toBeInTheDocument();
+    });
+
+    it("shows only the reason label (no colon+value) when matchingFieldValue is absent", () => {
+      renderPanel({
+        ...phoneConflictPreview,
+        conflictedRecords: [
+          {
+            ...phoneConflictPreview.conflictedRecords[0]!,
+            matchingFieldValue: undefined
+          }
+        ]
+      });
+
+      expect(screen.getByText("Teléfono coincidente")).toBeInTheDocument();
+      expect(screen.queryByText(/Teléfono coincidente:/)).not.toBeInTheDocument();
+    });
+
+    it("renders email-match conflict with highlighted email on both sides", () => {
+      renderPanel({
+        ...basePreview,
+        fileName: "email-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-em-1",
+              displayName: "Dr. García Importado",
+              phones: [],
+              emails: [{ address: "garcia@hospital.com" }],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-em-1",
+              displayName: "Dr. García",
+              phones: [],
+              emails: [{ address: "garcia@hospital.com", label: "Corporativo" }],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "email-match",
+            conflictReasonKey: "conflict_reason.email_match",
+            matchingFieldValue: "garcia@hospital.com"
+          }
+        ]
+      });
+
+      expect(screen.getByText(/Correo coincidente: garcia@hospital.com/)).toBeInTheDocument();
+      const emailEls = screen.getAllByText("garcia@hospital.com");
+      expect(emailEls.length).toBeGreaterThanOrEqual(2);
+      for (const el of emailEls) {
+        expect(el.closest("li")).toHaveClass("bg-amber-100");
+      }
+    });
+
+    // BUG-1: formatted numbers must highlight via normalized intersection
+    it("highlights a matching phone when the two sides have different formatting", () => {
+      // existing: "555 12 34" (formatted), incoming: "5551234" (digits-only)
+      // Both normalize to "5551234" → both must be highlighted.
+      renderPanel({
+        ...basePreview,
+        fileName: "formatted-phone-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-fmt-1",
+              displayName: "Servicio Importado",
+              phones: [
+                { number: "5551234", kind: "direct" },
+                { number: "9999999", kind: "other" }
+              ],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-fmt-1",
+              displayName: "Servicio Existente",
+              phones: [
+                { number: "555 12 34", kind: "direct" },
+                { number: "8888888", kind: "fax" }
+              ],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "phone-match",
+            conflictReasonKey: "conflict_reason.phone_match",
+            matchingFieldValue: "5551234"
+          }
+        ]
+      });
+
+      // The two matching numbers have different raw strings but same normalized form
+      const importedMatch = screen.getByText("5551234");
+      const existingMatch = screen.getByText("555 12 34");
+      expect(importedMatch.closest("li")).toHaveClass("bg-amber-100");
+      expect(existingMatch.closest("li")).toHaveClass("bg-amber-100");
+
+      // Non-shared phones must NOT be highlighted
+      expect(screen.getByText("9999999").closest("li")).not.toHaveClass("bg-amber-100");
+      expect(screen.getByText("8888888").closest("li")).not.toHaveClass("bg-amber-100");
+    });
+
+    // BUG-1: email intersection must handle different cases
+    it("highlights a matching email when the two sides have different case", () => {
+      renderPanel({
+        ...basePreview,
+        fileName: "case-email-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-case-em-1",
+              displayName: "Dr. López Importado",
+              phones: [],
+              emails: [
+                { address: "Lopez@Hospital.com" },
+                { address: "other@hospital.com" }
+              ],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-case-em-1",
+              displayName: "Dr. López",
+              phones: [],
+              emails: [
+                { address: "lopez@hospital.com" },
+                { address: "unrelated@other.com" }
+              ],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "email-match",
+            conflictReasonKey: "conflict_reason.email_match",
+            matchingFieldValue: "lopez@hospital.com"
+          }
+        ]
+      });
+
+      // Both case variants of the shared email must be highlighted
+      expect(screen.getByText("Lopez@Hospital.com").closest("li")).toHaveClass("bg-amber-100");
+      expect(screen.getByText("lopez@hospital.com").closest("li")).toHaveClass("bg-amber-100");
+
+      // Non-shared emails must NOT be highlighted
+      expect(screen.getByText("other@hospital.com").closest("li")).not.toHaveClass("bg-amber-100");
+      expect(screen.getByText("unrelated@other.com").closest("li")).not.toHaveClass("bg-amber-100");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // BUG-2: missing arrays on conflict record must not crash the panel
+  // ---------------------------------------------------------------------------
+  describe("conflict record robustness — missing arrays (BUG-2)", () => {
+    it("renders without crashing when phones/emails/socials are absent on both records", () => {
+      // Simulate a stale/untyped IPC payload that omits the array fields.
+      const incompleteRecord = {
+        id: "incomplete-1",
+        type: "service",
+        displayName: "Servicio Sin Arrays",
+        status: "active"
+      } as unknown as ConflictRecordSummary;
+
+      renderPanel({
+        ...basePreview,
+        fileName: "incomplete-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: incompleteRecord,
+            matchingRecord: incompleteRecord,
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "phone-match",
+            conflictReasonKey: "conflict_reason.phone_match",
+            matchingFieldValue: undefined
+          }
+        ]
+      });
+
+      // Should render the empty-state placeholder, not throw
+      const emptyStates = screen.getAllByText("Sin teléfonos ni correos");
+      expect(emptyStates.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // BUG-3: specialty separator must not appear when service is absent
+  // ---------------------------------------------------------------------------
+  describe("specialty org field separator (BUG-3)", () => {
+    const makeSpecialtyConflict = (overrides: Partial<{ department?: string; service?: string; specialty?: string }>) => ({
+      ...basePreview,
+      fileName: "specialty-conflict.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "spec-import-1",
+            displayName: "Servicio",
+            phones: [],
+            emails: [],
+            socials: [],
+            ...overrides
+          },
+          matchingRecord: {
+            id: "spec-existing-1",
+            displayName: "Servicio Existente",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing" as const,
+          conflictType: "external-id-match" as const,
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    it("does not render a dangling bullet when specialty is the only org field present", () => {
+      // No department, no service — specialty alone must not get a leading " · "
+      renderPanel(makeSpecialtyConflict({ specialty: "TAC" }));
+
+      expect(screen.getAllByText(/TAC/)[0]).toBeInTheDocument();
+      // The span for specialty must NOT start with a bullet separator
+      const specialtySpans = document.querySelectorAll(".text-slate-500 span");
+      const tacSpan = Array.from(specialtySpans).find((el) => el.textContent?.includes("TAC"));
+      expect(tacSpan?.textContent?.trimStart()).toBe("TAC");
+    });
+
+    it("renders separator before specialty when department is present", () => {
+      renderPanel(makeSpecialtyConflict({ department: "Radiología", specialty: "TAC" }));
+
+      // The full org line should read "Radiología · TAC"
+      expect(screen.getAllByText(/Radiología/)[0]).toBeInTheDocument();
+      const orgDivs = document.querySelectorAll(".text-slate-500");
+      const combined = Array.from(orgDivs).map((el) => el.textContent).join(" ");
+      expect(combined).toMatch(/Radiología.*·.*TAC/);
+    });
+
+    it("renders separator before specialty when service is present", () => {
+      renderPanel(makeSpecialtyConflict({ service: "Urgencias", specialty: "Triaje" }));
+
+      const orgDivs = document.querySelectorAll(".text-slate-500");
+      const combined = Array.from(orgDivs).map((el) => el.textContent).join(" ");
+      expect(combined).toMatch(/Urgencias.*·.*Triaje/);
     });
   });
 

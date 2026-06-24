@@ -456,7 +456,10 @@ describe("ImportExportPage", () => {
             type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecord: {
             id: "existing-1",
@@ -464,7 +467,10 @@ describe("ImportExportPage", () => {
             type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecordIndex: 0,
           matchingRecordSource: "existing",
@@ -527,14 +533,20 @@ describe("ImportExportPage", () => {
             externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecord: {
             id: "existing-1",
             externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecordIndex: 0,
           matchingRecordSource: "existing",
@@ -588,14 +600,20 @@ describe("ImportExportPage", () => {
             externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecord: {
             id: "existing-1",
             externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
-            status: "active"
+            status: "active",
+            phones: [],
+            emails: [],
+            socials: []
           },
           matchingRecordIndex: 0,
           matchingRecordSource: "existing",
