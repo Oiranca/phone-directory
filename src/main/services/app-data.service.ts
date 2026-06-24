@@ -1575,15 +1575,49 @@ export class AppDataService {
       source: "existing" | "import";
     };
 
-    /** Extract the human-readable match value from a stable key (OIR-132). */
-    const extractMatchingFieldValue = (key: string, conflictType: ConflictType): string | undefined => {
+    /**
+     * Derive the human-readable match value from the actual intersection between
+     * the imported record and the existing record (OIR-132 Bug-1 + Bug-2).
+     *
+     * Previously this extracted the first comma-delimited token from the stable key,
+     * which was the lexicographically-smallest normalized value — not necessarily
+     * the value that caused the match.  Now we compute the intersection explicitly
+     * and return the original *formatted* phone/email string (Bug-2) so operators
+     * see the value exactly as it appears in their records.
+     */
+    const extractMatchingFieldValue = (
+      conflictType: ConflictType,
+      imported: ContactRecord,
+      existingSummary: ConflictRecordSummary
+    ): string | undefined => {
       if (conflictType === "phone-match") {
-        const m = /phones:([^|]+)/.exec(key);
-        return m ? m[1]!.split(",")[0] : undefined;
+        // Build a set of normalized phone values present in the existing record.
+        const existingNorms = new Set<string>();
+        for (const p of existingSummary.phones ?? []) {
+          const norm = normalizePhoneForDedup(p.number);
+          if (norm) existingNorms.add(norm);
+        }
+        // Return the first imported phone whose normalized form intersects.
+        // Use the original formatted number from the imported record (Bug-2).
+        for (const p of imported.contactMethods.phones) {
+          const norm = normalizePhoneForDedup(p.number);
+          if (norm && existingNorms.has(norm)) {
+            return p.number;
+          }
+        }
+        return undefined;
       }
       if (conflictType === "email-match") {
-        const m = /emails:([^|]+)/.exec(key);
-        return m ? m[1]!.split(",")[0] : undefined;
+        const existingNorms = new Set(
+          (existingSummary.emails ?? []).map((e) => e.address.trim().toLowerCase())
+        );
+        for (const e of imported.contactMethods.emails) {
+          const norm = e.address.trim().toLowerCase();
+          if (norm && existingNorms.has(norm)) {
+            return e.address;
+          }
+        }
+        return undefined;
       }
       return undefined;
     };
@@ -1638,7 +1672,7 @@ export class AppDataService {
           if (indexed !== undefined) {
             match = indexed;
             conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
-            matchingFieldValue = extractMatchingFieldValue(key, indexed.conflictType);
+            matchingFieldValue = extractMatchingFieldValue(indexed.conflictType, importedRecord, indexed.record);
             break;
           }
         }
@@ -1721,13 +1755,16 @@ export class AppDataService {
   }
 
   private classifyConflictTypeByKey(stableKey: string): ConflictType {
-    // All keys produced by buildStableMergeKeys contain either phones: or emails: or both
-    // Classify based on which comes first or is present
+    // All keys produced by buildStableMergeKeys contain either phones: or emails: or both.
+    // Classify based on which comes first or is present.
     if (stableKey.includes("emails:") && !stableKey.includes("phones:")) {
       return "email-match";
     }
-    // If phones: is present (or both), classify as phone-match
-    // (keys with both typically prioritize phone matching)
+    // If phones: is present (or both), classify as phone-match.
+    // Known limitation (Bug-4 / OIR-132): when a key contains BOTH phones: and emails:,
+    // collapsing to "phone-match" means the shared email is not highlighted in the UI.
+    // Supporting a "dual-match" conflict type would require extending the ConflictType
+    // union and updating the renderer — deferred to avoid scope creep.
     return "phone-match";
   }
 

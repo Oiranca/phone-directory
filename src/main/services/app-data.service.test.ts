@@ -1925,6 +1925,72 @@ describe("AppDataService", () => {
       expect(conflict.conflictType).toBe("phone-match");
       expect(conflict.matchingFieldValue).toBe("88801");
     });
+
+    it("sets matchingFieldValue to the actually-matched phone, not the lexicographically-first (Bug-1)", async () => {
+      // Regression guard for OIR-132 Bug-1:
+      // Record A has phones ["12345", "99999"].  Record B matches on "99999".
+      // The stable key sorts all phones → "12345,99999".  The old split(",")[0]
+      // would have returned "12345" (wrong).  The fix must return "99999".
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-lex.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "type,displayName,department,phone1Number,phone2Number,status",
+          // Row 1: has both 12345 (lex-first) and 99999
+          "service,Mostrador A,Recepción,12345,99999,active",
+          // Row 2: shares only 99999 — this is the actual match value
+          "service,Mostrador B,Recepción,99999,,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      expect(conflict.conflictType).toBe("phone-match");
+      // Must be the shared phone ("99999"), not the lex-first one ("12345")
+      expect(conflict.matchingFieldValue).toBe("99999");
+    });
+
+    it("sets matchingFieldValue to the original formatted phone, not the normalized form (Bug-2)", async () => {
+      // Regression guard for OIR-132 Bug-2:
+      // Record A has "+34 600 111 222" (formatted), Record B has "34600111222" (digits-only).
+      // Both normalize to "34600111222".  The badge must show the imported record's original
+      // formatted string, not the stripped digits-only form.
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+
+      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-fmt.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "type,displayName,department,phone1Number,status",
+          // Row 1 (existing side): formatted phone with spaces
+          "service,Servicio A,Recepción,600 111 222,active",
+          // Row 2 (imported side): digits-only form of the same number
+          "service,Servicio B,Recepción,600111222,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const conflict = preview.conflictedRecords[0]!;
+
+      expect(conflict.conflictType).toBe("phone-match");
+      // The imported record's phone is "600111222" — that is the formatted value that
+      // should appear in the badge (not the normalized "600111222" stripped differently,
+      // and definitely not "600 111 222" which is the existing record's formatting).
+      expect(conflict.matchingFieldValue).toBe("600111222");
+    });
   });
 
   it("localizes unsupported phone kind warnings during CSV preview", async () => {
