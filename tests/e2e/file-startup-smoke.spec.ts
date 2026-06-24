@@ -1,26 +1,30 @@
 /**
- * Startup path smoke tests (OIR-117 acceptance criteria 3 & 4).
+ * Dev-startup smoke tests + production loadFile() wiring checks (OIR-117 AC3/AC4).
  *
- * Criterion 3: verify the production code path in src/main/index.ts is wired
- * to loadFile(dist/index.html) — NOT a hardcoded http:// URL. We verify the
- * wiring statically by confirming the dist/index.html file exists and that the
- * path expression in the source maps to the correct artifact, then run a
- * functional E2E that exercises the app fully through the built assets.
+ * SCOPE BOUNDARY — what this suite covers and what it does NOT:
  *
- * Criterion 4: no production startup coverage depends ONLY on the dev renderer
- * URL. The second test documents (and gates) dev-mode URL behaviour.
+ * Covered:
+ *   AC3a) The built dist/index.html artifact exists (required by the packaged
+ *         loadFile() call — if missing, a packaged app would show a blank page).
+ *   AC3b) The compiled dist-electron/main/index.js contains a loadFile() call
+ *         that references "dist/index.html" and does NOT call loadURL() with a
+ *         hardcoded http://localhost address unconditionally. This is a static
+ *         wiring check on the compiled output, not a live packaged-app test.
+ *   AC3c) The app renders the main directory page end-to-end when launched
+ *         through the Playwright/Electron harness. This exercises the dev-server
+ *         branch (isDev === true), confirming the build pipeline and IPC surface
+ *         are intact.
+ *   AC4)  Dev mode uses ELECTRON_RENDERER_URL rather than a hardcoded constant.
  *
- * Why file:// is not directly testable in E2E:
- * `isDev` is defined as `!app.isPackaged`. In Playwright/Electron E2E the app
- * is launched via `electron.launch()` against dist-electron/main/index.js —
- * not a signed, packaged .app — so `app.isPackaged` is always false. The only
- * way to test the actual file:// loadFile() branch is to package the app
- * (electron-builder). That is outside the scope of the unit/E2E test suite.
- * Instead we:
- *   a) Verify the built dist/index.html artifact exists (the target of loadFile).
- *   b) Assert the production loadFile() path uses the correct relative path
- *      expression (by reading the compiled main/index.js after build).
- *   c) Run the app through the E2E harness to confirm it renders correctly.
+ * NOT covered (requires electron-builder packaging to test):
+ *   The actual production file:// loadFile() branch at runtime.
+ *   In Playwright/Electron E2E, the app is launched against
+ *   dist-electron/main/index.js via electron.launch() — NOT a signed,
+ *   packaged .app. Because of this, `app.isPackaged` is always false, so
+ *   isDev is always true and the dev-server branch is always taken.
+ *   Exercising the real loadFile() branch requires `electron-builder --dir`
+ *   followed by launching the packaged binary, which is outside the scope
+ *   of this unit/E2E suite and is covered by the USB release smoke workflow.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -36,21 +40,29 @@ import {
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-test.describe("file:// startup smoke — production renderer path", () => {
-  test("built dist/index.html exists (loadFile target is valid)", async () => {
-    // This verifies criterion 3: the artifact that loadFile() targets must be
-    // present after `pnpm run build`. If this fails, the packaged app would
-    // show a blank page at file:// startup.
+// NOTE: This describe block is intentionally named "dev-startup smoke" because
+// all E2E tests below run with app.isPackaged === false (dev branch active).
+// The two static-wiring checks (AC3a, AC3b) do not launch the app and verify
+// the PRODUCTION loadFile() wiring at the source/artifact level only.
+test.describe("dev-startup smoke — build artifact + loadFile wiring checks", () => {
+  // AC3a: static artifact check — no app launch required.
+  test("built dist/index.html exists (loadFile target is valid for packaged app)", async () => {
+    // Verifies that the artifact targeted by the production loadFile() call is
+    // present after `pnpm run build`. A missing dist/index.html would cause a
+    // blank page in the packaged app, but this test catches that at CI time.
     const distIndexPath = path.join(repoRootDir, "dist", "index.html");
     const stat = await fs.stat(distIndexPath);
     expect(stat.isFile()).toBe(true);
     expect(stat.size).toBeGreaterThan(0);
   });
 
+  // AC3b: static wiring check — no app launch required.
   test("compiled main/index.js wires loadFile to dist/index.html (not a remote URL)", async () => {
     // Verify the production startup path in the compiled output.
     // After build:electron, dist-electron/main/index.js must call
     // loadFile(...dist/index.html) — not loadURL with any http:// address.
+    // This is a static check on the compiled artifact; it does NOT launch the
+    // packaged app and does NOT exercise the runtime loadFile() branch.
     const compiledMain = await fs.readFile(
       path.join(repoRootDir, "dist-electron", "main", "index.js"),
       "utf-8"
@@ -68,10 +80,12 @@ test.describe("file:// startup smoke — production renderer path", () => {
     expect(compiledMain).not.toMatch(/loadURL\s*\(\s*["'`]http:\/\/localhost/);
   });
 
-  test("app renders the directory heading via E2E (built assets are functional)", async () => {
-    // Functional smoke: the built E2E app (dev mode, dev server) renders the
-    // main directory page. This confirms the build pipeline and IPC surface
-    // are intact end-to-end.
+  // AC3c: functional dev-mode smoke — launches the app in DEV branch.
+  test("app renders the directory heading via E2E (dev branch, built assets functional)", async () => {
+    // Dev-mode smoke: the app is launched with app.isPackaged === false so the
+    // dev-server (loadURL) branch is taken, NOT the production loadFile() branch.
+    // This confirms the build pipeline and IPC surface are intact end-to-end.
+    // It does NOT exercise the file:// startup path — see suite-level comment.
     const workspace = await createWorkspace("file-startup-functional");
     const { electronApp, page } = await launchElectronApp({
       userDataPath: workspace.userDataPath
@@ -91,6 +105,7 @@ test.describe("file:// startup smoke — production renderer path", () => {
     }
   });
 
+  // AC4: dev-mode URL source check — confirms ELECTRON_RENDERER_URL is used.
   test("dev-mode: ELECTRON_RENDERER_URL controls the dev server URL (not hardcoded)", async () => {
     // Criterion 4: dev mode must use env.rendererUrl (from ELECTRON_RENDERER_URL)
     // rather than a hardcoded constant. If env.rendererUrl is null, it falls
@@ -101,6 +116,9 @@ test.describe("file:// startup smoke — production renderer path", () => {
     // app loads from the dev server (not file://). This must remain true so
     // that removing the ELECTRON_RENDERER_URL env var in the packaged build
     // would not silently fall back to the dev server URL.
+    //
+    // NOTE: like the functional smoke above, this runs with app.isPackaged ===
+    // false. The URL observed here is the DEV server URL, not file://.
     const workspace = await createWorkspace("file-startup-dev-url-check");
     const { electronApp, page } = await launchElectronApp({
       userDataPath: workspace.userDataPath
