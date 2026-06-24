@@ -1926,11 +1926,19 @@ describe("AppDataService", () => {
       expect(conflict.matchingFieldValue).toBe("88801");
     });
 
-    it("sets matchingFieldValue to the actually-matched phone, not the lexicographically-first (Bug-1)", async () => {
+    it("sets matchingFieldValue to the first-in-record phone, not the lexicographically-first (Bug-1)", async () => {
       // Regression guard for OIR-132 Bug-1:
-      // Record A has phones ["12345", "99999"].  Record B matches on "99999".
-      // The stable key sorts all phones → "12345,99999".  The old split(",")[0]
-      // would have returned "12345" (wrong).  The fix must return "99999".
+      //
+      // buildStableMergeKeys keys a record on its FULL sorted normalized phone set,
+      // so a phone-match conflict requires IDENTICAL phone sets — subset-phone
+      // matching (e.g. {12345,99999} vs {99999}) does NOT produce a conflict.
+      //
+      // The reachable "actually-matched ≠ lexicographically-first" scenario:
+      //   Both rows carry phones [99999, 12345] (CSV order).
+      //   Stable key sorts them → "phones:12345,99999" (12345 is lex-first).
+      //   The old split(",")[0] bug would have returned "12345" (wrong).
+      //   extractMatchingFieldValue iterates the imported record's phones in their
+      //   original CSV order → first hit is "99999", which is returned (correct).
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -1942,10 +1950,10 @@ describe("AppDataService", () => {
         sourceFilePath,
         [
           "type,displayName,department,phone1Number,phone2Number,status",
-          // Row 1: has both 12345 (lex-first) and 99999
-          "service,Mostrador A,Recepción,12345,99999,active",
-          // Row 2: shares only 99999 — this is the actual match value
-          "service,Mostrador B,Recepción,99999,,active"
+          // Row 1 (existing side): phones listed 99999 first, then 12345 (lex-later)
+          "service,Mostrador A,Recepción,99999,12345,active",
+          // Row 2 (imported side): same phone set, different display name → conflict
+          "service,Mostrador B,Recepción,99999,12345,active"
         ].join("\n") + "\n",
         "utf-8"
       );
@@ -1954,7 +1962,8 @@ describe("AppDataService", () => {
       const conflict = preview.conflictedRecords[0]!;
 
       expect(conflict.conflictType).toBe("phone-match");
-      // Must be the shared phone ("99999"), not the lex-first one ("12345")
+      // extractMatchingFieldValue walks the imported record's phones in CSV order.
+      // The first intersecting phone is "99999", NOT the lex-first "12345".
       expect(conflict.matchingFieldValue).toBe("99999");
     });
 
