@@ -3517,4 +3517,186 @@ describe("AppDataService", () => {
     const result = await service.restoreBackup(realBackupPath);
     expect(result.recordCount).toBeGreaterThanOrEqual(0);
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-130: buscas persistence — preview must NOT write, confirm MUST write
+  // ---------------------------------------------------------------------------
+
+  it("OIR-130: previewCsvImport does NOT persist buscas records (side-effect-free)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BuscasService } = await import("./buscas.service.js");
+
+    const buscasService = new BuscasService();
+    const service = new AppDataService({ buscasService });
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Build an ODS with a contacts sheet + a buscas sheet.
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Urgencias"
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["SERVICIO", "PRINCIPAL", "COMENTARIOS"],
+        ["ANESTESIA", "7321", ""]
+      ]),
+      "Buscas_Facultativos"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    // Run preview only — do NOT call importCsvDataset.
+    await service.previewCsvImport(sourceFilePath);
+
+    // buscas.json must NOT exist (or if it does, importedRecords must be empty).
+    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    let importedRecords: unknown[] = [];
+    try {
+      const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as { importedRecords?: unknown[] };
+      importedRecords = raw.importedRecords ?? [];
+    } catch {
+      // ENOENT — file was not created at all, which is also correct.
+    }
+    expect(importedRecords).toHaveLength(0);
+  });
+
+  it("OIR-130: importCsvDataset persists buscas records after contacts are written", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BuscasService } = await import("./buscas.service.js");
+
+    const buscasService = new BuscasService();
+    const service = new AppDataService({ buscasService });
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Urgencias"
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
+        ["ANESTESIA", "7321", "7322", ""]
+      ]),
+      "Buscas_Facultativos"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas-confirm.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    await service.previewCsvImport(sourceFilePath);
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    // Contacts import succeeded.
+    expect(result.createdCount).toBeGreaterThan(0);
+
+    // buscas.json now contains the imported pager records.
+    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as { importedRecords: Array<{ deviceNumber: string }> };
+    expect(raw.importedRecords).toHaveLength(2);
+    const numbers = raw.importedRecords.map((r) => r.deviceNumber);
+    expect(numbers).toContain("7321");
+    expect(numbers).toContain("7322");
+  });
+
+  it("OIR-130: importCsvDataset returns contacts result even when buscas persist fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    // Inject a buscasService stub that always throws.
+    const failingBuscasService = {
+      importFromOds: async () => { throw new Error("buscas write failure"); }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new AppDataService({ buscasService: failingBuscasService as any });
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Servicio", "Número", "Notas"],
+        ["Mostrador", "55555", ""]
+      ]),
+      "Urgencias"
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["SERVICIO", "PRINCIPAL"],
+        ["ANESTESIA", "7321"]
+      ]),
+      "Buscas_Facultativos"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas-error.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    // importCsvDataset must NOT throw even though buscas persist throws.
+    const result = await service.importCsvDataset(sourceFilePath);
+    expect(result.createdCount).toBeGreaterThan(0);
+  });
+
+  it("OIR-130: importCsvDataset persists buscas records when workbook has zero contact rows (buscas-only ODS)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BuscasService } = await import("./buscas.service.js");
+
+    const buscasService = new BuscasService();
+    const service = new AppDataService({ buscasService });
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    // Build a workbook with ONLY a buscas sheet — no contact sheet at all.
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
+        ["CARDIOLOGIA", "8801", "8802", ""],
+        ["NEUROLOGIA", "8803", "", "guardia"]
+      ]),
+      "Buscas_Facultativos"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "buscas-only.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    // Preview must succeed (buscas-only is a valid, confirmable workbook).
+    await service.previewCsvImport(sourceFilePath);
+
+    // Confirm must NOT throw even though validRowCount === 0 (no contact rows).
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    // No contacts were created or updated — existing contacts are untouched.
+    expect(result.createdCount).toBe(0);
+    expect(result.updatedCount).toBe(0);
+
+    // buscas.json must contain the imported pager records.
+    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as {
+      importedRecords: Array<{ deviceNumber: string }>;
+    };
+    const numbers = raw.importedRecords.map((r) => r.deviceNumber);
+    expect(numbers).toContain("8801");
+    expect(numbers).toContain("8802");
+    expect(numbers).toContain("8803");
+  });
 });

@@ -64,6 +64,14 @@ export const registerBuscasIpc = (service: BuscasService) => {
     }
   });
 
+  ipcMain.handle(BUSCAS_CHANNELS.listImported, async () => {
+    try {
+      return await service.listImported();
+    } catch (err) {
+      throw toRendererError(err, BUSCAS_CHANNELS.listImported);
+    }
+  });
+
   ipcMain.handle(SERVER_CHANNELS.buscasSearch, async (_event, query: unknown) => {
     try {
       const q = typeof query === "string" ? query : "";

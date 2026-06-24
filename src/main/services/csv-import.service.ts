@@ -682,6 +682,7 @@ export const buildImportPreviewFromRows = async (
       updatedCount: 0,
       buscasSkippedRowCount: options.buscasSkippedRowCount ?? 0,
       socialHandleSkippedRowCount: options.socialHandleSkippedRowCount ?? 0,
+      parsedBuscasCellCount: 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

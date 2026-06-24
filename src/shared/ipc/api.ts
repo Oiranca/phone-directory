@@ -30,7 +30,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
-import type { BuscaRecord, EditableBuscaRecord } from "../schemas/busca.schema.js";
+import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../schemas/busca.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
 export interface HospitalDirectoryApi {
@@ -65,11 +65,14 @@ export interface HospitalDirectoryApi {
   exportAuditLog: (params: AuditLogQueryParams) => Promise<ExportAuditLogResult | null>;
   recoverAuditLog: () => Promise<void>;
 
-  // Buscas
+  // Buscas — manual registry
   listBuscas: () => Promise<BuscaRecord[]>;
   addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
   updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
   deleteBusca: (id: string) => Promise<void>;
+
+  // Buscas — ODS-imported (read-only from renderer side)
+  listImportedBuscas: () => Promise<ImportedBuscaRecord[]>;
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;

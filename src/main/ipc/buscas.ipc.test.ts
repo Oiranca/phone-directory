@@ -38,6 +38,7 @@ describe("registerBuscasIpc", () => {
     add: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    listImported: vi.fn().mockResolvedValue([]),
     search: vi.fn().mockResolvedValue([])
   };
 
@@ -261,6 +262,53 @@ describe("registerBuscasIpc", () => {
       await invoke(SEARCH_CHANNEL, "urgencias");
 
       expect(serviceMock.search).toHaveBeenCalledWith("urgencias");
+    });
+  });
+
+  describe("listImported channel — buscas:list-imported", () => {
+    it("returns empty array when no ODS import has occurred", async () => {
+      serviceMock.listImported.mockResolvedValue([]);
+
+      const result = await invoke("buscas:list-imported");
+
+      expect(result).toEqual([]);
+      expect(serviceMock.listImported).toHaveBeenCalledOnce();
+    });
+
+    it("returns imported records from the service", async () => {
+      const importedRecords = [
+        {
+          id: "ibsc_aabbccdd",
+          deviceNumber: "7321",
+          department: "Anestesia",
+          holderType: "Principal / Residente",
+          sourceSheet: "Buscas_Facultativos",
+          sourceRow: 0
+        },
+        {
+          id: "ibsc_11223344",
+          deviceNumber: "7580",
+          department: "Cardiología",
+          holderType: "Adjunto 1",
+          sourceSheet: "Buscas_Facultativos",
+          sourceRow: 1
+        }
+      ];
+      serviceMock.listImported.mockResolvedValue(importedRecords);
+
+      const result = await invoke("buscas:list-imported");
+
+      expect(result).toEqual(importedRecords);
+      expect(serviceMock.listImported).toHaveBeenCalledOnce();
+    });
+
+    it("propagates service errors through toRendererError", async () => {
+      serviceMock.listImported.mockRejectedValueOnce(new Error("permiso denegado"));
+
+      const err = await invoke("buscas:list-imported").catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe("permiso denegado");
     });
   });
 });

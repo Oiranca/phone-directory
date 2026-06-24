@@ -38,10 +38,11 @@ export const SETTINGS_CHANNELS = {
 } as const;
 
 export const BUSCAS_CHANNELS = {
-  list:   "buscas:list",
-  add:    "buscas:add",
-  update: "buscas:update",
-  remove: "buscas:delete"
+  list:          "buscas:list",
+  add:           "buscas:add",
+  update:        "buscas:update",
+  remove:        "buscas:delete",
+  listImported:  "buscas:list-imported"
 } as const;
 
 export const PUSH_CHANNELS = {

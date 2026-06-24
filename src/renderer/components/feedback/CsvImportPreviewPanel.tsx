@@ -58,7 +58,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
   const hasBlockers = preview.invalidRowCount > 0;
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
-  const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || preview.validRowCount === 0;
+  // OIR-130: A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
+  // Treat it as confirmable. Only block when BOTH contact rows AND buscas content are absent.
+  const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+  const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || !hasImportableContent;
 
   return (
     <section
@@ -144,16 +147,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* INTERIM (OIR-102/OIR-134): Deferred-skip informational notes */}
+      {/* OIR-130: Buscas rows are now parsed and imported into the Buscas section. */}
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
-            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
+            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila de buscas sin número" : "filas de buscas sin número"}
           </span>{" "}
-          (hojas de buscas — pendientes de su sección)
+          omitidas (filas vacías o solo comentarios en las hojas de buscas)
         </div>
       )}
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (

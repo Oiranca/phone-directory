@@ -1,14 +1,17 @@
 import fs from "node:fs/promises";
-import { buscaRecordSchema, buscasDatasetSchema, editableBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
-import type { BuscaRecord, BuscasDataset, EditableBuscaRecord } from "../../shared/schemas/busca.schema.js";
+import { buscaRecordSchema, buscasDatasetSchema, editableBuscaRecordSchema, importedBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
+import type { BuscaRecord, BuscasDataset, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getBuscasFilePath, getManagedDataDirectory } from "../utils/paths.js";
+import type { BuscasSheetParseResult } from "./spreadsheet-buscas-parser.js";
+import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
 
 const BUSCAS_VERSION = "1.0.0";
 
 const emptyDataset = (): BuscasDataset => ({
   version: BUSCAS_VERSION,
-  records: []
+  records: [],
+  importedRecords: []
 });
 
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
@@ -24,6 +27,7 @@ const assertUniqueDeviceNumber = (records: BuscaRecord[], deviceNumber: string, 
 };
 
 const createEntityId = () => `bsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
+const createImportedEntityId = () => `ibsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
 
 const createUniqueId = (records: BuscaRecord[]): string => {
   const maxAttempts = 1000;
@@ -38,6 +42,23 @@ const createUniqueId = (records: BuscaRecord[]): string => {
     candidate = createEntityId();
   }
 
+  return candidate;
+};
+
+const createUniqueImportedId = (existingIds: Set<string>): string => {
+  const maxAttempts = 1000;
+  let attempts = 0;
+  let candidate = createImportedEntityId();
+
+  while (existingIds.has(candidate)) {
+    attempts += 1;
+    if (attempts >= maxAttempts) {
+      throw new Error("No se pudo generar un ID único para la busca importada después de 1000 intentos.");
+    }
+    candidate = createImportedEntityId();
+  }
+
+  existingIds.add(candidate);
   return candidate;
 };
 
@@ -123,6 +144,45 @@ export class BuscasService {
       const nextRecords = dataset.records.filter((r) => r.id !== id);
       const nextDataset = buscasDatasetSchema.parse({ ...dataset, records: nextRecords });
       await this.writeDataset(nextDataset);
+    });
+  }
+
+  async listImported(): Promise<ImportedBuscaRecord[]> {
+    const dataset = await this.readDataset();
+    return dataset.importedRecords ?? [];
+  }
+
+  /**
+   * Replaces all ODS-imported buscas records with the result of a fresh parse.
+   * Existing manually-managed records (in `records`) are untouched.
+   *
+   * The incoming `parseResult` is the output of parseBuscasSheets() — records
+   * have no IDs yet. This method assigns ibsc_ IDs and writes the dataset
+   * atomically via the serialised write queue.
+   *
+   * Returns the number of imported records written.
+   */
+  async importFromOds(parseResult: BuscasSheetParseResult): Promise<number> {
+    return this.enqueueWrite(async () => {
+      if (parseResult.records.length > MAX_SPREADSHEET_IMPORT_ROWS) {
+        throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+      }
+
+      const dataset = await this.readDataset();
+      const existingIds = new Set<string>();
+
+      const importedRecords: ImportedBuscaRecord[] = parseResult.records.map((raw) => {
+        const id = createUniqueImportedId(existingIds);
+        return importedBuscaRecordSchema.parse({ ...raw, id });
+      });
+
+      const nextDataset = buscasDatasetSchema.parse({
+        ...dataset,
+        importedRecords
+      });
+
+      await this.writeDataset(nextDataset);
+      return importedRecords.length;
     });
   }
 

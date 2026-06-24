@@ -6,6 +6,7 @@ import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editabl
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import type { BuscasService } from "./buscas.service.js";
 import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
@@ -52,6 +53,7 @@ export class AppDataService {
   constructor(
     private readonly options: {
       onAutoBackupFailure?: (message: string) => void;
+      buscasService?: BuscasService;
     } = {}
   ) {}
 
@@ -434,6 +436,10 @@ export class AppDataService {
       sourceFilePath,
       this.getEditorName(settings)
     );
+
+    // previewCsvImport is side-effect-free: buscas are NOT persisted here.
+    // Buscas are persisted only when the user confirms via importCsvDataset.
+
     const currentContacts = await this.readContacts(settings);
     const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
     const conflictedRecords = this.detectConflicts(currentContacts, dataset);
@@ -456,7 +462,7 @@ export class AppDataService {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
-    const { dataset, preview } = await buildSpreadsheetImportPreview(
+    const { dataset, preview, buscasParseResult } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       editorName
     );
@@ -465,7 +471,9 @@ export class AppDataService {
       throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
     }
 
-    if (preview.validRowCount === 0) {
+    // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
+    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook.
+    if (preview.validRowCount === 0 && buscasParseResult.parsedCellCount === 0) {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
@@ -490,6 +498,19 @@ export class AppDataService {
         conflictPolicyCounts: { new: merged.conflictPolicyCounts }
       }
     });
+
+    // OIR-130: Persist buscas records after contacts are successfully written.
+    // A buscas failure must NOT roll back or suppress the contacts import result.
+    if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
+      try {
+        await this.options.buscasService.importFromOds(buscasParseResult);
+      } catch (err) {
+        // Non-fatal: contacts import succeeded; log so operators can diagnose.
+        // Surfacing to the UI would require a contract change — out of scope here.
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[BuscasImport] Failed to persist buscas records — ${errMsg}`);
+      }
+    }
 
     return {
       contacts: merged.contacts,

@@ -199,4 +199,36 @@ describe("buscasDatasetSchema", () => {
       buscasDatasetSchema.parse({ records: [] })
     ).toThrow();
   });
+
+  it("BUG-3: coerces explicit null importedRecords to [] (prevents parse crash on stored null)", () => {
+    const result = buscasDatasetSchema.parse({
+      version: "1.0.0",
+      records: [],
+      importedRecords: null
+    });
+    expect(result.importedRecords).toEqual([]);
+  });
+
+  it("BUG-3: coerces missing importedRecords to [] (undefined → default)", () => {
+    const result = buscasDatasetSchema.parse({ version: "1.0.0", records: [] });
+    expect(result.importedRecords).toEqual([]);
+  });
+
+  it("BUG-3: preserves existing importedRecords when present", () => {
+    const importedRecord = {
+      id: "ibsc_abcd1234",
+      deviceNumber: "7321",
+      department: "Anestesia",
+      holderType: "Principal",
+      sourceSheet: "Buscas_Facultativos",
+      sourceRow: 0
+    };
+    const result = buscasDatasetSchema.parse({
+      version: "1.0.0",
+      records: [],
+      importedRecords: [importedRecord]
+    });
+    expect(result.importedRecords).toHaveLength(1);
+    expect(result.importedRecords[0]!.deviceNumber).toBe("7321");
+  });
 });

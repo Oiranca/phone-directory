@@ -25,6 +25,8 @@ import {
   resolveServiceRowLabel,
   mergeRecordsByDisplayName,
 } from "./spreadsheet-parsers.js";
+import { parseBuscasSheets } from "./spreadsheet-buscas-parser.js";
+import type { BuscasSheetParseResult } from "./spreadsheet-buscas-parser.js";
 
 // Re-export the public symbols that external modules depend on.
 export type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
@@ -32,7 +34,7 @@ export { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
 export { mergeRecordsByDisplayName } from "./spreadsheet-parsers.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
-const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
+export const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
 const MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS = 5_000;
 const IS_VITEST_RUNTIME = process.env.VITEST === "true";
 
@@ -111,9 +113,17 @@ export type SpreadsheetImportNormalizationResult = {
   rows: NormalizedImportRow[];
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
-  /** INTERIM (OIR-102/OIR-134): Rows skipped because they belong to Buscas sheets. */
+  /**
+   * OIR-130: Parse result for buscas sheets found in the workbook.
+   * Populated when one or more sheets with a "buscas" slug prefix are present.
+   * The caller (AppDataService.previewCsvImport) persists these via BuscasService.
+   * buscasSkippedRowCount counts rows that were in buscas sheets but yielded no
+   * parseable pager record (e.g. empty rows, comment-only rows).
+   */
+  buscasParseResult: BuscasSheetParseResult;
+  /** Alias kept for backwards-compat with preview panel display (genuinely-unparseable buscas rows). */
   buscasSkippedRowCount: number;
-  /** INTERIM (OIR-102/OIR-134): Rows skipped because they are social-media handles. */
+  /** OIR-131/OIR-134: Rows skipped because they are social-media handles. */
   socialHandleSkippedRowCount: number;
 };
 
@@ -582,7 +592,7 @@ export const normalizeWorkbookRowsFromFile = (
 
   const records: NormalizedImportRow[] = [];
   const profiles: SheetProfile[] = [];
-  let buscasSkippedRowCount = 0;
+  const buscasSheets: Array<{ name: string; rows: string[][] }> = [];
   let socialHandleSkippedRowCount = 0;
 
   for (const sheet of sheets) {
@@ -590,13 +600,13 @@ export const normalizeWorkbookRowsFromFile = (
       continue;
     }
 
-    // INTERIM (OIR-102): Count data rows in Buscas sheets before detectSheetProfile
-    // discards them via isDeferredFeatureSheet, so the operator can see how many rows
-    // were silently omitted.  We approximate by counting non-empty rows minus one
-    // header row (consistent with how service sheets count their data rows).
+    // OIR-130: Route buscas sheets to the dedicated pager parser instead of skipping.
+    // These sheets (Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores,
+    // Buscas_Varios) use column-per-holder-type layout and belong to the separate
+    // Buscas section. parseBuscasSheets() is called after the loop with all collected
+    // sheets so a single BuscasSheetParseResult is returned to the caller.
     if (isDeferredFeatureSheet(sheet.slug)) {
-      const dataRowCount = Math.max(0, sheet.rows.length - 1);
-      buscasSkippedRowCount += dataRowCount;
+      buscasSheets.push({ name: sheet.name, rows: sheet.rows });
       continue;
     }
 
@@ -618,7 +628,19 @@ export const normalizeWorkbookRowsFromFile = (
     socialHandleSkippedRowCount += serviceResult.socialSkippedRows;
   }
 
-  if (records.length === 0) {
+  if (records.length === 0 && buscasSheets.length === 0) {
+    throw new Error(
+      "No se encontraron hojas soportadas para importar. Usa Admisión Central, Urgencias, Rayos, Secretarías, Hospitales de día, UMI o Centros de salud."
+    );
+  }
+
+  // OIR-130: Parse buscas sheets collected above.
+  const buscasParseResult = parseBuscasSheets(buscasSheets);
+
+  // Allow import of buscas-only workbooks (no phone contacts) only when at least one
+  // buscas record was parsed. Otherwise the "no supported sheets" error stands for
+  // workbooks that are genuinely empty.
+  if (records.length === 0 && buscasParseResult.parsedCellCount === 0) {
     throw new Error(
       "No se encontraron hojas soportadas para importar. Usa Admisión Central, Urgencias, Rayos, Secretarías, Hospitales de día, UMI o Centros de salud."
     );
@@ -629,8 +651,9 @@ export const normalizeWorkbookRowsFromFile = (
 
   return {
     rows: mergedRecords,
-    ...summarizeDetectedFormat(profiles),
-    buscasSkippedRowCount,
+    ...summarizeDetectedFormat(profiles.length > 0 ? profiles : []),
+    buscasParseResult,
+    buscasSkippedRowCount: buscasParseResult.skippedRowCount,
     socialHandleSkippedRowCount
   };
 };
@@ -750,10 +773,16 @@ export const readWorkbookRowsInWorker = (
 // Public API entry point
 // ---------------------------------------------------------------------------
 
+const emptyBuscasParseResult = (): BuscasSheetParseResult => ({
+  records: [],
+  parsedCellCount: 0,
+  skippedRowCount: 0
+});
+
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
   editorName: string
-): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal; buscasParseResult: BuscasSheetParseResult }> => {
   const extension = path.extname(sourceFilePath).toLowerCase();
   const sourceStats = await fs.stat(sourceFilePath);
 
@@ -774,7 +803,8 @@ export const buildSpreadsheetImportPreview = async (
         ...result.preview,
         detectedFormat: "plantilla normalizada",
         detectionConfidence: "high"
-      }
+      },
+      buscasParseResult: emptyBuscasParseResult()
     };
   }
 
@@ -790,7 +820,7 @@ export const buildSpreadsheetImportPreview = async (
     throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
   }
 
-  return buildImportPreviewFromRows(normalized.rows, {
+  const result = await buildImportPreviewFromRows(normalized.rows, {
     sourceFilePath,
     fileName: path.basename(sourceFilePath),
     editorName,
@@ -799,4 +829,13 @@ export const buildSpreadsheetImportPreview = async (
     buscasSkippedRowCount: normalized.buscasSkippedRowCount,
     socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount
   });
+
+  return {
+    ...result,
+    preview: {
+      ...result.preview,
+      parsedBuscasCellCount: normalized.buscasParseResult.parsedCellCount
+    },
+    buscasParseResult: normalized.buscasParseResult
+  };
 };
