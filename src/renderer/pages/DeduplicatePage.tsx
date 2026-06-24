@@ -111,12 +111,9 @@ export const DeduplicatePage = () => {
       const result = await window.hospitalDirectory.detectDuplicates();
       setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
     } catch {
-      // Refresh failed but the merge already committed — degrade gracefully:
-      // apply the optimistic local filter so the just-merged pair disappears
-      // from the UI even without a full server refresh.
-      setPairStates((current) =>
-        current.filter((ps) => ps.pair.id !== mergedPairId)
-      );
+      // Refresh failed but the merge already committed — warn the operator to
+      // reload rather than applying a partial local filter that could mask the
+      // true list state.
       pushToast({
         type: "warning",
         message: "La fusión se completó, pero la lista no pudo actualizarse. Recarga la página para ver los cambios."
@@ -206,8 +203,6 @@ export const DeduplicatePage = () => {
         {pairStates.map((pairState) => {
           const { pair, keepId } = pairState;
           const isMerging = mergingId === pair.id;
-          const discardId = keepId === pair.recordA.id ? pair.recordB.id : pair.recordA.id;
-          void discardId;
 
           return (
             <article key={pair.id} className="rounded-3xl bg-white p-6 shadow-panel">

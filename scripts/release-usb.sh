@@ -183,16 +183,17 @@ CHECKSUM_FILE="$PACKAGE_ROOT/RELEASE_MANIFEST.txt.sha256"
 # Portability shim: prefer shasum (macOS/Perl), fall back to sha256sum (Linux
 # coreutils). If neither is available, skip checksum generation with a warning
 # rather than aborting the whole release under set -euo pipefail.
-SHA256_CMD=""
+# SHA256_CMD is a bash array to avoid SC2086 word-splitting on invocation.
+SHA256_CMD=()
 if command -v shasum >/dev/null 2>&1; then
-  SHA256_CMD="shasum -a 256"
+  SHA256_CMD=(shasum -a 256)
 elif command -v sha256sum >/dev/null 2>&1; then
-  SHA256_CMD="sha256sum"
+  SHA256_CMD=(sha256sum)
 else
   log "WARNING: neither shasum nor sha256sum found — skipping checksum generation"
 fi
 
-if [ -n "$SHA256_CMD" ]; then
+if [ "${#SHA256_CMD[@]}" -gt 0 ]; then
   # Build the checksum manifest relative to PACKAGE_ROOT so it is portable
   # (shasum -c / sha256sum -c must be run from within PACKAGE_ROOT on the
   # target machine).
@@ -207,7 +208,7 @@ if [ -n "$SHA256_CMD" ]; then
       ! -name 'RELEASE_MANIFEST.txt' \
       -print0 \
       | sort -z \
-      | xargs -0 $SHA256_CMD \
+      | xargs -0 "${SHA256_CMD[@]}" \
       > "$CHECKSUM_FILE"
   )
 
@@ -216,7 +217,7 @@ if [ -n "$SHA256_CMD" ]; then
   # Append checksum block to the human-readable manifest
   {
     printf '\n--- SHA-256 Artifact Checksums ---\n'
-    printf 'Verify on target: cd <usb-package> && %s -c RELEASE_MANIFEST.txt.sha256\n\n' "$SHA256_CMD"
+    printf 'Verify on target: cd <usb-package> && %s -c RELEASE_MANIFEST.txt.sha256\n\n' "${SHA256_CMD[*]}"
     cat "$CHECKSUM_FILE"
   } >> "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
 fi

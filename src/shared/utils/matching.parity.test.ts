@@ -1,22 +1,20 @@
 /**
- * matching.parity.test.ts — OIR-119 shared fixture matrix.
+ * matching.parity.test.ts — OIR-119 / OIR-134 shared fixture matrix.
  *
  * Two purposes:
  *   1. Prove that the shared helpers produce the same output as the original
  *      inline logic in each consumer (import / conflict-detection / duplicate-
  *      detection).
- *   2. Lock the INTENTIONAL DIVERGENCE between `normalizeDisplayName` in
- *      duplicate-detection.service.ts (NFD + char-range) and
- *      `normalizeDisplayNameForMerge` in spreadsheet-normalize.ts (NFKD +
- *      unicode-prop). If these accidentally converge or diverge further, the
- *      comparison tests below will catch it.
- *
- * Do NOT merge the two display-name normalizers — they serve different
- * matching strategies and must stay separate.
+ *   2. Pin the canonical NFKD display-name normalizer behavior introduced by
+ *      OIR-134, which superseded the OIR-119 intentional divergence between
+ *      `normalizeDisplayName` (NFD + char-range) in duplicate-detection and
+ *      `normalizeDisplayNameForMerge` (NFKD + \p{Diacritic}) in
+ *      spreadsheet-normalize. Both callers now use the single canonical NFKD
+ *      form exported from this module.
  */
 
 import { describe, expect, it } from "vitest";
-import { normalizePhoneForDedup, computeMetadataCounts } from "./matching.js";
+import { normalizePhoneForDedup, computeMetadataCounts, normalizeDisplayName } from "./matching.js";
 import { normalizeDisplayNameForMerge } from "../../main/services/spreadsheet-normalize.js";
 import type { ContactRecord } from "../types/contact.js";
 
@@ -231,70 +229,64 @@ describe("computeMetadataCounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Display-name normalization DIVERGENCE lock
+// normalizeDisplayName — canonical NFKD behavior (OIR-134)
 // ---------------------------------------------------------------------------
 
-describe("display-name normalization — intentional divergence lock", () => {
+describe("normalizeDisplayName — canonical NFKD form", () => {
   /**
-   * The two display-name normalizers differ in:
-   *   1. Unicode form: duplicate-detection uses NFD; spreadsheet-normalize uses NFKD.
-   *   2. Diacritic regex: char-range [̀-ͯ] vs unicode-prop \p{Diacritic}.
+   * OIR-134 unified the two formerly-separate display-name normalizers:
+   *   - duplicate-detection.service.ts used NFD + char-range [̀-ͯ]
+   *   - spreadsheet-normalize.ts used NFKD + \p{Diacritic}
    *
-   * For common ASCII-adjacent inputs they produce the same output, but they
-   * diverge on some Unicode edge cases. These tests document BOTH sameness and
-   * difference so a future change to either normalizer is visible immediately.
-   *
-   * DO NOT unify these implementations. They serve different matching contexts.
+   * Both now delegate to this single canonical NFKD implementation.
+   * These tests pin the canonical behavior and verify that
+   * normalizeDisplayNameForMerge (the spreadsheet alias) is identical.
    */
 
-  /** Inline replica of the NFD + char-range normalizer from duplicate-detection.service.ts */
-  const normalizeForDupDetection = (name: string): string =>
-    name
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/\s+/g, " ");
-
-  const SAME_OUTPUT_MATRIX: string[] = [
-    "Juan García",
-    "María José",
-    "Pérez López",
-    "Nurse O'Brien",
-    "Dr. Smith",
-    "áéíóú",
-    "ÁÉÍÓÚ",
-    "ñoño",
-    "Montserrat",
+  const COMMON_INPUTS: [input: string, expected: string][] = [
+    ["Juan García", "juan garcia"],
+    ["María José", "maria jose"],
+    ["Pérez López", "perez lopez"],
+    ["Nurse O'Brien", "nurse o'brien"],
+    ["Dr. Smith", "dr. smith"],
+    ["áéíóú", "aeiou"],
+    ["ÁÉÍÓÚ", "aeiou"],
+    ["ñoño", "nono"],
+    ["Montserrat", "montserrat"],
+    ["  MARÍA  ", "maria"],
+    ["Juan   Luis", "juan luis"],
   ];
 
-  it.each(SAME_OUTPUT_MATRIX)(
-    "both normalizers agree on common inputs: %j",
-    (input) => {
-      expect(normalizeForDupDetection(input)).toBe(normalizeDisplayNameForMerge(input));
+  it.each(COMMON_INPUTS)("normalizeDisplayName(%j) === %j", (input, expected) => {
+    expect(normalizeDisplayName(input)).toBe(expected);
+  });
+
+  it("normalizeDisplayNameForMerge is an alias for the same canonical NFKD function", () => {
+    const inputs = ["Juan García", "María José", "áéíóú", "ÁÉÍÓÚ", "ñoño", "  MARÍA  "];
+    for (const input of inputs) {
+      expect(normalizeDisplayName(input)).toBe(normalizeDisplayNameForMerge(input));
     }
-  );
-
-  it("documents that the two normalizers are different implementations (NFD vs NFKD)", () => {
-    // Both normalizers currently agree on all the inputs above.
-    // This test exists to document the difference in form, not to assert output divergence —
-    // divergence may appear only with exotic Unicode (ligatures, compatibility chars, etc).
-    //
-    // The point is: if either implementation changes, tests here break and the reviewer
-    // must consciously decide whether to update the other variant.
-    expect(normalizeForDupDetection("Juan García")).toBe("juan garcia");
-    expect(normalizeDisplayNameForMerge("Juan García")).toBe("juan garcia");
   });
 
-  it("both normalizers trim and lowercase", () => {
-    const input = "  MARÍA  ";
-    expect(normalizeForDupDetection(input)).toBe("maria");
-    expect(normalizeDisplayNameForMerge(input)).toBe("maria");
+  it("strips compatibility characters (NFKD decomposes ligatures, halfwidth, etc.)", () => {
+    // NFKD decomposes ﬁ (U+FB01 LATIN SMALL LIGATURE FI) → fi
+    expect(normalizeDisplayName("ﬁle")).toBe("file");
+    // NFKD decomposes ＡＢＣ (fullwidth letters) → ABC → abc
+    expect(normalizeDisplayName("ＡＢＣ")).toBe("abc");
   });
 
-  it("both normalizers collapse internal whitespace", () => {
-    const input = "Juan   Luis";
-    expect(normalizeForDupDetection(input)).toBe("juan luis");
-    expect(normalizeDisplayNameForMerge(input)).toBe("juan luis");
+  it("strips Spanish diacritics via \\p{Diacritic}", () => {
+    expect(normalizeDisplayName("Ángeles")).toBe("angeles");
+    expect(normalizeDisplayName("Díaz")).toBe("diaz");
+    expect(normalizeDisplayName("Núñez")).toBe("nunez");
+    expect(normalizeDisplayName("Güell")).toBe("guell");
+  });
+
+  it("trims leading/trailing whitespace and collapses internal whitespace", () => {
+    expect(normalizeDisplayName("  Foo   Bar  ")).toBe("foo bar");
+  });
+
+  it("lowercases the result", () => {
+    expect(normalizeDisplayName("BANCO DE SANGRE")).toBe("banco de sangre");
   });
 });

@@ -256,12 +256,12 @@ describe("Social-handle row skip (isSocialHandle)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C. deferredSkippedRowCount surface (OIR-102 security review fix)
+// C. buscasSkippedRowCount / socialHandleSkippedRowCount surface (OIR-102 / OIR-134)
 // ---------------------------------------------------------------------------
 
-describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
-  it("counts data rows from a Buscas sheet in deferredSkippedRowCount", () => {
-    // Buscas_Celadores has 1 header row + 2 data rows = 2 deferred rows.
+describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
+  it("counts data rows from a Buscas sheet in buscasSkippedRowCount", () => {
+    // Buscas_Celadores has 1 header row + 2 data rows = 2 buscas rows.
     const filePath = writeWorkbook(testRoot, "buscas-count.xlsx", [
       {
         name: "Buscas_Celadores",
@@ -279,12 +279,13 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
     const result = normalizeWorkbookRowsFromFile(filePath);
 
     // 2 data rows in Buscas_Celadores (header excluded), 0 social rows.
-    expect(result.deferredSkippedRowCount).toBe(2);
+    expect(result.buscasSkippedRowCount).toBe(2);
+    expect(result.socialHandleSkippedRowCount).toBe(0);
     // Real contacts unaffected.
     expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
   });
 
-  it("counts social-handle rows in deferredSkippedRowCount", () => {
+  it("counts social-handle rows in socialHandleSkippedRowCount", () => {
     // Sheet contains one social-handle row (label: "hospitaldrnegrin", no phone).
     const filePath = writeWorkbook(testRoot, "social-count.xlsx", [
       {
@@ -303,7 +304,8 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
     const result = normalizeWorkbookRowsFromFile(filePath);
 
     // Exactly 1 social-handle row was skipped.
-    expect(result.deferredSkippedRowCount).toBe(1);
+    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.socialHandleSkippedRowCount).toBe(1);
     // Real contacts unaffected.
     const names = result.rows.map((r) => r.displayName);
     expect(names).toContain("Triaje");
@@ -312,10 +314,9 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
     expect(names).not.toContain("hospitaldrnegrin");
   });
 
-  it("aggregates buscas rows and social rows into a single deferredSkippedRowCount", () => {
+  it("tracks buscas rows and social rows in separate counters", () => {
     // Buscas_Varios: 1 header + 3 data = 3 buscas rows.
     // urgencias sheet: 1 social-handle row.
-    // Total expected: 3 + 1 = 4.
     const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
       {
         name: "Buscas_Varios",
@@ -339,13 +340,14 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    expect(result.deferredSkippedRowCount).toBe(4);
+    expect(result.buscasSkippedRowCount).toBe(3);
+    expect(result.socialHandleSkippedRowCount).toBe(1);
     const names = result.rows.map((r) => r.displayName);
     expect(names).toContain("Triaje");
     expect(names).toContain("Mostrador");
   });
 
-  it("returns deferredSkippedRowCount of 0 when there are no deferred skips", () => {
+  it("returns both counts as 0 when there are no deferred skips", () => {
     const filePath = writeWorkbook(testRoot, "no-skips.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Triaje", numbers: ["11111"] },
@@ -355,13 +357,14 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    expect(result.deferredSkippedRowCount).toBe(0);
+    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.socialHandleSkippedRowCount).toBe(0);
     expect(result.rows).toHaveLength(2);
   });
 
-  it("preview carries deferredSkippedRowCount from the normalization result", async () => {
+  it("preview carries buscasSkippedRowCount from the normalization result", async () => {
     // Integration: buildSpreadsheetImportPreview (sync path) returns a preview
-    // with deferredSkippedRowCount reflecting actual buscas rows.
+    // with buscasSkippedRowCount reflecting actual buscas rows.
     const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");
     const filePath = writeWorkbook(testRoot, "preview-count.xlsx", [
       {
@@ -380,7 +383,8 @@ describe("deferredSkippedRowCount in SpreadsheetImportNormalizationResult", () =
     const { preview } = await buildSpreadsheetImportPreview(filePath, "test-editor");
 
     // 2 data rows in Buscas_Enfermería.
-    expect(preview.deferredSkippedRowCount).toBe(2);
+    expect(preview.buscasSkippedRowCount).toBe(2);
+    expect(preview.socialHandleSkippedRowCount).toBe(0);
     // Import is not blocked.
     expect(preview.invalidRowCount).toBe(0);
   });

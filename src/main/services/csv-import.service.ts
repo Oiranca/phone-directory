@@ -400,8 +400,10 @@ export const buildImportPreviewFromRows = async (
     editorName: string;
     detectedFormat?: string;
     detectionConfidence?: "high" | "medium" | "low";
-    /** INTERIM (OIR-102): rows silently skipped by deferred-feature guards. Default 0 (CSV path). */
-    deferredSkippedRowCount?: number;
+    /** INTERIM (OIR-102/OIR-134): Buscas-sheet rows silently skipped. Default 0 (CSV path). */
+    buscasSkippedRowCount?: number;
+    /** INTERIM (OIR-102/OIR-134): Social-handle rows silently skipped. Default 0 (CSV path). */
+    socialHandleSkippedRowCount?: number;
   }
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const records: ContactRecord[] = [];
@@ -594,7 +596,8 @@ export const buildImportPreviewFromRows = async (
       mergedRecordCount: dataset.records.length,
       createdCount: dataset.records.length,
       updatedCount: 0,
-      deferredSkippedRowCount: options.deferredSkippedRowCount ?? 0,
+      buscasSkippedRowCount: options.buscasSkippedRowCount ?? 0,
+      socialHandleSkippedRowCount: options.socialHandleSkippedRowCount ?? 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

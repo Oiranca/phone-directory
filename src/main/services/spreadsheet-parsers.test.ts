@@ -5,10 +5,12 @@
  *   - blankRecord: full shape assertion (all expected fields, correct types)
  *   - buildStableExternalId: determinism, ASCII-fold/join behavior,
  *     accent normalization, order sensitivity, empty/edge inputs
+ *   - normalizeServiceSheet: rowHasPhone gating regression tests (OIR-134)
  */
 
 import { describe, expect, it } from "vitest";
-import { blankRecord, buildStableExternalId } from "./spreadsheet-parsers.js";
+import { blankRecord, buildStableExternalId, normalizeServiceSheet } from "./spreadsheet-parsers.js";
+import type { SheetData, SheetProfile } from "./spreadsheet-parsers.js";
 
 // ---------------------------------------------------------------------------
 // blankRecord
@@ -279,5 +281,75 @@ describe("buildStableExternalId", () => {
     // When phone1 is also present (two phones), no undefined slot:
     const suffixTwo = buildStableExternalId(["Urgencias", "Triaje", "12345", "67890"]);
     expect(suffixTwo).toBe("urgencias-triaje-12345-67890");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeServiceSheet — rowHasPhone gating regression (OIR-134)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal sheet profile fixture for service-sheet regression tests.
+ */
+const makeProfile = (department: string): SheetProfile => ({
+  parser: "service",
+  canonicalSlug: "test",
+  department,
+  rowsToSkip: 0,
+  detectedFormat: "service",
+  detectionConfidence: "high"
+});
+
+const makeSheet = (name: string, rows: string[][]): SheetData => ({
+  name,
+  slug: "test",
+  rows
+});
+
+describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", () => {
+  it("does NOT emit a contact when the only tail cell is a date (dd/mm/yyyy) — date must not gate rowHasPhone", () => {
+    // The label must be ALL-CAPS so that isExcludedLabel() returns true, making
+    // the rowHasPhone guard (`if (label && isExcludedLabel(label) && !rowHasPhone)`)
+    // observable. Mixed-case labels like "Guardia" are NOT excluded by isExcludedLabel,
+    // so that guard never fires regardless of rowHasPhone, and the test cannot isolate
+    // the regression.
+    //
+    // Bug: `phoneNumbers.length > 0` caused extractNumbers("12/03/2024") → ["2024"]
+    // (4 digits, within range) to set rowHasPhone=true. rowHasPhone=true then triggers
+    // the fallback `label = firstCell` → label becomes "GUARDIA", so the
+    // `isExcludedLabel && !rowHasPhone` guard does NOT fire → record is emitted.
+    // Fix: looksLikeDateValue("12/03/2024") short-circuits the rowHasPhone check
+    // → rowHasPhone stays false → label fallback not triggered → label stays ""
+    // → `if (!label) return` fires → no record emitted.
+    const sheet = makeSheet("GUARDIA", [["GUARDIA", "12/03/2024"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("GUARDIA"));
+    expect(records).toHaveLength(0);
+  });
+
+  it("does NOT gate rowHasPhone true from a 10-digit number alone (outside 4–9 digit range)", () => {
+    // Same rationale as the date test: ALL-CAPS label required so isExcludedLabel()
+    // returns true and the rowHasPhone gating path is exercised.
+    //
+    // Bug: `phoneNumbers.length > 0` caused extractNumbers("1234567890") → ["1234567890"]
+    // (10 digits, out of 4–9 range) to set rowHasPhone=true, restoring label "CONTROL"
+    // via the fallback and bypassing the guard → record emitted.
+    // Fix: only numbers with 4–9 digits qualify for rowHasPhone. The 10-digit number
+    // does not qualify → rowHasPhone stays false → label stays "" → `if (!label) return`
+    // → no record emitted.
+    const sheet = makeSheet("CONTROL", [["CONTROL", "1234567890"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("CONTROL"));
+    expect(records).toHaveLength(0);
+  });
+
+  it("DOES emit a contact when an ALL-CAPS excluded-label row has a real 4–9 digit phone (positive control)", () => {
+    // "URGENCIAS" is all-caps → isExcludedLabel() returns true. But "928123456"
+    // is 9 digits (within 4–9 range) and not a date → rowHasPhone=true.
+    // rowHasPhone=true triggers the label fallback → label = "URGENCIAS" AND
+    // causes `isExcludedLabel(label) && !rowHasPhone` to NOT fire → record is emitted.
+    // Proves the fix only skips rows that genuinely have no phone-like number.
+    const sheet = makeSheet("URGENCIAS", [["URGENCIAS", "928123456"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("URGENCIAS"));
+    expect(records).toHaveLength(1);
+    expect(records[0]!.phone1Number).toBe("928123456");
   });
 });

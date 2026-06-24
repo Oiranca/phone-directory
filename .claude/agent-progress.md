@@ -111,3 +111,32 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [10:01] Identified types to derive: PhoneContact, EmailContact, ContactRecord, DirectoryDataset, AppSettings, AutoBackupSettings, AutoBackupTrigger, EditableAppSettings, AuditAction, AuditLogEntry, AuditLogQueryParams
 - [10:01] Editable types (EditablePhoneContact, EditableEmailContact, EditableContactRecord) intentionally differ — schema has transforms/validation, kept separate with comment
 - [10:02] Implementing derivation in contact.ts
+- [11:07] All 4 validations pass: build OK, renderer typecheck OK, electron typecheck OK, 818/819 tests pass
+- [11:08] ✅ Complete — commit 64a24c8, branch fix/oir-118-zod-schema-derivation pushed. 8 new serialization parity tests added.
+
+#### [OIR-119] software-engineer — shared matching/metadata helpers
+- [11:35] Task started. Investigating helper duplication across csv-import, app-data, duplicate-detection, spreadsheet-normalize.
+- [11:37] Analysis complete. Findings:
+  - normalizePhoneNumber (strip /\D/g): IDENTICAL in duplicate-detection.service.ts and spreadsheet-normalize.ts (normalizeNumberForDedup). app-data.service.ts uses both forms: bare strip (lines 1464,1469,1510) and strip+slice(-9) for mergeDuplicates (line 626 — intentionally different, last-9-digits for dedup merge).
+  - normalizeDisplayName: DIVERGENT — duplicate-detection uses NFD+char-range, spreadsheet-normalize uses NFKD+unicode-prop \p{Diacritic}. Different normalization forms. Must keep both, locked by parity test.
+  - typeCounts/areaCounts counting loop: IDENTICAL in csv-import.service.ts buildDataset and app-data.service.ts buildNextDataset. Extract to shared helper.
+  - Plan: extract (1) normalizePhoneForDedup (= strip /\D/g) as shared helper; (2) computeMetadataCounts (typeCounts+areaCounts loop) as shared helper. Keep normalizeDisplayName divergence locked with parity test.
+- [11:42] Implementation complete. Created src/shared/utils/matching.ts with normalizePhoneForDedup + computeMetadataCounts. Updated 4 consumer files. Created matching.parity.test.ts with 21 new tests locking parity and divergence.
+- [11:42] Validation: build clean, tsc app+electron clean, 839 passed / 1 skip / 0 fail (was 818/1/0). Commit: 5120dc9. Branch pushed: fix/oir-119-shared-matching-helpers.
+- [11:42] ✅ Complete — OIR-119 shared matching/metadata helpers extracted, parity tests added, all validation green.
+#### [OIR-134] software-engineer — fix stale stub field
+- [12:15] Replaced deferredSkippedRowCount with buscasSkippedRowCount + socialHandleSkippedRowCount in contacts.ipc.test.ts previewStub
+- [12:15] Added satisfies CsvImportPreviewWithConflicts & { sourceFilePath: string } type guard
+- [12:15] tsc -p tsconfig.app.json --noEmit: clean
+- [12:15] tsc -p tsconfig.electron.json --noEmit: clean
+- [12:15] tsc -p tsconfig.vitest.json --noEmit: pre-existing errors only (unchanged vs baseline)
+- [12:15] pnpm test: 853 passed / 1 skipped / 0 failed
+- [12:15] ✅ Complete — committed 8c6bde5, pushed to fix/oir-134-import-cleanup
+#### [OIR-134] software-engineer — fix rowHasPhone gating regression
+- [12:28] Task started — reading spreadsheet-parsers.ts on fix/oir-134-import-cleanup branch
+- [12:29] Confirmed regression: const rowHasPhone = phoneNumbers.length > 0 (missing date guard + 4-9 digit range check)
+- [12:30] Applied fix: import looksLikeDateValue, replace const assignment with let + per-cell gate in single-pass loop
+- [12:31] Added 3 regression tests to spreadsheet-parsers.test.ts (date cell, 10-digit out-of-range, positive control)
+- [12:31] Added singular socialHandleSkippedRowCount test to CsvImportPreviewPanel.test.tsx
+- [12:32] Validation: pnpm build ✓ | tsconfig.app.json ✓ | tsconfig.electron.json ✓ | pnpm test: 853 passed, 0 failed (42 files)
+- [12:33] ✅ Complete — phoneNumbers content parity preserved, rowHasPhone gating restored to OLD semantics

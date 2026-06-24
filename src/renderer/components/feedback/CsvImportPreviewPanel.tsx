@@ -144,16 +144,27 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* INTERIM (OIR-102): Deferred-skip informational note */}
-      {(preview.deferredSkippedRowCount ?? 0) > 0 && (
+      {/* INTERIM (OIR-102/OIR-134): Deferred-skip informational notes */}
+      {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
-            {preview.deferredSkippedRowCount} {preview.deferredSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
+            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
           </span>{" "}
-          (hojas de buscas / redes sociales — pendientes de su sección)
+          (hojas de buscas — pendientes de su sección)
+        </div>
+      )}
+      {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (
+        <div
+          role="note"
+          className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+        >
+          <span className="font-semibold">
+            {preview.socialHandleSkippedRowCount} {preview.socialHandleSkippedRowCount === 1 ? "fila omitida" : "filas omitidas"}
+          </span>{" "}
+          (redes sociales — filas sin número de teléfono omitidas)
         </div>
       )}
 

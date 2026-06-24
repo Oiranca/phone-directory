@@ -100,8 +100,10 @@ export type SpreadsheetImportNormalizationResult = {
   rows: NormalizedImportRow[];
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
-  /** INTERIM (OIR-102): Total rows silently skipped by deferred-feature guards. */
-  deferredSkippedRowCount: number;
+  /** INTERIM (OIR-102/OIR-134): Rows skipped because they belong to Buscas sheets. */
+  buscasSkippedRowCount: number;
+  /** INTERIM (OIR-102/OIR-134): Rows skipped because they are social-media handles. */
+  socialHandleSkippedRowCount: number;
 };
 
 type SheetProfile = {
@@ -285,6 +287,14 @@ const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
 };
 
 /**
+ * Minimum number of flat label+phone rows required to accept a sheet as a
+ * generic flat service sheet (Bug A fix — see detectSheetProfile comment).
+ * Conservative: admits real contact tables while rejecting 1- or 2-row tables
+ * that only mimic the label+phone layout.
+ */
+const MIN_FLAT_PHONE_BEARING_ROWS = 3;
+
+/**
  * Counts rows that look like a flat contact row: first cell has at least one
  * letter, AND at least one non-first cell has a phone-like number.
  *
@@ -440,7 +450,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   const flatStartIndex = serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0;
   const flatPhoneBearingRows = countFlatPhoneBearingRows(sheet.rows, flatStartIndex);
 
-  if (flatPhoneBearingRows >= 3) {
+  if (flatPhoneBearingRows >= MIN_FLAT_PHONE_BEARING_ROWS) {
     return {
       parser: "service",
       canonicalSlug: normalizeAscii(derivedDepartment),
@@ -561,7 +571,8 @@ export const normalizeWorkbookRowsFromFile = (
 
   const records: NormalizedImportRow[] = [];
   const profiles: SheetProfile[] = [];
-  let deferredSkippedRowCount = 0;
+  let buscasSkippedRowCount = 0;
+  let socialHandleSkippedRowCount = 0;
 
   for (const sheet of sheets) {
     if (sheet.rows.length === 0) {
@@ -574,7 +585,7 @@ export const normalizeWorkbookRowsFromFile = (
     // header row (consistent with how service sheets count their data rows).
     if (isDeferredFeatureSheet(sheet.slug)) {
       const dataRowCount = Math.max(0, sheet.rows.length - 1);
-      deferredSkippedRowCount += dataRowCount;
+      buscasSkippedRowCount += dataRowCount;
       continue;
     }
 
@@ -593,7 +604,7 @@ export const normalizeWorkbookRowsFromFile = (
 
     const serviceResult = normalizeServiceSheet(sheet, profile);
     records.push(...serviceResult.records);
-    deferredSkippedRowCount += serviceResult.socialSkippedRows;
+    socialHandleSkippedRowCount += serviceResult.socialSkippedRows;
   }
 
   if (records.length === 0) {
@@ -608,7 +619,8 @@ export const normalizeWorkbookRowsFromFile = (
   return {
     rows: mergedRecords,
     ...summarizeDetectedFormat(profiles),
-    deferredSkippedRowCount
+    buscasSkippedRowCount,
+    socialHandleSkippedRowCount
   };
 };
 
@@ -773,6 +785,7 @@ export const buildSpreadsheetImportPreview = async (
     editorName,
     detectedFormat: normalized.detectedFormat,
     detectionConfidence: normalized.detectionConfidence,
-    deferredSkippedRowCount: normalized.deferredSkippedRowCount
+    buscasSkippedRowCount: normalized.buscasSkippedRowCount,
+    socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount
   });
 };
