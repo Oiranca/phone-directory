@@ -830,5 +830,12 @@ export const buildSpreadsheetImportPreview = async (
     socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount
   });
 
-  return { ...result, buscasParseResult: normalized.buscasParseResult };
+  return {
+    ...result,
+    preview: {
+      ...result.preview,
+      parsedBuscasCellCount: normalized.buscasParseResult.parsedCellCount
+    },
+    buscasParseResult: normalized.buscasParseResult
+  };
 };

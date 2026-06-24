@@ -16,6 +16,7 @@ const basePreview: CsvImportPreviewWithConflicts = {
   updatedCount: 0,
   buscasSkippedRowCount: 0,
   socialHandleSkippedRowCount: 0,
+  parsedBuscasCellCount: 0,
   typeCounts: {},
   areaCounts: {},
   rowIssues: [],
@@ -612,6 +613,32 @@ describe("CsvImportPreviewPanel", () => {
 
       // Skip counts alone do not block import.
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+  });
+
+  describe("buscas-only workbook confirm gate (OIR-130)", () => {
+    it("enables the confirm button when parsedBuscasCellCount > 0 and validRowCount === 0", () => {
+      // A buscas-only ODS: no contact rows but valid buscas content was parsed.
+      renderPanel({
+        ...basePreview,
+        validRowCount: 0,
+        parsedBuscasCellCount: 12,
+        previewRows: []
+      });
+
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+
+    it("keeps the confirm button disabled when both validRowCount and parsedBuscasCellCount are 0", () => {
+      // A truly empty workbook: nothing to import at all.
+      renderPanel({
+        ...basePreview,
+        validRowCount: 0,
+        parsedBuscasCellCount: 0,
+        previewRows: []
+      });
+
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
   });
 });

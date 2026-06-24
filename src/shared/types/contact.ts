@@ -212,6 +212,13 @@ export interface CsvImportPreview {
    * social-media handle rows inside service sheets. Always 0 for the CSV path.
    */
   socialHandleSkippedRowCount: number;
+  /**
+   * OIR-130: Number of buscas (pager) cells successfully parsed from buscas sheets.
+   * A value > 0 means the workbook contained valid buscas content even if validRowCount === 0.
+   * Used by the renderer confirm gate to allow confirming buscas-only workbooks.
+   * Always 0 for the CSV path and for workbooks with no buscas sheets.
+   */
+  parsedBuscasCellCount: number;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
