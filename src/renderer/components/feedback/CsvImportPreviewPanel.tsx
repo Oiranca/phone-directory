@@ -163,7 +163,7 @@ const ConflictRecordCol = ({
         </ul>
       )}
 
-      {phones.length === 0 && emails.length === 0 && (
+      {phones.length === 0 && emails.length === 0 && socials.length === 0 && (
         <p className="mt-1 text-xs italic text-slate-400">Sin teléfonos ni correos</p>
       )}
     </div>

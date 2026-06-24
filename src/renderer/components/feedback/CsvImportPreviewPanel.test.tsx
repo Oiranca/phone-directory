@@ -608,6 +608,31 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByText("Sin teléfonos ni correos")).toBeInTheDocument();
     });
 
+    it("does NOT show 'Sin teléfonos ni correos' when the record has socials but no phones or emails (Bug-3)", () => {
+      // Regression guard for OIR-132 Bug-3: a record with socials only was showing
+      // both the social list AND the empty-state note simultaneously.  The note must
+      // only appear when phones, emails AND socials are all empty.
+      renderPanel({
+        ...phoneConflictPreview,
+        conflictedRecords: [
+          {
+            ...phoneConflictPreview.conflictedRecords[0]!,
+            importedRecord: {
+              ...phoneConflictPreview.conflictedRecords[0]!.importedRecord,
+              phones: [],
+              emails: [],
+              socials: [{ platform: "instagram", handle: "urgencias_h" }]
+            }
+          }
+        ]
+      });
+
+      // The social handle must be visible
+      expect(screen.getByText("@urgencias_h")).toBeInTheDocument();
+      // The contradictory empty-state note must NOT appear
+      expect(screen.queryByText("Sin teléfonos ni correos")).not.toBeInTheDocument();
+    });
+
     it("shows only the reason label (no colon+value) when matchingFieldValue is absent", () => {
       renderPanel({
         ...phoneConflictPreview,
