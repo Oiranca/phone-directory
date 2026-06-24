@@ -258,19 +258,21 @@ export interface ConflictSocialSummary {
   label?: string;
 }
 
-/** Minimal record data safe to expose in import conflict previews. */
+/**
+ * Minimal record data sent to the renderer for import conflict previews.
+ * Contains only the fields the conflict diff card actually renders.
+ * Fields not displayed in the UI (type, area, status) are intentionally
+ * excluded to keep the IPC payload minimal.
+ */
 export interface ConflictRecordSummary {
   id?: string;
   externalId?: string;
-  type: RecordType;
   displayName: string;
   department?: string;
   service?: string;
-  area?: AreaType;
   specialty?: string;
   /** Compact single-line location string, e.g. "Edificio A · Planta 2 · Hab 301". */
   locationSummary?: string;
-  status: ContactRecord["status"];
   /** Lean phone list for field-level diff (OIR-132). */
   phones: ConflictPhoneSummary[];
   /** Lean email list for field-level diff (OIR-132). */

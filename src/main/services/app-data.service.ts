@@ -1727,14 +1727,11 @@ export class AppDataService {
     return {
       id: record.id,
       externalId: record.externalId,
-      type: record.type,
       displayName: record.displayName,
       department: record.organization.department,
       service: record.organization.service,
-      area: record.organization.area,
       specialty: record.organization.specialty,
       locationSummary,
-      status: record.status,
       // Lean contact method lists for field-level diff (OIR-132).
       phones: record.contactMethods.phones.map((p) => ({
         number: p.number,

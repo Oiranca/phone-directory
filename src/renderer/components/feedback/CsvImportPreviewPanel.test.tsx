@@ -417,10 +417,8 @@ describe("CsvImportPreviewPanel", () => {
           importedRecord: {
             id: "import-1",
             externalId: "legacy-1",
-            type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
-            status: "active",
             phones: [],
             emails: [],
             socials: []
@@ -428,10 +426,8 @@ describe("CsvImportPreviewPanel", () => {
           matchingRecord: {
             id: "existing-1",
             externalId: "legacy-1",
-            type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
-            status: "active",
             phones: [],
             emails: [],
             socials: []
@@ -495,13 +491,11 @@ describe("CsvImportPreviewPanel", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-ph-1",
-            type: "service",
             displayName: "Urgencias Importada",
             department: "Urgencias",
             service: "Triaje",
             specialty: "Triage avanzado",
             locationSummary: "Edificio A · Planta 1",
-            status: "active",
             phones: [
               { number: "12345", kind: "direct" },
               { number: "99999", kind: "fax", label: "Fax" }
@@ -511,11 +505,9 @@ describe("CsvImportPreviewPanel", () => {
           },
           matchingRecord: {
             id: "existing-ph-1",
-            type: "service",
             displayName: "Urgencias Actual",
             department: "Urgencias",
             service: "Triaje",
-            status: "active",
             phones: [
               { number: "12345", kind: "direct" },
               { number: "11111", kind: "other" }
@@ -664,18 +656,14 @@ describe("CsvImportPreviewPanel", () => {
             recordIndex: 0,
             importedRecord: {
               id: "import-em-1",
-              type: "person",
               displayName: "Dr. García Importado",
-              status: "active",
               phones: [],
               emails: [{ address: "garcia@hospital.com" }],
               socials: []
             },
             matchingRecord: {
               id: "existing-em-1",
-              type: "person",
               displayName: "Dr. García",
-              status: "active",
               phones: [],
               emails: [{ address: "garcia@hospital.com", label: "Corporativo" }],
               socials: []
@@ -716,9 +704,7 @@ describe("CsvImportPreviewPanel", () => {
             recordIndex: 0,
             importedRecord: {
               id: "import-fmt-1",
-              type: "service",
               displayName: "Servicio Importado",
-              status: "active",
               phones: [
                 { number: "5551234", kind: "direct" },
                 { number: "9999999", kind: "other" }
@@ -728,9 +714,7 @@ describe("CsvImportPreviewPanel", () => {
             },
             matchingRecord: {
               id: "existing-fmt-1",
-              type: "service",
               displayName: "Servicio Existente",
-              status: "active",
               phones: [
                 { number: "555 12 34", kind: "direct" },
                 { number: "8888888", kind: "fax" }
@@ -775,9 +759,7 @@ describe("CsvImportPreviewPanel", () => {
             recordIndex: 0,
             importedRecord: {
               id: "import-case-em-1",
-              type: "person",
               displayName: "Dr. López Importado",
-              status: "active",
               phones: [],
               emails: [
                 { address: "Lopez@Hospital.com" },
@@ -787,9 +769,7 @@ describe("CsvImportPreviewPanel", () => {
             },
             matchingRecord: {
               id: "existing-case-em-1",
-              type: "person",
               displayName: "Dr. López",
-              status: "active",
               phones: [],
               emails: [
                 { address: "lopez@hospital.com" },
@@ -878,9 +858,7 @@ describe("CsvImportPreviewPanel", () => {
           recordIndex: 0,
           importedRecord: {
             id: "spec-import-1",
-            type: "service" as const,
             displayName: "Servicio",
-            status: "active" as const,
             phones: [],
             emails: [],
             socials: [],
@@ -888,9 +866,7 @@ describe("CsvImportPreviewPanel", () => {
           },
           matchingRecord: {
             id: "spec-existing-1",
-            type: "service" as const,
             displayName: "Servicio Existente",
-            status: "active" as const,
             phones: [],
             emails: [],
             socials: []
