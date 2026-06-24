@@ -13,7 +13,15 @@ export const readJsonFile = async <T>(filePath: string): Promise<T> => {
 export const shouldFsyncParentDirectory = (platform: NodeJS.Platform = process.platform): boolean =>
   platform !== "win32";
 
-export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
+export interface WriteJsonFileOptions {
+  /** Override the platform used to decide whether to fsync the parent directory.
+   *  Defaults to `process.platform`. Intended for unit tests that need to exercise
+   *  both POSIX and Windows code paths on any host without `it.runIf` guards. */
+  platform?: NodeJS.Platform;
+}
+
+export async function writeJsonFile(filePath: string, data: unknown, options: WriteJsonFileOptions = {}): Promise<void> {
+  const platform = options.platform ?? process.platform;
   const tmp = filePath + ".tmp";
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
   try {
@@ -25,7 +33,7 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
     }
     try {
       await fs.rename(tmp, filePath);
-      if (shouldFsyncParentDirectory()) {
+      if (shouldFsyncParentDirectory(platform)) {
         const dirFd = await fs.open(path.dirname(filePath), "r");
         try {
           await dirFd.sync();
