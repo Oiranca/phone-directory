@@ -41,13 +41,13 @@ export const CONTACTS_CHANNELS = {
   recoverAuditLog:  "contacts:recover-audit-log",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
-} as const satisfies _CanonicalContacts;
+} as const satisfies typeof _CanonicalContacts;
 
 export const SETTINGS_CHANNELS = {
   save:       "settings:save",
   defaults:   "settings:defaults",
   browsePath: "settings:browse-path"
-} as const satisfies _CanonicalSettings;
+} as const satisfies typeof _CanonicalSettings;
 
 export const BUSCAS_CHANNELS = {
   list:         "buscas:list",
@@ -55,11 +55,11 @@ export const BUSCAS_CHANNELS = {
   update:       "buscas:update",
   remove:       "buscas:delete",
   listImported: "buscas:list-imported"
-} as const satisfies _CanonicalBuscas;
+} as const satisfies typeof _CanonicalBuscas;
 
 export const PUSH_CHANNELS = {
   autoBackupFailed: "app:auto-backup-failed"
-} as const satisfies _CanonicalPush;
+} as const satisfies typeof _CanonicalPush;
 
 export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
   // Type assertion: api must satisfy HospitalDirectoryApi exactly.
