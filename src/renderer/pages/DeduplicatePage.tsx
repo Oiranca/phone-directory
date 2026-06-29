@@ -9,6 +9,24 @@ interface PairState {
   keepId: string | null;
 }
 
+const DISMISSED_KEY = "dedup-dismissed-pairs";
+
+function readDismissedPairIds(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedPairId(id: string): void {
+  const existing = readDismissedPairIds();
+  if (!existing.includes(id)) {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...existing, id]));
+  }
+}
+
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const applyMergeResult = useAppStore((s) => s.applyMergeResult);
@@ -24,10 +42,7 @@ export const DeduplicatePage = () => {
 
   const handleDismissPair = (pairId: string) => {
     setPairStates((current) => current.filter((ps) => ps.pair.id !== pairId));
-    const existing = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
-    if (!existing.includes(pairId)) {
-      localStorage.setItem("dedup-dismissed-pairs", JSON.stringify([...existing, pairId]));
-    }
+    writeDismissedPairId(pairId);
   };
 
   useEffect(() => {
@@ -36,7 +51,7 @@ export const DeduplicatePage = () => {
         setIsLoading(true);
         setLoadError(null);
         const result = await window.hospitalDirectory.detectDuplicates();
-        const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+        const dismissed = readDismissedPairIds();
         setPairStates(
           result.pairs
             .filter((pair) => !dismissed.includes(pair.id))
@@ -122,7 +137,7 @@ export const DeduplicatePage = () => {
     try {
       // Refresh all pairs to clear any pairs that referenced the discarded record
       const result = await window.hospitalDirectory.detectDuplicates();
-      const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+      const dismissed = readDismissedPairIds();
       setPairStates(
         result.pairs
           .filter((pair) => !dismissed.includes(pair.id))

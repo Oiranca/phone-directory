@@ -392,6 +392,15 @@ describe("DeduplicatePage", () => {
       });
     });
 
+    it("treats a malformed dedup-dismissed-pairs value as empty and does not throw", async () => {
+      localStorage.setItem("dedup-dismissed-pairs", "this is not json{{{");
+
+      // Rendering must not throw; both pairs must be visible (malformed = empty dismissed list)
+      renderPage();
+      expect(await screen.findByText("Similitud 90%")).toBeInTheDocument();
+      expect(screen.getByText("Similitud 85%")).toBeInTheDocument();
+    });
+
     it("does not re-show a dismissed pair after remount with the same data", async () => {
       const { unmount } = renderPage();
       await screen.findByText("Similitud 90%");
