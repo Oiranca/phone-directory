@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { normalizePhoneForDedup, computeMetadataCounts, normalizeDisplayName } from "./matching.js";
+import { normalizePhoneForDedup, normalizePhoneForMergeDedup, computeMetadataCounts, normalizeDisplayName } from "./matching.js";
 import { normalizeDisplayNameForMerge } from "../../main/services/spreadsheet-normalize.js";
 import type { ContactRecord } from "../types/contact.js";
 
@@ -102,6 +102,64 @@ describe("normalizePhoneForDedup", () => {
     for (const input of inputs) {
       expect(normalizePhoneForDedup(input)).toBe(normalizeNumberForDedup(input));
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizePhoneForMergeDedup — parity matrix
+// ---------------------------------------------------------------------------
+
+describe("normalizePhoneForMergeDedup", () => {
+  /**
+   * Original implementations replaced by this shared helper:
+   *   - app-data.service.ts `mergeDuplicates`:   phone.replace(/\D/g, "").slice(-9)
+   *   - MergeLossPreview.tsx `computeMergeLossPreview`: n.replace(/\D/g, "").slice(-9)
+   *
+   * Both were byte-identical. This test matrix proves the shared helper
+   * matches each original and pins the last-9-digit behavior.
+   */
+
+  const FIXTURE_MATRIX: [input: string, expected: string][] = [
+    // Exactly 9 digits — unchanged
+    ["928101234", "928101234"],
+    // More than 9 digits — last 9 returned
+    ["+34928101234", "928101234"],
+    // Spaces and dashes stripped before slicing
+    ["928-101-234", "928101234"],
+    // With country prefix and spaces
+    ["+34 600 001 111", "600001111"],
+    // Fewer than 9 digits — all returned (no left-padding)
+    ["1234", "1234"],
+    // Empty string
+    ["", ""],
+    // Only non-digits — empty after strip, empty after slice
+    ["ext. N/A", ""],
+  ];
+
+  it.each(FIXTURE_MATRIX)("normalizePhoneForMergeDedup(%j) === %j", (input, expected) => {
+    expect(normalizePhoneForMergeDedup(input)).toBe(expected);
+  });
+
+  it("parity: matches original inline from app-data.service.ts mergeDuplicates", () => {
+    const originalMerge = (phone: string) => phone.replace(/\D/g, "").slice(-9);
+    const inputs = ["+34928101234", "600-001-111", "600001111", "1234", ""];
+    for (const input of inputs) {
+      expect(normalizePhoneForMergeDedup(input)).toBe(originalMerge(input));
+    }
+  });
+
+  it("parity: matches original inline from MergeLossPreview computeMergeLossPreview", () => {
+    const originalPreview = (n: string) => n.replace(/\D/g, "").slice(-9);
+    const inputs = ["+34928101234", "600-001-111", "600001111", "1234", ""];
+    for (const input of inputs) {
+      expect(normalizePhoneForMergeDedup(input)).toBe(originalPreview(input));
+    }
+  });
+
+  it("two phones with the same last-9 digits but different prefixes are considered duplicates", () => {
+    const a = normalizePhoneForMergeDedup("+34928101234");
+    const b = normalizePhoneForMergeDedup("928101234");
+    expect(a).toBe(b);
   });
 });
 

@@ -126,10 +126,8 @@ describe("MergeLossPreview — always-visible content", () => {
   it("does NOT list correos in the fill-gap loss note (emails are union-merged, never lost)", () => {
     render(<MergeLossPreview keepRecord={keepRecord} discardRecord={discardRecord} />);
     // "correos" must only appear in the union bullet (Se conservarán…), not the scalar loss note.
-    // The static-note <li> has class text-amber-700; query it directly.
-    const staticNote = document.querySelector("li.text-amber-700");
-    expect(staticNote).not.toBeNull();
-    expect(staticNote!.textContent).not.toMatch(/correos/);
+    const staticNote = screen.getByTestId("merge-loss-scalar-note");
+    expect(staticNote.textContent).not.toMatch(/correos/);
   });
 
   it("renders with role=note and accessible label", () => {

@@ -1,4 +1,5 @@
 import type { DuplicateRecordSummary } from "../../../shared/types/duplicate";
+import { normalizePhoneForMergeDedup } from "../../../shared/utils/matching";
 
 /**
  * A field from the discarded record that will be lost during merge because
@@ -38,10 +39,9 @@ export function computeMergeLossPreview(
   discardRecord: DuplicateRecordSummary
 ): MergeLossPreviewData {
   // Phones: mirror the last-9-digit normalisation from app-data.service.ts
-  const normalizePhone = (n: string) => n.replace(/\D/g, "").slice(-9);
-  const keepPhoneNums = new Set(keepRecord.phones.map((p) => normalizePhone(p.number)));
+  const keepPhoneNums = new Set(keepRecord.phones.map((p) => normalizePhoneForMergeDedup(p.number)));
   const phonesAdded = discardRecord.phones.filter(
-    (p) => !keepPhoneNums.has(normalizePhone(p.number))
+    (p) => !keepPhoneNums.has(normalizePhoneForMergeDedup(p.number))
   );
 
   const fieldConflicts: MergeFieldConflict[] = [];
@@ -143,7 +143,7 @@ export function MergeLossPreview({ keepRecord, discardRecord }: MergeLossPreview
             Emails, aliases, and social handles are NOT listed here because they
             are union-merged (same as phones) — unique values from the discard
             are always added to the keeper, never silently dropped. */}
-        <li className="text-amber-700">
+        <li className="text-amber-700" data-testid="merge-loss-scalar-note">
           <span className="font-medium">Otros campos escalares</span> del registro descartado
           (notas, ubicación, servicio, área, especialidad, etc.): si el registro conservado ya
           los tiene, el valor del descartado se perderá permanentemente; si el conservado no

@@ -40,7 +40,7 @@ import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.j
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
-import { computeMetadataCounts, normalizePhoneForDedup } from "../../shared/utils/matching.js";
+import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -645,15 +645,13 @@ export class AppDataService {
     }
 
     // Normalize for deduplication: use same normalization as detector
-    const normalizePhoneNumber = (phone: string): string =>
-      phone.replace(/\D/g, "").slice(-9); // Last 9 digits, matches detector logic
     const normalizeEmail = (email: string): string =>
       email.trim().toLowerCase();
     const normalizeTag = (tag: string): string =>
       tag.trim().toLowerCase();
 
     const existingPhoneNumbers = new Set(
-      keepRecord.contactMethods.phones.map((p) => normalizePhoneNumber(p.number))
+      keepRecord.contactMethods.phones.map((p) => normalizePhoneForMergeDedup(p.number))
     );
     const existingEmailAddresses = new Set(
       keepRecord.contactMethods.emails.map((e) => normalizeEmail(e.address))
@@ -663,7 +661,7 @@ export class AppDataService {
     );
 
     const extraPhones = discardRecord.contactMethods.phones.filter(
-      (p) => !existingPhoneNumbers.has(normalizePhoneNumber(p.number))
+      (p) => !existingPhoneNumbers.has(normalizePhoneForMergeDedup(p.number))
     );
     const extraEmails = discardRecord.contactMethods.emails.filter(
       (e) => !existingEmailAddresses.has(normalizeEmail(e.address))
