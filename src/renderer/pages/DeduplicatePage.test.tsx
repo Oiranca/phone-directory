@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
-import { DeduplicatePage } from "./DeduplicatePage";
+import { buildStorageKey, DeduplicatePage } from "./DeduplicatePage";
 import { useAppStore } from "../store/useAppStore";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+import { defaultSettings } from "../../shared/fixtures/defaultSettings";
 
 // Stub HTMLDialogElement.showModal/close since jsdom does not implement them
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
@@ -377,7 +378,7 @@ describe("DeduplicatePage", () => {
       expect(screen.getByText("Similitud 85%")).toBeInTheDocument();
     });
 
-    it("persists the dismissed pair id to localStorage", async () => {
+    it("persists the dismissed pair id to the scoped localStorage key", async () => {
       renderPage();
       await screen.findByText("Similitud 90%");
 
@@ -386,14 +387,17 @@ describe("DeduplicatePage", () => {
       });
       fireEvent.click(dismissButtons[0]!);
 
+      // When store has no settings (dataFilePath = null), buildStorageKey falls back to
+      // the bare prefix — same as the pre-scoping global key, keeping backward compat.
+      const key = buildStorageKey(null);
       await waitFor(() => {
-        const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+        const dismissed = JSON.parse(localStorage.getItem(key) || "[]") as string[];
         expect(dismissed).toContain(mockPair.id);
       });
     });
 
-    it("treats a malformed dedup-dismissed-pairs value as empty and does not throw", async () => {
-      localStorage.setItem("dedup-dismissed-pairs", "this is not json{{{");
+    it("treats a malformed dismissed-pairs value as empty and does not throw", async () => {
+      localStorage.setItem(buildStorageKey(null), "this is not json{{{");
 
       // Rendering must not throw; both pairs must be visible (malformed = empty dismissed list)
       renderPage();
@@ -437,6 +441,63 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findByText("Similitud 85%");
       expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("dismiss pair scoping — different datasets do not share dismissals", () => {
+    const pathA = "/data/hospital-a/contacts.json";
+    const pathB = "/data/hospital-b/contacts.json";
+
+    const twoPairsResult = {
+      pairs: [mockPair],
+      records: { cnt_0001: recordA, cnt_0002: recordB },
+      checkedCount: 2,
+      pairCount: 1
+    };
+
+    beforeEach(() => {
+      localStorage.clear();
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockResolvedValue(twoPairsResult),
+          mergeContacts: mockMergeContacts
+        }
+      });
+    });
+
+    it("a pair dismissed under dataset-A key does not disappear when dataset-B is active", async () => {
+      // Step 1: mount under dataset A and dismiss the pair
+      useAppStore.setState({ settings: { ...defaultSettings(pathA, "/backups") } });
+      const { unmount } = renderPage();
+      await screen.findByText("Similitud 90%");
+
+      const dismissButtons = screen.getAllByRole("button", {
+        name: /No son el mismo contacto:/
+      });
+      fireEvent.click(dismissButtons[0]!);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
+      });
+
+      // Confirm that the dismissal was written to the A-scoped key
+      const keyA = buildStorageKey(pathA);
+      const dismissedA = JSON.parse(localStorage.getItem(keyA) || "[]") as string[];
+      expect(dismissedA).toContain(mockPair.id);
+
+      unmount();
+
+      // Step 2: switch to dataset B — pair must be visible again
+      useAppStore.setState({ settings: { ...defaultSettings(pathB, "/backups") } });
+
+      renderPage();
+      expect(await screen.findByText("Similitud 90%")).toBeInTheDocument();
+
+      // B-scoped key must be empty
+      const keyB = buildStorageKey(pathB);
+      const dismissedB = JSON.parse(localStorage.getItem(keyB) || "[]") as string[];
+      expect(dismissedB).toHaveLength(0);
     });
   });
 

@@ -9,22 +9,60 @@ interface PairState {
   keepId: string | null;
 }
 
-const DISMISSED_KEY = "dedup-dismissed-pairs";
+const STORAGE_KEY_PREFIX = "dedup-dismissed-pairs";
+const STORAGE_KEY_VERSION = "v1";
 
-function readDismissedPairIds(): string[] {
+/**
+ * djb2 hash — deterministic, synchronous, no external dependencies.
+ * Used to derive a stable opaque identifier from the dataset file path so that
+ * dismissed-pair lists stay isolated per dataset. Without this, switching
+ * dataFilePath or opening a copied dataset that reuses contact IDs could silently
+ * hide duplicate warnings for the wrong directory.
+ */
+function hashPath(path: string): string {
+  let h = 5381;
+  for (let i = 0; i < path.length; i++) {
+    h = (((h << 5) + h) ^ path.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/**
+ * Build a dataset-scoped localStorage key.
+ * Format: `dedup-dismissed-pairs:v1:<djb2(dataFilePath)>`
+ *
+ * Scope source: `settings.dataFilePath` from EditableAppSettings, which is
+ * populated by the bootstrap IPC call before any page renders in normal
+ * operation. Using the path (rather than a separate UUID) is intentional — it
+ * is stable, derived from the real filesystem location, and does not require
+ * persisting a separate dataset identifier.
+ *
+ * Falls back to the bare prefix (unscoped) when dataFilePath is absent. This
+ * preserves backward compatibility with any dismissals written under the old
+ * global key, and covers tests that do not seed settings or recovery-mode
+ * renders where contacts.json is temporarily unavailable.
+ */
+export function buildStorageKey(dataFilePath: string | null | undefined): string {
+  if (!dataFilePath) {
+    return STORAGE_KEY_PREFIX;
+  }
+  return `${STORAGE_KEY_PREFIX}:${STORAGE_KEY_VERSION}:${hashPath(dataFilePath)}`;
+}
+
+export function readDismissedPairIds(storageKey: string): string[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]");
+    const parsed: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
     return Array.isArray(parsed) ? (parsed as string[]) : [];
   } catch {
     return [];
   }
 }
 
-function writeDismissedPairId(id: string): void {
-  const existing = readDismissedPairIds();
+export function writeDismissedPairId(storageKey: string, id: string): void {
+  const existing = readDismissedPairIds(storageKey);
   if (!existing.includes(id)) {
     try {
-      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...existing, id]));
+      localStorage.setItem(storageKey, JSON.stringify([...existing, id]));
     } catch {
       // ignore write failures (quota exceeded, private browsing, etc.)
     }
@@ -34,6 +72,8 @@ function writeDismissedPairId(id: string): void {
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const applyMergeResult = useAppStore((s) => s.applyMergeResult);
+  const dataFilePath = useAppStore((s) => s.settings?.dataFilePath ?? null);
+  const storageKey = buildStorageKey(dataFilePath);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
@@ -46,7 +86,7 @@ export const DeduplicatePage = () => {
 
   const handleDismissPair = (pairId: string) => {
     setPairStates((current) => current.filter((ps) => ps.pair.id !== pairId));
-    writeDismissedPairId(pairId);
+    writeDismissedPairId(storageKey, pairId);
   };
 
   useEffect(() => {
@@ -55,7 +95,7 @@ export const DeduplicatePage = () => {
         setIsLoading(true);
         setLoadError(null);
         const result = await window.hospitalDirectory.detectDuplicates();
-        const dismissed = readDismissedPairIds();
+        const dismissed = readDismissedPairIds(storageKey);
         setPairStates(
           result.pairs
             .filter((pair) => !dismissed.includes(pair.id))
@@ -71,7 +111,10 @@ export const DeduplicatePage = () => {
     };
 
     void load();
-  }, []);
+  // storageKey is stable in normal operation (set once at bootstrap); include it
+  // so that if the operator changes dataFilePath the list reloads under the new scope.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
 
   const handleKeepSelect = (pairId: string, keepId: string) => {
     setPairStates((current) =>
@@ -141,7 +184,7 @@ export const DeduplicatePage = () => {
     try {
       // Refresh all pairs to clear any pairs that referenced the discarded record
       const result = await window.hospitalDirectory.detectDuplicates();
-      const dismissed = readDismissedPairIds();
+      const dismissed = readDismissedPairIds(storageKey);
       setPairStates(
         result.pairs
           .filter((pair) => !dismissed.includes(pair.id))
