@@ -51,4 +51,21 @@ describe('StatusBanner', () => {
     const banner = container.firstChild as HTMLElement;
     expect(banner).toHaveClass('custom-class');
   });
+
+  it.each([
+    { type: 'success' as const, srPrefix: 'Correcto:' },
+    { type: 'error' as const, srPrefix: 'Error:' },
+    { type: 'warning' as const, srPrefix: 'Aviso:' },
+    { type: 'info' as const, srPrefix: 'Información:' },
+  ])('$type banner exposes sr-only prefix "$srPrefix" and aria-hidden icon', ({ type, srPrefix }) => {
+    const { container } = render(<StatusBanner type={type} message="Mensaje de prueba" />);
+
+    // Prefijo sr-only presente en el DOM
+    const srEl = screen.getByText(srPrefix);
+    expect(srEl).toHaveClass('sr-only');
+
+    // Icono SVG decorativo con aria-hidden
+    const icon = container.querySelector('svg[aria-hidden="true"]');
+    expect(icon).toBeInTheDocument();
+  });
 });

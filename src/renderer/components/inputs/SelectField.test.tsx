@@ -94,6 +94,23 @@ describe("SelectField", () => {
     expect(trigger).toHaveAttribute("aria-invalid", "true");
   });
 
+  it("trigger uses focus-visible ring instead of plain focus ring (WCAG 2.4.7)", () => {
+    renderSelectField();
+    const trigger = screen.getByLabelText("Tipo");
+    // focus-visible:ring-2 must be present so the ring only shows on keyboard focus
+    expect(trigger.className).toContain("focus-visible:ring-2");
+    // plain focus:ring-2 must NOT be present to avoid ring on mouse click
+    expect(trigger.className).not.toContain("focus:ring-2");
+  });
+
+  it("invalid trigger also uses focus-visible:ring-2 (WCAG 2.4.7, security LOW-1)", () => {
+    renderSelectField({ invalid: true });
+    const trigger = screen.getByLabelText("Tipo");
+    // ring size must be explicit even in the invalid branch
+    expect(trigger.className).toContain("focus-visible:ring-2");
+    expect(trigger.className).not.toContain("focus:ring-2");
+  });
+
   it("disables the trigger and prevents interaction when disabled is true", () => {
     const { onChange } = renderSelectField({ disabled: true });
     
