@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import type { BuscaRecord, EditableBuscaRecord } from "../../shared/schemas/busca.schema";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 
@@ -20,6 +20,7 @@ const emptyForm = (): EditableBuscaRecord => ({
 
 export const BuscasPage = () => {
   const [records, setRecords] = useState<BuscaRecord[]>([]);
+  const [importedRecords, setImportedRecords] = useState<ImportedBuscaRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [error, setError] = useState("");
@@ -32,6 +33,7 @@ export const BuscasPage = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; deviceNumber: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const firstFieldRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query);
 
   const loadBuscas = async () => {
@@ -39,8 +41,13 @@ export const BuscasPage = () => {
       setIsLoading(true);
       setLoadError(false);
       setError("");
-      const data = await window.hospitalDirectory.listBuscas();
-      setRecords(data);
+      const [primary, imported] = await Promise.allSettled([
+        window.hospitalDirectory.listBuscas(),
+        window.hospitalDirectory.listImportedBuscas()
+      ]);
+      if (primary.status === "rejected") throw primary.reason;
+      setRecords(primary.value);
+      setImportedRecords(imported.status === "fulfilled" ? imported.value : []);
     } catch {
       setLoadError(true);
     } finally {
@@ -51,6 +58,12 @@ export const BuscasPage = () => {
   useEffect(() => {
     void loadBuscas();
   }, []);
+
+  useLayoutEffect(() => {
+    if (showForm) {
+      firstFieldRef.current?.focus();
+    }
+  }, [showForm, editingId]);
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -63,6 +76,18 @@ export const BuscasPage = () => {
         r.role.toLowerCase().includes(q)
     );
   }, [records, deferredQuery]);
+
+  const filteredImportedRecords = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
+    if (!q) return importedRecords;
+    return importedRecords.filter(
+      (r) =>
+        r.deviceNumber.toLowerCase().includes(q) ||
+        r.holderType.toLowerCase().includes(q) ||
+        r.department.toLowerCase().includes(q) ||
+        r.sourceSheet.toLowerCase().includes(q)
+    );
+  }, [importedRecords, deferredQuery]);
 
   const handleCreateNew = () => {
     setEditingId(null);
@@ -194,13 +219,13 @@ export const BuscasPage = () => {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex-1">
               <label htmlFor="buscas-search" className="sr-only">
-                Buscar buscas por número, asignado, departamento o rol
+                Buscar buscas por número, asignado, departamento, rol, titular u hoja ODS
               </label>
               <input
                 id="buscas-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por número, nombre, departamento o rol"
+                placeholder="Buscar por número, nombre, departamento, rol, titular u hoja ODS"
                 type="search"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
               />
@@ -215,12 +240,13 @@ export const BuscasPage = () => {
             </button>
           </div>
           <p
-            role={filteredRecords.length > 0 ? "status" : undefined}
-            aria-live={filteredRecords.length > 0 ? "polite" : "off"}
-            aria-atomic={filteredRecords.length > 0 ? "true" : undefined}
+            role={filteredRecords.length + filteredImportedRecords.length > 0 ? "status" : undefined}
+            aria-live={filteredRecords.length + filteredImportedRecords.length > 0 ? "polite" : "off"}
+            aria-atomic={filteredRecords.length + filteredImportedRecords.length > 0 ? "true" : undefined}
             className="text-xs font-medium text-slate-500"
           >
-            {filteredRecords.length} {filteredRecords.length === 1 ? "resultado" : "resultados"}
+            {filteredRecords.length + filteredImportedRecords.length}{" "}
+            {filteredRecords.length + filteredImportedRecords.length === 1 ? "resultado" : "resultados"}
           </p>
         </div>
       </div>
@@ -247,6 +273,7 @@ export const BuscasPage = () => {
                 Número de busca <span aria-hidden="true" className="text-red-600">*</span>
               </label>
               <input
+                ref={firstFieldRef}
                 id="form-device-number"
                 type="text"
                 required
@@ -347,7 +374,7 @@ export const BuscasPage = () => {
       )}
 
       {/* Empty state */}
-      {filteredRecords.length === 0 && !showForm && (
+      {filteredRecords.length === 0 && filteredImportedRecords.length === 0 && !showForm && (
         <div
           role="status"
           aria-live="polite"
@@ -360,17 +387,18 @@ export const BuscasPage = () => {
       )}
 
       {/* Records table */}
-      {filteredRecords.length > 0 && (
+      {(filteredRecords.length > 0 || filteredImportedRecords.length > 0) && (
         <div className="rounded-3xl bg-white shadow-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <caption className="sr-only">Registros de buscas</caption>
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Número
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Asignado a
+                    Asignado a / Titular
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Departamento
@@ -379,10 +407,10 @@ export const BuscasPage = () => {
                     Rol
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Turno
+                    Turno / Origen
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Grupo
+                    Grupo / Hoja
                   </th>
                   <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Acciones
@@ -424,6 +452,21 @@ export const BuscasPage = () => {
                         </button>
                       </div>
                     </td>
+                  </tr>
+                ))}
+                {filteredImportedRecords.map((record) => (
+                  <tr key={record.id} className="border-b border-slate-100 bg-blue-50/30 transition hover:bg-blue-50/60">
+                    <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
+                    <td className="px-4 py-3 text-slate-700">{record.holderType}</td>
+                    <td className="px-4 py-3 text-slate-600">{record.department}</td>
+                    <td className="px-4 py-3 text-slate-400">—</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        ODS
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">{record.sourceSheet}</td>
+                    <td className="px-4 py-3 text-right" />
                   </tr>
                 ))}
               </tbody>

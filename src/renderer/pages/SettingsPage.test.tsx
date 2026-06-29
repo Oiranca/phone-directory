@@ -474,6 +474,31 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
   });
 
+  it("primary action buttons carry focus-ring for keyboard accessibility", async () => {
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    const saveBtn = screen.getByRole("button", { name: "Guardar configuración" });
+    const discardBtn = screen.getByRole("button", { name: "Descartar cambios" });
+    expect(saveBtn.className).toContain("focus-ring");
+    expect(discardBtn.className).toContain("focus-ring");
+  });
+
+  it("Cargar rutas gestionadas button carries focus-ring", async () => {
+    window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("Ruta inválida"));
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Ruta del archivo de datos"), {
+      target: { value: "/tmp/data/existente.json" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
+    expect(resetBtn.className).toContain("focus-ring");
+  });
+
   it("sidebar aside renders status block, hr separator, and help heading in order — no decorative card wrappers", async () => {
     renderPage();
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { BuscasPage } from "./BuscasPage";
-import type { BuscaRecord } from "../../shared/schemas/busca.schema";
+import type { BuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 
 const mockRecords: BuscaRecord[] = [
   {
@@ -21,6 +21,25 @@ const mockRecords: BuscaRecord[] = [
     department: "UCI",
     role: "Médico",
     shift: "tarde"
+  }
+];
+
+const mockImportedRecords: ImportedBuscaRecord[] = [
+  {
+    id: "ibsc_00000001",
+    deviceNumber: "5001",
+    department: "Cardiología",
+    holderType: "Principal",
+    sourceSheet: "Buscas_Facultativos",
+    sourceRow: 2
+  },
+  {
+    id: "ibsc_00000002",
+    deviceNumber: "5002",
+    department: "Neurología",
+    holderType: "Residente",
+    sourceSheet: "Buscas_Enfermería",
+    sourceRow: 3
   }
 ];
 
@@ -65,6 +84,7 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
     configurable: true,
     value: {
       listBuscas: vi.fn().mockResolvedValue(mockRecords),
+      listImportedBuscas: vi.fn().mockResolvedValue([]),
       addBusca: vi.fn(),
       updateBusca: vi.fn(),
       deleteBusca: vi.fn(),
@@ -457,5 +477,124 @@ describe("BuscasPage", () => {
 
     // addBusca must still have been called exactly once
     expect(addBuscaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows manual buscas even when listImportedBuscas rejects — no error state", async () => {
+    setupWindowApi({
+      listImportedBuscas: vi.fn().mockRejectedValue(new Error("ODS store unavailable"))
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("B-001")).toBeInTheDocument();
+      expect(screen.getByText("B-002")).toBeInTheDocument();
+    });
+    // Must not show the error/retry state
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    // No ODS rows should appear
+    expect(screen.queryByText("ODS")).not.toBeInTheDocument();
+  });
+
+  it("shows imported ODS records with ODS badge in the table", async () => {
+    setupWindowApi({
+      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("5001")).toBeInTheDocument();
+      expect(screen.getByText("5002")).toBeInTheDocument();
+      expect(screen.getByText("Principal")).toBeInTheDocument();
+      expect(screen.getByText("Residente")).toBeInTheDocument();
+    });
+    // Both ODS badges must be present
+    const odsBadges = screen.getAllByText("ODS");
+    expect(odsBadges.length).toBe(2);
+  });
+
+  it("includes imported records in the result count", async () => {
+    setupWindowApi({
+      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+    });
+    renderPage();
+    await waitFor(() => {
+      // 2 regular + 2 imported = 4 resultados
+      expect(screen.getByText("4 resultados")).toBeInTheDocument();
+    });
+  });
+
+  it("filters imported records by search query", async () => {
+    setupWindowApi({
+      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("5001")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), {
+      target: { value: "Cardiología" }
+    });
+    await waitFor(() => {
+      expect(screen.getByText("5001")).toBeInTheDocument();
+      expect(screen.queryByText("5002")).not.toBeInTheDocument();
+    });
+  });
+
+  it("table has accessible caption", async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("B-001")).toBeInTheDocument();
+    });
+    const caption = document.querySelector("caption");
+    expect(caption).not.toBeNull();
+    expect(caption!.textContent).toBe("Registros de buscas");
+    expect(caption!.className).toContain("sr-only");
+  });
+
+  it("focuses the first form field when the create form opens", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    await waitFor(() => {
+      const firstInput = screen.getByLabelText(/número de busca/i);
+      expect(document.activeElement).toBe(firstInput);
+    });
+  });
+
+  it("focuses the first form field when the edit form opens", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+    await waitFor(() => {
+      const firstInput = screen.getByLabelText(/número de busca/i);
+      expect(document.activeElement).toBe(firstInput);
+    });
+  });
+
+  it("refocuses first form field when switching from create to edit while form is already open", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+
+    // Open create form — focus lands on first field
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
+    });
+
+    // Move focus away to simulate user interaction
+    screen.getByLabelText(/asignado a/i).focus();
+    expect(document.activeElement).not.toBe(screen.getByLabelText(/número de busca/i));
+
+    // Switch to editing B-001 while form is still open — focus must return to first field
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
+    });
+  });
+
+  it("search label and placeholder mention ODS holder and source-sheet fields", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    const searchInput = screen.getByLabelText(/Buscar buscas/i);
+    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/titular/i));
+    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/hoja ods/i));
   });
 });
