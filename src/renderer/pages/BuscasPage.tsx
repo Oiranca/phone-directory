@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -59,11 +59,11 @@ export const BuscasPage = () => {
     void loadBuscas();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (showForm) {
       firstFieldRef.current?.focus();
     }
-  }, [showForm]);
+  }, [showForm, editingId]);
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -219,13 +219,13 @@ export const BuscasPage = () => {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex-1">
               <label htmlFor="buscas-search" className="sr-only">
-                Buscar buscas por número, asignado, departamento o rol
+                Buscar buscas por número, asignado, departamento, rol, titular u hoja ODS
               </label>
               <input
                 id="buscas-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por número, nombre, departamento o rol"
+                placeholder="Buscar por número, nombre, departamento, rol, titular u hoja ODS"
                 type="search"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
               />

@@ -165,3 +165,10 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 
 #### [OIR-130-fix] software-engineer — buscas-only lost write
 - [10:00] Task started — fixing buscas-only workbook zero-row guard + silent catch logging in app-data.service.ts
+
+#### [OIR-186] pr-comment-responder — Codex review fixes (PR #99)
+- [19:45] Task start: responding to 2 Codex inline comments on fix/oir-186-buscas-settings-p1
+- [19:46] Fix 1: useEffect → useLayoutEffect keyed [showForm, editingId] so switching create→edit refocuses first field
+- [19:46] Fix 2: search sr-only label + placeholder now include "titular" and "hoja ODS" to reflect imported ODS filtering
+- [19:47] Tests: added 2 new tests — refocus on create→edit switch, ODS label/placeholder assertion
+- [19:47] Gates: pnpm typecheck ✅, pnpm test 1333/1333 ✅, pnpm build ✅

@@ -568,4 +568,33 @@ describe("BuscasPage", () => {
       expect(document.activeElement).toBe(firstInput);
     });
   });
+
+  it("refocuses first form field when switching from create to edit while form is already open", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+
+    // Open create form — focus lands on first field
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
+    });
+
+    // Move focus away to simulate user interaction
+    screen.getByLabelText(/asignado a/i).focus();
+    expect(document.activeElement).not.toBe(screen.getByLabelText(/número de busca/i));
+
+    // Switch to editing B-001 while form is still open — focus must return to first field
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
+    });
+  });
+
+  it("search label and placeholder mention ODS holder and source-sheet fields", async () => {
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    const searchInput = screen.getByLabelText(/Buscar buscas/i);
+    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/titular/i));
+    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/hoja ods/i));
+  });
 });
