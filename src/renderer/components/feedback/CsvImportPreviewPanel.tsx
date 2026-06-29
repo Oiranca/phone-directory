@@ -629,7 +629,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   onClick={() => setConflictsPage((p) => p - 1)}
                   disabled={conflictsPage === 0}
                   aria-label="Página anterior"
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -643,7 +643,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   onClick={() => setConflictsPage((p) => p + 1)}
                   disabled={(conflictsPage + 1) * CONFLICTS_PER_PAGE >= conflictedRecords.length}
                   aria-label="Página siguiente"
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />

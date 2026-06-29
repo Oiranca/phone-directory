@@ -87,7 +87,7 @@ describe("ContactFormPage", () => {
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
     fireEvent.change(screen.getByLabelText("Número"), {
@@ -118,7 +118,7 @@ describe("ContactFormPage", () => {
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
     fireEvent.change(screen.getByLabelText("Número"), {
@@ -160,7 +160,7 @@ describe("ContactFormPage", () => {
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
     fireEvent.change(screen.getByLabelText("Número"), {
@@ -184,7 +184,7 @@ describe("ContactFormPage", () => {
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "" }
     });
     fireEvent.change(screen.getByLabelText("Número"), {
@@ -210,7 +210,7 @@ describe("ContactFormPage", () => {
 
     expect(await screen.findByDisplayValue(defaultContacts.records[0].displayName)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre visible"), {
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Admisión actualizada" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -324,20 +324,31 @@ describe("ContactFormPage", () => {
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
+  describe("displayName field accessibility attributes", () => {
+    it("marks the displayName input as required with required and aria-required attributes", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      const input = screen.getByLabelText(/nombre visible/i);
+      expect(input).toBeRequired();
+      expect(input).toHaveAttribute("aria-required", "true");
+    });
+  });
+
   describe("focus management on validation error", () => {
     it("moves focus to the displayName input when displayName is missing on submit", async () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
       // Leave displayName empty, clear the phone number too
-      fireEvent.change(screen.getByLabelText("Nombre visible"), { target: { value: "" } });
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), { target: { value: "" } });
       fireEvent.change(screen.getByLabelText("Número"), { target: { value: "" } });
 
       fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
 
       // Wait for the inline error to appear, then check focus
       await screen.findByText("El nombre visible es obligatorio.");
-      expect(document.activeElement).toBe(screen.getByLabelText("Nombre visible"));
+      expect(document.activeElement).toBe(screen.getByLabelText(/nombre visible/i));
     });
 
     it("does not steal focus from the active element on initial render", async () => {
@@ -345,7 +356,7 @@ describe("ContactFormPage", () => {
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
       // On initial render no submit has occurred — displayName input must not hold focus
-      expect(document.activeElement).not.toBe(screen.getByLabelText("Nombre visible"));
+      expect(document.activeElement).not.toBe(screen.getByLabelText(/nombre visible/i));
     });
   });
 });

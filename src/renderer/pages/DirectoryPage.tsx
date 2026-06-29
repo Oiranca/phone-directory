@@ -624,7 +624,7 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <section ref={detailRef} role="region" aria-label="Detalle del registro seleccionado" onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
+        <section ref={detailRef} aria-label="Detalle del registro seleccionado" onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
           <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
             <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
             {selectedRecord ? (

@@ -15,13 +15,15 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
     <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
     <div>
       <label htmlFor="displayName" className="text-sm font-medium text-slate-700">
-        Nombre visible
+        Nombre visible<span aria-hidden="true" className="ml-1 text-red-600">*</span>
       </label>
       <input
         ref={displayNameInputRef}
         id="displayName"
         value={formState.displayName}
         onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
+        required
+        aria-required="true"
         aria-invalid={!!fieldErrors.displayName}
         aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
         className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"

@@ -1657,6 +1657,16 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Página anterior" })).not.toBeDisabled();
     });
+
+    it("conflict pagination buttons have the focus-ring class for keyboard focus visibility (WCAG 2.4.7)", () => {
+      renderPanel(makeConflictsPreview(21));
+
+      const prevBtn = screen.getByRole("button", { name: "Página anterior" });
+      const nextBtn = screen.getByRole("button", { name: "Página siguiente" });
+
+      expect(prevBtn.className).toContain("focus-ring");
+      expect(nextBtn.className).toContain("focus-ring");
+    });
   });
 
   // ---------------------------------------------------------------------------

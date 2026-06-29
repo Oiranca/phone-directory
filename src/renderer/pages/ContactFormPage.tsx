@@ -81,7 +81,7 @@ export const ContactFormPage = () => {
         {liveMessage}
       </p>
 
-      <form className="mt-6 space-y-8" data-keyboard-submit onSubmit={handleSubmit}>
+      <form className="mt-6 space-y-8" data-keyboard-submit noValidate onSubmit={handleSubmit}>
         <div className="grid gap-6 xl:grid-cols-2">
           <IdentitySection
             formState={formState}
