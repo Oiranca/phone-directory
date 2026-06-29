@@ -47,14 +47,17 @@ export function computeMergeLossPreview(
   const fieldConflicts: MergeFieldConflict[] = [];
 
   // displayName — derived from person.firstName / person.lastName in the service.
-  // If both records have a displayName and they differ, the discard's name is lost.
+  // The service merges firstName and lastName individually, so a displayName
+  // difference does not guarantee the name is lost (e.g. one record has only
+  // firstName, the other only lastName — both parts survive). Label as
+  // approximate to avoid overstating the risk.
   if (
     keepRecord.displayName &&
     discardRecord.displayName &&
     keepRecord.displayName !== discardRecord.displayName
   ) {
     fieldConflicts.push({
-      field: "Nombre",
+      field: "Nombre (aproximado)",
       discardValue: discardRecord.displayName,
       keepValue: keepRecord.displayName
     });
@@ -136,12 +139,15 @@ export function MergeLossPreview({ keepRecord, discardRecord }: MergeLossPreview
           </li>
         )}
 
-        {/* Static note for fields not in the summary (notes, location, emails, etc.) */}
+        {/* Static note for fill-gap scalar fields not visible in the summary.
+            Emails, aliases, and social handles are NOT listed here because they
+            are union-merged (same as phones) — unique values from the discard
+            are always added to the keeper, never silently dropped. */}
         <li className="text-amber-700">
-          <span className="font-medium">Otros campos</span> del registro descartado (notas,
-          ubicación, correos, servicio, etc.): si el registro conservado ya los tiene, el
-          valor del descartado se perderá permanentemente; si el conservado no los tiene, se
-          copiarán del descartado.
+          <span className="font-medium">Otros campos escalares</span> del registro descartado
+          (notas, ubicación, servicio, área, especialidad, etc.): si el registro conservado ya
+          los tiene, el valor del descartado se perderá permanentemente; si el conservado no
+          los tiene, se copiarán del descartado.
         </li>
       </ul>
     </div>

@@ -58,9 +58,9 @@ describe("computeMergeLossPreview — phonesAdded", () => {
 });
 
 describe("computeMergeLossPreview — fieldConflicts (displayName)", () => {
-  it("reports a Nombre conflict when keeper and discard have different displayNames", () => {
+  it("reports a Nombre (aproximado) conflict when keeper and discard have different displayNames", () => {
     const { fieldConflicts } = computeMergeLossPreview(keepRecord, discardRecord);
-    const conflict = fieldConflicts.find((c) => c.field === "Nombre");
+    const conflict = fieldConflicts.find((c) => c.field === "Nombre (aproximado)");
     expect(conflict).toBeDefined();
     expect(conflict!.discardValue).toBe("María López Sánchez");
     expect(conflict!.keepValue).toBe("María López");
@@ -69,13 +69,13 @@ describe("computeMergeLossPreview — fieldConflicts (displayName)", () => {
   it("does not report a Nombre conflict when displayNames are identical", () => {
     const sameNameDiscard = { ...discardRecord, displayName: "María López" };
     const { fieldConflicts } = computeMergeLossPreview(keepRecord, sameNameDiscard);
-    expect(fieldConflicts.find((c) => c.field === "Nombre")).toBeUndefined();
+    expect(fieldConflicts.find((c) => c.field === "Nombre (aproximado)")).toBeUndefined();
   });
 
   it("does not report a Nombre conflict when keeper has no displayName", () => {
     const noNameKeep = { ...keepRecord, displayName: "" };
     const { fieldConflicts } = computeMergeLossPreview(noNameKeep, discardRecord);
-    expect(fieldConflicts.find((c) => c.field === "Nombre")).toBeUndefined();
+    expect(fieldConflicts.find((c) => c.field === "Nombre (aproximado)")).toBeUndefined();
   });
 });
 
@@ -115,10 +115,21 @@ describe("MergeLossPreview — always-visible content", () => {
     expect(screen.getByText(/teléfonos, correos y etiquetas/)).toBeInTheDocument();
   });
 
-  it("renders the static note about other fields (notas, ubicación)", () => {
+  it("renders the static note about fill-gap scalar fields (notas, ubicación, servicio)", () => {
     render(<MergeLossPreview keepRecord={keepRecord} discardRecord={discardRecord} />);
+    // These are fill-gap scalar fields and must appear in the static note
     expect(screen.getByText(/notas/)).toBeInTheDocument();
     expect(screen.getByText(/ubicación/)).toBeInTheDocument();
+    expect(screen.getByText(/servicio/)).toBeInTheDocument();
+  });
+
+  it("does NOT list correos in the fill-gap loss note (emails are union-merged, never lost)", () => {
+    render(<MergeLossPreview keepRecord={keepRecord} discardRecord={discardRecord} />);
+    // "correos" must only appear in the union bullet (Se conservarán…), not the scalar loss note.
+    // The static-note <li> has class text-amber-700; query it directly.
+    const staticNote = document.querySelector("li.text-amber-700");
+    expect(staticNote).not.toBeNull();
+    expect(staticNote!.textContent).not.toMatch(/correos/);
   });
 
   it("renders with role=note and accessible label", () => {

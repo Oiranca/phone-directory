@@ -349,16 +349,12 @@ export const DeduplicatePage = () => {
                 })}
               </div>
 
-              {keepId && (() => {
-                const keepRecord = pair.recordA.id === keepId ? pair.recordA : pair.recordB;
-                const discardRecord = pair.recordA.id === keepId ? pair.recordB : pair.recordA;
-                return (
-                  <MergeLossPreview
-                    keepRecord={keepRecord}
-                    discardRecord={discardRecord}
-                  />
-                );
-              })()}
+              {keepId && (
+                <MergeLossPreview
+                  keepRecord={pair.recordA.id === keepId ? pair.recordA : pair.recordB}
+                  discardRecord={pair.recordA.id === keepId ? pair.recordB : pair.recordA}
+                />
+              )}
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <button
