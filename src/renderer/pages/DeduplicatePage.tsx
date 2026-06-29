@@ -22,13 +22,26 @@ export const DeduplicatePage = () => {
     discardRecord: { id: string; displayName: string };
   } | null>(null);
 
+  const handleDismissPair = (pairId: string) => {
+    setPairStates((current) => current.filter((ps) => ps.pair.id !== pairId));
+    const existing = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+    if (!existing.includes(pairId)) {
+      localStorage.setItem("dedup-dismissed-pairs", JSON.stringify([...existing, pairId]));
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
         setIsLoading(true);
         setLoadError(null);
         const result = await window.hospitalDirectory.detectDuplicates();
-        setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
+        const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+        setPairStates(
+          result.pairs
+            .filter((pair) => !dismissed.includes(pair.id))
+            .map((pair) => ({ pair, keepId: null }))
+        );
       } catch (error) {
         setLoadError(
           error instanceof Error ? error.message : "No se pudo cargar duplicados"
@@ -109,7 +122,12 @@ export const DeduplicatePage = () => {
     try {
       // Refresh all pairs to clear any pairs that referenced the discarded record
       const result = await window.hospitalDirectory.detectDuplicates();
-      setPairStates(result.pairs.map((pair) => ({ pair, keepId: null })));
+      const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+      setPairStates(
+        result.pairs
+          .filter((pair) => !dismissed.includes(pair.id))
+          .map((pair) => ({ pair, keepId: null }))
+      );
     } catch {
       // Refresh failed but the merge already committed — warn the operator to
       // reload rather than applying a partial local filter that could mask the
@@ -268,8 +286,18 @@ export const DeduplicatePage = () => {
                 })}
               </div>
 
-              {keepId && (
-                <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleDismissPair(pair.id)}
+                  disabled={!!mergingId}
+                  title="Marcar como contactos distintos y no volver a sugerir"
+                  aria-label={`No son el mismo contacto: ${pair.recordA.displayName} y ${pair.recordB.displayName}`}
+                  className="focus-ring rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-60"
+                >
+                  No son el mismo contacto
+                </button>
+                {keepId && (
                   <button
                     type="button"
                     onClick={() => handleMergeClick(pairState)}
@@ -278,8 +306,8 @@ export const DeduplicatePage = () => {
                   >
                     {isMerging ? "Fusionando…" : "Fusionar"}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </article>
           );
         })}

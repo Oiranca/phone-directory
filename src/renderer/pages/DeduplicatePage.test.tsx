@@ -103,6 +103,7 @@ describe("DeduplicatePage", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("renders the duplicate pair with both displayNames", async () => {
@@ -311,6 +312,105 @@ describe("DeduplicatePage", () => {
         expect(survivor).toBeDefined();
         expect(survivor!.displayName).toBe("Admisión General (fusionado)");
       });
+    });
+  });
+
+  describe("dismiss pair", () => {
+    const recordC = {
+      id: "cnt_0003",
+      displayName: "Urgencias Generales",
+      department: "Urgencias",
+      phones: [{ id: "ph_3", number: "70007" }]
+    };
+
+    const recordD = {
+      id: "cnt_0004",
+      displayName: "Urgencias Generales",
+      department: "Urgencias",
+      phones: [{ id: "ph_4", number: "70008" }]
+    };
+
+    const mockPair2 = {
+      id: "cnt_0003:cnt_0004",
+      recordA: recordC,
+      recordB: recordD,
+      reasons: ["displayName"],
+      score: 0.85
+    };
+
+    const twoPairsResult = {
+      pairs: [mockPair, mockPair2],
+      records: {
+        cnt_0001: recordA,
+        cnt_0002: recordB,
+        cnt_0003: recordC,
+        cnt_0004: recordD
+      },
+      checkedCount: 4,
+      pairCount: 2
+    };
+
+    beforeEach(() => {
+      localStorage.clear();
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockResolvedValue(twoPairsResult),
+          mergeContacts: mockMergeContacts
+        }
+      });
+    });
+
+    it("clicking dismiss removes the pair from the UI and keeps the other pair visible", async () => {
+      renderPage();
+      await screen.findByText("Similitud 90%");
+      expect(screen.getByText("Similitud 85%")).toBeInTheDocument();
+
+      const dismissButtons = screen.getAllByRole("button", {
+        name: /No son el mismo contacto:/
+      });
+      fireEvent.click(dismissButtons[0]!);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("Similitud 85%")).toBeInTheDocument();
+    });
+
+    it("persists the dismissed pair id to localStorage", async () => {
+      renderPage();
+      await screen.findByText("Similitud 90%");
+
+      const dismissButtons = screen.getAllByRole("button", {
+        name: /No son el mismo contacto:/
+      });
+      fireEvent.click(dismissButtons[0]!);
+
+      await waitFor(() => {
+        const dismissed = JSON.parse(localStorage.getItem("dedup-dismissed-pairs") || "[]") as string[];
+        expect(dismissed).toContain(mockPair.id);
+      });
+    });
+
+    it("does not re-show a dismissed pair after remount with the same data", async () => {
+      const { unmount } = renderPage();
+      await screen.findByText("Similitud 90%");
+
+      const dismissButtons = screen.getAllByRole("button", {
+        name: /No son el mismo contacto:/
+      });
+      fireEvent.click(dismissButtons[0]!);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
+      });
+
+      unmount();
+
+      // Re-mount: IPC still returns both pairs, but dismissed pair must be filtered
+      renderPage();
+      await screen.findByText("Similitud 85%");
+      expect(screen.queryByText("Similitud 90%")).not.toBeInTheDocument();
     });
   });
 
