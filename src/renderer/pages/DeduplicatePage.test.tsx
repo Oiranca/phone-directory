@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
@@ -582,6 +582,126 @@ describe("DeduplicatePage", () => {
 
       // Success toast must NOT appear
       expect(screen.queryByText("Duplicado fusionado correctamente")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("merge loss preview — OIR-175", () => {
+    it("does not show the preview panel before any keepId is selected", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      // No record selected yet — preview must not be visible
+      expect(screen.queryByRole("note", { name: "Resumen de la fusión" })).not.toBeInTheDocument();
+    });
+
+    it("shows the preview panel after selecting a record to keep", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      expect(screen.getByRole("note", { name: "Resumen de la fusión" })).toBeInTheDocument();
+    });
+
+    it("shows the union-fields message once the preview is visible", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      expect(screen.getByText(/teléfonos, correos y etiquetas/)).toBeInTheDocument();
+    });
+
+    it("shows the static note about other fields once the preview is visible", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      expect(screen.getByText(/notas/)).toBeInTheDocument();
+    });
+
+    describe("preview with field conflicts", () => {
+      const recordWithDeptA = {
+        id: "cnt_0011",
+        displayName: "Dra. Martínez",
+        department: "Cardiología",
+        phones: [{ id: "ph_11", number: "600001111" }]
+      };
+
+      const recordWithDeptB = {
+        id: "cnt_0012",
+        displayName: "Dra. Martínez Ruiz",
+        department: "UCI",
+        phones: [
+          { id: "ph_12a", number: "600001111" }, // duplicate
+          { id: "ph_12b", number: "600002222" }  // unique
+        ]
+      };
+
+      beforeEach(() => {
+        Object.defineProperty(window, "hospitalDirectory", {
+          configurable: true,
+          value: {
+            detectDuplicates: vi.fn().mockResolvedValue({
+              pairs: [{
+                id: "cnt_0011:cnt_0012",
+                recordA: recordWithDeptA,
+                recordB: recordWithDeptB,
+                reasons: ["displayName"],
+                score: 0.85
+              }],
+              records: { cnt_0011: recordWithDeptA, cnt_0012: recordWithDeptB },
+              checkedCount: 2,
+              pairCount: 1
+            }),
+            mergeContacts: mockMergeContacts
+          }
+        });
+      });
+
+      it("shows the department conflict when keeper and discard have different departments", async () => {
+        renderPage();
+        await screen.findByText("Dra. Martínez");
+
+        // Select first record (Cardiología) as keeper
+        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        fireEvent.click(keepButtons[0]!);
+
+        // Scope to preview panel to avoid matching the record card's department text
+        const preview = screen.getByRole("note", { name: "Resumen de la fusión" });
+        expect(within(preview).getByText(/Departamento/)).toBeInTheDocument();
+        expect(within(preview).getByText(/UCI/)).toBeInTheDocument();
+      });
+
+      it("shows the name conflict when keeper and discard have different displayNames", async () => {
+        renderPage();
+        await screen.findByText("Dra. Martínez");
+
+        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        fireEvent.click(keepButtons[0]!);
+
+        // Scope to preview panel to avoid matching the record card's name text
+        const preview = screen.getByRole("note", { name: "Resumen de la fusión" });
+        expect(within(preview).getByText(/Nombre/)).toBeInTheDocument();
+        expect(within(preview).getByText(/Martínez Ruiz/)).toBeInTheDocument();
+      });
+
+      it("shows unique phone count from the discard record", async () => {
+        renderPage();
+        await screen.findByText("Dra. Martínez");
+
+        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        fireEvent.click(keepButtons[0]!);
+
+        // Scope to preview panel to avoid matching phone numbers in the record cards
+        const preview = screen.getByRole("note", { name: "Resumen de la fusión" });
+        expect(within(preview).getByText(/1 teléfono/)).toBeInTheDocument();
+        expect(within(preview).getByText(/600002222/)).toBeInTheDocument();
+      });
     });
   });
 });
