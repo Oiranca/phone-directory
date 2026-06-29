@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
   CsvImportPreviewWithConflicts,
@@ -36,6 +37,14 @@ const POLICY_LABELS: Record<MergePolicy, string> = {
   skip: "Omitir",
   overwrite: "Sobrescribir",
   "merge-fields": "Combinar"
+};
+
+/** Plain-language consequence descriptions shown below each policy label (OIR-178). */
+const POLICY_DESCRIPTIONS: Record<MergePolicy, string> = {
+  skip: "La fila del CSV no se importa; el contacto existente no cambia.",
+  overwrite: "El contacto existente se reemplaza con los datos del CSV. Los datos actuales se perderán.",
+  "merge-fields":
+    "Se fusionan ambos contactos. Los teléfonos, correos y etiquetas se combinan; las notas y otros campos del contacto existente se conservan."
 };
 
 /** Maximum rows rendered in the DOM at one time for the preview row table. */
@@ -184,9 +193,10 @@ type Props = {
   onConfirm: () => void;
   onPolicyChange: (recordIndex: number, policy: MergePolicy) => void;
   onClose: () => void;
+  headingRef?: RefObject<HTMLHeadingElement>;
 };
 
-export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose }: Props) => {
+export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose, headingRef }: Props) => {
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
@@ -292,7 +302,13 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
             Vista previa importación
           </p>
-          <h3 className="mt-2 text-xl font-semibold text-emerald-950">{preview.fileName}</h3>
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="mt-2 text-xl font-semibold text-emerald-950"
+          >
+            {preview.fileName}
+          </h3>
           {preview.detectedFormat && (
             <p className="mt-2 text-sm text-emerald-900/80">
               Formato detectado: {preview.detectedFormat}
@@ -567,23 +583,35 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                         Política
                       </legend>
                       <div className="mt-2 grid gap-2">
-                        {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((policy) => (
-                          <label
-                            key={policy}
-                            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800"
-                          >
-                            <input
-                              type="radio"
-                              name={`conflict-policy-${conflict.recordIndex}`}
-                              value={policy}
-                              checked={conflict.selectedPolicy === policy}
-                              disabled={isMutating}
-                              onChange={() => onPolicyChange(conflict.recordIndex, policy)}
-                              className="h-4 w-4"
-                            />
-                            {POLICY_LABELS[policy]}
-                          </label>
-                        ))}
+                        {(Object.keys(POLICY_LABELS) as MergePolicy[]).map((policy) => {
+                          const descId = `policy-desc-${conflict.recordIndex}-${policy}`;
+                          return (
+                            <div
+                              key={policy}
+                              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                            >
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                                <input
+                                  type="radio"
+                                  name={`conflict-policy-${conflict.recordIndex}`}
+                                  value={policy}
+                                  checked={conflict.selectedPolicy === policy}
+                                  disabled={isMutating}
+                                  onChange={() => onPolicyChange(conflict.recordIndex, policy)}
+                                  aria-describedby={descId}
+                                  className="h-4 w-4 shrink-0"
+                                />
+                                {POLICY_LABELS[policy]}
+                              </label>
+                              <p
+                                id={descId}
+                                className="mt-1 pl-6 text-xs text-slate-500"
+                              >
+                                {POLICY_DESCRIPTIONS[policy]}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
                     </fieldset>
                   </div>
