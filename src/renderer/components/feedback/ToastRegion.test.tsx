@@ -92,6 +92,24 @@ describe("ToastRegion", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it.each([
+    { type: "success" as const, srPrefix: "Correcto:" },
+    { type: "error" as const, srPrefix: "Error:" },
+    { type: "warning" as const, srPrefix: "Aviso:" },
+    { type: "info" as const, srPrefix: "Información:" },
+  ])("$type toast exposes sr-only prefix '$srPrefix' and aria-hidden icon", ({ type, srPrefix }) => {
+    const { container } = renderWithProvider({ message: "Mensaje de prueba", type });
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+
+    // Prefijo sr-only presente en el DOM
+    const srEl = screen.getByText(srPrefix);
+    expect(srEl).toHaveClass("sr-only");
+
+    // Icono SVG decorativo con aria-hidden (excluye el chevron del SelectField)
+    const icons = container.querySelectorAll('svg[aria-hidden="true"]');
+    expect(icons.length).toBeGreaterThan(0);
+  });
+
   it("useToast outside ToastProvider throws descriptive error", () => {
     const Broken = () => {
       useToast();

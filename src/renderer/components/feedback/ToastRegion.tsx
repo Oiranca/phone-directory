@@ -2,6 +2,51 @@ import { createContext, PropsWithChildren, useCallback, useContext, useEffect, u
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
+/** Prefijos sr-only por tipo — los lectores de pantalla los anuncian antes del mensaje. */
+const TOAST_SR_PREFIXES: Record<ToastType, string> = {
+  success: "Correcto:",
+  error: "Error:",
+  warning: "Aviso:",
+  info: "Información:",
+};
+
+/** Iconos SVG decorativos por tipo, ocultos a tecnologías asistivas (aria-hidden). */
+const ToastIcon = ({ type }: { type: ToastType }) => {
+  if (type === "success") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="mt-0.5 h-4 w-4 shrink-0">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M6.5 10.5l2.5 2 4.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "error") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="mt-0.5 h-4 w-4 shrink-0">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M7.5 7.5l5 5M12.5 7.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "warning") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="mt-0.5 h-4 w-4 shrink-0">
+        <path d="M10 3L18 17H2L10 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M10 9v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="10" cy="14.5" r="0.75" fill="currentColor" />
+      </svg>
+    );
+  }
+  // info
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="mt-0.5 h-4 w-4 shrink-0">
+      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 9.5V14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="10" cy="7" r="0.75" fill="currentColor" />
+    </svg>
+  );
+};
+
 interface ToastInput {
   type?: ToastType;
   title?: string;
@@ -106,7 +151,9 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                 ].join(" ")}
               >
                 <div className="flex items-start gap-3">
+                  <ToastIcon type={toast.type} />
                   <div className="min-w-0 flex-1">
+                    <span className="sr-only">{TOAST_SR_PREFIXES[toast.type]}</span>
                     {toast.title ? <p className="text-sm font-semibold">{toast.title}</p> : null}
                     <p className={toast.title ? "mt-1 text-sm" : "text-sm font-medium"}>{toast.message}</p>
                   </div>

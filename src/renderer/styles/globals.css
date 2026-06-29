@@ -34,7 +34,15 @@
     @apply min-h-[44px] min-w-[44px];
   }
 
-  /* Shared focus ring for accessibility */
+  /*
+   * Shared focus ring for keyboard accessibility (WCAG 2.4.7).
+   * Uso: añade la clase `focus-ring` a cualquier elemento interactivo (botón, enlace,
+   * input nativo) para obtener un anillo visible solo en navegación por teclado.
+   * Se usa `focus-visible:` en lugar de `focus:` para evitar mostrar el anillo en
+   * clics con ratón o toque táctil.
+   * En componentes con estilos de foco propios (p.ej. SelectField) aplica directamente
+   * `focus-visible:ring-2 focus-visible:ring-scs-blue` en el className del elemento.
+   */
   .focus-ring {
     @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2;
   }
