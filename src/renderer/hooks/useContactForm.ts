@@ -23,6 +23,9 @@ export type ContactFormState = Omit<EditableContactRecord, "person" | "location"
 
 export type PendingFocusTarget =
   | {
+    kind: "displayName";
+  }
+  | {
     kind: "phone";
     id?: string;
     fallback: "add-phone";
@@ -230,6 +233,7 @@ export type UseContactFormResult = {
   // derived
   availableAreas: AreaType[];
   // refs
+  displayNameInputRef: React.RefObject<HTMLInputElement>;
   addPhoneButtonRef: React.RefObject<HTMLButtonElement>;
   addEmailButtonRef: React.RefObject<HTMLButtonElement>;
   phoneNumberInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
@@ -265,6 +269,7 @@ export const useContactForm = (): UseContactFormResult => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const [pendingFocusTarget, setPendingFocusTarget] = useState<PendingFocusTarget | null>(null);
+  const displayNameInputRef = useRef<HTMLInputElement>(null);
   const addPhoneButtonRef = useRef<HTMLButtonElement>(null);
   const addEmailButtonRef = useRef<HTMLButtonElement>(null);
   const phoneNumberInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -294,6 +299,12 @@ export const useContactForm = (): UseContactFormResult => {
 
   useEffect(() => {
     if (!pendingFocusTarget) {
+      return;
+    }
+
+    if (pendingFocusTarget.kind === "displayName") {
+      displayNameInputRef.current?.focus();
+      setPendingFocusTarget(null);
       return;
     }
 
@@ -463,7 +474,37 @@ export const useContactForm = (): UseContactFormResult => {
     const parsed = editableContactRecordSchema.safeParse(payload);
 
     if (!parsed.success) {
-      setFieldErrors(buildErrorMap(parsed.error));
+      const errorMap = buildErrorMap(parsed.error);
+      setFieldErrors(errorMap);
+
+      // Move focus to the first field with an error (form/visual order):
+      //   1. displayName  2. phones (by array index)  3. emails (by array index)
+      if (errorMap["displayName"]) {
+        setPendingFocusTarget({ kind: "displayName" });
+      } else {
+        const firstPhoneIdx = formState.contactMethods.phones.findIndex((_, idx) =>
+          Object.keys(errorMap).some((k) => k.startsWith(`contactMethods.phones.${idx}.`))
+        );
+        if (firstPhoneIdx >= 0) {
+          setPendingFocusTarget({
+            kind: "phone",
+            id: formState.contactMethods.phones[firstPhoneIdx]!.id,
+            fallback: "add-phone"
+          });
+        } else {
+          const firstEmailIdx = formState.contactMethods.emails.findIndex((_, idx) =>
+            Object.keys(errorMap).some((k) => k.startsWith(`contactMethods.emails.${idx}.`))
+          );
+          if (firstEmailIdx >= 0) {
+            setPendingFocusTarget({
+              kind: "email",
+              id: formState.contactMethods.emails[firstEmailIdx]!.id,
+              fallback: "add-email"
+            });
+          }
+        }
+      }
+
       pushToast({
         type: "error",
         message: "Revisa los campos marcados antes de guardar."
@@ -507,6 +548,7 @@ export const useContactForm = (): UseContactFormResult => {
     liveMessage,
     setLiveMessage,
     availableAreas,
+    displayNameInputRef,
     addPhoneButtonRef,
     addEmailButtonRef,
     phoneNumberInputRefs,

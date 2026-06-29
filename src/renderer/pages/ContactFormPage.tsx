@@ -20,6 +20,7 @@ export const ContactFormPage = () => {
     liveMessage,
     setLiveMessage,
     availableAreas,
+    displayNameInputRef,
     addPhoneButtonRef,
     addEmailButtonRef,
     phoneNumberInputRefs,
@@ -86,6 +87,7 @@ export const ContactFormPage = () => {
             formState={formState}
             fieldErrors={fieldErrors}
             setFormState={setFormState}
+            displayNameInputRef={displayNameInputRef}
           />
           <OrganizationLocationSection
             formState={formState}
