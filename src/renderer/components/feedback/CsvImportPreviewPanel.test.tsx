@@ -1658,4 +1658,111 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("button", { name: "Página anterior" })).not.toBeDisabled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-178 — policy option consequence descriptions and aria-describedby
+  // ---------------------------------------------------------------------------
+  describe("policy option descriptions (OIR-178)", () => {
+    const conflictWithPoliciesPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "policy-desc.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-pd-1",
+            displayName: "Registro importado",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-pd-1",
+            displayName: "Registro existente",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    it("renders the Omitir description in the DOM", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      expect(
+        screen.getByText("La fila del CSV no se importa; el contacto existente no cambia.")
+      ).toBeInTheDocument();
+    });
+
+    it("renders the Sobrescribir description in the DOM", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      expect(
+        screen.getByText(
+          "El contacto existente se reemplaza con los datos del CSV. Los datos actuales se perderán."
+        )
+      ).toBeInTheDocument();
+    });
+
+    it("renders the Combinar description in the DOM", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      expect(
+        screen.getByText(
+          "Se fusionan ambos contactos. Los teléfonos, correos y etiquetas se combinan; las notas y otros campos del contacto existente se conservan."
+        )
+      ).toBeInTheDocument();
+    });
+
+    it("skip radio input has aria-describedby pointing to its description element", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      const radio = screen.getByRole("radio", { name: "Omitir" });
+      const descId = radio.getAttribute("aria-describedby");
+      expect(descId).toBeTruthy();
+      const descEl = document.getElementById(descId!);
+      expect(descEl).toBeInTheDocument();
+      expect(descEl).toHaveTextContent(
+        "La fila del CSV no se importa; el contacto existente no cambia."
+      );
+    });
+
+    it("overwrite radio input has aria-describedby pointing to its description element", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      const radio = screen.getByRole("radio", { name: "Sobrescribir" });
+      const descId = radio.getAttribute("aria-describedby");
+      expect(descId).toBeTruthy();
+      const descEl = document.getElementById(descId!);
+      expect(descEl).toBeInTheDocument();
+      expect(descEl).toHaveTextContent(
+        "El contacto existente se reemplaza con los datos del CSV. Los datos actuales se perderán."
+      );
+    });
+
+    it("merge-fields radio input has aria-describedby pointing to its description element", () => {
+      renderPanel(conflictWithPoliciesPreview);
+
+      const radio = screen.getByRole("radio", { name: "Combinar" });
+      const descId = radio.getAttribute("aria-describedby");
+      expect(descId).toBeTruthy();
+      const descEl = document.getElementById(descId!);
+      expect(descEl).toBeInTheDocument();
+      expect(descEl).toHaveTextContent(
+        "Se fusionan ambos contactos. Los teléfonos, correos y etiquetas se combinan; las notas y otros campos del contacto existente se conservan."
+      );
+    });
+  });
 });
