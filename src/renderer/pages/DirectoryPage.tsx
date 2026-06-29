@@ -35,7 +35,7 @@ const privacyInlineRiskText = {
   "No facilitar a pacientes": "No compartir con pacientes."
 } as const;
 
-const RESULTS_PER_PAGE = 5;
+const RESULTS_PER_PAGE = 10;
 const PAGINATION_WINDOW = 3;
 
 const getPageRange = (startPage: number, length: number): number[] =>
@@ -254,7 +254,7 @@ export const DirectoryPage = () => {
   }, [currentPageRecords, selectedRecordId, setSelectedRecordId]);
 
   const listRef = useRef<HTMLUListElement>(null);
-  const detailRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
 
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
     if (currentPageRecords.length === 0) {
@@ -572,7 +572,7 @@ export const DirectoryPage = () => {
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentPage === 1}
                   aria-label="Página anterior"
-                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -612,7 +612,7 @@ export const DirectoryPage = () => {
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   disabled={currentPage === totalPages}
                   aria-label="Página siguiente"
-                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
+                  className="focus-ring flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-30"
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
                     <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -624,9 +624,9 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <div ref={detailRef} onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
+        <section ref={detailRef} role="region" aria-label="Detalle del registro seleccionado" onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
           <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
-            <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Detalle del registro</h3>
+            <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
             {selectedRecord ? (
               <div className="space-y-6">
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
@@ -652,9 +652,9 @@ export const DirectoryPage = () => {
                           </span>
                         ))}
                       </div>
-                      <p className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
+                      <h4 className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
                         {selectedRecord.displayName}
-                      </p>
+                      </h4>
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
@@ -709,7 +709,7 @@ export const DirectoryPage = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
-                    <p className="text-xs font-medium text-slate-400">
+                    <p className="text-xs font-medium text-slate-600">
                       {selectedRecord.contactMethods.phones.length} disponibles
                     </p>
                   </div>
@@ -754,7 +754,7 @@ export const DirectoryPage = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
-                    <p className="text-xs font-medium text-slate-400">
+                    <p className="text-xs font-medium text-slate-600">
                       {selectedRecord.contactMethods.emails.length} disponibles
                     </p>
                   </div>
@@ -788,7 +788,7 @@ export const DirectoryPage = () => {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Redes sociales</p>
-                      <p className="text-xs font-medium text-slate-400">
+                      <p className="text-xs font-medium text-slate-600">
                         {(selectedRecord.contactMethods.socials ?? []).length} disponibles
                       </p>
                     </div>
@@ -860,7 +860,7 @@ export const DirectoryPage = () => {
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </section>
   );

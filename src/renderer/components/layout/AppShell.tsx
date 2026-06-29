@@ -3,12 +3,12 @@ import { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 const navItems = [
-  { to: "/", label: "Directorio" },
-  { to: "/contacts/new", label: "Nuevo registro" },
-  { to: "/import-export", label: "Importar/Exportar" },
-  { to: "/settings", label: "Configuración" },
-  { to: "/buscas", label: "Buscas" },
-  { to: "/deduplicate", label: "Duplicados" }
+  { to: "/", label: "Directorio", title: "Directorio — Alt+1" },
+  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2" },
+  { to: "/import-export", label: "Importar/Exportar", title: "Importar/Exportar — Alt+3" },
+  { to: "/settings", label: "Configuración", title: "Configuración — Alt+4" },
+  { to: "/buscas", label: "Buscas", title: "Buscas — Alt+5" },
+  { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+6" }
 ];
 
 const shortcutRoutes: Record<string, string> = {
@@ -138,6 +138,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  title={item.title}
                   className={({ isActive }) =>
                     [
                       "focus-ring rounded-2xl px-4 py-3 text-center text-sm font-medium transition-colors md:rounded-full md:px-4 md:py-2.5",

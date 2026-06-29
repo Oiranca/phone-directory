@@ -43,6 +43,16 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
+  it("nav links expose keyboard shortcut hint via title attribute", () => {
+    renderShell();
+    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("title", "Directorio — Alt+1");
+    expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
+    expect(screen.getByRole("link", { name: "Importar/Exportar" })).toHaveAttribute("title", "Importar/Exportar — Alt+3");
+    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+4");
+    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+5");
+    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("title", "Duplicados — Alt+6");
+  });
+
   it("nav links keep the shared focus visibility class", () => {
     renderShell();
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveClass("focus-ring");

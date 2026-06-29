@@ -434,10 +434,10 @@ describe("DirectoryPage", () => {
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("caps visible results to five per page and exposes pagination", async () => {
+  it("caps visible results to ten per page and exposes pagination", async () => {
     const contacts = structuredClone(defaultContacts);
 
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 9; index += 1) {
       contacts.records.push({
         ...structuredClone(defaultContacts.records[0]),
         id: `extra-record-${index}`,
@@ -462,7 +462,7 @@ describe("DirectoryPage", () => {
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir a la página 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Página anterior" })).toHaveClass("focus-ring");
-    expect(screen.queryByText("Registro extra 6")).not.toBeInTheDocument();
+    expect(screen.queryByText("Registro extra 9")).not.toBeInTheDocument();
   });
 
   it("announces the empty result state as a status update", async () => {
@@ -492,7 +492,7 @@ describe("DirectoryPage", () => {
   it("moves selection to the new page when pagination changes", async () => {
     const contacts = structuredClone(defaultContacts);
 
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 9; index += 1) {
       contacts.records.push({
         ...structuredClone(defaultContacts.records[0]),
         id: `paged-record-${index}`,
@@ -518,7 +518,9 @@ describe("DirectoryPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ir a la página 2" }));
 
-    const selectedOption = screen.getByRole("button", { name: /paginado 4/i });
+    // With RESULTS_PER_PAGE=10 and 11 total records (2 defaultContacts + 9 extras),
+    // page 2 contains only "Paginado 9" which is auto-selected as the first record.
+    const selectedOption = screen.getByRole("button", { name: /paginado 9/i });
     expect(selectedOption).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -707,6 +709,42 @@ describe("DirectoryPage", () => {
     fireEvent.click(firstButton);
     expect(firstButton).toHaveAttribute("aria-pressed", "true");
     expect(secondButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("detail panel is wrapped in a region landmark with accessible label", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Detalle del registro seleccionado" })).toBeInTheDocument();
+  });
+
+  it("selected record name is rendered as an h4 heading", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: /admisión general/i, level: 4 });
+    expect(heading).toBeInTheDocument();
+    expect(heading.tagName.toLowerCase()).toBe("h4");
   });
 
   it("renders email details and wraps long notes safely", async () => {
