@@ -401,6 +401,23 @@ describe("DeduplicatePage", () => {
       expect(screen.getByText("Similitud 85%")).toBeInTheDocument();
     });
 
+    it("does not throw when localStorage.setItem throws on dismiss", async () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException("QuotaExceededError");
+      });
+
+      renderPage();
+      await screen.findByText("Similitud 90%");
+
+      const dismissButtons = screen.getAllByRole("button", {
+        name: /No son el mismo contacto:/
+      });
+      // Clicking dismiss must not throw even when localStorage.setItem fails
+      expect(() => fireEvent.click(dismissButtons[0]!)).not.toThrow();
+
+      setItemSpy.mockRestore();
+    });
+
     it("does not re-show a dismissed pair after remount with the same data", async () => {
       const { unmount } = renderPage();
       await screen.findByText("Similitud 90%");

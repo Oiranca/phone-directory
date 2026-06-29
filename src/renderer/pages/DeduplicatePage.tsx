@@ -23,7 +23,11 @@ function readDismissedPairIds(): string[] {
 function writeDismissedPairId(id: string): void {
   const existing = readDismissedPairIds();
   if (!existing.includes(id)) {
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...existing, id]));
+    try {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...existing, id]));
+    } catch {
+      // ignore write failures (quota exceeded, private browsing, etc.)
+    }
   }
 }
 
