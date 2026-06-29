@@ -135,7 +135,7 @@ export const SelectField = ({
   const triggerClassName = [
     "mt-2 flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 text-left text-sm transition outline-none ring-scs-blue",
     invalid
-      ? "border-scs-danger focus-visible:border-scs-danger focus-visible:ring-scs-danger/20"
+      ? "border-scs-danger focus-visible:border-scs-danger focus-visible:ring-2 focus-visible:ring-scs-danger/20"
       : "border-slate-200 hover:border-slate-300 focus-visible:border-scs-blue focus-visible:ring-2",
     disabled
       ? "opacity-50 cursor-not-allowed bg-slate-50 border-slate-200"

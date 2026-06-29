@@ -103,6 +103,14 @@ describe("SelectField", () => {
     expect(trigger.className).not.toContain("focus:ring-2");
   });
 
+  it("invalid trigger also uses focus-visible:ring-2 (WCAG 2.4.7, security LOW-1)", () => {
+    renderSelectField({ invalid: true });
+    const trigger = screen.getByLabelText("Tipo");
+    // ring size must be explicit even in the invalid branch
+    expect(trigger.className).toContain("focus-visible:ring-2");
+    expect(trigger.className).not.toContain("focus:ring-2");
+  });
+
   it("disables the trigger and prevents interaction when disabled is true", () => {
     const { onChange } = renderSelectField({ disabled: true });
     
