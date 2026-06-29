@@ -41,6 +41,9 @@ const POLICY_LABELS: Record<MergePolicy, string> = {
 /** Maximum rows rendered in the DOM at one time for the preview row table. */
 const PREVIEW_ROWS_PER_PAGE = 100;
 
+/** Maximum conflict cards rendered in the DOM at one time for the conflict resolution list. */
+const CONFLICTS_PER_PAGE = 20;
+
 const CONFLICT_REASON_LABELS: Record<string, string> = {
   "conflict_reason.external_id": "Mismo identificador externo",
   "conflict_reason.phone_match": "Teléfono coincidente",
@@ -204,6 +207,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const [bulkPolicy, setBulkPolicy] = useState<MergePolicy>("skip");
 
   // ---------------------------------------------------------------------------
+  // OIR-176 — conflict record pagination.
+  // conflictsPage is 0-based. Reset to 0 whenever a new file is previewed.
+  // ---------------------------------------------------------------------------
+  const [conflictsPage, setConflictsPage] = useState(0);
+
+  useEffect(() => {
+    setConflictsPage(0);
+  }, [preview.importToken]);
+
+  // ---------------------------------------------------------------------------
   // OIR-122 — preview row pagination.
   // previewPage is 1-based. Reset to page 1 whenever a new file is previewed.
   // ---------------------------------------------------------------------------
@@ -220,6 +233,11 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
 
   const previewPageStart = (safePage - 1) * PREVIEW_ROWS_PER_PAGE;
   const currentPageRows = preview.previewRows.slice(previewPageStart, previewPageStart + PREVIEW_ROWS_PER_PAGE);
+
+  const paginatedConflicts = conflictedRecords.slice(
+    conflictsPage * CONFLICTS_PER_PAGE,
+    (conflictsPage + 1) * CONFLICTS_PER_PAGE
+  );
 
   const allIndices = conflictedRecords.map((c) => c.recordIndex);
   const allSelected = allIndices.length > 0 && allIndices.every((idx) => selectedIndices.has(idx));
@@ -480,7 +498,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             Conflictos ({conflictedRecords.length})
           </p>
           <div className="mt-3 space-y-4">
-            {conflictedRecords.map((conflict) => {
+            {paginatedConflicts.map((conflict) => {
               const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
               const matchSignal = conflict.matchingFieldValue
                 ? `${reasonLabel}: ${conflict.matchingFieldValue}`
@@ -573,6 +591,39 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
               );
             })}
           </div>
+
+          {/* OIR-176 — conflict pagination controls */}
+          {conflictedRecords.length > CONFLICTS_PER_PAGE && (
+            <nav aria-label="Navegación de conflictos" className="mt-3 rounded-2xl border border-amber-200 bg-white/80 p-2">
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConflictsPage((p) => p - 1)}
+                  disabled={conflictsPage === 0}
+                  aria-label="Página anterior"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m12.5 4.5-5 5 5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+                <span className="text-sm text-amber-900">
+                  Página <span aria-current="page" className="font-semibold">{conflictsPage + 1}</span> de <span className="font-semibold">{Math.ceil(conflictedRecords.length / CONFLICTS_PER_PAGE)}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConflictsPage((p) => p + 1)}
+                  disabled={(conflictsPage + 1) * CONFLICTS_PER_PAGE >= conflictedRecords.length}
+                  aria-label="Página siguiente"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-amber-600 transition hover:bg-amber-50 disabled:cursor-default disabled:opacity-30"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5">
+                    <path d="m7.5 4.5 5 5-5 5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </button>
+              </div>
+            </nav>
+          )}
         </div>
       )}
 

@@ -1551,4 +1551,111 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.queryByText("Preview B 101")).not.toBeInTheDocument();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-176 — conflict record pagination
+  // ---------------------------------------------------------------------------
+  describe("conflict pagination (OIR-176)", () => {
+    /** Build a preview with N conflict records, each with a distinct recordIndex. */
+    const makeConflictsPreview = (count: number): CsvImportPreviewWithConflicts => ({
+      ...basePreview,
+      fileName: "many-conflicts.csv",
+      totalRowCount: count,
+      validRowCount: count,
+      recordCount: count,
+      mergedRecordCount: count,
+      updatedCount: count,
+      conflictCount: count,
+      policiesResolved: false,
+      conflictedRecords: Array.from({ length: count }, (_, i) => ({
+        recordIndex: i,
+        importedRecord: {
+          id: `import-pg-${i}`,
+          displayName: `Importado ${i + 1}`,
+          phones: [],
+          emails: [],
+          socials: []
+        },
+        matchingRecord: {
+          id: `existing-pg-${i}`,
+          displayName: `Existente ${i + 1}`,
+          phones: [],
+          emails: [],
+          socials: []
+        },
+        matchingRecordIndex: i,
+        matchingRecordSource: "existing" as const,
+        conflictType: "external-id-match" as const,
+        conflictReasonKey: "conflict_reason.external_id"
+      }))
+    });
+
+    it("renders only the first 20 conflict cards when there are 50 conflicts", () => {
+      renderPanel(makeConflictsPreview(50));
+
+      // Page 1: records 0–19 (displayed as "Importado 1" through "Importado 20")
+      expect(screen.getByText("Importado 1")).toBeInTheDocument();
+      expect(screen.getByText("Importado 20")).toBeInTheDocument();
+      // Record 21 is on page 2 — must not be in the DOM
+      expect(screen.queryByText("Importado 21")).not.toBeInTheDocument();
+    });
+
+    it("navigating to page 2 shows the next 20 conflicts", () => {
+      renderPanel(makeConflictsPreview(50));
+
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      // Page 2: records 20–39 (displayed as "Importado 21" through "Importado 40")
+      expect(screen.getByText("Importado 21")).toBeInTheDocument();
+      expect(screen.getByText("Importado 40")).toBeInTheDocument();
+      // Page 1 records must no longer be in the DOM
+      expect(screen.queryByText("Importado 1")).not.toBeInTheDocument();
+    });
+
+    it("selection persists across conflict page navigation", () => {
+      renderPanel(makeConflictsPreview(50));
+
+      // Select first conflict on page 1 (recordIndex 0 → exact aria-label "Seleccionar conflicto 1")
+      const selectFirstConflict = () =>
+        screen.getByRole("checkbox", { name: "Seleccionar conflicto 1" });
+      fireEvent.click(selectFirstConflict());
+      expect(selectFirstConflict()).toBeChecked();
+
+      // Navigate to page 2
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      // Navigate back to page 1
+      fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
+
+      // Selection must have persisted across page navigation
+      expect(selectFirstConflict()).toBeChecked();
+    });
+
+    it("does not render conflict pagination when conflicts count is at or below the page size", () => {
+      renderPanel(makeConflictsPreview(20));
+
+      expect(screen.queryByRole("navigation", { name: /Navegación de conflictos/ })).not.toBeInTheDocument();
+    });
+
+    it("renders conflict pagination nav when conflict count exceeds the page size", () => {
+      renderPanel(makeConflictsPreview(21));
+
+      expect(screen.getByRole("navigation", { name: /Navegación de conflictos/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Página siguiente" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Página anterior" })).toBeInTheDocument();
+    });
+
+    it("Página anterior is disabled on page 1 and Página siguiente is disabled on the last page", () => {
+      renderPanel(makeConflictsPreview(50));
+
+      expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Página siguiente" })).not.toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+      fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+      expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Página anterior" })).not.toBeDisabled();
+    });
+  });
 });
