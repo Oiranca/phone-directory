@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
 import { useAppStore } from "../store/useAppStore";
 
 interface PairState {
@@ -347,6 +348,13 @@ export const DeduplicatePage = () => {
                   );
                 })}
               </div>
+
+              {keepId && (
+                <MergeLossPreview
+                  keepRecord={pair.recordA.id === keepId ? pair.recordA : pair.recordB}
+                  discardRecord={pair.recordA.id === keepId ? pair.recordB : pair.recordA}
+                />
+              )}
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <button

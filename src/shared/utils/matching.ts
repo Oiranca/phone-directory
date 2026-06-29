@@ -26,12 +26,11 @@
  *      - csv-import.service.ts `buildDataset`
  *      - app-data.service.ts `buildNextDataset`
  *
- * ## What is deliberately NOT shared
- *
- * - `normalizePhoneNumber` in app-data.service.ts `mergeDuplicates` (line ~626)
- *   additionally applies `.slice(-9)` for the merge-dedup step. This variant is
- *   NOT the same as `normalizePhoneForDedup` and is intentionally kept inline
- *   inside `mergeDuplicates`.
+ * 4. `normalizePhoneForMergeDedup` — strip non-digits then keep the last 9
+ *    digits. Canonical shared form of the phone normalization used in the
+ *    merge step:
+ *      - app-data.service.ts `mergeDuplicates` inline `normalizePhoneNumber`
+ *      - renderer MergeLossPreview.tsx `computeMergeLossPreview`
  */
 
 import type { AreaType, RecordType } from "../constants/catalogs.js";
@@ -47,6 +46,20 @@ import type { ContactRecord } from "../types/contact.js";
  *   - app-data mergeImportedRecordFields: `phone.number.replace(/\D/g, "")`
  */
 export const normalizePhoneForDedup = (phone: string): string => phone.replace(/\D/g, "");
+
+/**
+ * Strips all non-digit characters from a phone string, then retains only the
+ * last 9 digits.
+ *
+ * This is the merge-dedup variant: two phone entries are considered the same
+ * contact method when their last 9 digits match, regardless of country prefix.
+ *
+ * Canonical shared form used by:
+ *   - app-data.service.ts `mergeDuplicates` (was an inline `normalizePhoneNumber`)
+ *   - renderer `MergeLossPreview.tsx` `computeMergeLossPreview`
+ */
+export const normalizePhoneForMergeDedup = (phone: string): string =>
+  phone.replace(/\D/g, "").slice(-9);
 
 /**
  * Canonical display-name normalizer (NFKD form).
