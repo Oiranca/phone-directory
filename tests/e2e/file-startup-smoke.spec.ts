@@ -14,6 +14,10 @@
  *         through the Playwright/Electron harness. This exercises the dev-server
  *         branch (isDev === true), confirming the build pipeline and IPC surface
  *         are intact.
+ *   AC3d) The built dist/index.html uses RELATIVE asset paths (./assets/...) not
+ *         absolute paths (/assets/...). Absolute paths resolve to the filesystem
+ *         root under file:// protocol, causing a blank window in all packaged
+ *         builds. Requires vite.config.ts to have base: "./" set.
  *   AC4)  Dev mode uses ELECTRON_RENDERER_URL rather than a hardcoded constant.
  *
  * NOT covered (requires electron-builder packaging to test):
@@ -54,6 +58,41 @@ test.describe("dev-startup smoke — build artifact + loadFile wiring checks", (
     const stat = await fs.stat(distIndexPath);
     expect(stat.isFile()).toBe(true);
     expect(stat.size).toBeGreaterThan(0);
+  });
+
+  // AC3d: static asset-path check — no app launch required.
+  // Regression guard for the blank-window bug caused by Vite defaulting base to "/".
+  // Under file:// protocol, absolute paths like /assets/index-*.js resolve to the
+  // filesystem root (not the app directory), causing all assets to 404 → blank window.
+  // vite.config.ts MUST have base: "./" to produce relative paths.
+  // This test will FAIL if base: "./" is removed from vite.config.ts.
+  test("dist/index.html uses relative asset paths (no /assets/ absolute refs that break file://)", async () => {
+    const distIndexPath = path.join(repoRootDir, "dist", "index.html");
+    const html = await fs.readFile(distIndexPath, "utf-8");
+
+    // Collect all src= and href= attribute values from the HTML.
+    const srcMatches = [...html.matchAll(/\bsrc="([^"]+)"/g)].map((m) => m[1]);
+    const hrefMatches = [...html.matchAll(/\bhref="([^"]+)"/g)].map((m) => m[1]);
+    const allRefs = [...srcMatches, ...hrefMatches];
+
+    // Filter to only asset paths (scripts, stylesheets, etc — not data: URIs or #fragments).
+    const assetRefs = allRefs.filter(
+      (ref) => !ref.startsWith("data:") && !ref.startsWith("#") && ref.trim() !== ""
+    );
+
+    expect(assetRefs.length, "dist/index.html must reference at least one asset").toBeGreaterThan(0);
+
+    // None of the asset paths may start with "/" (absolute) — they must be relative.
+    // An absolute /assets/... path will silently 404 under file:// because the OS
+    // resolves it from the filesystem root, not from beside index.html.
+    const absoluteRefs = assetRefs.filter((ref) => ref.startsWith("/"));
+    expect(
+      absoluteRefs,
+      `dist/index.html contains absolute asset paths that will 404 under file:// protocol.\n` +
+        `These paths resolve to filesystem root under file://, causing a blank window.\n` +
+        `Fix: ensure vite.config.ts has base: "./" set.\n` +
+        `Offending refs: ${absoluteRefs.join(", ")}`
+    ).toHaveLength(0);
   });
 
   // AC3b: static wiring check — no app launch required.
