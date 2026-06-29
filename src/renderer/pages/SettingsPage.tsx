@@ -460,7 +460,7 @@ export const SettingsPage = () => {
                   type="button"
                   onClick={() => void handleResetPathsToDefaults()}
                   disabled={isSaving || isResettingPaths}
-                  className="mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isResettingPaths ? "Cargando rutas…" : "Cargar rutas gestionadas"}
                 </button>
@@ -473,7 +473,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={isSaving || isResettingPaths || !isDirty}
-              className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="focus-ring w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
             </button>
@@ -481,7 +481,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={handleReset}
               disabled={isSaving || isResettingPaths || !isDirty}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="focus-ring w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               Descartar cambios
             </button>
