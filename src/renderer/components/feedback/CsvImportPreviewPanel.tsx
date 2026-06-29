@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
   CsvImportPreviewWithConflicts,
@@ -184,9 +185,10 @@ type Props = {
   onConfirm: () => void;
   onPolicyChange: (recordIndex: number, policy: MergePolicy) => void;
   onClose: () => void;
+  headingRef?: RefObject<HTMLHeadingElement>;
 };
 
-export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose }: Props) => {
+export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose, headingRef }: Props) => {
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
@@ -292,7 +294,13 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
             Vista previa importación
           </p>
-          <h3 className="mt-2 text-xl font-semibold text-emerald-950">{preview.fileName}</h3>
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="mt-2 text-xl font-semibold text-emerald-950"
+          >
+            {preview.fileName}
+          </h3>
           {preview.detectedFormat && (
             <p className="mt-2 text-sm text-emerald-900/80">
               Formato detectado: {preview.detectedFormat}

@@ -898,6 +898,40 @@ describe("ImportExportPage", () => {
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
   });
 
+  it("moves focus to the panel heading when the CSV import preview panel opens", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Wait for panel heading to appear and then receive programmatic focus (50 ms delay)
+    await waitFor(
+      () => {
+        const heading = screen.getByRole("heading", { name: "directory.csv" });
+        expect(document.activeElement).toBe(heading);
+      },
+      { timeout: 500 }
+    );
+  });
+
+  it("returns focus to the trigger button when the CSV preview panel closes", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    const triggerButton = screen.getByRole("button", { name: /Preparar agenda/ });
+    fireEvent.click(triggerButton);
+    await screen.findByText("Vista previa importación");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar vista previa" }));
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: /Preparar agenda/ })
+      );
+    });
+  });
+
   it("does NOT re-issue listBackups when contacts change after initial load (backupsRequestedRef guard)", async () => {
     // Regression lock for the loaded-once guarantee: after the initial load,
     // subsequent store mutations (e.g. after a JSON import) update contacts,

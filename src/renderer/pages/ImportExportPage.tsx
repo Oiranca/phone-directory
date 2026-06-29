@@ -51,6 +51,9 @@ export const ImportExportPage = () => {
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const confirmationInFlightRef = useRef(false);
+  const triggerButtonRef = useRef<HTMLButtonElement>(null);
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const isPanelOpen = csvPreview !== null;
   // Tracks whether the initial backup list load has been requested so the
   // backups effect never issues more than one listBackups IPC call, even when
   // contacts or settings references change after the initial load.
@@ -82,6 +85,13 @@ export const ImportExportPage = () => {
   useEffect(() => {
     void ensureBootstrapLoaded();
   }, []);
+
+  useEffect(() => {
+    if (isPanelOpen) {
+      const t = setTimeout(() => panelHeadingRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [isPanelOpen]);
 
   useEffect(() => {
     if (storeIsLoading) return;
@@ -475,6 +485,7 @@ export const ImportExportPage = () => {
           </button>
 
           <button
+            ref={triggerButtonRef}
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isMutating}
@@ -497,7 +508,11 @@ export const ImportExportPage = () => {
             isMutating={isMutating}
             onConfirm={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
             onPolicyChange={handleConflictPolicyChange}
-            onClose={() => setCsvPreview(null)}
+            onClose={() => {
+              setCsvPreview(null);
+              triggerButtonRef.current?.focus();
+            }}
+            headingRef={panelHeadingRef}
           />
         )}
         </article>
