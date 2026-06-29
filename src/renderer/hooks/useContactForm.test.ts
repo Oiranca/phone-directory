@@ -453,7 +453,53 @@ describe("useContactForm", () => {
     });
   });
 
+  describe("refs", () => {
+    it("exposes displayNameInputRef in the hook return value", () => {
+      useAppStore.setState({
+        contacts: defaultContacts,
+        settings: editableSettings,
+        isLoading: false,
+        bootstrapStatus: "success",
+        bootstrapError: "",
+        bootstrapHelp: ""
+      });
+      const { result } = renderFormHook("/contacts/new");
+      expect("displayNameInputRef" in result.current).toBe(true);
+    });
+  });
+
   describe("validation", () => {
+    it("sets fieldErrors.displayName when displayName is empty on submit", async () => {
+      useAppStore.setState({
+        contacts: defaultContacts,
+        settings: editableSettings,
+        isLoading: false,
+        bootstrapStatus: "success",
+        bootstrapError: "",
+        bootstrapHelp: ""
+      });
+      const { result } = renderFormHook("/contacts/new");
+
+      act(() => {
+        result.current.setFormState((current) => ({
+          ...current,
+          displayName: "",
+          contactMethods: {
+            ...current.contactMethods,
+            phones: [{ ...current.contactMethods.phones[0]!, number: "123456" }]
+          }
+        }));
+      });
+
+      const fakeEvent = { preventDefault: vi.fn() } as unknown as React.FormEvent<HTMLFormElement>;
+      await act(async () => {
+        await result.current.handleSubmit(fakeEvent);
+      });
+
+      expect(result.current.fieldErrors["displayName"]).toBeTruthy();
+      expect(window.hospitalDirectory.createRecord).not.toHaveBeenCalled();
+    });
+
     it("sets fieldErrors and does not call createRecord when displayName and phone are empty", async () => {
       useAppStore.setState({
         contacts: defaultContacts,

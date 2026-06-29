@@ -7,9 +7,10 @@ type Props = {
   formState: ContactFormState;
   fieldErrors: Record<string, string>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
+  displayNameInputRef?: React.RefObject<HTMLInputElement>;
 };
 
-export const IdentitySection = ({ formState, fieldErrors, setFormState }: Props) => (
+export const IdentitySection = ({ formState, fieldErrors, setFormState, displayNameInputRef }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
     <div>
@@ -17,6 +18,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState }: Props)
         Nombre visible
       </label>
       <input
+        ref={displayNameInputRef}
         id="displayName"
         value={formState.displayName}
         onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
