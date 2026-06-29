@@ -41,12 +41,13 @@ export const BuscasPage = () => {
       setIsLoading(true);
       setLoadError(false);
       setError("");
-      const [data, imported] = await Promise.all([
+      const [primary, imported] = await Promise.allSettled([
         window.hospitalDirectory.listBuscas(),
         window.hospitalDirectory.listImportedBuscas()
       ]);
-      setRecords(data);
-      setImportedRecords(imported);
+      if (primary.status === "rejected") throw primary.reason;
+      setRecords(primary.value);
+      setImportedRecords(imported.status === "fulfilled" ? imported.value : []);
     } catch {
       setLoadError(true);
     } finally {

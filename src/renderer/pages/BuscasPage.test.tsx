@@ -479,6 +479,21 @@ describe("BuscasPage", () => {
     expect(addBuscaMock).toHaveBeenCalledTimes(1);
   });
 
+  it("shows manual buscas even when listImportedBuscas rejects — no error state", async () => {
+    setupWindowApi({
+      listImportedBuscas: vi.fn().mockRejectedValue(new Error("ODS store unavailable"))
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("B-001")).toBeInTheDocument();
+      expect(screen.getByText("B-002")).toBeInTheDocument();
+    });
+    // Must not show the error/retry state
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    // No ODS rows should appear
+    expect(screen.queryByText("ODS")).not.toBeInTheDocument();
+  });
+
   it("shows imported ODS records with ODS badge in the table", async () => {
     setupWindowApi({
       listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
