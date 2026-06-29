@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
@@ -86,10 +86,9 @@ export const ImportExportPage = () => {
     void ensureBootstrapLoaded();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isPanelOpen) {
-      const t = setTimeout(() => panelHeadingRef.current?.focus(), 50);
-      return () => clearTimeout(t);
+      panelHeadingRef.current?.focus();
     }
   }, [isPanelOpen]);
 

@@ -904,14 +904,11 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    // Wait for panel heading to appear and then receive programmatic focus (50 ms delay)
-    await waitFor(
-      () => {
-        const heading = screen.getByRole("heading", { name: "directory.csv" });
-        expect(document.activeElement).toBe(heading);
-      },
-      { timeout: 500 }
-    );
+    // useLayoutEffect fires synchronously after the DOM update — no timer involved
+    await waitFor(() => {
+      const heading = screen.getByRole("heading", { name: "directory.csv" });
+      expect(document.activeElement).toBe(heading);
+    });
   });
 
   it("returns focus to the trigger button when the CSV preview panel closes", async () => {
