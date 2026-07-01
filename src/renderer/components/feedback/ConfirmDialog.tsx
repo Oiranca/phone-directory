@@ -66,6 +66,23 @@ export function ConfirmDialog({
     }
   }, [isOpen]);
 
+  // Unmount path: if the caller removes the component from the DOM while the
+  // dialog is still showing (e.g. ImportExportPage sets conditional rendering to
+  // false instead of passing isOpen=false), restore focus to the original trigger
+  // element so keyboard users keep their place.
+  useEffect(() => {
+    return () => {
+      if (dialogRef.current?.open) {
+        dialogRef.current.close();
+      }
+      const trigger = triggerElementRef.current;
+      if (trigger instanceof HTMLElement) {
+        trigger.focus({ preventScroll: true });
+      }
+      triggerElementRef.current = null;
+    };
+  }, []); // empty deps — cleanup only runs on unmount
+
   if (!isOpen) return null;
 
   return (

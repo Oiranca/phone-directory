@@ -193,4 +193,44 @@ describe('ConfirmDialog', () => {
     fireEvent(dialog, new Event('cancel', { cancelable: true }));
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  // ── Focus restoration on unmount path ───────────────────────────────────────
+  // Callers such as ImportExportPage remove the component from the DOM instead
+  // of passing isOpen=false, so the mounted-path focus restore never runs.
+  // A cleanup effect on the empty-dep useEffect handles this path.
+
+  it('restores focus to the trigger element when unmounted while the dialog is showing', () => {
+    const Wrapper = ({ show }: { show: boolean }) => (
+      <>
+        <button type="button" aria-label="Abrir diálogo">Abrir</button>
+        {show && (
+          <ConfirmDialog
+            isOpen={true}
+            title="Test"
+            message="Test message"
+            onConfirm={vi.fn()}
+            onCancel={vi.fn()}
+          />
+        )}
+      </>
+    );
+
+    // Render without the dialog, focus the trigger button so it is captured as
+    // document.activeElement when the dialog mounts.
+    const { rerender } = render(<Wrapper show={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir diálogo' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    // Mount the dialog — the isOpen effect captures document.activeElement (trigger)
+    // and calls showModal().
+    rerender(<Wrapper show={true} />);
+
+    // Unmount the dialog by removing it from the tree (simulates caller toggling
+    // conditional rendering to false without passing isOpen=false).
+    rerender(<Wrapper show={false} />);
+
+    // The unmount cleanup effect must have restored focus to the trigger.
+    expect(trigger).toHaveFocus();
+  });
 });
