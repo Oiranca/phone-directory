@@ -710,7 +710,7 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.phones.length} disponibles
+                      {selectedRecord.contactMethods.phones.length} {selectedRecord.contactMethods.phones.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -755,7 +755,7 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.emails.length} disponibles
+                      {selectedRecord.contactMethods.emails.length} {selectedRecord.contactMethods.emails.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -789,7 +789,7 @@ export const DirectoryPage = () => {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Redes sociales</p>
                       <p className="text-xs font-medium text-slate-600">
-                        {(selectedRecord.contactMethods.socials ?? []).length} disponibles
+                        {(selectedRecord.contactMethods.socials ?? []).length} {(selectedRecord.contactMethods.socials ?? []).length === 1 ? "disponible" : "disponibles"}
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
