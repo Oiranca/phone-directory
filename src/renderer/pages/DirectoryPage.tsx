@@ -466,28 +466,68 @@ export const DirectoryPage = () => {
           {(query || selectedType !== "all" || selectedArea !== "all" || selectedTags.length > 0 || showInactive) && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {query ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {query}
+                  <button
+                    type="button"
+                    aria-label="Eliminar filtro: búsqueda"
+                    onClick={() => setQuery("")}
+                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedType !== "all" ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {typeLabels[selectedType]}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${typeLabels[selectedType]}`}
+                    onClick={() => setSelectedType("all")}
+                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedArea !== "all" ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {areaLabels[selectedArea]}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${areaLabels[selectedArea]}`}
+                    onClick={() => setSelectedArea("all")}
+                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedTags.map((tag) => (
-                <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   #{tag}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${tag}`}
+                    onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
+                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ))}
               {showInactive ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   Inactivos
+                  <button
+                    type="button"
+                    aria-label="Eliminar filtro: Inactivos"
+                    onClick={() => setShowInactive(false)}
+                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               <button
@@ -559,9 +599,14 @@ export const DirectoryPage = () => {
             );
           })}
           </ul>
-          {visibleRecords.length === 0 && (
+          {visibleRecords.length === 0 && contacts.records.length === 0 && (
             <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
-              No hay resultados para la búsqueda y filtros actuales.
+              La agenda está vacía. Añade el primer contacto para empezar.
+            </div>
+          )}
+          {visibleRecords.length === 0 && contacts.records.length > 0 && (
+            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+              No se han encontrado resultados para esta búsqueda.
             </div>
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
@@ -667,26 +712,26 @@ export const DirectoryPage = () => {
 
                 <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <dl className="grid gap-4 sm:grid-cols-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</p>
-                        <p className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.department ?? "Sin departamento"}
-                        </p>
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</dt>
+                        <dd className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
+                          {selectedRecord.organization.department ?? "Sin unidad"}
+                        </dd>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</p>
-                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</dt>
+                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
                           {selectedRecord.organization.service ?? "Sin servicio"}
-                        </p>
+                        </dd>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</p>
-                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</dt>
+                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
                           {areaLabels[selectedRecord.organization.area ?? "none"]}
-                        </p>
+                        </dd>
                       </div>
-                    </div>
+                    </dl>
                   </div>
 
                   {selectedRecord.location && (
