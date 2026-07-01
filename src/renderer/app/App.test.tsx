@@ -300,7 +300,7 @@ describe("App recovery flow", () => {
     renderApp();
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Usar rutas gestionadas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar la configuración predeterminada" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.getSettingsDefaults).toHaveBeenCalledTimes(1);

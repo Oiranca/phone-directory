@@ -54,7 +54,7 @@ const PREVIEW_ROWS_PER_PAGE = 100;
 const CONFLICTS_PER_PAGE = 20;
 
 const CONFLICT_REASON_LABELS: Record<string, string> = {
-  "conflict_reason.external_id": "Mismo identificador externo",
+  "conflict_reason.external_id": "Este contacto ya existe en la agenda (mismo código)",
   "conflict_reason.phone_match": "Teléfono coincidente",
   "conflict_reason.email_match": "Correo coincidente"
 };
@@ -254,6 +254,20 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
   const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
 
+  // OIR-182 item 3: count how many conflicts already have a policy selected.
+  const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
+
+  // OIR-182 item 4: warn before closing when partial resolution work exists.
+  const handleClose = () => {
+    if (resolvedCount > 0 && resolvedCount < conflictCount) {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm("Has empezado a resolver los conflictos. Si cierras ahora perderás el trabajo parcial. ¿Quieres cerrar igualmente?")) {
+        return;
+      }
+    }
+    onClose();
+  };
+
   const handleToggleOne = useCallback((recordIndex: number) => {
     setSelectedIndices((prev) => {
       const next = new Set(prev);
@@ -311,29 +325,24 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           </h3>
           {preview.detectedFormat && (
             <p className="mt-2 text-sm text-emerald-900/80">
-              Formato detectado: {preview.detectedFormat}
-              {preview.detectionConfidence
+              Tipo de archivo: {preview.detectedFormat}
+              {preview.detectionConfidence && preview.detectionConfidence !== "low"
                 ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})`
-                : ""}
+                : preview.detectionConfidence === "low"
+                  ? " — formato no reconocido, revísalo con atención"
+                  : ""}
             </p>
           )}
         </div>
+        {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isMutating}
             className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
           >
             Cerrar vista previa
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isConfirmDisabled}
-            className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isImporting ? "Importando…" : "Confirmar importación"}
           </button>
         </div>
       </div>
@@ -344,8 +353,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           role="alert"
           className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
         >
-          El archivo contiene {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.
-          Corrige el origen antes de importar o cierra la vista previa para seleccionar otro archivo.
+          Hay {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila con errores que no se importará" : "filas con errores que no se importarán"}.
+          Corrígelas en la agenda original o cierra esta vista.
         </div>
       )}
 
@@ -373,10 +382,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           ].join(" ")}
         >
           <span className="font-semibold">
-            {conflictCount} {conflictCount === 1 ? "conflicto detectado" : "conflictos detectados"}.
+            Hay {conflictCount} {conflictCount === 1 ? "registro que ya existe en la agenda" : "registros que ya existen en la agenda"}.
           </span>{" "}
           {hasUnresolvedConflicts
-            ? "Selecciona una política para cada conflicto antes de confirmar."
+            ? "Para cada uno elige qué hacer (omitir, sustituir o combinar) antes de continuar."
             : "Todas las políticas de conflicto están seleccionadas."}
         </div>
       )}
@@ -510,13 +519,22 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </div>
           </div>
 
-          <p className="text-sm font-semibold text-emerald-950">
-            Conflictos ({conflictedRecords.length})
-          </p>
+          {/* OIR-182 item 3: resolution progress counter (sibling span preserves exact text for tests) */}
+          <div className="flex items-baseline gap-3">
+            <p className="text-sm font-semibold text-emerald-950">
+              Conflictos ({conflictedRecords.length})
+            </p>
+            {conflictedRecords.length > 0 && (
+              <span aria-live="polite" aria-atomic="true" className="text-xs text-emerald-700">
+                {resolvedCount} de {conflictedRecords.length} resueltos
+              </span>
+            )}
+          </div>
           <div className="mt-3 space-y-4">
             {paginatedConflicts.map((conflict) => {
               const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
-              const matchSignal = conflict.matchingFieldValue
+              // Strip the raw machine ID for external_id conflicts — only show the human label.
+              const matchSignal = conflict.matchingFieldValue && conflict.conflictReasonKey !== "conflict_reason.external_id"
                 ? `${reasonLabel}: ${conflict.matchingFieldValue}`
                 : reasonLabel;
 
@@ -553,7 +571,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   <div className="mb-3 flex items-start gap-3">
                     <input
                       type="checkbox"
-                      aria-label={`Seleccionar conflicto ${conflict.recordIndex + 1}`}
+                      aria-label={`Seleccionar ${conflict.importedRecord.displayName ?? `conflicto ${conflict.recordIndex + 1}`}`}
                       checked={isSelected}
                       disabled={isMutating}
                       onChange={() => handleToggleOne(conflict.recordIndex)}
@@ -599,6 +617,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                                   disabled={isMutating}
                                   onChange={() => onPolicyChange(conflict.recordIndex, policy)}
                                   aria-describedby={descId}
+                                  aria-required="true"
                                   className="h-4 w-4 shrink-0"
                                 />
                                 {POLICY_LABELS[policy]}
@@ -650,6 +669,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces conflict page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {conflictsPage + 1} de {Math.ceil(conflictedRecords.length / CONFLICTS_PER_PAGE)}
+              </span>
             </nav>
           )}
         </div>
@@ -830,6 +853,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces preview row page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {safePage} de {totalPreviewPages}
+              </span>
             </nav>
           )}
         </div>
@@ -841,6 +868,20 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           El archivo no contiene filas de datos.
         </div>
       )}
+
+      {/* OIR-182 item 2: single sticky confirm footer — CTA appears in one place only */}
+      <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isConfirmDisabled}
+            className="rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {isImporting ? "Importando…" : "Confirmar importación"}
+          </button>
+        </div>
+      </div>
     </section>
   );
 };
