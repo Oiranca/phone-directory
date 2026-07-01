@@ -223,7 +223,7 @@ describe("AppShell — recovery mode", () => {
     renderShell({ isRecoveryMode: true });
     expect(
       screen.getByText(
-        "El directorio está bloqueado hasta importar una copia de seguridad válida o restaurar un directorio vacío."
+        "El directorio está bloqueado hasta importar una copia de seguridad válida o restablecer un directorio vacío."
       )
     ).toBeInTheDocument();
   });
