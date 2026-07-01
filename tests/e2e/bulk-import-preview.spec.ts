@@ -101,7 +101,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
       const alert = previewPanel.getByRole("alert");
       await expect(alert).toBeVisible();
-      await expect(alert).toContainText("filas rechazadas");
+      await expect(alert).toContainText("filas con errores que no se importarán");
 
       // Row table shows rejected badges
       const table = page.getByRole("table", { name: "Filas de importación" });
