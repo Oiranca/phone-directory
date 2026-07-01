@@ -111,8 +111,8 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Confirm button is disabled
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
 
-      // Error message toast
-      await expect(page.getByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeVisible();
+      // Error message toast (OIR-181: plain-language copy)
+      await expect(page.getByText("Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo.")).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);

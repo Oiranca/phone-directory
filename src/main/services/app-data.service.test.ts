@@ -3920,4 +3920,31 @@ describe("AppDataService", () => {
     expect(numbers).toContain("8802");
     expect(numbers).toContain("8803");
   });
+
+  it("OIR-181: saveSettings file-exists error message contains no 'dataset' jargon", async () => {
+    // Regression guard: assertDataFilePathAvailable must use plain-language copy
+    // when the destination data file already exists (OIR-181 policy).
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Create a second JSON file at a new path so the path is "already taken".
+    const occupiedPath = path.join(testRoot, "data", "occupied.json");
+    await fs.writeFile(occupiedPath, JSON.stringify({ note: "exists" }), "utf-8");
+
+    const error = await service
+      .saveSettings(buildEditableSettings({ dataFilePath: occupiedPath }))
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+
+    // Must NOT contain the banned jargon term.
+    expect(message).not.toMatch(/dataset/i);
+
+    // Must contain the corrected plain-language phrase.
+    expect(message).toContain("archivo de datos");
+    expect(message).toContain("Ya existe un archivo en esa ruta");
+  });
 });
