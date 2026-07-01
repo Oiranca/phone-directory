@@ -391,7 +391,7 @@ export const DirectoryPage = () => {
       {/* Search Header */}
       <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-4">
-          <h2 id="directory-page-title" className="sr-only">Directorio</h2>
+          <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">

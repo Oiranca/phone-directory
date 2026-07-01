@@ -90,7 +90,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Búsqueda de contactos" })).toBeInTheDocument();
       expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
