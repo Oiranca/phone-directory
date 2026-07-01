@@ -1873,7 +1873,7 @@ describe("AppDataService", () => {
       expect(Array.isArray(conflict.matchingRecord.socials)).toBe(true);
     });
 
-    it("sets matchingFieldValue to the externalId for external-id-match conflicts", async () => {
+    it("does not set matchingFieldValue for external-id-match conflicts (privacy: raw ID must not reach renderer)", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -1897,7 +1897,8 @@ describe("AppDataService", () => {
       const conflict = preview.conflictedRecords[0]!;
 
       expect(conflict.conflictType).toBe("external-id-match");
-      expect(conflict.matchingFieldValue).toBe(existing.externalId);
+      // matchingFieldValue must be absent for external-id-match — raw codes are not sent to the renderer.
+      expect(conflict.matchingFieldValue).toBeUndefined();
     });
 
     it("sets matchingFieldValue to the shared phone number for phone-match conflicts", async () => {
