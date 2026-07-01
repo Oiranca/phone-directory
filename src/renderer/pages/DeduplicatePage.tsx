@@ -88,8 +88,10 @@ export const DeduplicatePage = () => {
   // Focus restoration refs
   // triggerRef — the "Fusionar" button that opened the confirm dialog
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  // headingRef — the page heading, focused when no pairs remain after merge
+  // headingRef — the duplicate-list page heading, focused when ≥1 pair remains after merge
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // emptyStateHeadingRef — the empty-state heading, focused when 0 pairs remain after merge
+  const emptyStateHeadingRef = useRef<HTMLHeadingElement>(null);
   // pendingFocusRef — flag set before state updates to trigger focus restore in effect
   const pendingFocusRef = useRef<boolean>(false);
 
@@ -102,10 +104,9 @@ export const DeduplicatePage = () => {
     if (firstKeepBtn) {
       firstKeepBtn.focus();
     } else {
-      // No more pairs — focus the heading (which is rendered only when pairs exist,
-      // so fall back to the section heading ref; if the empty state is shown instead,
-      // headingRef.current will be null and focus gracefully stays on body).
-      headingRef.current?.focus();
+      // No more pairs: the duplicate-list heading (headingRef) has unmounted.
+      // Focus the empty-state heading instead, which is now in the DOM.
+      emptyStateHeadingRef.current?.focus();
     }
   }, [pairStates]);
 
@@ -310,7 +311,7 @@ export const DeduplicatePage = () => {
     );
   }
 
-  // Empty state: no duplicates found
+  // Empty state: no duplicates found (also rendered after the last pair is merged)
   if (pairStates.length === 0) {
     return (
       <section className="rounded-3xl bg-white p-8 shadow-panel">
@@ -320,7 +321,14 @@ export const DeduplicatePage = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-base font-semibold text-slate-700">No se encontraron duplicados</p>
+          {/* Stable focus target for post-merge keyboard flow when 0 pairs remain */}
+          <h2
+            ref={emptyStateHeadingRef}
+            tabIndex={-1}
+            className="text-base font-semibold text-slate-700 focus:outline-none"
+          >
+            No se encontraron duplicados
+          </h2>
           <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
         </div>
       </section>

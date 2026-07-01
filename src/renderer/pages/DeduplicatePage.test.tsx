@@ -231,6 +231,30 @@ describe("DeduplicatePage", () => {
       await triggerMerge();
       expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
     });
+
+    it("focus lands on the empty-state heading (not body) when last pair is merged and refresh returns zero pairs", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Open the confirm dialog
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      // Click the dialog confirm button
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      // Wait for the empty-state heading to appear (refresh returned zero pairs)
+      const emptyHeading = await screen.findByRole("heading", { name: "No se encontraron duplicados" });
+
+      // Focus must land on the empty-state heading, not document.body
+      await waitFor(() => {
+        expect(document.activeElement).toBe(emptyHeading);
+        expect(document.activeElement).not.toBe(document.body);
+      });
+    });
   });
 
   describe("merge store reconciliation — merge succeeds + refresh fails (graceful degradation)", () => {
