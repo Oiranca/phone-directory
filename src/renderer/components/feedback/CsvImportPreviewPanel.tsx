@@ -54,7 +54,7 @@ const PREVIEW_ROWS_PER_PAGE = 100;
 const CONFLICTS_PER_PAGE = 20;
 
 const CONFLICT_REASON_LABELS: Record<string, string> = {
-  "conflict_reason.external_id": "Mismo identificador externo",
+  "conflict_reason.external_id": "Este contacto ya existe en la agenda (mismo código)",
   "conflict_reason.phone_match": "Teléfono coincidente",
   "conflict_reason.email_match": "Correo coincidente"
 };
@@ -311,10 +311,12 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           </h3>
           {preview.detectedFormat && (
             <p className="mt-2 text-sm text-emerald-900/80">
-              Formato detectado: {preview.detectedFormat}
-              {preview.detectionConfidence
+              Tipo de archivo: {preview.detectedFormat}
+              {preview.detectionConfidence && preview.detectionConfidence !== "low"
                 ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})`
-                : ""}
+                : preview.detectionConfidence === "low"
+                  ? " — formato no reconocido, revísalo con atención"
+                  : ""}
             </p>
           )}
         </div>
@@ -344,8 +346,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           role="alert"
           className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
         >
-          El archivo contiene {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.
-          Corrige el origen antes de importar o cierra la vista previa para seleccionar otro archivo.
+          Hay {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila con errores que no se importará" : "filas con errores que no se importarán"}.
+          Corrígelas en la agenda original o cierra esta vista.
         </div>
       )}
 
@@ -373,10 +375,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           ].join(" ")}
         >
           <span className="font-semibold">
-            {conflictCount} {conflictCount === 1 ? "conflicto detectado" : "conflictos detectados"}.
+            Hay {conflictCount} {conflictCount === 1 ? "registro que ya existe en la agenda" : "registros que ya existen en la agenda"}.
           </span>{" "}
           {hasUnresolvedConflicts
-            ? "Selecciona una política para cada conflicto antes de confirmar."
+            ? "Para cada uno elige qué hacer (omitir, sustituir o combinar) antes de continuar."
             : "Todas las políticas de conflicto están seleccionadas."}
         </div>
       )}
@@ -516,7 +518,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <div className="mt-3 space-y-4">
             {paginatedConflicts.map((conflict) => {
               const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
-              const matchSignal = conflict.matchingFieldValue
+              // Strip the raw machine ID for external_id conflicts — only show the human label.
+              const matchSignal = conflict.matchingFieldValue && conflict.conflictReasonKey !== "conflict_reason.external_id"
                 ? `${reasonLabel}: ${conflict.matchingFieldValue}`
                 : reasonLabel;
 
