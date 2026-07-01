@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "Directorio", title: "Directorio — Alt+1" },
@@ -55,6 +55,16 @@ interface AppShellProps extends PropsWithChildren {
 
 export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // T1: move focus to #main-content on route change so keyboard users
+  // land at the top of the new page content instead of retaining stale focus.
+  useEffect(() => {
+    const main = document.getElementById("main-content");
+    if (main) {
+      main.focus();
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (isRecoveryMode) {
@@ -88,7 +98,12 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       }
 
       if (event.key === "/" && !isTextEntryElement(event.target)) {
-        const searchInput = document.getElementById("directory-search") as HTMLInputElement | null;
+        // Focus the search input of the CURRENT page (T9): use data-page-search attribute first,
+        // then fall back to known page-specific IDs.
+        const searchInput =
+          (document.querySelector<HTMLInputElement>("[data-page-search]")) ??
+          (document.getElementById("directory-search") as HTMLInputElement | null) ??
+          (document.getElementById("buscas-search") as HTMLInputElement | null);
         if (searchInput) {
           event.preventDefault();
           searchInput.focus();
@@ -122,15 +137,15 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-scs-blue">Agenda Hospitalaria</p>
-              <h1 className="font-serif text-2xl font-semibold leading-none text-scs-blueDark sm:text-3xl">MVP local</h1>
+              <h1 className="font-serif text-2xl font-semibold leading-none text-scs-blueDark sm:text-3xl">Directorio</h1>
             </div>
             <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
-              {isRecoveryMode ? "Recuperación" : "Offline"}
+              {isRecoveryMode ? "Recuperación" : "Local"}
             </div>
           </div>
           {isRecoveryMode ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              El directorio está bloqueado hasta importar una copia JSON válida o restablecer un dataset vacío.
+              El directorio está bloqueado hasta importar una copia de seguridad válida o restaurar un directorio vacío.
             </div>
           ) : (
             <nav aria-label="Navegación principal" className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap md:gap-3">

@@ -3,6 +3,7 @@ import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
 
 interface PairState {
@@ -254,17 +255,15 @@ export const DeduplicatePage = () => {
   // Empty state: no duplicates found
   if (pairStates.length === 0) {
     return (
-      <section className="rounded-3xl bg-white p-8 shadow-panel">
-        <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-          <div className="rounded-full bg-emerald-50 p-4">
-            <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-base font-semibold text-slate-700">No se encontraron duplicados</p>
-          <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
-        </div>
-      </section>
+      <StatePanel
+        title="No se encontraron duplicados"
+        message="El directorio no tiene registros con datos coincidentes."
+        icon={
+          <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+          </svg>
+        }
+      />
     );
   }
 
@@ -317,7 +316,7 @@ export const DeduplicatePage = () => {
                           : "border-slate-200 bg-slate-50"
                       ].join(" ")}
                     >
-                      <p className="font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="font-semibold text-scs-blueDark">{record.displayName}</h3>
                       {record.department && (
                         <p className="mt-1 text-xs text-slate-500">{record.department}</p>
                       )}

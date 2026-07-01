@@ -192,7 +192,7 @@ export const SettingsPage = () => {
         message: "Rutas gestionadas listas para guardar."
       });
     } catch (error) {
-      const message = toCompactToastMessage(error, "No se pudieron cargar las rutas gestionadas.");
+      const message = toCompactToastMessage(error, "No se pudieron cargar las rutas predeterminadas.");
       setSaveError(message);
       pushToast({
         type: "error",
@@ -277,7 +277,7 @@ export const SettingsPage = () => {
                 value={editorName}
                 onChange={handleEditorNameChange}
                 placeholder="Ej. Turno mañana"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
               />
               <span className="mt-2 block text-xs text-slate-500">
                 Se usa en auditoría, importaciones CSV y futuras exportaciones.
@@ -294,7 +294,7 @@ export const SettingsPage = () => {
                   value={dataFilePath}
                   onChange={handleDataFilePathChange}
                   placeholder="/ruta/al/directorio/contacts.json"
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                 />
                 <button
                   type="button"
@@ -322,7 +322,7 @@ export const SettingsPage = () => {
                   value={backupDirectoryPath}
                   onChange={handleBackupDirectoryPathChange}
                   placeholder="/ruta/a/la/carpeta/backups"
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                 />
                 <button
                   type="button"
@@ -346,7 +346,7 @@ export const SettingsPage = () => {
                 type="checkbox"
                 checked={showInactiveByDefault}
                 onChange={handleShowInactiveChange}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
               />
               <span>
                 <span className="block text-sm font-semibold text-slate-700">Mostrar inactivos al iniciar</span>
@@ -363,7 +363,7 @@ export const SettingsPage = () => {
                   type="checkbox"
                   checked={autoBackupEnabled}
                   onChange={handleAutoBackupEnabledChange}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
                 />
                 <span>
                   <span className="block text-sm font-semibold text-slate-700">Activar auto-backup</span>
@@ -384,7 +384,7 @@ export const SettingsPage = () => {
                       setSaveError("");
                     }}
                     disabled={!autoBackupEnabled}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20 disabled:opacity-60"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   >
                     <option value="launch">Al abrir la app</option>
                     <option value="intervalHours">Cada N horas</option>
@@ -406,7 +406,7 @@ export const SettingsPage = () => {
                       setSaveError("");
                     }}
                     disabled={!autoBackupEnabled}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20 disabled:opacity-60"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   />
                 </label>
               </div>
@@ -425,7 +425,7 @@ export const SettingsPage = () => {
                       setAutoBackupIntervalHours(event.target.value);
                       setSaveError("");
                     }}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
                 </label>
               ) : null}
@@ -444,7 +444,7 @@ export const SettingsPage = () => {
                       setAutoBackupEditCountThreshold(event.target.value);
                       setSaveError("");
                     }}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
                 </label>
               ) : null}
@@ -462,7 +462,7 @@ export const SettingsPage = () => {
                   disabled={isSaving || isResettingPaths}
                   className="focus-ring mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isResettingPaths ? "Cargando rutas…" : "Cargar rutas gestionadas"}
+                  {isResettingPaths ? "Cargando rutas…" : "Cargar rutas predeterminadas"}
                 </button>
               ) : null}
             </div>
@@ -534,11 +534,11 @@ export const SettingsPage = () => {
             <h3 className="text-sm font-semibold text-scs-blueDark">Qué cambia al guardar</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
               <li>El nombre del editor se aplicará a nuevas altas y futuras importaciones.</li>
-              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el dataset actual.</li>
+              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual.</li>
               <li>La carpeta de backups debe existir y ser accesible antes de guardarla aquí.</li>
               <li>La preferencia de inactivos se usará como comportamiento inicial del directorio.</li>
               <li>Los auto-backups usan el prefijo <code>auto-backup-</code> y rotan según la retención indicada.</li>
-              <li>Si una ruta falla, puedes cargar las rutas gestionadas y guardarlas cuando lo revises.</li>
+              <li>Si una ruta falla, puedes cargar las rutas predeterminadas y guardarlas cuando lo revises.</li>
             </ul>
           </div>
         </aside>

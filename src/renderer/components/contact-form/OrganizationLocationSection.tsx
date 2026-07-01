@@ -26,7 +26,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               organization: { ...current.organization, department: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
 
@@ -43,7 +43,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               organization: { ...current.organization, service: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
     </div>
@@ -86,7 +86,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               organization: { ...current.organization, specialty: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
     </div>
@@ -105,7 +105,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               location: { ...current.location, building: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
 
@@ -122,7 +122,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               location: { ...current.location, floor: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
     </div>
@@ -141,7 +141,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               location: { ...current.location, room: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
 
@@ -158,7 +158,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
               location: { ...current.location, text: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
     </div>
