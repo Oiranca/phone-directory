@@ -243,19 +243,30 @@ export const ImportExportPage = () => {
         return;
       }
 
-      pushToast({
-        type: preview.warningCount > 0 ? "warning" : "success",
-        message: preview.warningCount > 0
-          ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
-          : `Todo listo: ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
-      });
+      // OIR-182 items 9+10: single toast per action; gate "Todo listo" when conflicts exist.
+      const unresolvedCount = preview.conflictCount ?? 0;
+      const hasConfidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low";
+      const confidenceNote = hasConfidenceWarning
+        ? preview.detectionConfidence === "low"
+          ? " No estamos seguros de haber leído bien el archivo. Revisa la vista previa antes de importar."
+          : " Confianza media en la detección del formato. Revisa la vista previa."
+        : "";
 
-      if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
+      if (unresolvedCount > 0) {
+        // Item 10: "Todo listo" is contradictory when conflicts still need resolving.
         pushToast({
           type: "warning",
-          message: preview.detectionConfidence === "low"
-            ? "No estamos seguros de haber leído bien el archivo. Revisa la vista previa antes de importar."
-            : "Confianza media en la detección del formato. Revisa la vista previa."
+          message: `${unresolvedCount === 1
+            ? "Hay 1 registro que ya existe en la agenda"
+            : `Hay ${unresolvedCount} registros que ya existen en la agenda`}. Para cada uno elige qué hacer antes de continuar.${confidenceNote}`
+        });
+      } else {
+        // Item 9: merge confidence note into the status toast — no second toast.
+        pushToast({
+          type: preview.warningCount > 0 || hasConfidenceWarning ? "warning" : "success",
+          message: preview.warningCount > 0 || hasConfidenceWarning
+            ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.${confidenceNote}`
+            : `Todo listo: ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
         });
       }
     } catch (error) {
@@ -395,11 +406,26 @@ export const ImportExportPage = () => {
     if (pendingConfirmation.kind === "import-csv") {
       const preview = pendingConfirmation.preview;
 
+      // OIR-182 item 8: show the applied conflict policies in the dialog so the
+      // user sees what was chosen (not the system defaults) before confirming.
+      const conflictedRecords = preview.conflictedRecords ?? [];
+      const policyParts: string[] = [];
+      if (conflictedRecords.length > 0) {
+        const skipCount = conflictedRecords.filter((c) => c.selectedPolicy === "skip").length;
+        const overwriteCount = conflictedRecords.filter((c) => c.selectedPolicy === "overwrite").length;
+        const mergeCount = conflictedRecords.filter((c) => c.selectedPolicy === "merge-fields").length;
+        if (skipCount > 0) policyParts.push(`${skipCount} ${skipCount === 1 ? "se omitirá" : "se omitirán"}`);
+        if (overwriteCount > 0) policyParts.push(`${overwriteCount} ${overwriteCount === 1 ? "se sobrescribirá" : "se sobrescribirán"}`);
+        if (mergeCount > 0) policyParts.push(`${mergeCount} ${mergeCount === 1 ? "se combinará" : "se combinarán"}`);
+      }
+      const policyNote = policyParts.length > 0 ? ` Conflictos: ${policyParts.join(", ")}.` : "";
+      const confidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
+        ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
+        : "";
+
       return {
         title: "Confirmar importación de agenda",
-        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
-          ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
-          : ""} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
+        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"
       };
     }
@@ -501,6 +527,26 @@ export const ImportExportPage = () => {
             </p>
           </button>
         </div>
+
+        {/* OIR-182 item 1: visible spinner while the file is being analysed */}
+        {isPreparingCsvPreview && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          >
+            <svg
+              className="h-5 w-5 animate-spin text-emerald-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span>Analizando el archivo, por favor espera…</span>
+          </div>
+        )}
 
         {csvPreview && (
           <CsvImportPreviewPanel
