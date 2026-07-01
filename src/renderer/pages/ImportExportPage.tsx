@@ -430,7 +430,7 @@ export const ImportExportPage = () => {
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Última actualización del dataset</p>
+            <p className="text-sm font-semibold text-slate-500">Última actualización</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{formatTimestamp(contacts.exportedAt)}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -478,7 +478,7 @@ export const ImportExportPage = () => {
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Reemplaza el directorio completo por un archivo válido. Acción destructiva con backup previo.
+              Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.
             </p>
             <p className="mt-4 text-sm font-semibold text-amber-900">
               {isImporting ? "Importando…" : "Seleccionar archivo"}

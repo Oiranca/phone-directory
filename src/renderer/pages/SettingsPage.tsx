@@ -534,7 +534,7 @@ export const SettingsPage = () => {
             <h3 className="text-sm font-semibold text-scs-blueDark">Qué cambia al guardar</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
               <li>El nombre del editor se aplicará a nuevas altas y futuras importaciones.</li>
-              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el dataset actual.</li>
+              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual.</li>
               <li>La carpeta de copias de seguridad debe existir y ser accesible antes de guardarla aquí.</li>
               <li>La preferencia de inactivos se usará como comportamiento inicial del directorio.</li>
               <li>Las copias de seguridad automáticas usan el prefijo <code>auto-backup-</code> y rotan según la retención indicada.</li>
