@@ -324,14 +324,22 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             {preview.fileName}
           </h3>
           {preview.detectedFormat && (
-            <p className="mt-2 text-sm text-emerald-900/80">
-              Tipo de archivo: {preview.detectedFormat}
-              {preview.detectionConfidence && preview.detectionConfidence !== "low"
-                ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})`
-                : preview.detectionConfidence === "low"
-                  ? " — formato no reconocido, revísalo con atención"
-                  : ""}
-            </p>
+            <>
+              <p className="mt-2 text-sm text-emerald-900/80">
+                Formato detectado: {preview.detectedFormat}
+                {preview.detectionConfidence ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})` : ""}
+              </p>
+              {preview.detectionConfidence === "medium" && (
+                <p className="mt-1 text-sm text-amber-800">
+                  Confianza media en la detección del formato. Revisa la vista previa.
+                </p>
+              )}
+              {preview.detectionConfidence === "low" && (
+                <p className="mt-1 text-sm text-red-800">
+                  No estamos seguros de haber leído bien el archivo. Revisa la vista previa antes de importar.
+                </p>
+              )}
+            </>
           )}
         </div>
         {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
@@ -340,7 +348,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             type="button"
             onClick={handleClose}
             disabled={isMutating}
-            className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
+            className="focus-ring rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
           >
             Cerrar vista previa
           </button>
@@ -684,7 +692,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {Object.entries(preview.typeCounts).length === 0 ? (
-              <span className="text-sm text-emerald-900/80">Sin registros válidos todavía.</span>
+              <span className="text-sm text-emerald-900/80">Aún no hay registros válidos.</span>
             ) : (
               Object.entries(preview.typeCounts).map(([type, count]) => (
                 <span key={type} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
@@ -872,14 +880,22 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {/* OIR-182 item 2: single sticky confirm footer — CTA appears in one place only */}
       <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isConfirmDisabled}
-            className="rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isImporting ? "Importando…" : "Confirmar importación"}
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            {hasUnresolvedConflicts && (
+              <p id="csv-confirm-disabled-hint" className="text-xs text-amber-800">
+                Resuelve todos los conflictos antes de confirmar.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isConfirmDisabled}
+              aria-describedby={hasUnresolvedConflicts ? "csv-confirm-disabled-hint" : undefined}
+              className="focus-ring rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {isImporting ? "Importando…" : "Confirmar importación"}
+            </button>
+          </div>
         </div>
       </div>
     </section>

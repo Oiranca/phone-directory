@@ -244,13 +244,8 @@ export const ImportExportPage = () => {
       }
 
       // OIR-182 items 9+10: single toast per action; gate "Todo listo" when conflicts exist.
+      // OIR-188: confidence note shown in panel — toast covers status/count only.
       const unresolvedCount = preview.conflictCount ?? 0;
-      const hasConfidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low";
-      const confidenceNote = hasConfidenceWarning
-        ? preview.detectionConfidence === "low"
-          ? " No estamos seguros de haber leído bien el archivo. Revisa la vista previa antes de importar."
-          : " Confianza media en la detección del formato. Revisa la vista previa."
-        : "";
 
       if (unresolvedCount > 0) {
         // Item 10: "Todo listo" is contradictory when conflicts still need resolving.
@@ -258,14 +253,14 @@ export const ImportExportPage = () => {
           type: "warning",
           message: `${unresolvedCount === 1
             ? "Hay 1 registro que ya existe en la agenda"
-            : `Hay ${unresolvedCount} registros que ya existen en la agenda`}. Para cada uno elige qué hacer antes de continuar.${confidenceNote}`
+            : `Hay ${unresolvedCount} registros que ya existen en la agenda`}. Para cada uno elige qué hacer antes de continuar.`
         });
       } else {
-        // Item 9: merge confidence note into the status toast — no second toast.
+        // Item 9: clean status/count toast — confidence note shown in panel.
         pushToast({
-          type: preview.warningCount > 0 || hasConfidenceWarning ? "warning" : "success",
-          message: preview.warningCount > 0 || hasConfidenceWarning
-            ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.${confidenceNote}`
+          type: preview.warningCount > 0 ? "warning" : "success",
+          message: preview.warningCount > 0
+            ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
             : `Todo listo: ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
         });
       }
@@ -460,7 +455,7 @@ export const ImportExportPage = () => {
             <p className="mt-2 text-sm font-medium text-slate-700">{formatTimestamp(contacts.exportedAt)}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Editor local</p>
+            <p className="text-sm font-semibold text-slate-500">Responsable local</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{settings.editorName || "Sin configurar"}</p>
           </div>
         </div>
@@ -470,7 +465,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleCreateBackup()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -485,7 +480,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleExport()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -500,7 +495,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => setPendingConfirmation({ kind: "import-json" })}
             disabled={isMutating}
-            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
@@ -516,9 +511,9 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isMutating}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
-            <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
+            <p className="text-lg font-semibold text-emerald-900">Importar CSV/ODS</p>
             <p className="mt-2 text-sm text-emerald-900/80">
               Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
             </p>
@@ -583,7 +578,7 @@ export const ImportExportPage = () => {
         <div className="mt-6 space-y-3">
           {backups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-              Todavía no hay copias de seguridad locales disponibles.
+              Aún no hay copias de seguridad locales disponibles.
             </div>
           ) : (
             backups.map((backup) => (
