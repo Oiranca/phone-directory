@@ -234,7 +234,7 @@ describe("CsvImportPreviewPanel", () => {
 
       const alert = screen.getByRole("alert");
       expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent("2 filas rechazadas");
+      expect(alert).toHaveTextContent("2 filas con errores");
     });
 
     it("disables the confirm button when invalid rows exist", () => {
@@ -306,7 +306,7 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel(allRejectedPreview);
 
       const alert = screen.getByRole("alert");
-      expect(alert).toHaveTextContent("2 filas rechazadas");
+      expect(alert).toHaveTextContent("2 filas con errores");
     });
 
     it("disables the confirm button", () => {
@@ -444,7 +444,7 @@ describe("CsvImportPreviewPanel", () => {
     it("blocks confirmation until conflict policies are selected", () => {
       renderPanel(conflictPreview);
 
-      expect(screen.getByRole("alert")).toHaveTextContent("Selecciona una política");
+      expect(screen.getByRole("alert")).toHaveTextContent("Para cada uno elige qué hacer");
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
 
@@ -935,7 +935,7 @@ describe("CsvImportPreviewPanel", () => {
     it("does not render format line when detectedFormat is absent", () => {
       renderPanel(basePreview);
 
-      expect(screen.queryByText(/Formato detectado:/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Tipo de archivo:/)).not.toBeInTheDocument();
     });
   });
 
@@ -965,7 +965,7 @@ describe("CsvImportPreviewPanel", () => {
         ]
       });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("1 fila rechazada");
+      expect(screen.getByRole("alert")).toHaveTextContent("1 fila con errores");
     });
   });
 
