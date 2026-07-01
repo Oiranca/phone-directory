@@ -164,7 +164,7 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Activar copia de seguridad automática" }));
-    fireEvent.change(screen.getByLabelText("Activación de la copia de seguridad automática"), {
+    fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
       target: { value: "intervalHours" }
     });
     fireEvent.change(screen.getByLabelText("Horas entre copias de seguridad automáticas"), {
@@ -173,7 +173,7 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Retención de copias de seguridad automáticas"), {
       target: { value: "999" }
     });
-    fireEvent.change(screen.getByLabelText("Activación de la copia de seguridad automática"), {
+    fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
       target: { value: "launch" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
