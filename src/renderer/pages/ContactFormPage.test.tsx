@@ -193,7 +193,7 @@ describe("ContactFormPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
 
     expect(await screen.findByText("Revisa los campos marcados antes de guardar.")).toBeInTheDocument();
-    expect(screen.getByText("El nombre visible es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("Falta el nombre del contacto.")).toBeInTheDocument();
     expect(screen.getByText("El teléfono es obligatorio.")).toBeInTheDocument();
     expect(window.hospitalDirectory.createRecord).not.toHaveBeenCalled();
   });
@@ -347,7 +347,7 @@ describe("ContactFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
 
       // Wait for the inline error to appear, then check focus
-      await screen.findByText("El nombre visible es obligatorio.");
+      await screen.findByText("Falta el nombre del contacto.");
       expect(document.activeElement).toBe(screen.getByLabelText(/nombre visible/i));
     });
 

@@ -273,7 +273,6 @@ export interface ConflictSocialSummary {
  */
 export interface ConflictRecordSummary {
   id?: string;
-  externalId?: string;
   displayName: string;
   department?: string;
   service?: string;
@@ -307,7 +306,7 @@ export interface ConflictedImportRecord {
   /**
    * The specific value that triggered the match (OIR-132).
    * For phone-match: the normalized phone number. For email-match: the email address.
-   * For external-id-match: the externalId. Used to highlight the matching field in the diff UI.
+   * Not populated for external-id-match (raw IDs are not rendered to the user).
    */
   matchingFieldValue?: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
