@@ -101,7 +101,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
       const alert = previewPanel.getByRole("alert");
       await expect(alert).toBeVisible();
-      await expect(alert).toContainText("filas rechazadas");
+      await expect(alert).toContainText("filas con errores que no se importarán");
 
       // Row table shows rejected badges
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -112,7 +112,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
 
       // Error message toast
-      await expect(page.getByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeVisible();
+      await expect(page.getByText("Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo.")).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);

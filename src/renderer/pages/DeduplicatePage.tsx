@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -85,6 +85,30 @@ export const DeduplicatePage = () => {
     discardRecord: { id: string; displayName: string };
   } | null>(null);
 
+  // Focus restoration refs
+  // triggerRef — the "Fusionar" button that opened the confirm dialog
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // headingRef — the page heading, focused when no pairs remain after merge
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // pendingFocusRef — flag set before state updates to trigger focus restore in effect
+  const pendingFocusRef = useRef<boolean>(false);
+
+  // Restore focus after pairStates changes following a merge confirmation
+  useEffect(() => {
+    if (!pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    // Try to focus the first "Conservar este" button in the updated list
+    const firstKeepBtn = document.querySelector<HTMLButtonElement>("[data-keep-btn]");
+    if (firstKeepBtn) {
+      firstKeepBtn.focus();
+    } else {
+      // No more pairs — focus the heading (which is rendered only when pairs exist,
+      // so fall back to the section heading ref; if the empty state is shown instead,
+      // headingRef.current will be null and focus gracefully stays on body).
+      headingRef.current?.focus();
+    }
+  }, [pairStates]);
+
   const handleDismissPair = (pairId: string) => {
     setPairStates((current) => current.filter((ps) => ps.pair.id !== pairId));
     writeDismissedPairId(storageKey, pairId);
@@ -125,10 +149,13 @@ export const DeduplicatePage = () => {
     );
   };
 
-  const handleMergeClick = (pairState: PairState) => {
+  const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
     if (!pairState.keepId) {
       return;
     }
+
+    // Store trigger so focus can be restored on cancel
+    triggerRef.current = triggerEl;
 
     const keepRecord =
       pairState.pair.recordA.id === pairState.keepId
@@ -144,6 +171,14 @@ export const DeduplicatePage = () => {
       pairId: pairState.pair.id,
       keepRecord: { id: keepRecord.id, displayName: keepRecord.displayName },
       discardRecord: { id: discardRecord.id, displayName: discardRecord.displayName }
+    });
+  };
+
+  const handleCancelDialog = () => {
+    setConfirmState(null);
+    // Restore focus to the button that triggered the dialog
+    requestAnimationFrame(() => {
+      triggerRef.current?.focus();
     });
   };
 
@@ -176,11 +211,17 @@ export const DeduplicatePage = () => {
       pushToast({ type: "error", message });
       setMergingId(null);
       setConfirmState(null);
+      // Restore focus to the trigger button on failure too
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
+      });
       return;
     }
 
     // Stage B: merge committed — show success, then refresh the list
     pushToast({ type: "success", message: "Duplicado fusionado correctamente" });
+    // Signal that the next pairStates update should restore focus
+    pendingFocusRef.current = true;
 
     try {
       // Refresh all pairs to clear any pairs that referenced the discarded record
@@ -195,9 +236,15 @@ export const DeduplicatePage = () => {
       // Refresh failed but the merge already committed — warn the operator to
       // reload rather than applying a partial local filter that could mask the
       // true list state.
+      pendingFocusRef.current = false;
       pushToast({
         type: "warning",
         message: "La fusión se completó, pero la lista no pudo actualizarse. Recarga la página para ver los cambios."
+      });
+      // Focus was never restored by the pairStates effect (refresh didn't fire
+      // setPairStates), so explicitly return focus to the trigger button now.
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
       });
     } finally {
       setMergingId(null);
@@ -207,8 +254,20 @@ export const DeduplicatePage = () => {
 
   if (isLoading) {
     return (
-      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">
-        Buscando duplicados…
+      <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-8 shadow-panel">
+        <div className="flex items-center gap-3 text-slate-700">
+          <svg
+            className="h-5 w-5 animate-spin text-scs-blue"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>Buscando duplicados…</span>
+        </div>
       </section>
     );
   }
@@ -271,7 +330,13 @@ export const DeduplicatePage = () => {
   return (
     <section aria-labelledby="deduplicate-page-title" className="flex flex-col gap-5">
       <div className="rounded-3xl bg-white p-5 shadow-panel">
-        <h2 id="deduplicate-page-title" className="text-2xl font-semibold text-scs-blueDark">
+        {/* tabIndex={-1} allows programmatic focus after all pairs are merged */}
+        <h2
+          id="deduplicate-page-title"
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-2xl font-semibold text-scs-blueDark focus:outline-none"
+        >
           Duplicados detectados
         </h2>
         <p className="mt-1 text-sm text-slate-500">
@@ -331,12 +396,14 @@ export const DeduplicatePage = () => {
                           ))}
                         </ul>
                       )}
+                      {/* Fix 5: min-h-[44px] min-w-[44px] ensures WCAG 2.5.5 touch target ≥44×44px */}
                       <button
                         type="button"
+                        data-keep-btn
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[
-                          "focus-ring mt-4 w-full rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60",
+                          "focus-ring mt-4 min-h-[44px] min-w-[44px] w-full rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60",
                           isSelected
                             ? "bg-scs-blue text-white"
                             : "border border-slate-300 bg-white text-slate-700 hover:border-scs-blue hover:text-scs-blue"
@@ -368,13 +435,29 @@ export const DeduplicatePage = () => {
                   No son el mismo contacto
                 </button>
                 {keepId && (
+                  /* Fix 1: amber/warning styling + ⚠ icon to communicate destructive/irreversible action */
                   <button
                     type="button"
-                    onClick={() => handleMergeClick(pairState)}
+                    onClick={(e) => handleMergeClick(pairState, e.currentTarget)}
                     disabled={!!mergingId}
-                    className="focus-ring rounded-2xl bg-scs-blue px-6 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
+                    className="focus-ring inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
                   >
-                    {isMerging ? "Fusionando…" : "Fusionar"}
+                    {isMerging ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Fusionando…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                        Fusionar
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -383,14 +466,19 @@ export const DeduplicatePage = () => {
         })}
       </div>
 
+      {/* Fix 2: unambiguous copy — explicitly states which contact will be deleted */}
       <ConfirmDialog
         isOpen={!!confirmState}
         title="Confirmar fusión"
-        message={confirmState ? `¿Fusionar "${confirmState.discardRecord.displayName}" en "${confirmState.keepRecord.displayName}"? Esta acción no se puede deshacer.` : ""}
+        message={
+          confirmState
+            ? `Se eliminará el contacto "${confirmState.discardRecord.displayName}" y sus datos únicos se añadirán a "${confirmState.keepRecord.displayName}". Esta acción no se puede deshacer.`
+            : ""
+        }
         confirmLabel="Fusionar"
         cancelLabel="Cancelar"
         onConfirm={() => void handleConfirmMerge()}
-        onCancel={() => setConfirmState(null)}
+        onCancel={handleCancelDialog}
         isDestructive={true}
       />
     </section>
