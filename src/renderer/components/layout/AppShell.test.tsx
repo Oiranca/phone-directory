@@ -59,9 +59,9 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
-  it("shows Offline badge", () => {
+  it("shows Local badge", () => {
     renderShell();
-    expect(screen.getByText("Offline")).toBeInTheDocument();
+    expect(screen.getByText("Local")).toBeInTheDocument();
   });
 
   it("does not show recovery banner", () => {
@@ -223,7 +223,7 @@ describe("AppShell — recovery mode", () => {
     renderShell({ isRecoveryMode: true });
     expect(
       screen.getByText(
-        "El directorio está bloqueado hasta importar una copia JSON válida o restablecer un dataset vacío."
+        "El directorio está bloqueado hasta importar una copia de seguridad válida o restablecer un directorio vacío."
       )
     ).toBeInTheDocument();
   });

@@ -65,7 +65,7 @@ export const ContactFormPage = () => {
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
+            Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del directorio.
           </p>
         </div>
         <Link
@@ -140,7 +140,7 @@ export const ContactFormPage = () => {
                 value={formState.aliases.join(", ")}
                 onChange={(event) => setCommaSeparatedField("aliases", event.target.value)}
                 placeholder="mostrador admisión, centralita"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
             <div>
@@ -152,7 +152,7 @@ export const ContactFormPage = () => {
                 value={formState.tags.join(", ")}
                 onChange={(event) => setCommaSeparatedField("tags", event.target.value)}
                 placeholder="admisión, urgencias"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
           </section>
@@ -166,7 +166,7 @@ export const ContactFormPage = () => {
               value={formState.notes ?? ""}
               onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
               rows={6}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
             />
           </section>
         </div>

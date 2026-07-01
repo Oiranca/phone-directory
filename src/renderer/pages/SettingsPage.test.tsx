@@ -269,7 +269,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
     expect((await screen.findAllByText("Ruta inválida")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Cargar rutas gestionadas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cargar rutas predeterminadas" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.getSettingsDefaults).toHaveBeenCalledTimes(1);
@@ -294,7 +294,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Cargar rutas gestionadas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cargar rutas predeterminadas" })).not.toBeInTheDocument();
   });
 
   it("offers managed path reset when the page mounts with existing settings", async () => {
@@ -325,7 +325,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar rutas gestionadas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cargar rutas predeterminadas" })).toBeInTheDocument();
   });
 
   it("Browse data file: successful pick populates the input and marks form dirty", async () => {
@@ -408,7 +408,7 @@ describe("SettingsPage", () => {
   });
 
   it("Browse buttons are re-enabled after path reset returns", async () => {
-    // Produce a path-related save error so "Cargar rutas gestionadas" becomes available.
+    // Produce a path-related save error so "Cargar rutas predeterminadas" becomes available.
     window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValueOnce(
       new Error("Ruta inválida")
     );
@@ -420,7 +420,7 @@ describe("SettingsPage", () => {
       target: { value: "/tmp/data/existente.json" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
-    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
+    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas predeterminadas" });
     expect(resetBtn).toBeInTheDocument();
 
     // At this point the managed reset action is already available, so this test exercises
@@ -484,7 +484,7 @@ describe("SettingsPage", () => {
     expect(discardBtn.className).toContain("focus-ring");
   });
 
-  it("Cargar rutas gestionadas button carries focus-ring", async () => {
+  it("Cargar rutas predeterminadas button carries focus-ring", async () => {
     window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("Ruta inválida"));
 
     renderPage();
@@ -495,7 +495,7 @@ describe("SettingsPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
-    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
+    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas predeterminadas" });
     expect(resetBtn.className).toContain("focus-ring");
   });
 
