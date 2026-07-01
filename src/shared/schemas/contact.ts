@@ -250,7 +250,7 @@ export const editableContactRecordSchema = z.object({
   type: z.enum(RECORD_TYPES, {
     errorMap: () => ({ message: "Selecciona un tipo de registro válido." })
   }),
-  displayName: z.string().trim().min(1, "El nombre visible es obligatorio."),
+  displayName: z.string().trim().min(1, "Falta el nombre del contacto."),
   person: z.object({
     firstName: optionalTextField(),
     lastName: optionalTextField()

@@ -12,6 +12,7 @@ type Props = {
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   updateEmail: (emailId: string, patch: Partial<EditableEmailContact>) => void;
   removeEmail: (emailId: string) => void;
+  clearFieldError?: (path: string) => void;
 };
 
 export const EmailsSection = ({
@@ -23,7 +24,8 @@ export const EmailsSection = ({
   setLiveMessage,
   setPendingFocusTarget,
   updateEmail,
-  removeEmail
+  removeEmail,
+  clearFieldError
 }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -56,14 +58,15 @@ export const EmailsSection = ({
       </button>
     </div>
 
-    <div className="space-y-4">
+    <ul className="space-y-4">
       {emails.map((email, index) => (
-        <div key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+        <li key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-700">Correo {index + 1}</p>
+            <h4 className="text-sm font-semibold text-slate-700">Correo {index + 1}</h4>
             <button
               type="button"
               onClick={() => removeEmail(email.id)}
+              aria-label={email.address.trim() ? `Eliminar email ${email.address.trim()}` : `Eliminar email ${index + 1}`}
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
@@ -83,6 +86,7 @@ export const EmailsSection = ({
             <div>
               <label htmlFor={`email-address-${email.id}`} className="text-sm font-medium text-slate-700">Correo electrónico</label>
               <input
+                type="email"
                 id={`email-address-${email.id}`}
                 ref={(element) => {
                   if (emailAddressInputRefs.current) {
@@ -90,7 +94,10 @@ export const EmailsSection = ({
                   }
                 }}
                 value={email.address}
-                onChange={(event) => updateEmail(email.id, { address: event.target.value })}
+                onChange={(event) => {
+                  clearFieldError?.(`contactMethods.emails.${index}.address`);
+                  updateEmail(email.id, { address: event.target.value });
+                }}
                 aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}
                 aria-describedby={fieldErrors[`contactMethods.emails.${index}.address`] ? `email-address-${email.id}-error` : undefined}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
@@ -111,8 +118,8 @@ export const EmailsSection = ({
             />
             Principal
           </label>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   </section>
 );

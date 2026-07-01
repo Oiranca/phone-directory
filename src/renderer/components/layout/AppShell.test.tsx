@@ -59,9 +59,9 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
-  it("shows Offline badge", () => {
+  it("shows Local badge", () => {
     renderShell();
-    expect(screen.getByText("Offline")).toBeInTheDocument();
+    expect(screen.getByText("Local")).toBeInTheDocument();
   });
 
   it("does not show recovery banner", () => {
@@ -83,11 +83,11 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("main")).toHaveClass("focus-ring");
   });
 
-  it("focuses directory search with slash when focus is not in text entry", () => {
+  it("focuses data-keyboard-search input with slash when focus is not in text entry", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-keyboard-search aria-label="Buscar contactos" />
         </AppShell>
       </MemoryRouter>
     );
@@ -101,7 +101,7 @@ describe("AppShell — default mode", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-keyboard-search aria-label="Buscar contactos" />
           <input aria-label="Campo activo" />
         </AppShell>
       </MemoryRouter>

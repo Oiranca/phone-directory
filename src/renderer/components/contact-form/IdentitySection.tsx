@@ -8,28 +8,33 @@ type Props = {
   fieldErrors: Record<string, string>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
   displayNameInputRef?: React.RefObject<HTMLInputElement>;
+  clearFieldError?: (path: string) => void;
 };
 
-export const IdentitySection = ({ formState, fieldErrors, setFormState, displayNameInputRef }: Props) => (
+export const IdentitySection = ({ formState, fieldErrors, setFormState, displayNameInputRef, clearFieldError }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
     <div>
       <label htmlFor="displayName" className="text-sm font-medium text-slate-700">
-        Nombre visible<span aria-hidden="true" className="ml-1 text-red-600">*</span>
+        Nombre visible<span aria-hidden="true" className="ml-1 text-scs-danger">*</span>
       </label>
       <input
         ref={displayNameInputRef}
         id="displayName"
         value={formState.displayName}
-        onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
+        onChange={(event) => {
+          clearFieldError?.("displayName");
+          setFormState((current) => ({ ...current, displayName: event.target.value }));
+        }}
         required
         aria-required="true"
         aria-invalid={!!fieldErrors.displayName}
         aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
+        placeholder="Ej. Ana García"
         className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
       />
       {fieldErrors.displayName && (
-        <p id="displayName-error" role="alert" className="mt-2 text-sm text-red-600">
+        <p id="displayName-error" role="alert" className="mt-2 text-sm text-scs-danger">
           {fieldErrors.displayName}
         </p>
       )}
@@ -105,7 +110,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
 
     <div>
       <label htmlFor="externalId" className="text-sm font-medium text-slate-700">
-        ID externo
+        Identificador externo
       </label>
       <input
         id="externalId"
