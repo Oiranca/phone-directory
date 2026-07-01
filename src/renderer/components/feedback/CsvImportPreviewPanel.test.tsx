@@ -1773,4 +1773,103 @@ describe("CsvImportPreviewPanel", () => {
       );
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Privacy + copy policy assertions (OIR-181)
+  // ---------------------------------------------------------------------------
+  describe("privacy and jargon policy (OIR-181)", () => {
+    it("does not render the raw external ID value for external_id conflicts", () => {
+      // The matchingFieldValue for external-id-match must never surface to the user.
+      // Even if the payload still contains one (e.g., older IPC version), the renderer
+      // must suppress it. This test asserts the policy end-to-end.
+      renderPanel({
+        ...basePreview,
+        fileName: "privacy-check.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-priv-1",
+              displayName: "Consulta Externa",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-priv-1",
+              displayName: "Consulta Externa actual",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id",
+            // raw machine ID — must not appear in rendered output
+            matchingFieldValue: "ID-RAW-12345"
+          }
+        ]
+      });
+
+      // The human-readable reason label must be present
+      expect(screen.getByText(/Este contacto ya existe en la agenda/)).toBeInTheDocument();
+
+      // The raw internal identifier must not appear anywhere in the rendered output
+      expect(screen.queryByText(/ID-RAW-12345/)).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("ID-RAW-12345");
+    });
+
+    it("rendered conflict panel does not contain jargon terms banned by OIR-181", () => {
+      // Regression guard: ensure no banned anglicisms or internal jargon surface
+      // in the conflict-resolution UI after the OIR-181 copy pass.
+      renderPanel({
+        ...basePreview,
+        fileName: "jargon-check.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-jargon-1",
+              displayName: "Mostrador importado",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-jargon-1",
+              displayName: "Mostrador actual",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      });
+
+      const body = document.body.textContent ?? "";
+      // None of these jargon terms should appear in user-facing copy
+      expect(body).not.toMatch(/\bdataset\b/i);
+      expect(body).not.toMatch(/\bbackup\b/i);
+      expect(body).not.toMatch(/\bdestructiva\b/i);
+    });
+  });
 });
