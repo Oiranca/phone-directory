@@ -217,38 +217,20 @@ export const DeduplicatePage = () => {
   // Error state: detection failure
   if (loadError) {
     return (
-      <section
+      <StatePanel
         role="alert"
-        className="rounded-3xl border-2 border-red-200 bg-red-50 p-8 shadow-panel"
-      >
-        <div className="flex flex-col items-start gap-4">
-          <div className="flex items-start gap-3">
-            <svg
-              className="mt-1 h-6 w-6 flex-shrink-0 text-red-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4v2m0-10a8 8 0 110 16 8 8 0 010-16z"
-              />
-            </svg>
-            <div>
-              <p className="font-semibold text-red-900">No se pudo cargar duplicados</p>
-              <p className="mt-1 text-sm text-red-700">{loadError}</p>
-            </div>
-          </div>
+        title="No se pudo cargar duplicados"
+        message={loadError}
+        action={
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+            className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
           >
             Reintentar
           </button>
-        </div>
-      </section>
+        }
+      />
     );
   }
 

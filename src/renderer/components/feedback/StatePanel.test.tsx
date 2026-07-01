@@ -46,4 +46,25 @@ describe('StatePanel', () => {
     render(<StatePanel title="Warning" message="Check this state." titleAs="h2" />);
     expect(screen.getByRole('heading', { level: 2, name: 'Warning' })).toBeInTheDocument();
   });
+
+  it('uses role="alert" and aria-live="assertive" for error states', () => {
+    const { container } = render(
+      <StatePanel role="alert" title="Error al cargar" message="No se pudieron cargar los datos." />
+    );
+    const panel = container.firstChild as HTMLElement;
+    expect(panel).toHaveAttribute('role', 'alert');
+    expect(panel).toHaveAttribute('aria-live', 'assertive');
+  });
+
+  it('renders an action element when role="alert"', () => {
+    render(
+      <StatePanel
+        role="alert"
+        title="Error"
+        message="Fallo al cargar."
+        action={<button type="button">Reintentar</button>}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+  });
 });

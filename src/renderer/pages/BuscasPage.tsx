@@ -185,21 +185,20 @@ export const BuscasPage = () => {
             Registro de Buscas
           </h2>
         </div>
-        <div
+        <StatePanel
           role="alert"
-          className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center shadow-panel"
-        >
-          <p className="mb-4 text-sm font-medium text-red-900">
-            No se pudieron cargar los registros de buscas.
-          </p>
-          <button
-            type="button"
-            onClick={() => void loadBuscas()}
-            className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
-          >
-            Reintentar
-          </button>
-        </div>
+          title="Error al cargar"
+          message="No se pudieron cargar los registros de buscas."
+          action={
+            <button
+              type="button"
+              onClick={() => void loadBuscas()}
+              className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+            >
+              Reintentar
+            </button>
+          }
+        />
       </section>
     );
   }
