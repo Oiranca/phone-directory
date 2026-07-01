@@ -59,11 +59,11 @@ export const PhonesSection = ({
       </button>
     </div>
 
-    <div className="space-y-4">
+    <ul className="space-y-4">
       {phones.map((phone, index) => (
-        <div key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+        <li key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</p>
+            <h4 className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</h4>
             <button
               type="button"
               onClick={() => removePhone(phone.id)}
@@ -89,6 +89,7 @@ export const PhonesSection = ({
                 Número<span aria-hidden="true" className="ml-1 text-red-600">*</span>
               </label>
               <input
+                type="tel"
                 id={`phone-number-${phone.id}`}
                 ref={(element) => {
                   if (phoneNumberInputRefs.current) {
@@ -176,8 +177,8 @@ export const PhonesSection = ({
               No facilitar a pacientes
             </label>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   </section>
 );

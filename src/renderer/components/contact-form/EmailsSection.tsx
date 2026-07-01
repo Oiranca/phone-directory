@@ -58,11 +58,11 @@ export const EmailsSection = ({
       </button>
     </div>
 
-    <div className="space-y-4">
+    <ul className="space-y-4">
       {emails.map((email, index) => (
-        <div key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+        <li key={email.id} className="rounded-3xl border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-700">Correo {index + 1}</p>
+            <h4 className="text-sm font-semibold text-slate-700">Correo {index + 1}</h4>
             <button
               type="button"
               onClick={() => removeEmail(email.id)}
@@ -86,6 +86,7 @@ export const EmailsSection = ({
             <div>
               <label htmlFor={`email-address-${email.id}`} className="text-sm font-medium text-slate-700">Correo electrónico</label>
               <input
+                type="email"
                 id={`email-address-${email.id}`}
                 ref={(element) => {
                   if (emailAddressInputRefs.current) {
@@ -117,8 +118,8 @@ export const EmailsSection = ({
             />
             Principal
           </label>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   </section>
 );

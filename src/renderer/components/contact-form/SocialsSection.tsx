@@ -77,11 +77,11 @@ export const SocialsSection = ({
         </button>
       </div>
 
-      <div className="space-y-4">
+      <ul className="space-y-4">
         {socials.map((social, index) => (
-          <div key={social.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+          <li key={social.id} className="rounded-3xl border border-slate-200 bg-white p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-slate-700">Red social {index + 1}</p>
+              <h4 className="text-sm font-semibold text-slate-700">Red social {index + 1}</h4>
               <button
                 type="button"
                 onClick={() => {
@@ -123,6 +123,7 @@ export const SocialsSection = ({
               <div>
                 <label htmlFor={`social-url-${social.id}`} className="text-sm font-medium text-slate-700">URL</label>
                 <input
+                  type="url"
                   id={`social-url-${social.id}`}
                   value={social.url ?? ""}
                   onChange={(event) => updateSocial(social.id, { url: event.target.value })}
@@ -151,9 +152,9 @@ export const SocialsSection = ({
                 Principal
               </label>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 };
