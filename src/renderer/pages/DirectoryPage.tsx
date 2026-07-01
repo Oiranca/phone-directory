@@ -398,6 +398,7 @@ export const DirectoryPage = () => {
               </label>
               <input
                 id="directory-search"
+                data-keyboard-search
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar contacto o servicio"

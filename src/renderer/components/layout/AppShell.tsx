@@ -88,7 +88,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       }
 
       if (event.key === "/" && !isTextEntryElement(event.target)) {
-        const searchInput = document.getElementById("directory-search") as HTMLInputElement | null;
+        const searchInput = document.querySelector<HTMLInputElement>("[data-keyboard-search]");
         if (searchInput) {
           event.preventDefault();
           searchInput.focus();
@@ -125,7 +125,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
               <h1 className="font-serif text-2xl font-semibold leading-none text-scs-blueDark sm:text-3xl">Agenda</h1>
             </div>
             <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
-              {isRecoveryMode ? "Recuperación" : "Offline"}
+              {isRecoveryMode ? "Recuperación" : "Local"}
             </div>
           </div>
           {isRecoveryMode ? (

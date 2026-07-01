@@ -493,7 +493,12 @@ export const SettingsPage = () => {
 
         <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div>
-            <p className="text-sm font-semibold text-slate-500">Estado actual</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-500">Estado actual</p>
+              {isDirty && (
+                <p className="text-xs font-medium text-amber-700">Cambios sin guardar</p>
+              )}
+            </div>
             <dl className="mt-3 space-y-3 text-sm text-slate-700">
               <div>
                 <dt className="font-medium text-slate-500">Editor activo</dt>
