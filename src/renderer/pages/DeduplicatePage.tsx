@@ -241,6 +241,11 @@ export const DeduplicatePage = () => {
         type: "warning",
         message: "La fusión se completó, pero la lista no pudo actualizarse. Recarga la página para ver los cambios."
       });
+      // Focus was never restored by the pairStates effect (refresh didn't fire
+      // setPairStates), so explicitly return focus to the trigger button now.
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
+      });
     } finally {
       setMergingId(null);
       setConfirmState(null);

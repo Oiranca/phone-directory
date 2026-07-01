@@ -314,6 +314,43 @@ describe("DeduplicatePage", () => {
         expect(survivor!.displayName).toBe("Admisión General (fusionado)");
       });
     });
+
+    it("closes the confirm dialog and restores focus after merge-success + refresh-failure (OIR-183)", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Click the page-level Fusionar button (the trigger element for focus restore)
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      // Give the button a chance to receive focus so triggerRef can capture it
+      mergeBtn.focus();
+      fireEvent.click(mergeBtn);
+
+      // Click the dialog confirm button
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      // The confirm dialog must close even when refresh fails
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+
+      // The success toast must still be visible (merge committed before refresh attempt)
+      expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
+
+      // The warning toast confirms graceful degradation fired
+      expect(
+        await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/)
+      ).toBeInTheDocument();
+
+      // Focus must be returned to a stable element — the trigger button that opened the
+      // dialog. requestAnimationFrame is flushed by jsdom on the next microtask tick.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(mergeBtn);
+      });
+    });
   });
 
   describe("dismiss pair", () => {
