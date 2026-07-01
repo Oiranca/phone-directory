@@ -1616,7 +1616,7 @@ describe("CsvImportPreviewPanel", () => {
 
       // Select first conflict on page 1 (recordIndex 0 → displayName "Importado 1")
       const selectFirstConflict = () =>
-        screen.getByRole("checkbox", { name: "Seleccionar Importado 1" });
+        screen.getByRole("checkbox", { name: "Seleccionar Importado 1 (fila 1)" });
       fireEvent.click(selectFirstConflict());
       expect(selectFirstConflict()).toBeChecked();
 
