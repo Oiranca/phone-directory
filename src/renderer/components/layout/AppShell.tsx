@@ -122,7 +122,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-scs-blue">Agenda Hospitalaria</p>
-              <h1 className="font-serif text-2xl font-semibold leading-none text-scs-blueDark sm:text-3xl">MVP local</h1>
+              <h1 className="font-serif text-2xl font-semibold leading-none text-scs-blueDark sm:text-3xl">Agenda</h1>
             </div>
             <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
               {isRecoveryMode ? "Recuperación" : "Offline"}
