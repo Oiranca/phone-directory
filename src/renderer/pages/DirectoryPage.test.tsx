@@ -485,7 +485,7 @@ describe("DirectoryPage", () => {
       target: { value: "sin-coincidencias" }
     });
 
-    expect(await screen.findByText("No hay resultados para la búsqueda y filtros actuales.")).toHaveAttribute("role", "status");
+    expect(await screen.findByText("No se han encontrado resultados para esta búsqueda.")).toHaveAttribute("role", "status");
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 

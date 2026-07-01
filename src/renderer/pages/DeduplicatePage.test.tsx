@@ -112,7 +112,7 @@ describe("DeduplicatePage", () => {
 
     expect(await screen.findAllByText("Admisión General")).toHaveLength(2);
     expect(screen.getByText("Similitud 90%")).toBeInTheDocument();
-    expect(screen.getByText("displayName")).toBeInTheDocument();
+    expect(screen.getByText("Nombre idéntico")).toBeInTheDocument();
   });
 
   it("renders department and phone number for each record", async () => {
@@ -137,7 +137,7 @@ describe("DeduplicatePage", () => {
 
     expect(screen.queryByRole("button", { name: "Fusionar" })).not.toBeInTheDocument();
 
-    const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+    const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
     fireEvent.click(keepButtons[0]!);
 
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("DeduplicatePage", () => {
       await screen.findAllByText("Admisión General");
 
       // Select record to keep
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       // Open confirm dialog (page-level Fusionar button)
@@ -273,7 +273,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
@@ -540,7 +540,7 @@ describe("DeduplicatePage", () => {
 
       const recordsBefore = useAppStore.getState().contacts!.records.map((r) => r.id);
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       // Open confirm dialog
@@ -564,7 +564,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
@@ -585,6 +585,172 @@ describe("DeduplicatePage", () => {
     });
   });
 
+  // ── OIR-183 P1 fixes ─────────────────────────────────────────────────────────
+
+  describe("OIR-183 Fix 1 — Fusionar button uses amber/warning styling, not primary blue", () => {
+    it("Fusionar button has amber background class after selecting a record", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      expect(mergeBtn).toHaveClass("bg-amber-500");
+      expect(mergeBtn).not.toHaveClass("bg-scs-blue");
+    });
+
+    it("Fusionar button contains an aria-hidden warning icon svg", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      const icon = mergeBtn.querySelector('svg[aria-hidden="true"]');
+      expect(icon).not.toBeNull();
+    });
+  });
+
+  describe("OIR-183 Fix 2 — ConfirmDialog explicitly names the contact being deleted", () => {
+    it("dialog message contains 'Se eliminará el contacto' and the discard record name", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
+
+      // The dialog message must explicitly state which contact is being eliminated
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog).toHaveTextContent("Se eliminará el contacto");
+      // The discard record's displayName (recordB since we kept recordA) must appear
+      expect(dialog).toHaveTextContent("Admisión General");
+    });
+
+    it("dialog message does not use the ambiguous phrasing '¿Fusionar' alone", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
+
+      const dialog = await screen.findByRole("dialog");
+      // Old ambiguous message started with "¿Fusionar" — must not be present
+      expect(dialog).not.toHaveTextContent("¿Fusionar");
+    });
+  });
+
+  describe("OIR-183 Fix 3 — Focus restore after dialog/merge", () => {
+    it("page heading has tabIndex=-1 to allow programmatic focus after merge", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const heading = screen.getByRole("heading", { name: "Duplicados detectados" });
+      expect(heading).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("'Conservar este' buttons have data-keep-btn attribute for focus targeting", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      for (const btn of keepButtons) {
+        expect(btn).toHaveAttribute("data-keep-btn");
+      }
+    });
+  });
+
+  describe("OIR-183 Fix 4 — Spinner during detectDuplicates", () => {
+    it("shows aria-busy=true on the loading section", async () => {
+      // Override detectDuplicates to never resolve so we can inspect loading state
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      const statusSection = screen.getByRole("status");
+      expect(statusSection).toHaveAttribute("aria-busy", "true");
+
+      // Cleanup: resolve the promise to avoid hanging
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+
+    it("shows the spinner svg with animate-spin class during loading", async () => {
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      const statusSection = screen.getByRole("status");
+      const spinner = statusSection.querySelector('svg.animate-spin');
+      expect(spinner).not.toBeNull();
+
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+
+    it("shows loading text 'Buscando duplicados…' while loading", async () => {
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      expect(screen.getByText("Buscando duplicados…")).toBeInTheDocument();
+
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+  });
+
+  describe("OIR-183 Fix 5 — 'Conservar este' touch target ≥44px", () => {
+    it("'Conservar este' buttons have min-h-[44px] class for WCAG 2.5.5", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(keepButtons.length).toBeGreaterThan(0);
+      for (const btn of keepButtons) {
+        expect(btn).toHaveClass("min-h-[44px]");
+      }
+    });
+
+    it("'Conservar este' buttons have min-w-[44px] class for WCAG 2.5.5", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      for (const btn of keepButtons) {
+        expect(btn).toHaveClass("min-w-[44px]");
+      }
+    });
+  });
+
+  // ── End OIR-183 P1 fixes ────────────────────────────────────────────────────
+
   describe("merge loss preview — OIR-175", () => {
     it("does not show the preview panel before any keepId is selected", async () => {
       renderPage();
@@ -598,7 +764,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByRole("note", { name: "Resumen de la fusión" })).toBeInTheDocument();
@@ -608,7 +774,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByText(/teléfonos, correos y etiquetas/)).toBeInTheDocument();
@@ -618,7 +784,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByText(/notas/)).toBeInTheDocument();
@@ -668,7 +834,7 @@ describe("DeduplicatePage", () => {
         await screen.findByText("Dra. Martínez");
 
         // Select first record (Cardiología) as keeper
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching the record card's department text
@@ -681,7 +847,7 @@ describe("DeduplicatePage", () => {
         renderPage();
         await screen.findByText("Dra. Martínez");
 
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching the record card's name text
@@ -694,7 +860,7 @@ describe("DeduplicatePage", () => {
         renderPage();
         await screen.findByText("Dra. Martínez");
 
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching phone numbers in the record cards

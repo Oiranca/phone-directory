@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
@@ -238,7 +238,10 @@ export type UseContactFormResult = {
   addEmailButtonRef: React.RefObject<HTMLButtonElement>;
   phoneNumberInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   emailAddressInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
+  /** Tracks whether the user has made unsaved changes. Reset on load and after successful save. */
+  isDirtyRef: React.MutableRefObject<boolean>;
   // mutation callbacks
+  clearFieldError: (path: string) => void;
   setCommaSeparatedField: (key: "aliases" | "tags", rawValue: string) => void;
   updatePhone: (phoneId: string, patch: Partial<EditablePhoneContact>) => void;
   removePhone: (phoneId: string) => void;
@@ -264,8 +267,33 @@ export const useContactForm = (): UseContactFormResult => {
     ensureBootstrapLoaded
   } = useAppStore();
   const { pushToast } = useToast();
-  const [formState, setFormState] = useState<ContactFormState>(() => createEmptyFormState());
+  const [formState, setFormStateRaw] = useState<ContactFormState>(() => createEmptyFormState());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  /**
+   * Ref-based dirty flag — updated synchronously so the useBlocker callback
+   * always reads the latest value when a navigation is attempted.
+   */
+  const isDirtyRef = useRef<boolean>(false);
+
+  /**
+   * User-facing state setter: marks the form as dirty whenever the user
+   * makes any change. Internal reset paths use setFormStateRaw directly.
+   */
+  const setFormState = useCallback<React.Dispatch<React.SetStateAction<ContactFormState>>>((action) => {
+    isDirtyRef.current = true;
+    setFormStateRaw(action);
+  }, [setFormStateRaw]);
+
+  /** Clears a single field error by dot-path (e.g. "displayName", "contactMethods.phones.0.number"). */
+  const clearFieldError = useCallback((path: string) => {
+    setFieldErrors((current) => {
+      if (!(path in current)) return current;
+      const next = { ...current };
+      delete next[path];
+      return next;
+    });
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const [pendingFocusTarget, setPendingFocusTarget] = useState<PendingFocusTarget | null>(null);
@@ -286,13 +314,15 @@ export const useContactForm = (): UseContactFormResult => {
 
   useEffect(() => {
     if (isEditing && existingRecord) {
-      setFormState(toFormState(existingRecord));
+      isDirtyRef.current = false;
+      setFormStateRaw(toFormState(existingRecord));
       setFieldErrors({});
       return;
     }
 
     if (!isEditing) {
-      setFormState(createEmptyFormState());
+      isDirtyRef.current = false;
+      setFormStateRaw(createEmptyFormState());
       setFieldErrors({});
     }
   }, [existingRecord, isEditing]);
@@ -522,6 +552,8 @@ export const useContactForm = (): UseContactFormResult => {
       setContacts(result.contacts);
       setSettings(result.settings);
       setSelectedRecordId(result.savedRecordId);
+      // Reset dirty flag synchronously before navigate so useBlocker does not intercept.
+      isDirtyRef.current = false;
       navigate("/");
     } catch (error) {
       pushToast({
@@ -553,6 +585,8 @@ export const useContactForm = (): UseContactFormResult => {
     addEmailButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
+    isDirtyRef,
+    clearFieldError,
     setCommaSeparatedField,
     updatePhone,
     removePhone,
