@@ -39,12 +39,23 @@ export function ConfirmDialog({
       triggerElementRef.current = document.activeElement;
       dialog.showModal();
       // Move focus to the cancel button (safe default — avoids accidental destructive confirm).
+      // If the cancel button is disabled, fall back to the first enabled button in the dialog.
       requestAnimationFrame(() => {
-        cancelButtonRef.current?.focus();
+        const btn = cancelButtonRef.current;
+        if (btn && !btn.disabled) {
+          btn.focus();
+        } else {
+          dialogRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+        }
       });
-    } else if (!isOpen && dialog && dialog.open) {
-      dialog.close();
-      // Restore focus to the element that triggered the dialog.
+    } else if (!isOpen) {
+      // Close the dialog if it is still in the DOM — the component may have already rendered
+      // null and removed the element before this effect fires.
+      if (dialog && dialog.open) {
+        dialog.close();
+      }
+      // Restore focus unconditionally so keyboard users keep their place even
+      // when the dialog element was already removed from the DOM on re-render.
       const trigger = triggerElementRef.current;
       if (trigger instanceof HTMLElement) {
         requestAnimationFrame(() => {
