@@ -1,10 +1,47 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { ContactFormPage } from "./ContactFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
+
+// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
+// Required for ConfirmDialog (used by the unsaved-changes blocker guard).
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+});
 
 const resetStore = () => {
   resetBootstrapInFlight();
@@ -90,7 +127,8 @@ describe("ContactFormPage", () => {
     fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
-    fireEvent.change(screen.getByLabelText("Número"), {
+    // Note: /número/i regex used because the label now has an aria-hidden asterisk
+    fireEvent.change(screen.getByLabelText(/número/i), {
       target: { value: "112233" }
     });
 
@@ -121,7 +159,7 @@ describe("ContactFormPage", () => {
     fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
-    fireEvent.change(screen.getByLabelText("Número"), {
+    fireEvent.change(screen.getByLabelText(/número/i), {
       target: { value: "112233" }
     });
 
@@ -163,7 +201,7 @@ describe("ContactFormPage", () => {
     fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "Nuevo Control" }
     });
-    fireEvent.change(screen.getByLabelText("Número"), {
+    fireEvent.change(screen.getByLabelText(/número/i), {
       target: { value: "112233" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
@@ -187,13 +225,13 @@ describe("ContactFormPage", () => {
     fireEvent.change(screen.getByLabelText(/nombre visible/i), {
       target: { value: "" }
     });
-    fireEvent.change(screen.getByLabelText("Número"), {
+    fireEvent.change(screen.getByLabelText(/número/i), {
       target: { value: "" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
 
     expect(await screen.findByText("Revisa los campos marcados antes de guardar.")).toBeInTheDocument();
-    expect(screen.getByText("El nombre visible es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("Falta el nombre del contacto.")).toBeInTheDocument();
     expect(screen.getByText("El teléfono es obligatorio.")).toBeInTheDocument();
     expect(window.hospitalDirectory.createRecord).not.toHaveBeenCalled();
   });
@@ -242,7 +280,8 @@ describe("ContactFormPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
 
-    const phoneInputs = screen.getAllByLabelText("Número");
+    // /número/i regex because the label has an aria-hidden asterisk span
+    const phoneInputs = screen.getAllByLabelText(/número/i);
     expect(phoneInputs).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("Teléfono 2 añadido.");
     expect(document.activeElement).toBe(phoneInputs[1]);
@@ -255,10 +294,11 @@ describe("ContactFormPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
 
-    const removePhoneButtons = screen.getAllByRole("button", { name: "Eliminar" });
+    // Buttons now have contextual aria-labels: "Eliminar teléfono 1" / "Eliminar teléfono 2"
+    const removePhoneButtons = screen.getAllByRole("button", { name: /eliminar teléfono/i });
     fireEvent.click(removePhoneButtons[1]!);
 
-    expect(screen.getAllByLabelText("Número")).toHaveLength(1);
+    expect(screen.getAllByLabelText(/número/i)).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent("Teléfono 2 eliminado.");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Añadir teléfono" }));
   });
@@ -282,7 +322,8 @@ describe("ContactFormPage", () => {
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar" }).at(-1)!);
+    // Button now has contextual aria-label: "Eliminar email 1" (empty address → position)
+    fireEvent.click(screen.getByRole("button", { name: /eliminar email/i }));
 
     expect(screen.queryByLabelText("Correo electrónico")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Correo 1 eliminado.");
@@ -335,6 +376,18 @@ describe("ContactFormPage", () => {
     });
   });
 
+  describe("phone number field accessibility attributes", () => {
+    it("marks the phone number input as required with required and aria-required attributes", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // /número/i because the label has an aria-hidden asterisk span
+      const input = screen.getByLabelText(/número/i);
+      expect(input).toBeRequired();
+      expect(input).toHaveAttribute("aria-required", "true");
+    });
+  });
+
   describe("focus management on validation error", () => {
     it("moves focus to the displayName input when displayName is missing on submit", async () => {
       renderWithRoute("/contacts/new");
@@ -342,12 +395,12 @@ describe("ContactFormPage", () => {
 
       // Leave displayName empty, clear the phone number too
       fireEvent.change(screen.getByLabelText(/nombre visible/i), { target: { value: "" } });
-      fireEvent.change(screen.getByLabelText("Número"), { target: { value: "" } });
+      fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "" } });
 
       fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
 
       // Wait for the inline error to appear, then check focus
-      await screen.findByText("El nombre visible es obligatorio.");
+      await screen.findByText("Falta el nombre del contacto.");
       expect(document.activeElement).toBe(screen.getByLabelText(/nombre visible/i));
     });
 
@@ -357,6 +410,199 @@ describe("ContactFormPage", () => {
 
       // On initial render no submit has occurred — displayName input must not hold focus
       expect(document.activeElement).not.toBe(screen.getByLabelText(/nombre visible/i));
+    });
+  });
+
+  describe("Fix 1 — field error clears on onChange", () => {
+    it("clears the displayName error when the user types in the field after a failed submit", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Submit with empty displayName to trigger the error
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
+      await screen.findByText("Falta el nombre del contacto.");
+
+      // Start correcting → error must disappear
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), { target: { value: "H" } });
+      expect(screen.queryByText("Falta el nombre del contacto.")).not.toBeInTheDocument();
+    });
+
+    it("clears the phone number error when the user types in the field after a failed submit", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Submit with displayName filled but empty phone number
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), { target: { value: "Test" } });
+      fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
+      await screen.findByText("El teléfono es obligatorio.");
+
+      // Start correcting → error must disappear
+      fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "9" } });
+      expect(screen.queryByText("El teléfono es obligatorio.")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Fix 3 — SocialsSection focus management", () => {
+    it("focuses the handle input of the new social row when a social is added", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+
+      const handleInputs = screen.getAllByLabelText("Handle / usuario");
+      expect(handleInputs).toHaveLength(1);
+      expect(screen.getByRole("status")).toHaveTextContent("Red social 1 añadida.");
+      expect(document.activeElement).toBe(handleInputs[0]);
+    });
+
+    it("returns focus to the add button when a social row is removed", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+      expect(screen.getAllByLabelText("Handle / usuario")).toHaveLength(1);
+
+      // Button has contextual aria-label: "Eliminar red social 1" (empty handle/url → position)
+      fireEvent.click(screen.getByRole("button", { name: /eliminar red social/i }));
+
+      expect(screen.queryByLabelText("Handle / usuario")).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Añadir red social" }));
+    });
+  });
+
+  describe("Fix 4 — contextual Eliminar aria-labels", () => {
+    it("uses position-based aria-label for Eliminar on a phone with no number yet", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Initial phone row has no number → should get position-based label
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 1" })).toBeInTheDocument();
+    });
+
+    it("includes the phone number in the aria-label when the number is filled in", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "612345678" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 612345678" })).toBeInTheDocument();
+    });
+
+    it("uses position-based aria-label for Eliminar on an email with no address yet", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+
+      expect(screen.getByRole("button", { name: "Eliminar email 1" })).toBeInTheDocument();
+    });
+
+    it("includes the email address in the aria-label when the address is filled in", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+      fireEvent.change(screen.getByLabelText("Correo electrónico"), {
+        target: { value: "usuario@ejemplo.com" }
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Eliminar email usuario@ejemplo.com" })
+      ).toBeInTheDocument();
+    });
+
+    it("uses position-based aria-label for Eliminar on a social row with no handle or url", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+
+      expect(screen.getByRole("button", { name: "Eliminar red social 1" })).toBeInTheDocument();
+    });
+  });
+
+  describe("Fix 5 — unsaved-changes navigation guard (useBlocker)", () => {
+    it("does not show the guard dialog when the form is clean (no changes made)", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Navigate away without touching the form — no dialog should appear
+      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("shows the unsaved-changes dialog when navigating away with a dirty form", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Make the form dirty
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+
+      // Try to navigate away via the top Cancelar link
+      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+
+      // Blocker dialog must appear
+      expect(
+        await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
+      ).toBeInTheDocument();
+    });
+
+    it("cancels navigation when the user clicks Seguir editando in the blocker dialog", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+      await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+
+      // Dialog gone, still on the form page
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/contacts/new");
+    });
+
+    it("allows navigation when the user confirms leaving in the blocker dialog", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+      await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Salir sin guardar" }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+    });
+
+    it("does not block navigation after a successful form submission", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Nuevo Control" }
+      });
+      fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "112233" } });
+      fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+      // No dialog should have appeared
+      expect(
+        screen.queryByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -243,12 +243,12 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.createBackup).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText("Backup creado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad creada.")).toBeInTheDocument();
   });
 
   it("shows the backup service error message when manual backup fails", async () => {
@@ -259,7 +259,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     expect(
       await screen.findByText("No se pudo crear el backup del directorio.")
@@ -321,7 +321,7 @@ describe("ImportExportPage", () => {
 
     const loadingState = screen.getByRole("status");
     expect(loadingState).toHaveAttribute("aria-busy", "true");
-    expect(loadingState).toHaveTextContent("Cargando importación y backups");
+    expect(loadingState).toHaveTextContent("Cargando importación y copias de seguridad");
 
     resolveBootstrap?.({
       contacts: defaultContacts,
@@ -380,7 +380,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
 
     expect(
-      await screen.findByText("No se pudo actualizar la lista de backups. Inténtalo de nuevo.")
+      await screen.findByText("No se pudo actualizar la lista de copias de seguridad. Inténtalo de nuevo.")
     ).toBeInTheDocument();
   });
 
@@ -407,8 +407,9 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
-    expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
-    expect(screen.getByText("Confianza media en la detección del formato. Revisa la vista previa.")).toBeInTheDocument();
+    expect(screen.getByText(/Tipo de archivo: exportación cruda de hoja de servicios/)).toBeInTheDocument();
+    // OIR-182: confidence note is now merged into the primary toast (no second toast)
+    expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -418,7 +419,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1", []);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
-    expect(await screen.findByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeInTheDocument();
+    expect(await screen.findByText("Importación completada. 1 alta y 1 actualización.")).toBeInTheDocument();
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
@@ -680,7 +681,7 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    expect(await screen.findByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeInTheDocument();
+    expect(await screen.findByText("Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
@@ -767,14 +768,14 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
-    expect(await screen.findByText("Backup restaurado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad restaurada.")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
@@ -788,8 +789,8 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     expect(
       await screen.findByText("No se pudo restaurar el backup seleccionado.")
@@ -808,13 +809,13 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
     });
-    expect(screen.getByRole("button", { name: /Crear backup/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
@@ -845,9 +846,9 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
 
-    const confirmButton = await screen.findByRole("button", { name: "Restaurar backup" });
+    const confirmButton = await screen.findByRole("button", { name: "Restaurar copia de seguridad" });
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
@@ -971,5 +972,110 @@ describe("ImportExportPage", () => {
     expect(screen.queryByText(/Cargando importación/)).not.toBeInTheDocument();
     // listBackups must never be called
     expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-182 — import P1 UX fixes
+  // ---------------------------------------------------------------------------
+
+  it("OIR-182 item 1: shows analysis spinner while previewCsvImport is pending", async () => {
+    // Intercept with a never-resolving promise so isPreparingCsvPreview stays true
+    let resolvePreview!: (value: unknown) => void;
+    const pendingPreview = new Promise((resolve) => { resolvePreview = resolve; });
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockReturnValue(pendingPreview);
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Spinner must appear while promise is in flight
+    expect(await screen.findByText(/Analizando el archivo/)).toBeInTheDocument();
+    const spinnerStatus = screen.getByRole("status");
+    expect(spinnerStatus).toBeInTheDocument();
+
+    // Resolve to avoid state-update-after-unmount warning
+    resolvePreview(null);
+  });
+
+  it("OIR-182 item 10: shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-conflict-toast",
+      fileName: "conflicts.csv",
+      detectedFormat: "exportación cruda",
+      detectionConfidence: "high",
+      totalRowCount: 2,
+      validRowCount: 2,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 2,
+      mergedRecordCount: 2,
+      createdCount: 0,
+      updatedCount: 2,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      buscasSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBuscasCellCount: 0,
+      conflictCount: 2,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: { id: "ci-0", displayName: "Contacto A", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-0", displayName: "Existente A", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        },
+        {
+          recordIndex: 1,
+          importedRecord: { id: "ci-1", displayName: "Contacto B", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-1", displayName: "Existente B", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Wait for the preview panel to load
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // "Todo listo" must NOT appear when there are conflicts to resolve
+    expect(screen.queryByText(/Todo listo/)).not.toBeInTheDocument();
+
+    // The conflict warning message (in toast or panel alert) must contain "Para cada uno"
+    expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
+  });
+
+  it("OIR-182 item 9: emits only one toast (confidence note merged) when detectionConfidence is not 'high'", async () => {
+    // Default mock already has detectionConfidence="medium" and conflictCount=0.
+    // After OIR-182 there must be exactly ONE toast element: the merged warning toast.
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Wait for panel to appear (preview received)
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // The merged toast must contain both "Todo listo" and "Confianza media" in one element.
+    // This would NOT find a match if they were in two separate toast elements.
+    expect(screen.getByText(/Todo listo.+Confianza media/)).toBeInTheDocument();
+
+    // Warning toasts use role="alert". There must be exactly 1 alert mentioning confidence.
+    const alerts = screen
+      .getAllByRole("alert")
+      .filter((el) => el.textContent?.includes("Confianza media"));
+    expect(alerts).toHaveLength(1);
   });
 });
