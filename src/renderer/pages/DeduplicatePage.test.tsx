@@ -112,7 +112,7 @@ describe("DeduplicatePage", () => {
 
     expect(await screen.findAllByText("Admisión General")).toHaveLength(2);
     expect(screen.getByText("Similitud 90%")).toBeInTheDocument();
-    expect(screen.getByText("displayName")).toBeInTheDocument();
+    expect(screen.getByText("Nombre idéntico")).toBeInTheDocument();
   });
 
   it("renders department and phone number for each record", async () => {
@@ -137,7 +137,7 @@ describe("DeduplicatePage", () => {
 
     expect(screen.queryByRole("button", { name: "Fusionar" })).not.toBeInTheDocument();
 
-    const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+    const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
     fireEvent.click(keepButtons[0]!);
 
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("DeduplicatePage", () => {
       await screen.findAllByText("Admisión General");
 
       // Select record to keep
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       // Open confirm dialog (page-level Fusionar button)
@@ -273,7 +273,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
@@ -540,7 +540,7 @@ describe("DeduplicatePage", () => {
 
       const recordsBefore = useAppStore.getState().contacts!.records.map((r) => r.id);
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       // Open confirm dialog
@@ -564,7 +564,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
@@ -592,7 +592,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
@@ -604,7 +604,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
@@ -618,7 +618,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
@@ -634,7 +634,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
@@ -658,7 +658,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       for (const btn of keepButtons) {
         expect(btn).toHaveAttribute("data-keep-btn");
       }
@@ -731,7 +731,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       expect(keepButtons.length).toBeGreaterThan(0);
       for (const btn of keepButtons) {
         expect(btn).toHaveClass("min-h-[44px]");
@@ -742,7 +742,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       for (const btn of keepButtons) {
         expect(btn).toHaveClass("min-w-[44px]");
       }
@@ -764,7 +764,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByRole("note", { name: "Resumen de la fusión" })).toBeInTheDocument();
@@ -774,7 +774,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByText(/teléfonos, correos y etiquetas/)).toBeInTheDocument();
@@ -784,7 +784,7 @@ describe("DeduplicatePage", () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
-      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
       fireEvent.click(keepButtons[0]!);
 
       expect(screen.getByText(/notas/)).toBeInTheDocument();
@@ -834,7 +834,7 @@ describe("DeduplicatePage", () => {
         await screen.findByText("Dra. Martínez");
 
         // Select first record (Cardiología) as keeper
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching the record card's department text
@@ -847,7 +847,7 @@ describe("DeduplicatePage", () => {
         renderPage();
         await screen.findByText("Dra. Martínez");
 
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching the record card's name text
@@ -860,7 +860,7 @@ describe("DeduplicatePage", () => {
         renderPage();
         await screen.findByText("Dra. Martínez");
 
-        const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+        const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
         fireEvent.click(keepButtons[0]!);
 
         // Scope to preview panel to avoid matching phone numbers in the record cards

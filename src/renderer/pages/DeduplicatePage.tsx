@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -8,6 +8,22 @@ import { useAppStore } from "../store/useAppStore";
 interface PairState {
   pair: DuplicatePair;
   keepId: string | null;
+}
+
+/** Spanish labels for duplicate-detection reason codes. */
+const REASON_LABELS: Record<string, string> = {
+  externalId: "ID externo idéntico",
+  displayName: "Nombre idéntico",
+  "displayName:fuzzy": "Nombre similar",
+  "displayName:levenshtein": "Nombre similar (Levenshtein)",
+  "dept+name": "Departamento y nombre coinciden",
+};
+
+function translateReason(reason: string): string {
+  if (REASON_LABELS[reason]) return REASON_LABELS[reason]!;
+  // phone reasons are "phone:<normalized-number>" — translate the prefix
+  if (reason.startsWith("phone:")) return "Teléfono coincide";
+  return reason;
 }
 
 const STORAGE_KEY_PREFIX = "dedup-dismissed-pairs";
@@ -114,32 +130,32 @@ export const DeduplicatePage = () => {
     writeDismissedPairId(storageKey, pairId);
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        const result = await window.hospitalDirectory.detectDuplicates();
-        const dismissed = readDismissedPairIds(storageKey);
-        setPairStates(
-          result.pairs
-            .filter((pair) => !dismissed.includes(pair.id))
-            .map((pair) => ({ pair, keepId: null }))
-        );
-      } catch (error) {
-        setLoadError(
-          error instanceof Error ? error.message : "No se pudo cargar duplicados"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void load();
+  // loadPairs is also called by the "Reintentar" error-state button for targeted retry
+  const loadPairs = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const result = await window.hospitalDirectory.detectDuplicates();
+      const dismissed = readDismissedPairIds(storageKey);
+      setPairStates(
+        result.pairs
+          .filter((pair) => !dismissed.includes(pair.id))
+          .map((pair) => ({ pair, keepId: null }))
+      );
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "No se pudo cargar duplicados"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   // storageKey is stable in normal operation (set once at bootstrap); include it
   // so that if the operator changes dataFilePath the list reloads under the new scope.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+
+  useEffect(() => {
+    void loadPairs();
+  }, [loadPairs]);
 
   const handleKeepSelect = (pairId: string, keepId: string) => {
     setPairStates((current) =>
@@ -295,7 +311,8 @@ export const DeduplicatePage = () => {
             </div>
           </div>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => void loadPairs()}
+            aria-label="Reintentar detección de duplicados"
             className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
           >
             Reintentar
@@ -357,13 +374,24 @@ export const DeduplicatePage = () => {
                       key={reason}
                       className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
                     >
-                      {reason}
+                      {translateReason(reason)}
                     </span>
                   ))}
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              {/* aria-live region: announces blocked/active status to screen readers */}
+              <p aria-live="polite" className="sr-only">
+                {isMerging
+                  ? "Fusionando contactos…"
+                  : (mergingId ? "Par en espera mientras se fusionan otros contactos." : "")}
+              </p>
+
+              <div
+                role="radiogroup"
+                aria-label="Elegir cuál conservar"
+                className="grid gap-4 sm:grid-cols-2"
+              >
                 {[pair.recordA, pair.recordB].map((record) => {
                   const isSelected = keepId === record.id;
 
@@ -377,7 +405,7 @@ export const DeduplicatePage = () => {
                           : "border-slate-200 bg-slate-50"
                       ].join(" ")}
                     >
-                      <p className="font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="font-semibold text-scs-blueDark">{record.displayName}</h3>
                       {record.department && (
                         <p className="mt-1 text-xs text-slate-500">{record.department}</p>
                       )}
@@ -394,6 +422,9 @@ export const DeduplicatePage = () => {
                       {/* Fix 5: min-h-[44px] min-w-[44px] ensures WCAG 2.5.5 touch target ≥44×44px */}
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        aria-label={`Conservar ${record.displayName}`}
                         data-keep-btn
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
