@@ -417,7 +417,6 @@ describe("CsvImportPreviewPanel", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             displayName: "Mostrador importado",
             department: "Admisión",
             phones: [],
@@ -426,7 +425,6 @@ describe("CsvImportPreviewPanel", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             displayName: "Mostrador actual",
             department: "Admisión",
             phones: [],

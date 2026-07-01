@@ -1658,13 +1658,14 @@ export class AppDataService {
       let conflictReasonKey = "";
       let matchingFieldValue: string | undefined;
 
-      // Prefer externalId match (most precise)
+      // Prefer externalId match (most precise).
+      // matchingFieldValue is intentionally not set for external-id-match:
+      // raw internal codes are not rendered to the user (privacy).
       if (importedRecord.externalId) {
         const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
         if (indexed !== undefined) {
           match = indexed;
           conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
-          matchingFieldValue = importedRecord.externalId;
         }
       }
 
@@ -1729,7 +1730,6 @@ export class AppDataService {
 
     return {
       id: record.id,
-      externalId: record.externalId,
       displayName: record.displayName,
       department: record.organization.department,
       service: record.organization.service,

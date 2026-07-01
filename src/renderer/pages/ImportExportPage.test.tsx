@@ -452,7 +452,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
@@ -463,7 +462,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
@@ -530,7 +528,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -540,7 +537,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
@@ -597,7 +593,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -607,7 +602,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
