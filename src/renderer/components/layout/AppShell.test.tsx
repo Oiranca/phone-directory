@@ -97,6 +97,24 @@ describe("AppShell — default mode", () => {
     expect(screen.getByLabelText("Buscar contactos")).toHaveFocus();
   });
 
+  it("prefers data-page-search over the directory-search id fallback when both are present", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          {/* data-page-search is the preferred target (current-page search) */}
+          <input data-page-search aria-label="Buscar en página actual" />
+          {/* id fallback — should NOT receive focus when data-page-search is present */}
+          <input id="directory-search" aria-label="Buscar contactos" />
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    fireEvent.keyDown(window, { key: "/" });
+
+    expect(screen.getByLabelText("Buscar en página actual")).toHaveFocus();
+    expect(screen.getByLabelText("Buscar contactos")).not.toHaveFocus();
+  });
+
   it("keeps slash as text input when typing in a text field", () => {
     render(
       <MemoryRouter future={future}>
