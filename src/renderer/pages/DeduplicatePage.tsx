@@ -98,7 +98,17 @@ export const DeduplicatePage = () => {
   // OIR-195 item 3: total pairs found in this session, fixed at the first successful
   // load so the "X de Y revisados" counter tracks progress against a stable baseline
   // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
-  const [initialPairTotal, setInitialPairTotal] = useState<number | null>(null);
+  // The baseline is tagged with the storageKey it was computed for, so switching the
+  // active data file (which changes storageKey) invalidates the stale baseline instead
+  // of leaving the previous dataset's total stuck as the denominator (PR #116 review).
+  const [pairTotalBaseline, setPairTotalBaseline] = useState<{
+    key: string;
+    total: number;
+  } | null>(null);
+  const initialPairTotal =
+    pairTotalBaseline !== null && pairTotalBaseline.key === storageKey
+      ? pairTotalBaseline.total
+      : null;
   const [confirmState, setConfirmState] = useState<{
     pairId: string;
     keepRecord: { id: string; displayName: string };
@@ -143,10 +153,15 @@ export const DeduplicatePage = () => {
       const dismissed = readDismissedPairIds(storageKey);
       const filtered = result.pairs.filter((pair) => !dismissed.includes(pair.id));
       setPairStates(filtered.map((pair) => ({ pair, keepId: null })));
-      // OIR-195 item 3: capture the baseline only once, on the first successful load
-      // of this session — later refreshes (e.g. "Reintentar" or post-merge) must not
-      // reset the denominator of the "X de Y revisados" counter.
-      setInitialPairTotal((current) => (current === null ? filtered.length : current));
+      // OIR-195 item 3: capture the baseline only once per storageKey, on the first
+      // successful load after that key is seen — later refreshes for the SAME dataset
+      // (e.g. "Reintentar" or post-merge) must not reset the denominator, but switching
+      // to a DIFFERENT dataset (storageKey changes) must recompute it (PR #116 review).
+      setPairTotalBaseline((current) =>
+        current === null || current.key !== storageKey
+          ? { key: storageKey, total: filtered.length }
+          : current
+      );
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "No se pudo cargar duplicados"

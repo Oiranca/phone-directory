@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
@@ -926,6 +926,101 @@ describe("DeduplicatePage", () => {
       expect(scoreBadge.id).toBeTruthy();
       expect(describedBy).toContain(scoreBadge.id);
       expect(describedBy).toContain(reasonBadge!.id);
+    });
+  });
+
+  describe("OIR-195 P3 regression — reviewed-pairs baseline resets when storageKey changes (PR #116)", () => {
+    const pathA = "/data/hospital-a/contacts.json";
+    const pathB = "/data/hospital-b/contacts.json";
+
+    const recordE = {
+      id: "cnt_0005",
+      displayName: "Farmacia Central",
+      department: "Farmacia",
+      phones: [{ id: "ph_5", number: "70009" }]
+    };
+    const recordF = {
+      id: "cnt_0006",
+      displayName: "Farmacia Central",
+      department: "Farmacia",
+      phones: [{ id: "ph_6", number: "70010" }]
+    };
+    const mockPairB1 = {
+      id: "cnt_0005:cnt_0006",
+      recordA: recordE,
+      recordB: recordF,
+      reasons: ["displayName"],
+      score: 0.8
+    };
+    const recordG = {
+      id: "cnt_0007",
+      displayName: "Radiología",
+      department: "Radiología",
+      phones: [{ id: "ph_7", number: "70011" }]
+    };
+    const recordH = {
+      id: "cnt_0008",
+      displayName: "Radiología",
+      department: "Radiología",
+      phones: [{ id: "ph_8", number: "70012" }]
+    };
+    const mockPairB2 = {
+      id: "cnt_0007:cnt_0008",
+      recordA: recordG,
+      recordB: recordH,
+      reasons: ["displayName"],
+      score: 0.8
+    };
+
+    const onePairResultA = {
+      pairs: [mockPair],
+      records: { cnt_0001: recordA, cnt_0002: recordB },
+      checkedCount: 2,
+      pairCount: 1
+    };
+
+    const twoPairsResultB = {
+      pairs: [mockPairB1, mockPairB2],
+      records: {
+        cnt_0005: recordE,
+        cnt_0006: recordF,
+        cnt_0007: recordG,
+        cnt_0008: recordH
+      },
+      checkedCount: 4,
+      pairCount: 2
+    };
+
+    it("recomputes the 'de N revisados' denominator when the active dataset (storageKey) changes, instead of keeping the previous dataset's total", async () => {
+      localStorage.clear();
+      useAppStore.setState({ settings: { ...defaultSettings(pathA, "/backups") } });
+
+      const detectDuplicatesMock = vi.fn().mockResolvedValueOnce(onePairResultA);
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: detectDuplicatesMock,
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+      await screen.findAllByText("Admisión General");
+      // Baseline for dataset A: 1 pair total
+      expect(screen.getByText("0 de 1 pares revisados")).toBeInTheDocument();
+
+      // Switch to dataset B — a different data file with a different pair count.
+      // This changes storageKey, which must re-trigger loadPairs and recompute the
+      // baseline instead of leaving the denominator stuck at dataset A's total
+      // (PR #116 review — initialPairTotal was only reset while null).
+      detectDuplicatesMock.mockResolvedValueOnce(twoPairsResultB);
+      act(() => {
+        useAppStore.setState({ settings: { ...defaultSettings(pathB, "/backups") } });
+      });
+
+      await screen.findAllByText("Radiología");
+      expect(screen.getByText("0 de 2 pares revisados")).toBeInTheDocument();
+      expect(screen.queryByText("0 de 1 pares revisados")).not.toBeInTheDocument();
     });
   });
 });
