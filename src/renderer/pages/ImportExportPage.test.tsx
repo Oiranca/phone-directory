@@ -239,6 +239,22 @@ describe("ImportExportPage", () => {
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
   });
 
+  it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
+    const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
+    const importJsonBtn = screen.getByRole("button", { name: /Importar JSON/ });
+    const prepareBtn = screen.getByRole("button", { name: /Preparar agenda/ });
+
+    expect(backupBtn.className).toContain("focus-ring");
+    expect(exportBtn.className).toContain("focus-ring");
+    expect(importJsonBtn.className).toContain("focus-ring");
+    expect(prepareBtn.className).toContain("focus-ring");
+  });
+
   it("creates a backup and shows success feedback", async () => {
     renderPage();
 

@@ -444,7 +444,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleCreateBackup()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Crear copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -459,7 +459,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleExport()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -474,7 +474,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => setPendingConfirmation({ kind: "import-json" })}
             disabled={isMutating}
-            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
@@ -490,7 +490,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isMutating}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
             <p className="mt-2 text-sm text-emerald-900/80">
