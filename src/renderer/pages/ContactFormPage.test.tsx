@@ -605,4 +605,37 @@ describe("ContactFormPage", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  describe("Fix 6 — beforeunload guard for window close/reload/unload", () => {
+    it("does not prevent unload when the form is clean", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      const event = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent;
+      window.dispatchEvent(event);
+
+      // Clean form: the handler must not call preventDefault, so the browser
+      // is left free to close/reload without prompting the user.
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("prevents unload and sets a returnValue string when the form is dirty", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+
+      const event = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent;
+      const returnValueSetter = vi.spyOn(event, "returnValue", "set");
+      window.dispatchEvent(event);
+
+      // Dirty form: preventDefault() must be called and returnValue set to a
+      // string, which together trigger the native confirm dialog in real
+      // browsers/Electron on window close, reload, or unload.
+      expect(event.defaultPrevented).toBe(true);
+      expect(returnValueSetter).toHaveBeenCalledWith("");
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Link, useBlocker } from "react-router-dom";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
@@ -47,6 +47,25 @@ export const ContactFormPage = () => {
    */
   const shouldBlock = useCallback(() => isDirtyRef.current, []);
   const blocker = useBlocker(shouldBlock);
+
+  /**
+   * Guard window close / reload / browser unload when the form is dirty.
+   * useBlocker only intercepts React Router navigation — it does not cover
+   * Electron window close, page reload, or unload triggered outside the
+   * router. The native beforeunload prompt covers those remaining paths.
+   */
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirtyRef]);
 
   if (isLoading || !hasContacts || !hasSettings) {
     return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;
