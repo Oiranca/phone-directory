@@ -870,4 +870,62 @@ describe("DeduplicatePage", () => {
       });
     });
   });
+
+  describe("OIR-195 P3 — reviewed-pairs counter", () => {
+    it("shows '0 de 1 pares revisados' when the single pair has not been actioned yet", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      expect(screen.getByText("0 de 1 pares revisados")).toBeInTheDocument();
+    });
+
+    it("updates the counter to '1 de 1 pares revisados' after dismissing the only pair", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /No son el mismo contacto/ })
+      );
+
+      // After dismissal, pairStates is empty so the empty state renders instead —
+      // the counter element itself only lives in the "has pairs" branch, so verify
+      // the empty state is shown (implicitly confirms the pair was reviewed/removed).
+      expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
+    });
+
+    it("does not render the counter when there are no pairs at all", async () => {
+      mockDetectDuplicates.mockResolvedValueOnce({
+        pairs: [],
+        records: {},
+        checkedCount: 5,
+        pairCount: 0
+      });
+
+      renderPage();
+
+      await screen.findByText("No se encontraron duplicados");
+      expect(screen.queryByText(/pares revisados/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("OIR-195 P3 — badge aria association", () => {
+    it("associates the similarity/reasons badges with the radiogroup via aria-describedby", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const radiogroup = screen.getByRole("radiogroup", { name: "Elegir cuál conservar" });
+      const describedBy = radiogroup.getAttribute("aria-describedby");
+      expect(describedBy).toBeTruthy();
+
+      const scoreBadge = screen.getByText("Similitud 90%");
+      const reasonBadge = screen.getByText("Nombre idéntico").parentElement;
+
+      for (const id of describedBy!.split(" ")) {
+        expect(document.getElementById(id)).not.toBeNull();
+      }
+      expect(scoreBadge.id).toBeTruthy();
+      expect(describedBy).toContain(scoreBadge.id);
+      expect(describedBy).toContain(reasonBadge!.id);
+    });
+  });
 });

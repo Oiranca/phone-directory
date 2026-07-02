@@ -95,6 +95,10 @@ export const DeduplicatePage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
   const [mergingId, setMergingId] = useState<string | null>(null);
+  // OIR-195 item 3: total pairs found in this session, fixed at the first successful
+  // load so the "X de Y revisados" counter tracks progress against a stable baseline
+  // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
+  const [initialPairTotal, setInitialPairTotal] = useState<number | null>(null);
   const [confirmState, setConfirmState] = useState<{
     pairId: string;
     keepRecord: { id: string; displayName: string };
@@ -137,11 +141,12 @@ export const DeduplicatePage = () => {
       setLoadError(null);
       const result = await window.hospitalDirectory.detectDuplicates();
       const dismissed = readDismissedPairIds(storageKey);
-      setPairStates(
-        result.pairs
-          .filter((pair) => !dismissed.includes(pair.id))
-          .map((pair) => ({ pair, keepId: null }))
-      );
+      const filtered = result.pairs.filter((pair) => !dismissed.includes(pair.id));
+      setPairStates(filtered.map((pair) => ({ pair, keepId: null })));
+      // OIR-195 item 3: capture the baseline only once, on the first successful load
+      // of this session — later refreshes (e.g. "Reintentar" or post-merge) must not
+      // reset the denominator of the "X de Y revisados" counter.
+      setInitialPairTotal((current) => (current === null ? filtered.length : current));
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "No se pudo cargar duplicados"
@@ -355,6 +360,12 @@ export const DeduplicatePage = () => {
           {pairStates.length} {pairStates.length === 1 ? "par encontrado" : "pares encontrados"}.
           Selecciona el registro a conservar y fusiona.
         </p>
+        {/* OIR-195 item 3: reviewed-pairs progress counter */}
+        {initialPairTotal !== null && initialPairTotal > 0 && (
+          <p aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-slate-500">
+            {Math.max(0, initialPairTotal - pairStates.length)} de {initialPairTotal} pares revisados
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
@@ -365,10 +376,15 @@ export const DeduplicatePage = () => {
           return (
             <article key={pair.id} className="rounded-3xl bg-white p-6 shadow-panel">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                {/* OIR-195 item 4: ids referenced by the radiogroup's aria-describedby below,
+                    so screen readers announce similarity/reasons as context for this pair's choice. */}
+                <span
+                  id={`pair-score-${pair.id}`}
+                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900"
+                >
                   Similitud {Math.round(pair.score * 100)}%
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div id={`pair-reasons-${pair.id}`} className="flex flex-wrap gap-2">
                   {pair.reasons.map((reason) => (
                     <span
                       key={reason}
@@ -390,6 +406,7 @@ export const DeduplicatePage = () => {
               <div
                 role="radiogroup"
                 aria-label="Elegir cuál conservar"
+                aria-describedby={`pair-score-${pair.id} pair-reasons-${pair.id}`}
                 className="grid gap-4 sm:grid-cols-2"
               >
                 {[pair.recordA, pair.recordB].map((record) => {
