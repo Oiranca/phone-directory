@@ -472,7 +472,7 @@ export const DirectoryPage = () => {
                     type="button"
                     aria-label="Eliminar filtro: búsqueda"
                     onClick={() => setQuery("")}
-                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
                   >
                     ×
                   </button>
@@ -485,7 +485,7 @@ export const DirectoryPage = () => {
                     type="button"
                     aria-label={`Eliminar filtro: ${typeLabels[selectedType]}`}
                     onClick={() => setSelectedType("all")}
-                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
                   >
                     ×
                   </button>
@@ -498,7 +498,7 @@ export const DirectoryPage = () => {
                     type="button"
                     aria-label={`Eliminar filtro: ${areaLabels[selectedArea]}`}
                     onClick={() => setSelectedArea("all")}
-                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
                   >
                     ×
                   </button>
@@ -511,7 +511,7 @@ export const DirectoryPage = () => {
                     type="button"
                     aria-label={`Eliminar filtro: ${tag}`}
                     onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
-                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
                   >
                     ×
                   </button>
@@ -524,7 +524,7 @@ export const DirectoryPage = () => {
                     type="button"
                     aria-label="Eliminar filtro: Inactivos"
                     onClick={() => setShowInactive(false)}
-                    className="focus-ring ml-0.5 rounded-full text-slate-400 hover:text-slate-700"
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
                   >
                     ×
                   </button>

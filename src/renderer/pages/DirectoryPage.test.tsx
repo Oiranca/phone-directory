@@ -232,6 +232,30 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("Urgencias central")).not.toBeInTheDocument();
   });
 
+  it("filter-chip clear buttons carry the shared touch-target class for a 44px hit area", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "admisión" }
+    });
+
+    const clearButton = await screen.findByRole("button", { name: "Eliminar filtro: búsqueda" });
+    expect(clearButton).toHaveClass("touch-target");
+  });
+
   it("clears selected tags when filter pills are reset", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
