@@ -143,6 +143,65 @@ describe("DeduplicatePage", () => {
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
   });
 
+  describe("OIR-189 P2 follow-up — radiogroup arrow-key navigation (roving tabindex)", () => {
+    it("ArrowDown moves focus and selection from the first radio to the second", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowDown" });
+
+      expect(keepButtons[1]).toHaveAttribute("aria-checked", "true");
+      expect(keepButtons[0]).toHaveAttribute("aria-checked", "false");
+      await waitFor(() => expect(keepButtons[1]).toHaveFocus());
+    });
+
+    it("ArrowDown wraps from the last radio back to the first", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[1]!.focus();
+      fireEvent.keyDown(keepButtons[1]!, { key: "ArrowDown" });
+
+      expect(keepButtons[0]).toHaveAttribute("aria-checked", "true");
+      await waitFor(() => expect(keepButtons[0]).toHaveFocus());
+    });
+
+    it("ArrowUp wraps from the first radio to the last", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowUp" });
+
+      expect(keepButtons[1]).toHaveAttribute("aria-checked", "true");
+      await waitFor(() => expect(keepButtons[1]).toHaveFocus());
+    });
+
+    it("only the roving tab stop has tabIndex 0 — the first radio before any selection", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(keepButtons[0]).toHaveAttribute("tabindex", "0");
+      expect(keepButtons[1]).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("moves the roving tab stop to the checked radio after selection", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[1]!);
+
+      expect(keepButtons[1]).toHaveAttribute("tabindex", "0");
+      expect(keepButtons[0]).toHaveAttribute("tabindex", "-1");
+    });
+  });
+
   it("shows empty state when no pairs returned", async () => {
     mockDetectDuplicates.mockResolvedValueOnce({
       pairs: [],

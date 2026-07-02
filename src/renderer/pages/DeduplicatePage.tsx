@@ -165,6 +165,44 @@ export const DeduplicatePage = () => {
     );
   };
 
+  // WAI-ARIA radiogroup keyboard contract: Arrow keys move focus AND selection between
+  // the two options in the group (roving tabindex), wrapping at the bounds. Only the
+  // active/checked radio (or the first one, when none is checked) is in the tab order —
+  // see the tabIndex computation on the radio buttons below.
+  const handleRadioKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    pairId: string,
+    records: [{ id: string }, { id: string }]
+  ) => {
+    if (
+      event.key !== "ArrowDown" &&
+      event.key !== "ArrowUp" &&
+      event.key !== "ArrowRight" &&
+      event.key !== "ArrowLeft"
+    ) {
+      return;
+    }
+    event.preventDefault();
+
+    const container = event.currentTarget;
+    const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
+    const currentIndex = records.findIndex((r) => r.id === focusedId);
+    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+    const isNext = event.key === "ArrowDown" || event.key === "ArrowRight";
+    const nextIndex = isNext
+      ? (safeIndex + 1) % records.length
+      : (safeIndex - 1 + records.length) % records.length;
+    const nextRecord = records[nextIndex]!;
+
+    handleKeepSelect(pairId, nextRecord.id);
+    requestAnimationFrame(() => {
+      const button = container.querySelector<HTMLButtonElement>(
+        `[data-record-id="${CSS.escape(nextRecord.id)}"]`
+      );
+      button?.focus();
+    });
+  };
+
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
     if (!pairState.keepId) {
       return;
@@ -391,9 +429,15 @@ export const DeduplicatePage = () => {
                 role="radiogroup"
                 aria-label="Elegir cuál conservar"
                 className="grid gap-4 sm:grid-cols-2"
+                onKeyDown={(event) =>
+                  handleRadioKeyDown(event, pair.id, [pair.recordA, pair.recordB])
+                }
               >
-                {[pair.recordA, pair.recordB].map((record) => {
+                {[pair.recordA, pair.recordB].map((record, index) => {
                   const isSelected = keepId === record.id;
+                  // Roving tabindex: the checked radio is tabbable; if none is checked yet,
+                  // the first radio is tabbable so Tab can enter the group at all.
+                  const isRovingTabStop = keepId ? isSelected : index === 0;
 
                   return (
                     <div
@@ -426,6 +470,8 @@ export const DeduplicatePage = () => {
                         aria-checked={isSelected}
                         aria-label={`Conservar ${record.displayName}`}
                         data-keep-btn
+                        data-record-id={record.id}
+                        tabIndex={isRovingTabStop ? 0 : -1}
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[
