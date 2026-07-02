@@ -122,9 +122,9 @@ const ConflictRecordCol = ({
       {/* Phones */}
       {phones.length > 0 && (
         <ul className="mt-2 space-y-0.5" aria-label="Teléfonos">
-          {phones.map((phone, i) => (
+          {phones.map((phone) => (
             <li
-              key={i}
+              key={`${phone.number}|${phone.label ?? ""}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingPhone(phone.number)
@@ -133,7 +133,13 @@ const ConflictRecordCol = ({
               ].join(" ")}
             >
               {isMatchingPhone(phone.number) && (
-                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+                <span
+                  className="mr-1 text-amber-700"
+                  title="Coincidencia automática con el otro registro (no es un campo obligatorio)"
+                  aria-label="Coincidencia automática con el otro registro, no es un campo obligatorio"
+                >
+                  *
+                </span>
               )}
               {phone.number}
               {phone.label && <span className="ml-1 text-slate-500">({phone.label})</span>}
@@ -145,9 +151,9 @@ const ConflictRecordCol = ({
       {/* Emails */}
       {emails.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Correos">
-          {emails.map((email, i) => (
+          {emails.map((email) => (
             <li
-              key={i}
+              key={`${email.address}|${email.label ?? ""}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingEmail(email.address)
@@ -156,7 +162,13 @@ const ConflictRecordCol = ({
               ].join(" ")}
             >
               {isMatchingEmail(email.address) && (
-                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+                <span
+                  className="mr-1 text-amber-700"
+                  title="Coincidencia automática con el otro registro (no es un campo obligatorio)"
+                  aria-label="Coincidencia automática con el otro registro, no es un campo obligatorio"
+                >
+                  *
+                </span>
               )}
               {email.address}
               {email.label && <span className="ml-1 text-slate-500">({email.label})</span>}
@@ -168,8 +180,11 @@ const ConflictRecordCol = ({
       {/* Socials */}
       {socials.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Redes sociales">
-          {socials.map((social, i) => (
-            <li key={i} className="text-xs text-slate-600">
+          {socials.map((social) => (
+            <li
+              key={`${social.platform}|${social.handle ?? social.url ?? ""}|${social.label ?? ""}`}
+              className="text-xs text-slate-600"
+            >
               {social.platform}
               {social.handle && <span className="ml-1">@{social.handle}</span>}
               {!social.handle && social.url && <span className="ml-1">{social.url}</span>}
@@ -402,6 +417,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
+          aria-live="polite"
+          aria-atomic="true"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
@@ -413,6 +430,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
+          aria-live="polite"
+          aria-atomic="true"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">

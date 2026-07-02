@@ -937,6 +937,17 @@ describe("CsvImportPreviewPanel", () => {
 
       expect(screen.queryByText(/Tipo de archivo:/)).not.toBeInTheDocument();
     });
+
+    it("shows the format line without a confidence label when detectionConfidence is undefined", () => {
+      renderPanel({
+        ...basePreview,
+        detectedFormat: "plantilla normalizada",
+        detectionConfidence: undefined
+      });
+
+      expect(screen.getByText("Formato detectado: plantilla normalizada")).toBeInTheDocument();
+      expect(screen.queryByText(/confianza/)).not.toBeInTheDocument();
+    });
   });
 
   describe("interaction states", () => {
