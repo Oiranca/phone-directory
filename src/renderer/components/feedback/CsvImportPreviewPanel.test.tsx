@@ -795,6 +795,71 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByText("other@hospital.com").closest("li")).not.toHaveClass("bg-amber-100");
       expect(screen.getByText("unrelated@other.com").closest("li")).not.toHaveClass("bg-amber-100");
     });
+
+    // PR #115 review: content-composed keys like `${phone.number}|${label}` collide when
+    // two contact methods share the same value, causing a React duplicate-key warning and
+    // risking the highlight state being applied to the wrong row on reconciliation.
+    it("renders duplicate phone entries with identical number and label without a React key collision, keeping the correct highlight on every row", () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      renderPanel({
+        ...basePreview,
+        fileName: "duplicate-phone-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-dup-1",
+              displayName: "Servicio Duplicado",
+              // Two entries with the exact same number AND label — the pre-fix key
+              // `${phone.number}|${label ?? ""}` would collide for both rows.
+              phones: [
+                { number: "12345", kind: "direct" },
+                { number: "12345", kind: "direct" }
+              ],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-dup-1",
+              displayName: "Servicio Duplicado Existente",
+              phones: [{ number: "12345", kind: "direct" }],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "phone-match",
+            conflictReasonKey: "conflict_reason.phone_match",
+            matchingFieldValue: "12345"
+          }
+        ]
+      });
+
+      // Both duplicate rows in the imported column plus the one in the existing column
+      // must all be rendered and highlighted — a key collision must not cause React to
+      // silently drop, merge, or misattribute the highlight of one of the duplicate rows.
+      const matchingPhones = screen.getAllByText("12345");
+      expect(matchingPhones).toHaveLength(3);
+      for (const el of matchingPhones) {
+        expect(el.closest("li")).toHaveClass("bg-amber-100");
+      }
+
+      // React must not warn about two children sharing the same key.
+      const hasDuplicateKeyWarning = consoleErrorSpy.mock.calls.some((call) =>
+        call.some((arg) => typeof arg === "string" && /same key|unique "key" prop/i.test(arg))
+      );
+      expect(hasDuplicateKeyWarning).toBe(false);
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   // ---------------------------------------------------------------------------

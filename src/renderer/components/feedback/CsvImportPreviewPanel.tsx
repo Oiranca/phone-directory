@@ -122,9 +122,9 @@ const ConflictRecordCol = ({
       {/* Phones */}
       {phones.length > 0 && (
         <ul className="mt-2 space-y-0.5" aria-label="Teléfonos">
-          {phones.map((phone) => (
+          {phones.map((phone, phoneIndex) => (
             <li
-              key={`${phone.number}|${phone.label ?? ""}`}
+              key={`${phone.number}|${phone.label ?? ""}|${phoneIndex}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingPhone(phone.number)
@@ -151,9 +151,9 @@ const ConflictRecordCol = ({
       {/* Emails */}
       {emails.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Correos">
-          {emails.map((email) => (
+          {emails.map((email, emailIndex) => (
             <li
-              key={`${email.address}|${email.label ?? ""}`}
+              key={`${email.address}|${email.label ?? ""}|${emailIndex}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingEmail(email.address)
@@ -180,9 +180,9 @@ const ConflictRecordCol = ({
       {/* Socials */}
       {socials.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Redes sociales">
-          {socials.map((social) => (
+          {socials.map((social, socialIndex) => (
             <li
-              key={`${social.platform}|${social.handle ?? social.url ?? ""}|${social.label ?? ""}`}
+              key={`${social.platform}|${social.handle ?? social.url ?? ""}|${social.label ?? ""}|${socialIndex}`}
               className="text-xs text-slate-600"
             >
               {social.platform}
