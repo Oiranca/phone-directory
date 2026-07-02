@@ -1,7 +1,45 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ConflictRecordSummary, CsvImportPreview, CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
+
+// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
+// Required because the discard-warning prompt now renders via the shared
+// ConfirmDialog component (native <dialog>) instead of window.confirm (PR #106 review).
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+});
 
 const basePreview: CsvImportPreviewWithConflicts = {
   importToken: "test-token",
@@ -1951,67 +1989,106 @@ describe("CsvImportPreviewPanel", () => {
       expect(btns).toHaveLength(1);
     });
 
-    // Item 4 — close guard
+    // Item 4 — close guard (PR #106 review: window.confirm replaced with shared ConfirmDialog)
 
-    it("calls window.confirm before closing if some but not all conflicts are resolved", () => {
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-
-      const { onClose } = renderPanel({
-        ...oneConflictPreview,
-        conflictCount: 2,
-        conflictedRecords: [
-          {
-            ...oneConflictPreview.conflictedRecords[0]!,
-            recordIndex: 0,
-            selectedPolicy: "skip" as const
+    /** Preview with two conflicts, one resolved — used by the partial-resolution guard tests. */
+    const twoConflictsOneResolvedPreview: CsvImportPreviewWithConflicts = {
+      ...oneConflictPreview,
+      conflictCount: 2,
+      conflictedRecords: [
+        {
+          ...oneConflictPreview.conflictedRecords[0]!,
+          recordIndex: 0,
+          selectedPolicy: "skip" as const
+        },
+        {
+          recordIndex: 1,
+          importedRecord: {
+            id: "import-oir182-1",
+            displayName: "Registro OIR-182 B",
+            phones: [],
+            emails: [],
+            socials: []
           },
-          {
-            recordIndex: 1,
-            importedRecord: {
-              id: "import-oir182-1",
-              displayName: "Registro OIR-182 B",
-              phones: [],
-              emails: [],
-              socials: []
-            },
-            matchingRecord: {
-              id: "existing-oir182-1",
-              displayName: "Existente OIR-182 B",
-              phones: [],
-              emails: [],
-              socials: []
-            },
-            matchingRecordIndex: 1,
-            matchingRecordSource: "existing",
-            conflictType: "external-id-match",
-            conflictReasonKey: "conflict_reason.external_id"
-          }
-        ]
-      });
+          matchingRecord: {
+            id: "existing-oir182-1",
+            displayName: "Existente OIR-182 B",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    it("shows the accessible ConfirmDialog (not window.confirm) before closing if some but not all conflicts are resolved", () => {
+      const confirmSpy = vi.spyOn(window, "confirm");
+
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
 
       fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
 
-      expect(confirmSpy).toHaveBeenCalledOnce();
+      // window.confirm must never be used for this flow anymore.
+      expect(confirmSpy).not.toHaveBeenCalled();
+      // The panel is not closed yet — awaiting the operator's decision in the dialog.
       expect(onClose).not.toHaveBeenCalled();
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      expect(dialog).toHaveTextContent("Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo.");
+      expect(within(dialog).getByRole("button", { name: "Cerrar igualmente" })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
 
       confirmSpy.mockRestore();
     });
 
-    it("closes without prompt when no policies have been resolved yet", () => {
-      const confirmSpy = vi.spyOn(window, "confirm");
+    it("cancel: dismisses the ConfirmDialog, leaves state unchanged, and restores focus to the trigger button", async () => {
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
+
+      const closeTrigger = screen.getByRole("button", { name: /Cerrar vista previa/ });
+      fireEvent.click(closeTrigger);
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+      // Dialog closes, onClose is never invoked — state (unresolved conflicts) is preserved.
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Focus is restored to the "Cerrar vista previa" button that triggered the dialog.
+      await waitFor(() => {
+        expect(closeTrigger).toHaveFocus();
+      });
+    });
+
+    it("confirm: proceeds with the discard by calling onClose", () => {
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar igualmente" }));
+
+      // Dialog closes and the panel-level onClose is invoked exactly once — the parent
+      // (ImportExportPage) owns unmounting the panel and restoring focus to its own
+      // trigger button once this fires.
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it("closes without showing the ConfirmDialog when no policies have been resolved yet", () => {
       const { onClose } = renderPanel(oneConflictPreview);
 
       fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
 
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
       expect(onClose).toHaveBeenCalledOnce();
-
-      confirmSpy.mockRestore();
     });
 
-    it("prompts before closing even when all conflicts are resolved (work would still be lost)", () => {
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-
+    it("shows the ConfirmDialog even when all conflicts are resolved (work would still be lost)", () => {
       const { onClose } = renderPanel({
         ...oneConflictPreview,
         policiesResolved: true,
@@ -2022,10 +2099,8 @@ describe("CsvImportPreviewPanel", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
 
-      expect(confirmSpy).toHaveBeenCalledOnce();
+      expect(screen.getByRole("dialog", { name: "Cerrar vista previa" })).toBeInTheDocument();
       expect(onClose).not.toHaveBeenCalled();
-
-      confirmSpy.mockRestore();
     });
 
     // Item 6 — aria-required on policy radios

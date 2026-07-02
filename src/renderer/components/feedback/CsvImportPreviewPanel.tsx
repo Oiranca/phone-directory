@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -257,16 +258,33 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // OIR-182 item 3: count how many conflicts already have a policy selected.
   const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
 
+  // PR #106 review: replace window.confirm with the shared accessible ConfirmDialog.
+  // closeButtonRef lets us restore focus to the trigger button when the operator
+  // cancels the discard-warning dialog (same convention as other ConfirmDialog usages).
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
   // OIR-182 item 4: warn before closing whenever any resolution work would be lost.
   // Prompt on any resolvedCount > 0 — not only partial — because closing before
   // importing discards the work even when all conflicts have been resolved.
   const handleClose = () => {
     if (resolvedCount > 0) {
-      // eslint-disable-next-line no-alert
-      if (!window.confirm("Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?")) {
-        return;
-      }
+      setShowDiscardConfirm(true);
+      return;
     }
+    onClose();
+  };
+
+  const handleCancelDiscardConfirm = () => {
+    setShowDiscardConfirm(false);
+    // Restore focus to the button that triggered the dialog.
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardConfirm(false);
     onClose();
   };
 
@@ -339,6 +357,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={handleClose}
             disabled={isMutating}
@@ -884,6 +903,19 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           </button>
         </div>
       </div>
+
+      {/* PR #106 review: shared accessible ConfirmDialog replaces window.confirm for the
+          discard-warning prompt shown when closing with unsaved conflict resolutions. */}
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        title="Cerrar vista previa"
+        message="Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?"
+        confirmLabel="Cerrar igualmente"
+        cancelLabel="Cancelar"
+        onConfirm={handleConfirmDiscard}
+        onCancel={handleCancelDiscardConfirm}
+        isDestructive={true}
+      />
     </section>
   );
 };
