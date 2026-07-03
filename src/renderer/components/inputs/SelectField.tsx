@@ -145,9 +145,9 @@ export const SelectField = ({
 
   return (
     <div ref={rootRef} className="relative">
-      <span id={labelId} className="text-sm font-medium text-slate-700">
+      <label id={labelId} htmlFor={id} className="text-sm font-medium text-slate-700">
         {label}
-      </span>
+      </label>
       <button
         ref={buttonRef}
         id={id}

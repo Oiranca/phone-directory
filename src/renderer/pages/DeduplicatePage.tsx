@@ -149,6 +149,10 @@ export const DeduplicatePage = () => {
   const emptyStateHeadingRef = useRef<HTMLHeadingElement>(null);
   // pendingFocusRef — flag set before state updates to trigger focus restore in effect
   const pendingFocusRef = useRef<boolean>(false);
+  // radioButtonRefs — tracks the "Conservar este" radio buttons by record id so
+  // arrow-key navigation can move DOM focus to the newly-selected option
+  // (roving tabindex pattern: only one radio per pair stays in the tab order).
+  const radioButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Restore focus after pairStates changes following a merge confirmation
   useEffect(() => {
@@ -205,42 +209,32 @@ export const DeduplicatePage = () => {
     );
   };
 
-  // WAI-ARIA radiogroup keyboard contract: Arrow keys move focus AND selection between
-  // the two options in the group (roving tabindex), wrapping at the bounds. Only the
-  // active/checked radio (or the first one, when none is checked) is in the tab order —
-  // see the tabIndex computation on the radio buttons below.
-  const handleRadioKeyDown = (
+  // Roving-tabindex arrow key navigation for the "keep this / keep both" radiogroup.
+  // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
+  // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the
+  // WAI-ARIA radiogroup keyboard contract.
+  const handleRadioGroupKeyDown = (
     event: React.KeyboardEvent<HTMLDivElement>,
     pairId: string,
-    records: [{ id: string }, { id: string }]
+    optionIds: string[]
   ) => {
-    if (
-      event.key !== "ArrowDown" &&
-      event.key !== "ArrowUp" &&
-      event.key !== "ArrowRight" &&
-      event.key !== "ArrowLeft"
-    ) {
-      return;
-    }
+    const previousKeys = ["ArrowUp", "ArrowLeft"];
+    const nextKeys = ["ArrowDown", "ArrowRight"];
+    if (!previousKeys.includes(event.key) && !nextKeys.includes(event.key)) return;
+
     event.preventDefault();
-
-    const container = event.currentTarget;
+    // Derive the current position from the actually-focused radio (event.target),
+    // not from which option is selected — a radio can have DOM focus without
+    // being checked yet (e.g. before any option has been picked).
     const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
-    const currentIndex = records.findIndex((r) => r.id === focusedId);
+    const currentIndex = focusedId ? optionIds.indexOf(focusedId) : -1;
     const safeIndex = currentIndex === -1 ? 0 : currentIndex;
-    const isNext = event.key === "ArrowDown" || event.key === "ArrowRight";
-    const nextIndex = isNext
-      ? (safeIndex + 1) % records.length
-      : (safeIndex - 1 + records.length) % records.length;
-    const nextRecord = records[nextIndex]!;
+    const delta = nextKeys.includes(event.key) ? 1 : -1;
+    const nextIndex = (safeIndex + delta + optionIds.length) % optionIds.length;
+    const nextId = optionIds[nextIndex]!;
 
-    handleKeepSelect(pairId, nextRecord.id);
-    requestAnimationFrame(() => {
-      const button = container.querySelector<HTMLButtonElement>(
-        `[data-record-id="${CSS.escape(nextRecord.id)}"]`
-      );
-      button?.focus();
-    });
+    handleKeepSelect(pairId, nextId);
+    radioButtonRefs.current.get(nextId)?.focus();
   };
 
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
@@ -464,14 +458,14 @@ export const DeduplicatePage = () => {
                 aria-label="Elegir cuál conservar"
                 className="grid gap-4 sm:grid-cols-2"
                 onKeyDown={(event) =>
-                  handleRadioKeyDown(event, pair.id, [pair.recordA, pair.recordB])
+                  handleRadioGroupKeyDown(event, pair.id, [pair.recordA.id, pair.recordB.id])
                 }
               >
                 {[pair.recordA, pair.recordB].map((record, index) => {
                   const isSelected = keepId === record.id;
-                  // Roving tabindex: the checked radio is tabbable; if none is checked yet,
-                  // the first radio is tabbable so Tab can enter the group at all.
-                  const isRovingTabStop = keepId ? isSelected : index === 0;
+                  // Roving tabindex: only the selected option (or the first option
+                  // when nothing is selected yet) stays in the tab order.
+                  const isTabbable = (keepId ?? pair.recordA.id) === record.id;
 
                   return (
                     <div
@@ -509,7 +503,11 @@ export const DeduplicatePage = () => {
                         )}
                         data-keep-btn
                         data-record-id={record.id}
-                        tabIndex={isRovingTabStop ? 0 : -1}
+                        ref={(el) => {
+                          if (el) radioButtonRefs.current.set(record.id, el);
+                          else radioButtonRefs.current.delete(record.id);
+                        }}
+                        tabIndex={isTabbable ? 0 : -1}
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[

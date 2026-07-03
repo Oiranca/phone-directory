@@ -930,6 +930,94 @@ describe("DeduplicatePage", () => {
 
   // ── End OIR-183 P1 fixes ────────────────────────────────────────────────────
 
+  describe("OIR-190 P2 follow-up — radiogroup arrow-key navigation (roving tabindex)", () => {
+    it("only one radio is tabbable at a time, defaulting to the first option", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(keepButtons[0]).toHaveAttribute("tabIndex", "0");
+      expect(keepButtons[1]).toHaveAttribute("tabIndex", "-1");
+    });
+
+    it("ArrowDown moves selection and focus to the next option", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowDown" });
+
+      const updatedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(updatedButtons[1]).toHaveAttribute("aria-checked", "true");
+      expect(updatedButtons[1]).toHaveAttribute("tabIndex", "0");
+      expect(updatedButtons[0]).toHaveAttribute("tabIndex", "-1");
+      expect(updatedButtons[1]).toHaveFocus();
+    });
+
+    it("ArrowRight moves selection and focus to the next option", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowRight" });
+
+      const updatedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(updatedButtons[1]).toHaveAttribute("aria-checked", "true");
+      expect(updatedButtons[1]).toHaveFocus();
+    });
+
+    it("ArrowDown wraps from the last option back to the first", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      // Move to the second (last) option first.
+      fireEvent.click(keepButtons[1]!);
+      const selectedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      selectedButtons[1]!.focus();
+
+      fireEvent.keyDown(selectedButtons[1]!, { key: "ArrowDown" });
+
+      const wrappedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(wrappedButtons[0]).toHaveAttribute("aria-checked", "true");
+      expect(wrappedButtons[0]).toHaveAttribute("tabIndex", "0");
+      expect(wrappedButtons[0]).toHaveFocus();
+    });
+
+    it("ArrowUp wraps from the first option back to the last", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowUp" });
+
+      const wrappedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(wrappedButtons[1]).toHaveAttribute("aria-checked", "true");
+      expect(wrappedButtons[1]).toHaveAttribute("tabIndex", "0");
+      expect(wrappedButtons[1]).toHaveFocus();
+    });
+
+    it("ArrowLeft moves selection and focus to the previous option (wrapping)", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      keepButtons[0]!.focus();
+
+      fireEvent.keyDown(keepButtons[0]!, { key: "ArrowLeft" });
+
+      const wrappedButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(wrappedButtons[1]).toHaveAttribute("aria-checked", "true");
+      expect(wrappedButtons[1]).toHaveFocus();
+    });
+  });
+
   describe("merge loss preview — OIR-175", () => {
     it("does not show the preview panel before any keepId is selected", async () => {
       renderPage();
