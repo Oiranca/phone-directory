@@ -1912,8 +1912,12 @@ describe("CsvImportPreviewPanel", () => {
       confirmSpy.mockRestore();
     });
 
-    it("closes without prompt when all conflicts are resolved (guard does not fire at 100%)", () => {
-      const confirmSpy = vi.spyOn(window, "confirm");
+    // Finding B (PR111): resolving every conflict does NOT persist anything by
+    // itself — selectedPolicy choices only take effect once "Confirmar
+    // importación" (onConfirm) is clicked. So closing at 100% resolved but
+    // pre-confirm must still warn, or all resolution work is silently lost.
+    it("calls window.confirm before closing when all conflicts are resolved but not yet confirmed", () => {
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
       const { onClose } = renderPanel({
         ...oneConflictPreview,
@@ -1925,7 +1929,26 @@ describe("CsvImportPreviewPanel", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
 
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(confirmSpy).toHaveBeenCalledOnce();
+      expect(onClose).not.toHaveBeenCalled();
+
+      confirmSpy.mockRestore();
+    });
+
+    it("proceeds to close when all conflicts are resolved and the operator confirms the warning dialog", () => {
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+      const { onClose } = renderPanel({
+        ...oneConflictPreview,
+        policiesResolved: true,
+        conflictedRecords: [
+          { ...oneConflictPreview.conflictedRecords[0]!, selectedPolicy: "overwrite" as const }
+        ]
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      expect(confirmSpy).toHaveBeenCalledOnce();
       expect(onClose).toHaveBeenCalledOnce();
 
       confirmSpy.mockRestore();

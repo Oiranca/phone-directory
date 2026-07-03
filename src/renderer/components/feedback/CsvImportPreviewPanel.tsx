@@ -257,9 +257,13 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // OIR-182 item 3: count how many conflicts already have a policy selected.
   const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
 
-  // OIR-182 item 4: warn before closing when partial resolution work exists.
+  // OIR-182 item 4 / Finding B (PR111): warn before closing whenever there is
+  // unsaved conflict-resolution work — including the fully-resolved-but-not-yet-
+  // confirmed state, since selectedPolicy choices only take effect once the
+  // operator clicks "Confirmar importación" (onConfirm). Closing before that,
+  // even with every conflict resolved, would silently discard all the work.
   const handleClose = () => {
-    if (resolvedCount > 0 && resolvedCount < conflictCount) {
+    if (resolvedCount > 0) {
       // eslint-disable-next-line no-alert
       if (!window.confirm("Has empezado a resolver los conflictos. Si cierras ahora perderás el trabajo parcial. ¿Quieres cerrar igualmente?")) {
         return;
