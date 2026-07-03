@@ -499,7 +499,7 @@ export const ImportExportPage = () => {
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Reemplaza el directorio completo por un archivo válido. Acción destructiva con copia de seguridad previa.
+              Reemplaza el directorio completo por un archivo válido. Se guarda una copia de seguridad antes de continuar.
             </p>
             <p className="mt-4 text-sm font-semibold text-amber-900">
               {isImporting ? "Importando…" : "Seleccionar archivo"}

@@ -239,6 +239,17 @@ describe("ImportExportPage", () => {
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
   });
 
+  it("OIR-188: shows the Import JSON card warning in plain natural Spanish (no bolted-on label)", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reemplaza el directorio completo por un archivo válido. Se guarda una copia de seguridad antes de continuar."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("creates a backup and shows success feedback", async () => {
     renderPage();
 
