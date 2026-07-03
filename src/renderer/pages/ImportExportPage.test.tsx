@@ -237,6 +237,7 @@ describe("ImportExportPage", () => {
     // PathDisplay component itself — both showing "contacts-1.json".
     expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
+    expect(screen.getByText("Última actualización del directorio")).toBeInTheDocument();
   });
 
   it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
@@ -313,6 +314,11 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.",
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar JSON/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Importar JSON" })).at(-1)!);
 

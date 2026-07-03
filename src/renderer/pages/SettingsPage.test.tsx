@@ -515,6 +515,13 @@ describe("SettingsPage", () => {
     const helpHeading = screen.getByRole("heading", { name: "Qué cambia al guardar" });
     expect(helpHeading).toBeInTheDocument();
 
+    // Data path help copy uses plain-language wording, not "dataset" jargon
+    expect(
+      screen.getByText(
+        "La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual.",
+      ),
+    ).toBeInTheDocument();
+
     // DOM order: status label -> separator -> help heading
     const bodyHTML = document.body.innerHTML;
     const statusPos = bodyHTML.indexOf("Estado actual");
