@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DuplicatePair } from "../../shared/types/duplicate";
+import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
@@ -24,6 +24,44 @@ function translateReason(reason: string): string {
   // phone reasons are "phone:<normalized-number>" — translate the prefix
   if (reason.startsWith("phone:")) return "Teléfono coincide";
   return reason;
+}
+
+/**
+ * OIR-189 P3 (Finding C) — the two records in a dedup pair frequently share the
+ * same displayName (that's often why they were flagged as duplicates), which
+ * previously produced two "Conservar" radios with IDENTICAL accessible names —
+ * a screen reader user could not tell them apart.
+ *
+ * This builds a disambiguated accessible name for the "Conservar" radio:
+ *  1. If department or the first phone number differ between the two records,
+ *     append whichever distinguishing detail is available (most natural: the
+ *     operator can already see these fields on the card).
+ *  2. Otherwise (both records identical on every visible field) fall back to
+ *     an explicit ordinal — "opción 1 de 2" / "opción 2 de 2" — which
+ *     guarantees the two accessible names are always distinct.
+ */
+function buildKeepAriaLabel(
+  record: DuplicateRecordSummary,
+  otherRecord: DuplicateRecordSummary,
+  position: number
+): string {
+  const distinguishing: string[] = [];
+
+  if (record.department && record.department !== otherRecord.department) {
+    distinguishing.push(record.department);
+  }
+
+  const firstPhone = record.phones[0]?.number;
+  const otherFirstPhone = otherRecord.phones[0]?.number;
+  if (firstPhone && firstPhone !== otherFirstPhone) {
+    distinguishing.push(firstPhone);
+  }
+
+  if (distinguishing.length > 0) {
+    return `Conservar ${record.displayName} (${distinguishing.join(", ")})`;
+  }
+
+  return `Conservar ${record.displayName}, opción ${position} de 2`;
 }
 
 const STORAGE_KEY_PREFIX = "dedup-dismissed-pairs";
@@ -468,7 +506,11 @@ export const DeduplicatePage = () => {
                         type="button"
                         role="radio"
                         aria-checked={isSelected}
-                        aria-label={`Conservar ${record.displayName}`}
+                        aria-label={buildKeepAriaLabel(
+                          record,
+                          index === 0 ? pair.recordB : pair.recordA,
+                          index + 1
+                        )}
                         data-keep-btn
                         data-record-id={record.id}
                         tabIndex={isRovingTabStop ? 0 : -1}

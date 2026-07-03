@@ -143,6 +143,65 @@ describe("DeduplicatePage", () => {
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
   });
 
+  describe("OIR-189 P3 follow-up — distinct accessible names for 'Conservar' radios (Finding C)", () => {
+    it("gives the two 'Conservar' radios distinct accessible names even when displayName matches", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      expect(keepButtons).toHaveLength(2);
+
+      const names = keepButtons.map((btn) => btn.getAttribute("aria-label"));
+      expect(names[0]).not.toEqual(names[1]);
+      // Both must still start with "Conservar" so existing /Conservar/ queries keep matching
+      expect(names[0]).toMatch(/^Conservar/);
+      expect(names[1]).toMatch(/^Conservar/);
+    });
+
+    it("falls back to an ordinal suffix when department and phone are also identical", async () => {
+      const identicalRecordA = {
+        id: "cnt_0021",
+        displayName: "Recepción",
+        department: "Recepción",
+        phones: [{ id: "ph_21", number: "70099" }]
+      };
+      const identicalRecordB = {
+        id: "cnt_0022",
+        displayName: "Recepción",
+        department: "Recepción",
+        phones: [{ id: "ph_22", number: "70099" }]
+      };
+
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockResolvedValue({
+            pairs: [{
+              id: "cnt_0021:cnt_0022",
+              recordA: identicalRecordA,
+              recordB: identicalRecordB,
+              reasons: ["displayName"],
+              score: 0.95
+            }],
+            records: { cnt_0021: identicalRecordA, cnt_0022: identicalRecordB },
+            checkedCount: 2,
+            pairCount: 1
+          }),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+      await screen.findAllByText("Recepción");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      const names = keepButtons.map((btn) => btn.getAttribute("aria-label"));
+      expect(names[0]).not.toEqual(names[1]);
+      expect(names[0]).toMatch(/opción 1 de 2/);
+      expect(names[1]).toMatch(/opción 2 de 2/);
+    });
+  });
+
   describe("OIR-189 P2 follow-up — radiogroup arrow-key navigation (roving tabindex)", () => {
     it("ArrowDown moves focus and selection from the first radio to the second", async () => {
       renderPage();
