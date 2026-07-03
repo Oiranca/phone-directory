@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { DuplicatePair } from "../../shared/types/duplicate";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
@@ -9,6 +9,60 @@ import { useAppStore } from "../store/useAppStore";
 interface PairState {
   pair: DuplicatePair;
   keepId: string | null;
+}
+
+/** Spanish labels for duplicate-detection reason codes. */
+const REASON_LABELS: Record<string, string> = {
+  externalId: "ID externo idéntico",
+  displayName: "Nombre idéntico",
+  "displayName:fuzzy": "Nombre similar",
+  "displayName:levenshtein": "Nombre similar (Levenshtein)",
+  "dept+name": "Departamento y nombre coinciden",
+};
+
+function translateReason(reason: string): string {
+  if (REASON_LABELS[reason]) return REASON_LABELS[reason]!;
+  // phone reasons are "phone:<normalized-number>" — translate the prefix
+  if (reason.startsWith("phone:")) return "Teléfono coincide";
+  return reason;
+}
+
+/**
+ * OIR-189 P3 (Finding C) — the two records in a dedup pair frequently share the
+ * same displayName (that's often why they were flagged as duplicates), which
+ * previously produced two "Conservar" radios with IDENTICAL accessible names —
+ * a screen reader user could not tell them apart.
+ *
+ * This builds a disambiguated accessible name for the "Conservar" radio:
+ *  1. If department or the first phone number differ between the two records,
+ *     append whichever distinguishing detail is available (most natural: the
+ *     operator can already see these fields on the card).
+ *  2. Otherwise (both records identical on every visible field) fall back to
+ *     an explicit ordinal — "opción 1 de 2" / "opción 2 de 2" — which
+ *     guarantees the two accessible names are always distinct.
+ */
+function buildKeepAriaLabel(
+  record: DuplicateRecordSummary,
+  otherRecord: DuplicateRecordSummary,
+  position: number
+): string {
+  const distinguishing: string[] = [];
+
+  if (record.department && record.department !== otherRecord.department) {
+    distinguishing.push(record.department);
+  }
+
+  const firstPhone = record.phones[0]?.number;
+  const otherFirstPhone = otherRecord.phones[0]?.number;
+  if (firstPhone && firstPhone !== otherFirstPhone) {
+    distinguishing.push(firstPhone);
+  }
+
+  if (distinguishing.length > 0) {
+    return `Conservar ${record.displayName} (${distinguishing.join(", ")})`;
+  }
+
+  return `Conservar ${record.displayName}, opción ${position} de 2`;
 }
 
 const STORAGE_KEY_PREFIX = "dedup-dismissed-pairs";
@@ -116,32 +170,32 @@ export const DeduplicatePage = () => {
     writeDismissedPairId(storageKey, pairId);
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        const result = await window.hospitalDirectory.detectDuplicates();
-        const dismissed = readDismissedPairIds(storageKey);
-        setPairStates(
-          result.pairs
-            .filter((pair) => !dismissed.includes(pair.id))
-            .map((pair) => ({ pair, keepId: null }))
-        );
-      } catch (error) {
-        setLoadError(
-          error instanceof Error ? error.message : "No se pudo cargar duplicados"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void load();
+  // loadPairs is also called by the "Reintentar" error-state button for targeted retry
+  const loadPairs = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const result = await window.hospitalDirectory.detectDuplicates();
+      const dismissed = readDismissedPairIds(storageKey);
+      setPairStates(
+        result.pairs
+          .filter((pair) => !dismissed.includes(pair.id))
+          .map((pair) => ({ pair, keepId: null }))
+      );
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "No se pudo cargar duplicados"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   // storageKey is stable in normal operation (set once at bootstrap); include it
   // so that if the operator changes dataFilePath the list reloads under the new scope.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+
+  useEffect(() => {
+    void loadPairs();
+  }, [loadPairs]);
 
   const handleKeepSelect = (pairId: string, keepId: string) => {
     setPairStates((current) =>
@@ -149,6 +203,44 @@ export const DeduplicatePage = () => {
         ps.pair.id === pairId ? { ...ps, keepId } : ps
       )
     );
+  };
+
+  // WAI-ARIA radiogroup keyboard contract: Arrow keys move focus AND selection between
+  // the two options in the group (roving tabindex), wrapping at the bounds. Only the
+  // active/checked radio (or the first one, when none is checked) is in the tab order —
+  // see the tabIndex computation on the radio buttons below.
+  const handleRadioKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    pairId: string,
+    records: [{ id: string }, { id: string }]
+  ) => {
+    if (
+      event.key !== "ArrowDown" &&
+      event.key !== "ArrowUp" &&
+      event.key !== "ArrowRight" &&
+      event.key !== "ArrowLeft"
+    ) {
+      return;
+    }
+    event.preventDefault();
+
+    const container = event.currentTarget;
+    const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
+    const currentIndex = records.findIndex((r) => r.id === focusedId);
+    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+    const isNext = event.key === "ArrowDown" || event.key === "ArrowRight";
+    const nextIndex = isNext
+      ? (safeIndex + 1) % records.length
+      : (safeIndex - 1 + records.length) % records.length;
+    const nextRecord = records[nextIndex]!;
+
+    handleKeepSelect(pairId, nextRecord.id);
+    requestAnimationFrame(() => {
+      const button = container.querySelector<HTMLButtonElement>(
+        `[data-record-id="${CSS.escape(nextRecord.id)}"]`
+      );
+      button?.focus();
+    });
   };
 
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
@@ -284,8 +376,9 @@ export const DeduplicatePage = () => {
         action={
           <button
             type="button"
-            onClick={() => window.location.reload()}
-            className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+            onClick={() => void loadPairs()}
+            aria-label="Reintentar detección de duplicados"
+            className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
           >
             Reintentar
           </button>
@@ -353,15 +446,32 @@ export const DeduplicatePage = () => {
                       key={reason}
                       className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
                     >
-                      {reason}
+                      {translateReason(reason)}
                     </span>
                   ))}
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[pair.recordA, pair.recordB].map((record) => {
+              {/* aria-live region: announces blocked/active status to screen readers */}
+              <p aria-live="polite" className="sr-only">
+                {isMerging
+                  ? "Fusionando contactos…"
+                  : (mergingId ? "Par en espera mientras se fusionan otros contactos." : "")}
+              </p>
+
+              <div
+                role="radiogroup"
+                aria-label="Elegir cuál conservar"
+                className="grid gap-4 sm:grid-cols-2"
+                onKeyDown={(event) =>
+                  handleRadioKeyDown(event, pair.id, [pair.recordA, pair.recordB])
+                }
+              >
+                {[pair.recordA, pair.recordB].map((record, index) => {
                   const isSelected = keepId === record.id;
+                  // Roving tabindex: the checked radio is tabbable; if none is checked yet,
+                  // the first radio is tabbable so Tab can enter the group at all.
+                  const isRovingTabStop = keepId ? isSelected : index === 0;
 
                   return (
                     <div
@@ -390,7 +500,16 @@ export const DeduplicatePage = () => {
                       {/* Fix 5: min-h-[44px] min-w-[44px] ensures WCAG 2.5.5 touch target ≥44×44px */}
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        aria-label={buildKeepAriaLabel(
+                          record,
+                          index === 0 ? pair.recordB : pair.recordA,
+                          index + 1
+                        )}
                         data-keep-btn
+                        data-record-id={record.id}
+                        tabIndex={isRovingTabStop ? 0 : -1}
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[
