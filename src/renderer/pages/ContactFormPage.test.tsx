@@ -487,7 +487,21 @@ describe("ContactFormPage", () => {
 
       fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "612345678" } });
 
-      expect(screen.getByRole("button", { name: "Eliminar teléfono 612345678" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 1: 612345678" })).toBeInTheDocument();
+    });
+
+    it("keeps Eliminar aria-labels unique across phones sharing the same number", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
+
+      const numberInputs = screen.getAllByLabelText(/número/i);
+      fireEvent.change(numberInputs[0], { target: { value: "612345678" } });
+      fireEvent.change(numberInputs[1], { target: { value: "612345678" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 1: 612345678" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 2: 612345678" })).toBeInTheDocument();
     });
 
     it("uses position-based aria-label for Eliminar on an email with no address yet", async () => {
@@ -509,8 +523,23 @@ describe("ContactFormPage", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: "Eliminar email usuario@ejemplo.com" })
+        screen.getByRole("button", { name: "Eliminar email 1: usuario@ejemplo.com" })
       ).toBeInTheDocument();
+    });
+
+    it("keeps Eliminar aria-labels unique across emails sharing the same address", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+
+      const addressInputs = screen.getAllByLabelText("Correo electrónico");
+      fireEvent.change(addressInputs[0], { target: { value: "usuario@ejemplo.com" } });
+      fireEvent.change(addressInputs[1], { target: { value: "usuario@ejemplo.com" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar email 1: usuario@ejemplo.com" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar email 2: usuario@ejemplo.com" })).toBeInTheDocument();
     });
 
     it("uses position-based aria-label for Eliminar on a social row with no handle or url", async () => {
@@ -520,6 +549,21 @@ describe("ContactFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
 
       expect(screen.getByRole("button", { name: "Eliminar red social 1" })).toBeInTheDocument();
+    });
+
+    it("keeps Eliminar aria-labels unique across social rows sharing the same handle", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+
+      const handleInputs = screen.getAllByLabelText("Handle / usuario");
+      fireEvent.change(handleInputs[0], { target: { value: "@hospital" } });
+      fireEvent.change(handleInputs[1], { target: { value: "@hospital" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar red social 1: @hospital" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar red social 2: @hospital" })).toBeInTheDocument();
     });
   });
 
