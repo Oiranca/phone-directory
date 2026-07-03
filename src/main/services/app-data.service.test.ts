@@ -184,6 +184,25 @@ describe("AppDataService", () => {
     ).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
+  it("rejects a custom data path that already points to an existing file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const existingDataFilePath = path.join(testRoot, "existing-contacts.json");
+    await fs.writeFile(existingDataFilePath, "{}", "utf-8");
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: existingDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      /Ya existe un archivo en esa ruta\. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas\./
+    );
+  });
+
   it("surfaces caller context when path validation hits unexpected filesystem errors", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -2833,7 +2852,7 @@ describe("AppDataService", () => {
     );
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
+      "El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo."
     );
   });
 

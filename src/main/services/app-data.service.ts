@@ -468,7 +468,7 @@ export class AppDataService {
     );
 
     if (preview.invalidRowCount > 0) {
-      throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
+      throw new Error("El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo.");
     }
 
     // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
@@ -1312,7 +1312,7 @@ export class AppDataService {
 
       if (error instanceof Error && error.message === "file-exists") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el dataset actual o restablece las rutas gestionadas.`
+          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
         );
       }
 
