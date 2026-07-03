@@ -605,4 +605,52 @@ describe("ContactFormPage", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  describe("Fix 6 — beforeunload guard outside the router (window close/reload)", () => {
+    it("does not warn on unload when the form is clean", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      const event = new Event("beforeunload", { cancelable: true });
+      const notCanceled = window.dispatchEvent(event);
+
+      expect(notCanceled).toBe(true);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("warns on unload when the form is dirty", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+
+      const event = new Event("beforeunload", { cancelable: true });
+      const notCanceled = window.dispatchEvent(event);
+
+      expect(notCanceled).toBe(false);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("removes the beforeunload listener on unmount", async () => {
+      const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
+      const { unmount } = render(
+        <ToastProvider>
+          <RouterProvider
+            router={createMemoryRouter(
+              [{ path: "/contacts/new", element: <ContactFormPage /> }],
+              { initialEntries: ["/contacts/new"] }
+            )}
+          />
+        </ToastProvider>
+      );
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      unmount();
+
+      expect(removeEventListenerSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function));
+      removeEventListenerSpy.mockRestore();
+    });
+  });
 });

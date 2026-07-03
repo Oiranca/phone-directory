@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Link, useBlocker } from "react-router-dom";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
@@ -47,6 +47,22 @@ export const ContactFormPage = () => {
    */
   const shouldBlock = useCallback(() => isDirtyRef.current, []);
   const blocker = useBlocker(shouldBlock);
+
+  /**
+   * Guard against losing unsaved edits outside the router — window close,
+   * reload, or any other unload path that useBlocker cannot intercept.
+   */
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirtyRef]);
 
   if (isLoading || !hasContacts || !hasSettings) {
     return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;
