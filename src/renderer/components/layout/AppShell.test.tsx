@@ -64,6 +64,13 @@ describe("AppShell — default mode", () => {
     expect(screen.getByText("Offline")).toBeInTheDocument();
   });
 
+  it("header shows the plain 'Agenda' heading and never mentions 'MVP'", () => {
+    renderShell();
+    const header = screen.getByRole("banner");
+    expect(screen.getByRole("heading", { level: 1, name: "Agenda" })).toBeInTheDocument();
+    expect(header.textContent).not.toMatch(/MVP/i);
+  });
+
   it("does not show recovery banner", () => {
     renderShell();
     expect(
