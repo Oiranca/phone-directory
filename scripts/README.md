@@ -86,7 +86,7 @@ The gate logic is tested in isolation using a stubbed `pnpm` executable (no real
 
 ```bash
 bash scripts/release-usb.audit.test.sh
-# or via npm script:
+# or via pnpm script:
 pnpm run test:audit-gate
 ```
 
