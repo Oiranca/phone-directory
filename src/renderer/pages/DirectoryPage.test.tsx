@@ -90,7 +90,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Búsqueda de contactos" })).toBeInTheDocument();
       expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
@@ -485,7 +485,8 @@ describe("DirectoryPage", () => {
       target: { value: "sin-coincidencias" }
     });
 
-    expect(await screen.findByText("No hay resultados para la búsqueda y filtros actuales.")).toHaveAttribute("role", "status");
+    const statusEl = await screen.findByRole("status");
+    expect(statusEl).toHaveTextContent("No hay resultados para la búsqueda y filtros actuales.");
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 

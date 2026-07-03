@@ -88,7 +88,7 @@ export const PathDisplay = ({ path, className, textClassName = "text-sm" }: Prop
           onClick={handleToggle}
           aria-label={revealed ? "Ocultar ruta completa" : "Mostrar ruta completa"}
           aria-pressed={revealed}
-          className="rounded px-1.5 py-0.5 text-xs font-medium text-slate-500 underline hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-scs-blue/40"
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-slate-500 underline hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue/40"
         >
           {revealed ? "Ocultar" : "Mostrar ruta"}
         </button>
@@ -96,7 +96,7 @@ export const PathDisplay = ({ path, className, textClassName = "text-sm" }: Prop
           type="button"
           onClick={() => void handleCopy()}
           aria-label="Copiar ruta completa"
-          className="rounded px-1.5 py-0.5 text-xs font-medium text-slate-500 underline hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-scs-blue/40"
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-slate-500 underline hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue/40"
         >
           {copied ? "Copiado" : "Copiar ruta"}
         </button>

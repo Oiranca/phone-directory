@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState
 import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { StatePanel } from "../components/feedback/StatePanel";
 
 const SHIFT_LABELS: Record<string, string> = {
   "mañana": "Mañana",
@@ -184,21 +185,20 @@ export const BuscasPage = () => {
             Registro de Buscas
           </h2>
         </div>
-        <div
+        <StatePanel
           role="alert"
-          className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center shadow-panel"
-        >
-          <p className="mb-4 text-sm font-medium text-red-900">
-            No se pudieron cargar los registros de buscas.
-          </p>
-          <button
-            type="button"
-            onClick={() => void loadBuscas()}
-            className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
-          >
-            Reintentar
-          </button>
-        </div>
+          title="Error al cargar"
+          message="No se pudieron cargar los registros de buscas."
+          action={
+            <button
+              type="button"
+              onClick={() => void loadBuscas()}
+              className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+            >
+              Reintentar
+            </button>
+          }
+        />
       </section>
     );
   }
@@ -223,11 +223,13 @@ export const BuscasPage = () => {
               </label>
               <input
                 id="buscas-search"
+                data-page-search
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar por número, nombre, departamento, rol, titular u hoja ODS"
                 type="search"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                title="Buscar buscas — pulsa / para enfocar"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <button
@@ -279,7 +281,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.deviceNumber}
                 onChange={(e) => setField("deviceNumber", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -292,7 +294,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.assignedTo}
                 onChange={(e) => setField("assignedTo", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -305,7 +307,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.department}
                 onChange={(e) => setField("department", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -318,7 +320,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.role}
                 onChange={(e) => setField("role", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -330,7 +332,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.shift}
                 onChange={(e) => setField("shift", e.target.value as EditableBuscaRecord["shift"])}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               >
                 {BUSCA_SHIFTS.map((shift) => (
                   <option key={shift} value={shift}>
@@ -348,7 +350,7 @@ export const BuscasPage = () => {
                 type="text"
                 value={formData.group ?? ""}
                 onChange={(e) => setField("group", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
           </div>
@@ -375,15 +377,12 @@ export const BuscasPage = () => {
 
       {/* Empty state */}
       {filteredRecords.length === 0 && filteredImportedRecords.length === 0 && !showForm && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel"
-        >
-          {query
+        <StatePanel
+          title={query ? "Sin resultados" : "Sin registros"}
+          message={query
             ? "No hay buscas que coincidan con la búsqueda."
             : "No hay buscas registradas. Crea el primer registro."}
-        </div>
+        />
       )}
 
       {/* Records table */}
@@ -459,7 +458,7 @@ export const BuscasPage = () => {
                     <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
                     <td className="px-4 py-3 text-slate-700">{record.holderType}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
-                    <td className="px-4 py-3 text-slate-400">—</td>
+                    <td className="px-4 py-3 text-slate-600">—</td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
                         ODS

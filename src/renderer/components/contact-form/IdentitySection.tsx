@@ -26,7 +26,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
         aria-required="true"
         aria-invalid={!!fieldErrors.displayName}
         aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
       />
       {fieldErrors.displayName && (
         <p id="displayName-error" role="alert" className="mt-2 text-sm text-red-600">
@@ -81,7 +81,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
               person: { ...current.person, firstName: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
 
@@ -98,7 +98,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
               person: { ...current.person, lastName: event.target.value }
             }))
           }
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
       </div>
     </div>
@@ -111,7 +111,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
         id="externalId"
         value={formState.externalId}
         onChange={(event) => setFormState((current) => ({ ...current, externalId: event.target.value }))}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
       />
     </div>
   </section>

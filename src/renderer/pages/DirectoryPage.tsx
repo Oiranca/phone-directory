@@ -6,6 +6,7 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { SelectField } from "../components/inputs/SelectField";
+import { StatePanel } from "../components/feedback/StatePanel";
 
 const typeLabels = {
   all: "Todos los tipos",
@@ -390,7 +391,7 @@ export const DirectoryPage = () => {
       {/* Search Header */}
       <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-4">
-          <h2 id="directory-page-title" className="sr-only">Directorio</h2>
+          <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -398,11 +399,13 @@ export const DirectoryPage = () => {
               </label>
               <input
                 id="directory-search"
+                data-page-search
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar contacto o servicio"
                 type="search"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                title="Buscar contactos — pulsa / para enfocar"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div className="w-full md:w-48">
@@ -450,7 +453,7 @@ export const DirectoryPage = () => {
                 type="checkbox"
                 checked={showInactive}
                 onChange={(event) => setShowInactive(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
               />
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
@@ -529,7 +532,7 @@ export const DirectoryPage = () => {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
                       <p className="truncate text-xs text-slate-500">
                         {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
                       </p>
@@ -560,9 +563,10 @@ export const DirectoryPage = () => {
           })}
           </ul>
           {visibleRecords.length === 0 && (
-            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
-              No hay resultados para la búsqueda y filtros actuales.
-            </div>
+            <StatePanel
+              title="Sin resultados"
+              message="No hay resultados para la búsqueda y filtros actuales."
+            />
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
             <nav aria-label="Paginación de resultados" className="rounded-2xl border border-slate-200 bg-white p-2">
@@ -710,7 +714,8 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.phones.length} disponibles
+                      {selectedRecord.contactMethods.phones.length}{" "}
+                      {selectedRecord.contactMethods.phones.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -755,7 +760,8 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.emails.length} disponibles
+                      {selectedRecord.contactMethods.emails.length}{" "}
+                      {selectedRecord.contactMethods.emails.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -789,7 +795,8 @@ export const DirectoryPage = () => {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Redes sociales</p>
                       <p className="text-xs font-medium text-slate-600">
-                        {(selectedRecord.contactMethods.socials ?? []).length} disponibles
+                        {(selectedRecord.contactMethods.socials ?? []).length}{" "}
+                        {(selectedRecord.contactMethods.socials ?? []).length === 1 ? "disponible" : "disponibles"}
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">

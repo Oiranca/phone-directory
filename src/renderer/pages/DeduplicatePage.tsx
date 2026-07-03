@@ -3,6 +3,7 @@ import type { DuplicatePair } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
 
 interface PairState {
@@ -216,55 +217,35 @@ export const DeduplicatePage = () => {
   // Error state: detection failure
   if (loadError) {
     return (
-      <section
+      <StatePanel
         role="alert"
-        className="rounded-3xl border-2 border-red-200 bg-red-50 p-8 shadow-panel"
-      >
-        <div className="flex flex-col items-start gap-4">
-          <div className="flex items-start gap-3">
-            <svg
-              className="mt-1 h-6 w-6 flex-shrink-0 text-red-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4v2m0-10a8 8 0 110 16 8 8 0 010-16z"
-              />
-            </svg>
-            <div>
-              <p className="font-semibold text-red-900">No se pudo cargar duplicados</p>
-              <p className="mt-1 text-sm text-red-700">{loadError}</p>
-            </div>
-          </div>
+        title="No se pudo cargar duplicados"
+        message={loadError}
+        action={
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+            className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
           >
             Reintentar
           </button>
-        </div>
-      </section>
+        }
+      />
     );
   }
 
   // Empty state: no duplicates found
   if (pairStates.length === 0) {
     return (
-      <section className="rounded-3xl bg-white p-8 shadow-panel">
-        <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-          <div className="rounded-full bg-emerald-50 p-4">
-            <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-base font-semibold text-slate-700">No se encontraron duplicados</p>
-          <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
-        </div>
-      </section>
+      <StatePanel
+        title="No se encontraron duplicados"
+        message="El directorio no tiene registros con datos coincidentes."
+        icon={
+          <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+          </svg>
+        }
+      />
     );
   }
 
@@ -317,7 +298,7 @@ export const DeduplicatePage = () => {
                           : "border-slate-200 bg-slate-50"
                       ].join(" ")}
                     >
-                      <p className="font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="font-semibold text-scs-blueDark">{record.displayName}</h3>
                       {record.department && (
                         <p className="mt-1 text-xs text-slate-500">{record.department}</p>
                       )}

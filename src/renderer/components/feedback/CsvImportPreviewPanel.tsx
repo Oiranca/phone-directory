@@ -173,14 +173,14 @@ const ConflictRecordCol = ({
               {social.platform}
               {social.handle && <span className="ml-1">@{social.handle}</span>}
               {!social.handle && social.url && <span className="ml-1">{social.url}</span>}
-              {social.label && <span className="ml-1 text-slate-400">({social.label})</span>}
+              {social.label && <span className="ml-1 text-slate-600">({social.label})</span>}
             </li>
           ))}
         </ul>
       )}
 
       {phones.length === 0 && emails.length === 0 && socials.length === 0 && (
-        <p className="mt-1 text-xs italic text-slate-400">Sin teléfonos ni correos</p>
+        <p className="mt-1 text-xs italic text-slate-600">Sin teléfonos ni correos</p>
       )}
     </div>
   );
@@ -753,7 +753,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                       </span>
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800">
-                      {row.displayName ?? <span className="italic text-slate-400">Sin nombre</span>}
+                      {row.displayName ?? <span className="italic text-slate-600">Sin nombre</span>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-600">
                       {row.type ?? "—"}
@@ -791,7 +791,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                       )}
                       {(!row.errorMessages || row.errorMessages.length === 0) &&
                         (!row.warningMessages || row.warningMessages.length === 0) && (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-slate-600">—</span>
                         )}
                     </td>
                   </tr>
