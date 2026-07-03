@@ -2833,7 +2833,7 @@ describe("AppDataService", () => {
     );
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
+      "El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo."
     );
   });
 
