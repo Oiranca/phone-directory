@@ -13,6 +13,7 @@ type Props = {
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   updatePhone: (phoneId: string, patch: Partial<EditablePhoneContact>) => void;
   removePhone: (phoneId: string) => void;
+  clearFieldError?: (path: string) => void;
 };
 
 export const PhonesSection = ({
@@ -24,7 +25,8 @@ export const PhonesSection = ({
   setLiveMessage,
   setPendingFocusTarget,
   updatePhone,
-  removePhone
+  removePhone,
+  clearFieldError
 }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -65,6 +67,11 @@ export const PhonesSection = ({
             <button
               type="button"
               onClick={() => removePhone(phone.id)}
+              aria-label={
+                phone.number.trim()
+                  ? `Eliminar teléfono ${index + 1}: ${phone.number.trim()}`
+                  : `Eliminar teléfono ${index + 1}`
+              }
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
@@ -82,7 +89,9 @@ export const PhonesSection = ({
               />
             </div>
             <div>
-              <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">Número</label>
+              <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">
+                Número<span aria-hidden="true" className="ml-1 text-red-600">*</span>
+              </label>
               <input
                 id={`phone-number-${phone.id}`}
                 ref={(element) => {
@@ -91,7 +100,12 @@ export const PhonesSection = ({
                   }
                 }}
                 value={phone.number}
-                onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
+                onChange={(event) => {
+                  clearFieldError?.(`contactMethods.phones.${index}.number`);
+                  updatePhone(phone.id, { number: event.target.value });
+                }}
+                required
+                aria-required="true"
                 aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
                 aria-describedby={fieldErrors[`contactMethods.phones.${index}.number`] ? `phone-number-${phone.id}-error` : undefined}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"

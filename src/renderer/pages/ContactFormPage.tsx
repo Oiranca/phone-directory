@@ -1,4 +1,6 @@
-import { Link } from "react-router-dom";
+import { useCallback, useEffect } from "react";
+import { Link, useBlocker } from "react-router-dom";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
 import { OrganizationLocationSection } from "../components/contact-form/OrganizationLocationSection";
@@ -25,6 +27,8 @@ export const ContactFormPage = () => {
     addEmailButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
+    isDirtyRef,
+    clearFieldError,
     setCommaSeparatedField,
     updatePhone,
     removePhone,
@@ -35,6 +39,33 @@ export const ContactFormPage = () => {
     setPendingFocusTarget,
     handleSubmit
   } = useContactForm();
+
+  /**
+   * Block navigation when the form has unsaved changes.
+   * isDirtyRef is a stable MutableRefObject — the callback reads the current
+   * value at navigation time, avoiding stale-closure issues.
+   */
+  const shouldBlock = useCallback(() => isDirtyRef.current, []);
+  const blocker = useBlocker(shouldBlock);
+
+  /**
+   * Guard window close / reload / browser unload when the form is dirty.
+   * useBlocker only intercepts React Router navigation — it does not cover
+   * Electron window close, page reload, or unload triggered outside the
+   * router. The native beforeunload prompt covers those remaining paths.
+   */
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirtyRef]);
 
   if (isLoading || !hasContacts || !hasSettings) {
     return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;
@@ -88,6 +119,7 @@ export const ContactFormPage = () => {
             fieldErrors={fieldErrors}
             setFormState={setFormState}
             displayNameInputRef={displayNameInputRef}
+            clearFieldError={clearFieldError}
           />
           <OrganizationLocationSection
             formState={formState}
@@ -106,6 +138,7 @@ export const ContactFormPage = () => {
           setPendingFocusTarget={setPendingFocusTarget}
           updatePhone={updatePhone}
           removePhone={removePhone}
+          clearFieldError={clearFieldError}
         />
 
         <EmailsSection
@@ -118,6 +151,7 @@ export const ContactFormPage = () => {
           setPendingFocusTarget={setPendingFocusTarget}
           updateEmail={updateEmail}
           removeEmail={removeEmail}
+          clearFieldError={clearFieldError}
         />
 
         <SocialsSection
@@ -187,6 +221,17 @@ export const ContactFormPage = () => {
           </Link>
         </div>
       </form>
+
+      {/* Unsaved-changes guard (Fix 5): shown when the router tries to navigate away with dirty form */}
+      <ConfirmDialog
+        isOpen={blocker.state === "blocked"}
+        title="Cambios sin guardar"
+        message="¿Seguro que quieres salir? Los cambios no guardados se perderán."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </section>
   );
 };

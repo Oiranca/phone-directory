@@ -8,9 +8,10 @@ type Props = {
   fieldErrors: Record<string, string>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
   displayNameInputRef?: React.RefObject<HTMLInputElement>;
+  clearFieldError?: (path: string) => void;
 };
 
-export const IdentitySection = ({ formState, fieldErrors, setFormState, displayNameInputRef }: Props) => (
+export const IdentitySection = ({ formState, fieldErrors, setFormState, displayNameInputRef, clearFieldError }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <h3 className="text-lg font-semibold text-scs-blueDark">Identidad</h3>
     <div>
@@ -21,7 +22,10 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
         ref={displayNameInputRef}
         id="displayName"
         value={formState.displayName}
-        onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
+        onChange={(event) => {
+          clearFieldError?.("displayName");
+          setFormState((current) => ({ ...current, displayName: event.target.value }));
+        }}
         required
         aria-required="true"
         aria-invalid={!!fieldErrors.displayName}

@@ -12,6 +12,7 @@ type Props = {
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   updateEmail: (emailId: string, patch: Partial<EditableEmailContact>) => void;
   removeEmail: (emailId: string) => void;
+  clearFieldError?: (path: string) => void;
 };
 
 export const EmailsSection = ({
@@ -23,7 +24,8 @@ export const EmailsSection = ({
   setLiveMessage,
   setPendingFocusTarget,
   updateEmail,
-  removeEmail
+  removeEmail,
+  clearFieldError
 }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -64,6 +66,11 @@ export const EmailsSection = ({
             <button
               type="button"
               onClick={() => removeEmail(email.id)}
+              aria-label={
+                email.address.trim()
+                  ? `Eliminar email ${index + 1}: ${email.address.trim()}`
+                  : `Eliminar email ${index + 1}`
+              }
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
@@ -90,7 +97,10 @@ export const EmailsSection = ({
                   }
                 }}
                 value={email.address}
-                onChange={(event) => updateEmail(email.id, { address: event.target.value })}
+                onChange={(event) => {
+                  clearFieldError?.(`contactMethods.emails.${index}.address`);
+                  updateEmail(email.id, { address: event.target.value });
+                }}
                 aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}
                 aria-describedby={fieldErrors[`contactMethods.emails.${index}.address`] ? `email-address-${email.id}-error` : undefined}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
