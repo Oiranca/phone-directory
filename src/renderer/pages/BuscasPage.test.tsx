@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ToastProvider } from "../components/feedback/ToastRegion";
 import { BuscasPage } from "./BuscasPage";
 import type { BuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 
@@ -96,7 +97,9 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
 const renderPage = () =>
   render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <BuscasPage />
+      <ToastProvider>
+        <BuscasPage />
+      </ToastProvider>
     </MemoryRouter>
   );
 

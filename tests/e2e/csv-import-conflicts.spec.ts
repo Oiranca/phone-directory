@@ -50,7 +50,7 @@ const conflictCsv = (displayName: string, phone: string) =>
 const openPreview = async (page: import("@playwright/test").Page) => {
   await page.getByRole("link", { name: "Importar/Exportar" }).click();
   await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
-  await page.getByRole("button", { name: /Preparar agenda/i }).click();
+  await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
   await expect(page.getByText("Vista previa importación")).toBeVisible();
 };
 
@@ -374,7 +374,7 @@ test.describe("OIR-103 CSV import conflict-resolution flows", () => {
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
       const alert = previewPanel.getByRole("alert");
       await expect(alert).toBeVisible();
-      await expect(alert).toContainText("rechazada");
+      await expect(alert).toContainText("filas con errores que no se importarán");
 
       // Row table shows rejected badges
       const table = page.getByRole("table", { name: "Filas de importación" });

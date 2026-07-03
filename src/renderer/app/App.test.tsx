@@ -161,7 +161,8 @@ describe("App recovery flow", () => {
     expect(screen.getByText("Importar JSON válido")).toBeInTheDocument();
     expect(screen.getByText("Restablecer directorio vacío")).toBeInTheDocument();
     expect(screen.queryByText("Directorio disponible")).not.toBeInTheDocument();
-    expect(screen.queryByText("Directorio")).not.toBeInTheDocument();
+    // "Directorio" appears in the AppShell h1 regardless of mode; check nav/page content instead
+    expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
   });
 
   it("imports a valid JSON backup and exits recovery mode", async () => {

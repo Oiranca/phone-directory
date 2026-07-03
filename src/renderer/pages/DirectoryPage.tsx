@@ -308,6 +308,32 @@ export const DirectoryPage = () => {
           button.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
       });
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      const firstRecord = currentPageRecords[0]!;
+      setSelectedRecordId(firstRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(firstRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
+    } else if (event.key === "End") {
+      event.preventDefault();
+      const lastRecord = currentPageRecords[currentPageRecords.length - 1]!;
+      setSelectedRecordId(lastRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(lastRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
     } else if (event.key === "Enter") {
       // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
       // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
@@ -390,7 +416,7 @@ export const DirectoryPage = () => {
       {/* Search Header */}
       <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-4">
-          <h2 id="directory-page-title" className="sr-only">Directorio</h2>
+          <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -398,11 +424,13 @@ export const DirectoryPage = () => {
               </label>
               <input
                 id="directory-search"
+                data-page-search
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar contacto o servicio"
                 type="search"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                title="Buscar contactos — pulsa / para enfocar"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div className="w-full md:w-48">
@@ -450,14 +478,14 @@ export const DirectoryPage = () => {
                 type="checkbox"
                 checked={showInactive}
                 onChange={(event) => setShowInactive(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus:ring-scs-blue"
+                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
               />
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
             <p
-              role={visibleRecords.length > 0 ? "status" : undefined}
-              aria-live={visibleRecords.length > 0 ? "polite" : "off"}
-              aria-atomic={visibleRecords.length > 0 ? "true" : undefined}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
               className="text-xs font-medium text-slate-500"
             >
               {visibleRecords.length} resultados
@@ -466,28 +494,68 @@ export const DirectoryPage = () => {
           {(query || selectedType !== "all" || selectedArea !== "all" || selectedTags.length > 0 || showInactive) && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {query ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {query}
+                  <button
+                    type="button"
+                    aria-label="Eliminar filtro: búsqueda"
+                    onClick={() => setQuery("")}
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedType !== "all" ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {typeLabels[selectedType]}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${typeLabels[selectedType]}`}
+                    onClick={() => setSelectedType("all")}
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedArea !== "all" ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   {areaLabels[selectedArea]}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${areaLabels[selectedArea]}`}
+                    onClick={() => setSelectedArea("all")}
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               {selectedTags.map((tag) => (
-                <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   #{tag}
+                  <button
+                    type="button"
+                    aria-label={`Eliminar filtro: ${tag}`}
+                    onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ))}
               {showInactive ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                   Inactivos
+                  <button
+                    type="button"
+                    aria-label="Eliminar filtro: Inactivos"
+                    onClick={() => setShowInactive(false)}
+                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
                 </span>
               ) : null}
               <button
@@ -529,7 +597,7 @@ export const DirectoryPage = () => {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
                       <p className="truncate text-xs text-slate-500">
                         {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
                       </p>
@@ -559,9 +627,14 @@ export const DirectoryPage = () => {
             );
           })}
           </ul>
-          {visibleRecords.length === 0 && (
+          {visibleRecords.length === 0 && contacts.records.length === 0 && (
             <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
-              No hay resultados para la búsqueda y filtros actuales.
+              La agenda está vacía. Añade el primer contacto para empezar.
+            </div>
+          )}
+          {visibleRecords.length === 0 && contacts.records.length > 0 && (
+            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+              No se han encontrado resultados para esta búsqueda.
             </div>
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
@@ -658,6 +731,7 @@ export const DirectoryPage = () => {
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
+                      aria-label={`Editar registro: ${selectedRecord.displayName}`}
                       className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
                       Editar registro
@@ -667,26 +741,26 @@ export const DirectoryPage = () => {
 
                 <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <dl className="grid gap-4 sm:grid-cols-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</p>
-                        <p className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.department ?? "Sin departamento"}
-                        </p>
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</dt>
+                        <dd className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
+                          {selectedRecord.organization.department ?? "Sin unidad"}
+                        </dd>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</p>
-                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</dt>
+                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
                           {selectedRecord.organization.service ?? "Sin servicio"}
-                        </p>
+                        </dd>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</p>
-                        <p className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</dt>
+                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
                           {areaLabels[selectedRecord.organization.area ?? "none"]}
-                        </p>
+                        </dd>
                       </div>
-                    </div>
+                    </dl>
                   </div>
 
                   {selectedRecord.location && (
@@ -710,7 +784,8 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.phones.length} disponibles
+                      {selectedRecord.contactMethods.phones.length}{" "}
+                      {selectedRecord.contactMethods.phones.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -755,7 +830,8 @@ export const DirectoryPage = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
                     <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.emails.length} disponibles
+                      {selectedRecord.contactMethods.emails.length}{" "}
+                      {selectedRecord.contactMethods.emails.length === 1 ? "disponible" : "disponibles"}
                     </p>
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -789,7 +865,8 @@ export const DirectoryPage = () => {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Redes sociales</p>
                       <p className="text-xs font-medium text-slate-600">
-                        {(selectedRecord.contactMethods.socials ?? []).length} disponibles
+                        {(selectedRecord.contactMethods.socials ?? []).length}{" "}
+                        {(selectedRecord.contactMethods.socials ?? []).length === 1 ? "disponible" : "disponibles"}
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
@@ -851,7 +928,7 @@ export const DirectoryPage = () => {
             ) : (
               <div className="flex h-64 flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-slate-50 p-4 mb-4">
-                  <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg aria-hidden="true" className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                   </svg>
                 </div>

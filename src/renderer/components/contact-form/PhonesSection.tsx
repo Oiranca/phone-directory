@@ -13,6 +13,7 @@ type Props = {
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   updatePhone: (phoneId: string, patch: Partial<EditablePhoneContact>) => void;
   removePhone: (phoneId: string) => void;
+  clearFieldError?: (path: string) => void;
 };
 
 export const PhonesSection = ({
@@ -24,7 +25,8 @@ export const PhonesSection = ({
   setLiveMessage,
   setPendingFocusTarget,
   updatePhone,
-  removePhone
+  removePhone,
+  clearFieldError
 }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -57,14 +59,19 @@ export const PhonesSection = ({
       </button>
     </div>
 
-    <div className="space-y-4">
+    <ul className="space-y-4">
       {phones.map((phone, index) => (
-        <div key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+        <li key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</p>
+            <h4 className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</h4>
             <button
               type="button"
               onClick={() => removePhone(phone.id)}
+              aria-label={
+                phone.number.trim()
+                  ? `Eliminar teléfono ${index + 1}: ${phone.number.trim()}`
+                  : `Eliminar teléfono ${index + 1}`
+              }
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
@@ -78,12 +85,15 @@ export const PhonesSection = ({
                 id={`phone-label-${phone.id}`}
                 value={phone.label ?? ""}
                 onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
             <div>
-              <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">Número</label>
+              <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">
+                Número<span aria-hidden="true" className="ml-1 text-red-600">*</span>
+              </label>
               <input
+                type="tel"
                 id={`phone-number-${phone.id}`}
                 ref={(element) => {
                   if (phoneNumberInputRefs.current) {
@@ -91,10 +101,15 @@ export const PhonesSection = ({
                   }
                 }}
                 value={phone.number}
-                onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
+                onChange={(event) => {
+                  clearFieldError?.(`contactMethods.phones.${index}.number`);
+                  updatePhone(phone.id, { number: event.target.value });
+                }}
+                required
+                aria-required="true"
                 aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
                 aria-describedby={fieldErrors[`contactMethods.phones.${index}.number`] ? `phone-number-${phone.id}-error` : undefined}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
               {fieldErrors[`contactMethods.phones.${index}.number`] && (
                 <p id={`phone-number-${phone.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
@@ -108,7 +123,7 @@ export const PhonesSection = ({
                 id={`phone-extension-${phone.id}`}
                 value={phone.extension ?? ""}
                 onChange={(event) => updatePhone(phone.id, { extension: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
           </div>
@@ -129,7 +144,7 @@ export const PhonesSection = ({
                 id={`phone-notes-${phone.id}`}
                 value={phone.notes ?? ""}
                 onChange={(event) => updatePhone(phone.id, { notes: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
           </div>
@@ -166,8 +181,8 @@ export const PhonesSection = ({
               No facilitar a pacientes
             </label>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   </section>
 );

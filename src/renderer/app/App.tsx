@@ -102,7 +102,7 @@ const RecoveryPanel = () => {
   };
 
   return (
-    <section className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 shadow-panel">
+    <section aria-busy={isImporting || isResetting || isRestoringPaths} className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 shadow-panel">
       <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">Recuperación obligatoria</p>
       <h2 className="mt-3 text-3xl font-semibold text-scs-blueDark">No se puede abrir el directorio actual</h2>
       <p className="mt-4 text-sm text-slate-700">{recovery.message}</p>
@@ -142,7 +142,7 @@ const RecoveryPanel = () => {
       <ConfirmDialog
         isOpen={isResetDialogOpen}
         title="Restablecer directorio vacío"
-        message="Se creará un backup del contacts.json dañado y después se restablecerá un directorio vacío. ¿Quieres continuar?"
+        message="Antes se guardará una copia de seguridad de los datos de la agenda y después se restablecerá un directorio vacío. ¿Quieres continuar?"
         confirmLabel="Restablecer directorio vacío"
         cancelLabel="Cancelar"
         isDestructive={true}
@@ -179,7 +179,7 @@ export const App = () => {
     return window.hospitalDirectory.onAutoBackupFailure(({ message }) => {
       pushToast({
         type: "error",
-        message: toCompactToastMessage(message, "No se pudo crear el auto-backup.")
+        message: toCompactToastMessage(message, "No se pudo crear la copia de seguridad automática.")
       });
     });
   }, [pushToast]);
@@ -187,7 +187,7 @@ export const App = () => {
   if (bootstrapError) {
     return (
       <AppShell>
-        <section className="rounded-3xl bg-white p-8 shadow-panel">
+        <section role="alert" className="rounded-3xl bg-white p-8 shadow-panel">
           <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
           <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
           {bootstrapHelp ? <p className="mt-2 text-sm text-slate-500">{bootstrapHelp}</p> : null}

@@ -1,7 +1,45 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ConflictRecordSummary, CsvImportPreview, CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
+
+// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
+// Required because the discard-warning prompt now renders via the shared
+// ConfirmDialog component (native <dialog>) instead of window.confirm (PR #106 review).
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : HTMLElement.prototype;
+
+  originalShowModal = dialogPrototype.showModal;
+  originalClose = dialogPrototype.close;
+
+  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = true;
+  });
+  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
+    this.open = false;
+  });
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+});
 
 const basePreview: CsvImportPreviewWithConflicts = {
   importToken: "test-token",
@@ -229,18 +267,26 @@ describe("CsvImportPreviewPanel", () => {
       ]
     };
 
-    it("renders the blocker alert when there are rejected rows", () => {
+    it("renders an informational (non-blocking) notice about rejected rows (OIR-200)", () => {
       renderPanel(mixedPreview);
 
-      const alert = screen.getByRole("alert");
-      expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent("2 filas rechazadas");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      const status = screen.getByRole("status");
+      expect(status).toBeInTheDocument();
+      expect(status).toHaveTextContent("2 filas rechazadas");
     });
 
-    it("disables the confirm button when invalid rows exist", () => {
+    it("enables the confirm button when at least one row is valid, even with rejected rows present (OIR-200)", () => {
       renderPanel(mixedPreview);
 
-      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+
+    it("calls onConfirm for a partial import when confirm is clicked (OIR-200)", () => {
+      const { onConfirm } = renderPanel(mixedPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
     it("shows rejected status badge for invalid rows", () => {
@@ -306,7 +352,7 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel(allRejectedPreview);
 
       const alert = screen.getByRole("alert");
-      expect(alert).toHaveTextContent("2 filas rechazadas");
+      expect(alert).toHaveTextContent("2 filas con errores");
     });
 
     it("disables the confirm button", () => {
@@ -417,7 +463,6 @@ describe("CsvImportPreviewPanel", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             displayName: "Mostrador importado",
             department: "Admisión",
             phones: [],
@@ -426,7 +471,6 @@ describe("CsvImportPreviewPanel", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             displayName: "Mostrador actual",
             department: "Admisión",
             phones: [],
@@ -444,7 +488,7 @@ describe("CsvImportPreviewPanel", () => {
     it("blocks confirmation until conflict policies are selected", () => {
       renderPanel(conflictPreview);
 
-      expect(screen.getByRole("alert")).toHaveTextContent("Selecciona una política");
+      expect(screen.getByRole("alert")).toHaveTextContent("Para cada uno elige qué hacer");
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
 
@@ -795,6 +839,71 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByText("other@hospital.com").closest("li")).not.toHaveClass("bg-amber-100");
       expect(screen.getByText("unrelated@other.com").closest("li")).not.toHaveClass("bg-amber-100");
     });
+
+    // PR #115 review: content-composed keys like `${phone.number}|${label}` collide when
+    // two contact methods share the same value, causing a React duplicate-key warning and
+    // risking the highlight state being applied to the wrong row on reconciliation.
+    it("renders duplicate phone entries with identical number and label without a React key collision, keeping the correct highlight on every row", () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      renderPanel({
+        ...basePreview,
+        fileName: "duplicate-phone-conflict.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-dup-1",
+              displayName: "Servicio Duplicado",
+              // Two entries with the exact same number AND label — the pre-fix key
+              // `${phone.number}|${label ?? ""}` would collide for both rows.
+              phones: [
+                { number: "12345", kind: "direct" },
+                { number: "12345", kind: "direct" }
+              ],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-dup-1",
+              displayName: "Servicio Duplicado Existente",
+              phones: [{ number: "12345", kind: "direct" }],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "phone-match",
+            conflictReasonKey: "conflict_reason.phone_match",
+            matchingFieldValue: "12345"
+          }
+        ]
+      });
+
+      // Both duplicate rows in the imported column plus the one in the existing column
+      // must all be rendered and highlighted — a key collision must not cause React to
+      // silently drop, merge, or misattribute the highlight of one of the duplicate rows.
+      const matchingPhones = screen.getAllByText("12345");
+      expect(matchingPhones).toHaveLength(3);
+      for (const el of matchingPhones) {
+        expect(el.closest("li")).toHaveClass("bg-amber-100");
+      }
+
+      // React must not warn about two children sharing the same key.
+      const hasDuplicateKeyWarning = consoleErrorSpy.mock.calls.some((call) =>
+        call.some((arg) => typeof arg === "string" && /same key|unique "key" prop/i.test(arg))
+      );
+      expect(hasDuplicateKeyWarning).toBe(false);
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -935,7 +1044,18 @@ describe("CsvImportPreviewPanel", () => {
     it("does not render format line when detectedFormat is absent", () => {
       renderPanel(basePreview);
 
-      expect(screen.queryByText(/Formato detectado:/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Tipo de archivo:/)).not.toBeInTheDocument();
+    });
+
+    it("shows the format line without a confidence label when detectionConfidence is undefined", () => {
+      renderPanel({
+        ...basePreview,
+        detectedFormat: "plantilla normalizada",
+        detectionConfidence: undefined
+      });
+
+      expect(screen.getByText("Formato detectado: plantilla normalizada")).toBeInTheDocument();
+      expect(screen.queryByText(/confianza/)).not.toBeInTheDocument();
     });
   });
 
@@ -965,7 +1085,7 @@ describe("CsvImportPreviewPanel", () => {
         ]
       });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("1 fila rechazada");
+      expect(screen.getByRole("alert")).toHaveTextContent("1 fila con errores");
     });
   });
 
@@ -1155,14 +1275,36 @@ describe("CsvImportPreviewPanel", () => {
     it("renders a per-conflict checkbox for each conflict card", () => {
       renderPanel(twoConflictPreview);
 
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ })).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio B importado/ })).toBeInTheDocument();
     });
 
     it("renders a select-all checkbox in the bulk toolbar", () => {
       renderPanel(twoConflictPreview);
 
       expect(screen.getByRole("checkbox", { name: /Seleccionar todos/ })).toBeInTheDocument();
+    });
+
+    // Regression: two imported rows with an identical displayName must still get
+    // distinct accessible names for their per-conflict checkbox (the recordIndex
+    // disambiguator was dropped in a prior change, causing duplicate aria-labels).
+    it("keeps per-conflict checkbox aria-labels unique when displayName repeats across conflicts", () => {
+      const duplicateNamePreview = {
+        ...twoConflictPreview,
+        conflictedRecords: twoConflictPreview.conflictedRecords.map((conflict) => ({
+          ...conflict,
+          importedRecord: { ...conflict.importedRecord, displayName: "Servicio Repetido" }
+        }))
+      };
+
+      renderPanel(duplicateNamePreview);
+
+      const first = screen.getByRole("checkbox", { name: "Seleccionar Servicio Repetido (conflicto 1)" });
+      const second = screen.getByRole("checkbox", { name: "Seleccionar Servicio Repetido (conflicto 2)" });
+
+      expect(first).toBeInTheDocument();
+      expect(second).toBeInTheDocument();
+      expect(first).not.toBe(second);
     });
 
     // --- select-all / deselect-all ---
@@ -1172,8 +1314,8 @@ describe("CsvImportPreviewPanel", () => {
 
       fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todos/ }));
 
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio B importado/ })).toBeChecked();
     });
 
     it("clicking select-all when all are selected deselects all", () => {
@@ -1184,17 +1326,17 @@ describe("CsvImportPreviewPanel", () => {
       fireEvent.click(selectAllCb); // select all
       fireEvent.click(selectAllCb); // now label says "Deseleccionar todos" — same element
 
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).not.toBeChecked();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ })).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio B importado/ })).not.toBeChecked();
     });
 
     it("selecting one conflict individually makes it checked", () => {
       renderPanel(twoConflictPreview);
 
-      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ }));
 
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio B importado/ })).not.toBeChecked();
     });
 
     // --- bulk-apply to selected ---
@@ -1206,7 +1348,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.queryByRole("button", { name: /Aplicar a seleccionados/ })).not.toBeInTheDocument();
 
       // Select one conflict
-      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ }));
 
       expect(screen.getByRole("button", { name: /Aplicar a seleccionados/ })).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: /Política para seleccionados/ })).toBeInTheDocument();
@@ -1234,7 +1376,7 @@ describe("CsvImportPreviewPanel", () => {
       const { onPolicyChange } = renderPanel(twoConflictPreview);
 
       // Select only conflict 0
-      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ }));
 
       // Apply "skip" to selected
       fireEvent.change(screen.getByRole("combobox", { name: /Política para seleccionados/ }), {
@@ -1323,8 +1465,8 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel(twoConflictPreview, { isMutating: true });
 
       expect(screen.getByRole("checkbox", { name: /Seleccionar todos/ })).toBeDisabled();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeDisabled();
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 2/ })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio B importado/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /Omitir a todos/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /Sobrescribir a todos/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /Combinar a todos/ })).toBeDisabled();
@@ -1472,8 +1614,8 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel(bigPreview);
 
       // Select the conflict
-      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ }));
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+      fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar Servicio Paginado importado/ }));
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio Paginado importado/ })).toBeChecked();
 
       // Navigate to page 2
       fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
@@ -1482,7 +1624,7 @@ describe("CsvImportPreviewPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
 
       // Conflict checkbox must still be checked — selection persisted
-      expect(screen.getByRole("checkbox", { name: /Seleccionar conflicto 1/ })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Seleccionar Servicio Paginado importado/ })).toBeChecked();
     });
 
     it("shows the page range indicator when there are multiple pages", () => {
@@ -1546,7 +1688,8 @@ describe("CsvImportPreviewPanel", () => {
 
       // Pager must be back on page 1: indicator reads "1" and first-page rows are visible.
       expect(screen.getByRole("navigation", { name: /Paginación de filas/ })).toBeInTheDocument();
-      expect(screen.getByText(/Página/)).toHaveTextContent("Página 1 de 2");
+      // Use selector to avoid matching the sr-only live region that also contains "Página"
+      expect(screen.getByText(/Página/, { selector: 'span:not([role="status"])' })).toHaveTextContent("Página 1 de 2");
       expect(screen.getByText("Preview B 1")).toBeInTheDocument();
       expect(screen.queryByText("Preview B 101")).not.toBeInTheDocument();
     });
@@ -1615,9 +1758,9 @@ describe("CsvImportPreviewPanel", () => {
     it("selection persists across conflict page navigation", () => {
       renderPanel(makeConflictsPreview(50));
 
-      // Select first conflict on page 1 (recordIndex 0 → exact aria-label "Seleccionar conflicto 1")
+      // Select first conflict on page 1 (recordIndex 0 → displayName "Importado 1")
       const selectFirstConflict = () =>
-        screen.getByRole("checkbox", { name: "Seleccionar conflicto 1" });
+        screen.getByRole("checkbox", { name: "Seleccionar Importado 1 (conflicto 1)" });
       fireEvent.click(selectFirstConflict());
       expect(selectFirstConflict()).toBeChecked();
 
@@ -1773,6 +1916,375 @@ describe("CsvImportPreviewPanel", () => {
       expect(descEl).toHaveTextContent(
         "Se fusionan ambos contactos. Los teléfonos, correos y etiquetas se combinan; las notas y otros campos del contacto existente se conservan."
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Privacy + copy policy assertions (OIR-181)
+  // ---------------------------------------------------------------------------
+  describe("privacy and jargon policy (OIR-181)", () => {
+    it("does not render the raw external ID value for external_id conflicts", () => {
+      // The matchingFieldValue for external-id-match must never surface to the user.
+      // Even if the payload still contains one (e.g., older IPC version), the renderer
+      // must suppress it. This test asserts the policy end-to-end.
+      renderPanel({
+        ...basePreview,
+        fileName: "privacy-check.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-priv-1",
+              displayName: "Consulta Externa",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-priv-1",
+              displayName: "Consulta Externa actual",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id",
+            // raw machine ID — must not appear in rendered output
+            matchingFieldValue: "ID-RAW-12345"
+          }
+        ]
+      });
+
+      // The human-readable reason label must be present
+      expect(screen.getByText(/Este contacto ya existe en la agenda/)).toBeInTheDocument();
+
+      // The raw internal identifier must not appear anywhere in the rendered output
+      expect(screen.queryByText(/ID-RAW-12345/)).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("ID-RAW-12345");
+    });
+
+    it("rendered conflict panel does not contain jargon terms banned by OIR-181", () => {
+      // Regression guard: ensure no banned anglicisms or internal jargon surface
+      // in the conflict-resolution UI after the OIR-181 copy pass.
+      renderPanel({
+        ...basePreview,
+        fileName: "jargon-check.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        updatedCount: 1,
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-jargon-1",
+              displayName: "Mostrador importado",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-jargon-1",
+              displayName: "Mostrador actual",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      });
+
+      const body = document.body.textContent ?? "";
+      // None of these jargon terms should appear in user-facing copy
+      expect(body).not.toMatch(/\bdataset\b/i);
+      expect(body).not.toMatch(/\bbackup\b/i);
+      expect(body).not.toMatch(/\bdestructiva\b/i);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-182 — UX and a11y improvements (P1 batch)
+  // ---------------------------------------------------------------------------
+  describe("OIR-182 UX and a11y improvements", () => {
+    /** One unresolved conflict — used for most OIR-182 item tests. */
+    const oneConflictPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "oir182.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-oir182-0",
+            displayName: "Registro OIR-182",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-oir182-0",
+            displayName: "Registro existente OIR-182",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    // Item 3 — resolution counter
+
+    it("shows '0 de N resueltos' counter when there are unresolved conflicts", () => {
+      renderPanel(oneConflictPreview);
+
+      expect(screen.getByText(/0 de 1 resueltos/)).toBeInTheDocument();
+    });
+
+    it("resolution counter reflects resolved count when a policy is set", () => {
+      renderPanel({
+        ...oneConflictPreview,
+        conflictedRecords: [
+          {
+            ...oneConflictPreview.conflictedRecords[0]!,
+            selectedPolicy: "skip" as const
+          }
+        ]
+      });
+
+      expect(screen.getByText(/1 de 1 resueltos/)).toBeInTheDocument();
+    });
+
+    it("does not render the counter when there are no conflicts", () => {
+      renderPanel(basePreview);
+
+      expect(screen.queryByText(/de \d+ resueltos/)).not.toBeInTheDocument();
+    });
+
+    // Item 2 — single CTA in sticky footer
+
+    it("has exactly one Confirmar importación button (sticky footer, no duplicate in header)", () => {
+      renderPanel(oneConflictPreview);
+
+      const btns = screen.getAllByRole("button", { name: /Confirmar importación/ });
+      expect(btns).toHaveLength(1);
+    });
+
+    // Item 4 — close guard (PR #106 review: window.confirm replaced with shared ConfirmDialog)
+
+    /** Preview with two conflicts, one resolved — used by the partial-resolution guard tests. */
+    const twoConflictsOneResolvedPreview: CsvImportPreviewWithConflicts = {
+      ...oneConflictPreview,
+      conflictCount: 2,
+      conflictedRecords: [
+        {
+          ...oneConflictPreview.conflictedRecords[0]!,
+          recordIndex: 0,
+          selectedPolicy: "skip" as const
+        },
+        {
+          recordIndex: 1,
+          importedRecord: {
+            id: "import-oir182-1",
+            displayName: "Registro OIR-182 B",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-oir182-1",
+            displayName: "Existente OIR-182 B",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    };
+
+    it("shows the accessible ConfirmDialog (not window.confirm) before closing if some but not all conflicts are resolved", () => {
+      const confirmSpy = vi.spyOn(window, "confirm");
+
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      // window.confirm must never be used for this flow anymore.
+      expect(confirmSpy).not.toHaveBeenCalled();
+      // The panel is not closed yet — awaiting the operator's decision in the dialog.
+      expect(onClose).not.toHaveBeenCalled();
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      expect(dialog).toHaveTextContent("Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo.");
+      expect(within(dialog).getByRole("button", { name: "Cerrar igualmente" })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+
+      confirmSpy.mockRestore();
+    });
+
+    it("cancel: dismisses the ConfirmDialog, leaves state unchanged, and restores focus to the trigger button", async () => {
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
+
+      const closeTrigger = screen.getByRole("button", { name: /Cerrar vista previa/ });
+      fireEvent.click(closeTrigger);
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+      // Dialog closes, onClose is never invoked — state (unresolved conflicts) is preserved.
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Focus is restored to the "Cerrar vista previa" button that triggered the dialog.
+      await waitFor(() => {
+        expect(closeTrigger).toHaveFocus();
+      });
+    });
+
+    it("confirm: proceeds with the discard by calling onClose", () => {
+      const { onClose } = renderPanel(twoConflictsOneResolvedPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      const dialog = screen.getByRole("dialog", { name: "Cerrar vista previa" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar igualmente" }));
+
+      // Dialog closes and the panel-level onClose is invoked exactly once — the parent
+      // (ImportExportPage) owns unmounting the panel and restoring focus to its own
+      // trigger button once this fires.
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it("closes without showing the ConfirmDialog when no policies have been resolved yet", () => {
+      const { onClose } = renderPanel(oneConflictPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      expect(screen.queryByRole("dialog", { name: "Cerrar vista previa" })).not.toBeInTheDocument();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    // Finding B (PR111): resolving every conflict does NOT persist anything by
+    // itself — selectedPolicy choices only take effect once "Confirmar
+    // importación" (onConfirm) is clicked. So closing at 100% resolved but
+    // pre-confirm must still warn, or all resolution work is silently lost.
+    it("shows the ConfirmDialog even when all conflicts are resolved (work would still be lost)", () => {
+      const { onClose } = renderPanel({
+        ...oneConflictPreview,
+        policiesResolved: true,
+        conflictedRecords: [
+          { ...oneConflictPreview.conflictedRecords[0]!, selectedPolicy: "overwrite" as const }
+        ]
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar vista previa/ }));
+
+      expect(screen.getByRole("dialog", { name: "Cerrar vista previa" })).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    // Item 6 — aria-required on policy radios
+
+    it("all policy radio inputs carry aria-required='true'", () => {
+      renderPanel(oneConflictPreview);
+
+      expect(screen.getByRole("radio", { name: "Omitir" })).toHaveAttribute("aria-required", "true");
+      expect(screen.getByRole("radio", { name: "Sobrescribir" })).toHaveAttribute("aria-required", "true");
+      expect(screen.getByRole("radio", { name: "Combinar" })).toHaveAttribute("aria-required", "true");
+    });
+
+    // Item 7 — live regions in pagination navs
+
+    it("conflict pagination nav contains an aria-live='polite' region for SR announcements", () => {
+      const manyConflicts: CsvImportPreviewWithConflicts = {
+        ...basePreview,
+        fileName: "many.csv",
+        totalRowCount: 21,
+        validRowCount: 21,
+        recordCount: 21,
+        mergedRecordCount: 21,
+        updatedCount: 21,
+        conflictCount: 21,
+        policiesResolved: false,
+        conflictedRecords: Array.from({ length: 21 }, (_, i) => ({
+          recordIndex: i,
+          importedRecord: {
+            id: `imp-oir182-${i}`,
+            displayName: `Importado OIR-182 ${i + 1}`,
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: `ex-oir182-${i}`,
+            displayName: `Existente OIR-182 ${i + 1}`,
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: i,
+          matchingRecordSource: "existing" as const,
+          conflictType: "external-id-match" as const,
+          conflictReasonKey: "conflict_reason.external_id"
+        }))
+      };
+      renderPanel(manyConflicts);
+
+      const conflictNav = screen.getByRole("navigation", { name: /Navegación de conflictos/ });
+      const liveRegion = conflictNav.querySelector("[aria-live='polite']");
+      expect(liveRegion).toBeInTheDocument();
+    });
+
+    it("preview row pagination nav contains an aria-live='polite' region for SR announcements", () => {
+      const manyRows: CsvImportPreviewWithConflicts = {
+        ...basePreview,
+        fileName: "rows.csv",
+        totalRowCount: 101,
+        validRowCount: 101,
+        recordCount: 101,
+        mergedRecordCount: 101,
+        createdCount: 101,
+        previewRows: Array.from({ length: 101 }, (_, i) => ({
+          rowNumber: i + 2,
+          status: "accepted" as const,
+          displayName: `Fila OIR-182 ${i + 1}`
+        }))
+      };
+      renderPanel(manyRows);
+
+      const rowNav = screen.getByRole("navigation", { name: /Paginación de filas/ });
+      const liveRegion = rowNav.querySelector("[aria-live='polite']");
+      expect(liveRegion).toBeInTheDocument();
     });
   });
 });

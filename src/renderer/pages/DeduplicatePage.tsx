@@ -1,13 +1,68 @@
-import { useEffect, useState } from "react";
-import type { DuplicatePair } from "../../shared/types/duplicate";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
 
 interface PairState {
   pair: DuplicatePair;
   keepId: string | null;
+}
+
+/** Spanish labels for duplicate-detection reason codes. */
+const REASON_LABELS: Record<string, string> = {
+  externalId: "ID externo idéntico",
+  displayName: "Nombre idéntico",
+  "displayName:fuzzy": "Nombre similar",
+  "displayName:levenshtein": "Nombre similar (Levenshtein)",
+  "dept+name": "Departamento y nombre coinciden",
+};
+
+function translateReason(reason: string): string {
+  if (REASON_LABELS[reason]) return REASON_LABELS[reason]!;
+  // phone reasons are "phone:<normalized-number>" — translate the prefix
+  if (reason.startsWith("phone:")) return "Teléfono coincide";
+  return reason;
+}
+
+/**
+ * OIR-189 P3 (Finding C) — the two records in a dedup pair frequently share the
+ * same displayName (that's often why they were flagged as duplicates), which
+ * previously produced two "Conservar" radios with IDENTICAL accessible names —
+ * a screen reader user could not tell them apart.
+ *
+ * This builds a disambiguated accessible name for the "Conservar" radio:
+ *  1. If department or the first phone number differ between the two records,
+ *     append whichever distinguishing detail is available (most natural: the
+ *     operator can already see these fields on the card).
+ *  2. Otherwise (both records identical on every visible field) fall back to
+ *     an explicit ordinal — "opción 1 de 2" / "opción 2 de 2" — which
+ *     guarantees the two accessible names are always distinct.
+ */
+function buildKeepAriaLabel(
+  record: DuplicateRecordSummary,
+  otherRecord: DuplicateRecordSummary,
+  position: number
+): string {
+  const distinguishing: string[] = [];
+
+  if (record.department && record.department !== otherRecord.department) {
+    distinguishing.push(record.department);
+  }
+
+  const firstPhone = record.phones[0]?.number;
+  const otherFirstPhone = otherRecord.phones[0]?.number;
+  if (firstPhone && firstPhone !== otherFirstPhone) {
+    distinguishing.push(firstPhone);
+  }
+
+  if (distinguishing.length > 0) {
+    return `Conservar ${record.displayName} (${distinguishing.join(", ")})`;
+  }
+
+  return `Conservar ${record.displayName}, opción ${position} de 2`;
 }
 
 const STORAGE_KEY_PREFIX = "dedup-dismissed-pairs";
@@ -79,43 +134,92 @@ export const DeduplicatePage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
   const [mergingId, setMergingId] = useState<string | null>(null);
+  // OIR-195 item 3: total pairs found in this session, fixed at the first successful
+  // load so the "X de Y revisados" counter tracks progress against a stable baseline
+  // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
+  // The baseline is tagged with the storageKey it was computed for, so switching the
+  // active data file (which changes storageKey) invalidates the stale baseline instead
+  // of leaving the previous dataset's total stuck as the denominator (PR #116 review).
+  const [pairTotalBaseline, setPairTotalBaseline] = useState<{
+    key: string;
+    total: number;
+  } | null>(null);
+  const initialPairTotal =
+    pairTotalBaseline !== null && pairTotalBaseline.key === storageKey
+      ? pairTotalBaseline.total
+      : null;
   const [confirmState, setConfirmState] = useState<{
     pairId: string;
     keepRecord: { id: string; displayName: string };
     discardRecord: { id: string; displayName: string };
   } | null>(null);
 
+  // Focus restoration refs
+  // triggerRef — the "Fusionar" button that opened the confirm dialog
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // headingRef — the duplicate-list page heading, focused when ≥1 pair remains after merge
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // emptyStateHeadingRef — the empty-state heading, focused when 0 pairs remain after merge
+  const emptyStateHeadingRef = useRef<HTMLHeadingElement>(null);
+  // pendingFocusRef — flag set before state updates to trigger focus restore in effect
+  const pendingFocusRef = useRef<boolean>(false);
+  // radioButtonRefs — tracks the "Conservar este" radio buttons by record id so
+  // arrow-key navigation can move DOM focus to the newly-selected option
+  // (roving tabindex pattern: only one radio per pair stays in the tab order).
+  const radioButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  // Restore focus after pairStates changes following a merge confirmation
+  useEffect(() => {
+    if (!pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    // Try to focus the first "Conservar este" button in the updated list
+    const firstKeepBtn = document.querySelector<HTMLButtonElement>("[data-keep-btn]");
+    if (firstKeepBtn) {
+      firstKeepBtn.focus();
+    } else {
+      // No more pairs: the duplicate-list heading (headingRef) has unmounted.
+      // Focus the empty-state heading instead, which is now in the DOM.
+      emptyStateHeadingRef.current?.focus();
+    }
+  }, [pairStates]);
+
   const handleDismissPair = (pairId: string) => {
     setPairStates((current) => current.filter((ps) => ps.pair.id !== pairId));
     writeDismissedPairId(storageKey, pairId);
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        const result = await window.hospitalDirectory.detectDuplicates();
-        const dismissed = readDismissedPairIds(storageKey);
-        setPairStates(
-          result.pairs
-            .filter((pair) => !dismissed.includes(pair.id))
-            .map((pair) => ({ pair, keepId: null }))
-        );
-      } catch (error) {
-        setLoadError(
-          error instanceof Error ? error.message : "No se pudo cargar duplicados"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void load();
+  // loadPairs is also called by the "Reintentar" error-state button for targeted retry
+  const loadPairs = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const result = await window.hospitalDirectory.detectDuplicates();
+      const dismissed = readDismissedPairIds(storageKey);
+      const filtered = result.pairs.filter((pair) => !dismissed.includes(pair.id));
+      setPairStates(filtered.map((pair) => ({ pair, keepId: null })));
+      // OIR-195 item 3: capture the baseline only once per storageKey, on the first
+      // successful load after that key is seen — later refreshes for the SAME dataset
+      // (e.g. "Reintentar" or post-merge) must not reset the denominator, but switching
+      // to a DIFFERENT dataset (storageKey changes) must recompute it (PR #116 review).
+      setPairTotalBaseline((current) =>
+        current === null || current.key !== storageKey
+          ? { key: storageKey, total: filtered.length }
+          : current
+      );
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "No se pudo cargar duplicados"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   // storageKey is stable in normal operation (set once at bootstrap); include it
   // so that if the operator changes dataFilePath the list reloads under the new scope.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+
+  useEffect(() => {
+    void loadPairs();
+  }, [loadPairs]);
 
   const handleKeepSelect = (pairId: string, keepId: string) => {
     setPairStates((current) =>
@@ -125,10 +229,41 @@ export const DeduplicatePage = () => {
     );
   };
 
-  const handleMergeClick = (pairState: PairState) => {
+  // Roving-tabindex arrow key navigation for the "keep this / keep both" radiogroup.
+  // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
+  // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the
+  // WAI-ARIA radiogroup keyboard contract.
+  const handleRadioGroupKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    pairId: string,
+    optionIds: string[]
+  ) => {
+    const previousKeys = ["ArrowUp", "ArrowLeft"];
+    const nextKeys = ["ArrowDown", "ArrowRight"];
+    if (!previousKeys.includes(event.key) && !nextKeys.includes(event.key)) return;
+
+    event.preventDefault();
+    // Derive the current position from the actually-focused radio (event.target),
+    // not from which option is selected — a radio can have DOM focus without
+    // being checked yet (e.g. before any option has been picked).
+    const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
+    const currentIndex = focusedId ? optionIds.indexOf(focusedId) : -1;
+    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+    const delta = nextKeys.includes(event.key) ? 1 : -1;
+    const nextIndex = (safeIndex + delta + optionIds.length) % optionIds.length;
+    const nextId = optionIds[nextIndex]!;
+
+    handleKeepSelect(pairId, nextId);
+    radioButtonRefs.current.get(nextId)?.focus();
+  };
+
+  const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
     if (!pairState.keepId) {
       return;
     }
+
+    // Store trigger so focus can be restored on cancel
+    triggerRef.current = triggerEl;
 
     const keepRecord =
       pairState.pair.recordA.id === pairState.keepId
@@ -144,6 +279,14 @@ export const DeduplicatePage = () => {
       pairId: pairState.pair.id,
       keepRecord: { id: keepRecord.id, displayName: keepRecord.displayName },
       discardRecord: { id: discardRecord.id, displayName: discardRecord.displayName }
+    });
+  };
+
+  const handleCancelDialog = () => {
+    setConfirmState(null);
+    // Restore focus to the button that triggered the dialog
+    requestAnimationFrame(() => {
+      triggerRef.current?.focus();
     });
   };
 
@@ -176,11 +319,17 @@ export const DeduplicatePage = () => {
       pushToast({ type: "error", message });
       setMergingId(null);
       setConfirmState(null);
+      // Restore focus to the trigger button on failure too
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
+      });
       return;
     }
 
     // Stage B: merge committed — show success, then refresh the list
     pushToast({ type: "success", message: "Duplicado fusionado correctamente" });
+    // Signal that the next pairStates update should restore focus
+    pendingFocusRef.current = true;
 
     try {
       // Refresh all pairs to clear any pairs that referenced the discarded record
@@ -195,9 +344,15 @@ export const DeduplicatePage = () => {
       // Refresh failed but the merge already committed — warn the operator to
       // reload rather than applying a partial local filter that could mask the
       // true list state.
+      pendingFocusRef.current = false;
       pushToast({
         type: "warning",
         message: "La fusión se completó, pero la lista no pudo actualizarse. Recarga la página para ver los cambios."
+      });
+      // Focus was never restored by the pairStates effect (refresh didn't fire
+      // setPairStates), so explicitly return focus to the trigger button now.
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
       });
     } finally {
       setMergingId(null);
@@ -207,8 +362,20 @@ export const DeduplicatePage = () => {
 
   if (isLoading) {
     return (
-      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">
-        Buscando duplicados…
+      <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-8 shadow-panel">
+        <div className="flex items-center gap-3 text-slate-700">
+          <svg
+            className="h-5 w-5 animate-spin text-scs-blue"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>Buscando duplicados…</span>
+        </div>
       </section>
     );
   }
@@ -216,52 +383,42 @@ export const DeduplicatePage = () => {
   // Error state: detection failure
   if (loadError) {
     return (
-      <section
+      <StatePanel
         role="alert"
-        className="rounded-3xl border-2 border-red-200 bg-red-50 p-8 shadow-panel"
-      >
-        <div className="flex flex-col items-start gap-4">
-          <div className="flex items-start gap-3">
-            <svg
-              className="mt-1 h-6 w-6 flex-shrink-0 text-red-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4v2m0-10a8 8 0 110 16 8 8 0 010-16z"
-              />
-            </svg>
-            <div>
-              <p className="font-semibold text-red-900">No se pudo cargar duplicados</p>
-              <p className="mt-1 text-sm text-red-700">{loadError}</p>
-            </div>
-          </div>
+        title="No se pudo cargar duplicados"
+        message={loadError}
+        action={
           <button
-            onClick={() => window.location.reload()}
+            type="button"
+            onClick={() => void loadPairs()}
+            aria-label="Reintentar detección de duplicados"
             className="focus-ring rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
           >
             Reintentar
           </button>
-        </div>
-      </section>
+        }
+      />
     );
   }
 
-  // Empty state: no duplicates found
+  // Empty state: no duplicates found (also rendered after the last pair is merged)
   if (pairStates.length === 0) {
     return (
       <section className="rounded-3xl bg-white p-8 shadow-panel">
         <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
           <div className="rounded-full bg-emerald-50 p-4">
-            <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-base font-semibold text-slate-700">No se encontraron duplicados</p>
+          {/* Stable focus target for post-merge keyboard flow when 0 pairs remain */}
+          <h2
+            ref={emptyStateHeadingRef}
+            tabIndex={-1}
+            className="text-base font-semibold text-slate-700 focus:outline-none"
+          >
+            No se encontraron duplicados
+          </h2>
           <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
         </div>
       </section>
@@ -271,13 +428,25 @@ export const DeduplicatePage = () => {
   return (
     <section aria-labelledby="deduplicate-page-title" className="flex flex-col gap-5">
       <div className="rounded-3xl bg-white p-5 shadow-panel">
-        <h2 id="deduplicate-page-title" className="text-2xl font-semibold text-scs-blueDark">
+        {/* tabIndex={-1} allows programmatic focus after all pairs are merged */}
+        <h2
+          id="deduplicate-page-title"
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-2xl font-semibold text-scs-blueDark focus:outline-none"
+        >
           Duplicados detectados
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           {pairStates.length} {pairStates.length === 1 ? "par encontrado" : "pares encontrados"}.
           Selecciona el registro a conservar y fusiona.
         </p>
+        {/* OIR-195 item 3: reviewed-pairs progress counter */}
+        {initialPairTotal !== null && initialPairTotal > 0 && (
+          <p aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-slate-500">
+            {Math.max(0, initialPairTotal - pairStates.length)} de {initialPairTotal} pares revisados
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
@@ -288,24 +457,47 @@ export const DeduplicatePage = () => {
           return (
             <article key={pair.id} className="rounded-3xl bg-white p-6 shadow-panel">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                {/* OIR-195 item 4: ids referenced by the radiogroup's aria-describedby below,
+                    so screen readers announce similarity/reasons as context for this pair's choice. */}
+                <span
+                  id={`pair-score-${pair.id}`}
+                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900"
+                >
                   Similitud {Math.round(pair.score * 100)}%
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div id={`pair-reasons-${pair.id}`} className="flex flex-wrap gap-2">
                   {pair.reasons.map((reason) => (
                     <span
                       key={reason}
                       className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
                     >
-                      {reason}
+                      {translateReason(reason)}
                     </span>
                   ))}
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[pair.recordA, pair.recordB].map((record) => {
+              {/* aria-live region: announces blocked/active status to screen readers */}
+              <p aria-live="polite" className="sr-only">
+                {isMerging
+                  ? "Fusionando contactos…"
+                  : (mergingId ? "Par en espera mientras se fusionan otros contactos." : "")}
+              </p>
+
+              <div
+                role="radiogroup"
+                aria-label="Elegir cuál conservar"
+                aria-describedby={`pair-score-${pair.id} pair-reasons-${pair.id}`}
+                className="grid gap-4 sm:grid-cols-2"
+                onKeyDown={(event) =>
+                  handleRadioGroupKeyDown(event, pair.id, [pair.recordA.id, pair.recordB.id])
+                }
+              >
+                {[pair.recordA, pair.recordB].map((record, index) => {
                   const isSelected = keepId === record.id;
+                  // Roving tabindex: only the selected option (or the first option
+                  // when nothing is selected yet) stays in the tab order.
+                  const isTabbable = (keepId ?? pair.recordA.id) === record.id;
 
                   return (
                     <div
@@ -317,7 +509,7 @@ export const DeduplicatePage = () => {
                           : "border-slate-200 bg-slate-50"
                       ].join(" ")}
                     >
-                      <p className="font-semibold text-scs-blueDark">{record.displayName}</p>
+                      <h3 className="font-semibold text-scs-blueDark">{record.displayName}</h3>
                       {record.department && (
                         <p className="mt-1 text-xs text-slate-500">{record.department}</p>
                       )}
@@ -331,12 +523,27 @@ export const DeduplicatePage = () => {
                           ))}
                         </ul>
                       )}
+                      {/* Fix 5: min-h-[44px] min-w-[44px] ensures WCAG 2.5.5 touch target ≥44×44px */}
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        aria-label={buildKeepAriaLabel(
+                          record,
+                          index === 0 ? pair.recordB : pair.recordA,
+                          index + 1
+                        )}
+                        data-keep-btn
+                        data-record-id={record.id}
+                        ref={(el) => {
+                          if (el) radioButtonRefs.current.set(record.id, el);
+                          else radioButtonRefs.current.delete(record.id);
+                        }}
+                        tabIndex={isTabbable ? 0 : -1}
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[
-                          "focus-ring mt-4 w-full rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60",
+                          "focus-ring mt-4 min-h-[44px] min-w-[44px] w-full rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60",
                           isSelected
                             ? "bg-scs-blue text-white"
                             : "border border-slate-300 bg-white text-slate-700 hover:border-scs-blue hover:text-scs-blue"
@@ -368,13 +575,29 @@ export const DeduplicatePage = () => {
                   No son el mismo contacto
                 </button>
                 {keepId && (
+                  /* Fix 1: amber/warning styling + ⚠ icon to communicate destructive/irreversible action */
                   <button
                     type="button"
-                    onClick={() => handleMergeClick(pairState)}
+                    onClick={(e) => handleMergeClick(pairState, e.currentTarget)}
                     disabled={!!mergingId}
-                    className="focus-ring rounded-2xl bg-scs-blue px-6 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
+                    className="focus-ring inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
                   >
-                    {isMerging ? "Fusionando…" : "Fusionar"}
+                    {isMerging ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Fusionando…
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                        Fusionar
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -383,14 +606,19 @@ export const DeduplicatePage = () => {
         })}
       </div>
 
+      {/* Fix 2: unambiguous copy — explicitly states which contact will be deleted */}
       <ConfirmDialog
         isOpen={!!confirmState}
         title="Confirmar fusión"
-        message={confirmState ? `¿Fusionar "${confirmState.discardRecord.displayName}" en "${confirmState.keepRecord.displayName}"? Esta acción no se puede deshacer.` : ""}
+        message={
+          confirmState
+            ? `Se eliminará el contacto "${confirmState.discardRecord.displayName}" y sus datos únicos se añadirán a "${confirmState.keepRecord.displayName}". Esta acción no se puede deshacer.`
+            : ""
+        }
         confirmLabel="Fusionar"
         cancelLabel="Cancelar"
         onConfirm={() => void handleConfirmMerge()}
-        onCancel={() => setConfirmState(null)}
+        onCancel={handleCancelDialog}
         isDestructive={true}
       />
     </section>

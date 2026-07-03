@@ -140,7 +140,7 @@ export class AppDataService {
     }
 
     if (!path.isAbsolute(normalizedBackupDirectoryPath)) {
-      throw new Error("La ruta de la carpeta de backups debe ser absoluta.");
+      throw new Error("La ruta de la carpeta de copias de seguridad debe ser absoluta.");
     }
 
     const currentSettings = await this.readSettings();
@@ -183,7 +183,7 @@ export class AppDataService {
 
   private async createBackupInner() {
     const settings = await this.readSettings(true);
-    const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear el backup del directorio.");
+    const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear la copia de seguridad del directorio.");
     this.autoBackupEditCount = 0;
     return backupFilePath;
   }
@@ -213,7 +213,7 @@ export class AppDataService {
     const settings = await this.readSettings(true);
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
-      "No se pudo leer la carpeta de backups."
+      "No se pudo leer la carpeta de copias de seguridad."
     );
     try {
       await ensureDirectory(backupDirectory);
@@ -259,7 +259,7 @@ export class AppDataService {
     } catch (error) {
       throw this.toFilesystemError(
         error,
-        "No se pudo leer la carpeta de backups.",
+        "No se pudo leer la carpeta de copias de seguridad.",
         { filePath: backupDirectory }
       );
     }
@@ -325,7 +325,7 @@ export class AppDataService {
   async restoreBackup(sourceFilePath: string): Promise<ImportContactsResult> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
-    const message = "No se pudo restaurar el backup seleccionado.";
+    const message = "No se pudo restaurar la copia de seguridad seleccionada.";
     const canonicalBackupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
       message
@@ -366,7 +366,7 @@ export class AppDataService {
       // placeholder never reaches JSON.parse (which would throw SyntaxError).
       if (rawContents.trim().length === 0) {
         throw new Error(
-          `${message} El archivo de backup está vacío y no puede restaurarse. Ruta afectada: ${canonicalSourceFilePath}.`
+          `${message} El archivo de copia de seguridad está vacío y no puede restaurarse. Ruta afectada: ${canonicalSourceFilePath}.`
         );
       }
 
@@ -467,12 +467,17 @@ export class AppDataService {
       editorName
     );
 
-    if (preview.invalidRowCount > 0) {
-      throw new Error("El archivo contiene filas inválidas. Corrige el origen antes de importarlo.");
-    }
+    // OIR-200: A partially-invalid file no longer blocks the whole import. Rejected
+    // rows are already excluded from `dataset` — buildImportPreviewFromRows only
+    // pushes a row into `dataset.records` after it passes Zod validation via
+    // contactRecordSchema.parse — so proceeding here can never persist a rejected
+    // row. Rejected rows (and their existing per-row reasons in preview.rowIssues)
+    // are simply skipped and reported back in the result below.
 
     // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
-    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook.
+    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook
+    // that has nothing importable at all (no valid contact rows AND no buscas
+    // content). This is the one case that must still block the import.
     if (preview.validRowCount === 0 && buscasParseResult.parsedCellCount === 0) {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
@@ -523,7 +528,10 @@ export class AppDataService {
       createdCount: merged.createdCount,
       updatedCount: merged.updatedCount,
       conflictCount: conflicts.length,
-      conflictPolicyCounts: merged.conflictPolicyCounts
+      conflictPolicyCounts: merged.conflictPolicyCounts,
+      // OIR-200: surface the same per-row rejection reasons already computed
+      // for the preview so the renderer can report exactly what was skipped.
+      rowIssues: preview.rowIssues
     };
     });
   }
@@ -782,14 +790,14 @@ export class AppDataService {
   private async createBackupFilePathUnique(settings: AppSettings, prefix: string) {
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
-      "No se pudo preparar la carpeta de backups del directorio."
+      "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
     try {
       await ensureDirectory(backupDirectory);
     } catch (error) {
       throw this.toFilesystemError(
         error,
-        "No se pudo preparar la carpeta de backups del directorio.",
+        "No se pudo preparar la carpeta de copias de seguridad del directorio.",
         { filePath: backupDirectory }
       );
     }
@@ -825,14 +833,14 @@ export class AppDataService {
         // Any other error (EACCES, ENOSPC, …) — surface it.
         throw this.toFilesystemError(
           error,
-          "No se pudo preparar la carpeta de backups del directorio.",
+          "No se pudo preparar la carpeta de copias de seguridad del directorio.",
           { filePath: candidatePath }
         );
       }
     }
 
     throw new Error(
-      `No se pudo generar un nombre único para el backup después de ${maxAttempts} intentos.`
+      `No se pudo generar un nombre único para la copia de seguridad después de ${maxAttempts} intentos.`
     );
   }
 
@@ -959,7 +967,7 @@ export class AppDataService {
     }
 
     if (!path.isAbsolute(settings.backupDirectoryPath)) {
-      throw new Error("La ruta de la carpeta de backups configurada debe ser absoluta.");
+      throw new Error("La ruta de la carpeta de copias de seguridad configurada debe ser absoluta.");
     }
 
     await this.assertPathChainIsNotSymlink(
@@ -969,7 +977,7 @@ export class AppDataService {
     );
     await this.assertPathChainIsNotSymlink(
       settings.backupDirectoryPath,
-      "No se pudo validar la carpeta de backups configurada."
+      "No se pudo validar la carpeta de copias de seguridad configurada."
     );
   }
 
@@ -989,7 +997,7 @@ export class AppDataService {
     );
     await this.assertPathChainIsNotSymlink(
       settings.backupDirectoryPath,
-      "No se pudo validar la carpeta de backups."
+      "No se pudo validar la carpeta de copias de seguridad."
     );
 
     if (path.extname(settings.dataFilePath).toLowerCase() !== ".json") {
@@ -1013,7 +1021,7 @@ export class AppDataService {
     );
     await this.assertExistingWritableDirectory(
       settings.backupDirectoryPath,
-      "No se pudo validar la carpeta de backups."
+      "No se pudo validar la carpeta de copias de seguridad."
     );
     await this.assertDataFilePathSafe(
       settings.dataFilePath,
@@ -1169,7 +1177,7 @@ export class AppDataService {
         }
         const message = error instanceof Error
           ? error.message
-          : "No se pudo crear el auto-backup.";
+          : "No se pudo crear la copia de seguridad automática.";
         this.options.onAutoBackupFailure?.(message);
       } finally {
         this.autoBackupPending = false;
@@ -1182,16 +1190,16 @@ export class AppDataService {
     // Delegates to the shared createBackupCore primitive (which calls
     // createBackupFilePathUnique + copyFileWithContext) instead of duplicating
     // that logic here.  This ensures the two code paths can never diverge.
-    await this.createBackupCore(settings, "auto-backup", "No se pudo crear el auto-backup del directorio.");
+    await this.createBackupCore(settings, "auto-backup", "No se pudo crear la copia de seguridad automática del directorio.");
     await this.pruneAutoBackups(settings);
   }
 
   private async pruneAutoBackups(settings: AppSettings) {
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
-      "No se pudo preparar la carpeta de backups del directorio."
+      "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
-    const pruneErrorMessage = "No se pudo rotar los auto-backups del directorio.";
+    const pruneErrorMessage = "No se pudo rotar las copias de seguridad automáticas del directorio.";
 
     try {
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
@@ -1285,7 +1293,7 @@ export class AppDataService {
 
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       throw new Error(
-        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de backups configurada.`
+        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de copias de seguridad configurada.`
       );
     }
   }
@@ -1312,7 +1320,7 @@ export class AppDataService {
 
       if (error instanceof Error && error.message === "file-exists") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el dataset actual o restablece las rutas gestionadas.`
+          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
         );
       }
 
@@ -1658,13 +1666,14 @@ export class AppDataService {
       let conflictReasonKey = "";
       let matchingFieldValue: string | undefined;
 
-      // Prefer externalId match (most precise)
+      // Prefer externalId match (most precise).
+      // matchingFieldValue is intentionally not set for external-id-match:
+      // raw internal codes are not rendered to the user (privacy).
       if (importedRecord.externalId) {
         const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
         if (indexed !== undefined) {
           match = indexed;
           conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
-          matchingFieldValue = importedRecord.externalId;
         }
       }
 
@@ -1729,7 +1738,6 @@ export class AppDataService {
 
     return {
       id: record.id,
-      externalId: record.externalId,
       displayName: record.displayName,
       department: record.organization.department,
       service: record.organization.service,

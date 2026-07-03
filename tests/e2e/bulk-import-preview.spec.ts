@@ -35,7 +35,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
       await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
 
       // Preview panel appears
       await expect(page.getByText("Vista previa importación")).toBeVisible();
@@ -92,7 +92,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
       await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
 
       // Preview panel appears
       await expect(page.getByText("Vista previa importación")).toBeVisible();
@@ -101,7 +101,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
       const alert = previewPanel.getByRole("alert");
       await expect(alert).toBeVisible();
-      await expect(alert).toContainText("filas rechazadas");
+      await expect(alert).toContainText("filas con errores que no se importarán");
 
       // Row table shows rejected badges
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -111,8 +111,8 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Confirm button is disabled
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
 
-      // Error message toast
-      await expect(page.getByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeVisible();
+      // Error message toast (OIR-200: nothing importable at all is still blocked)
+      await expect(page.getByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);
@@ -142,7 +142,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -155,12 +155,15 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Error message for rejected row is visible in table
       await expect(table.getByText("El tipo es obligatorio.")).toBeVisible();
 
-      // Blocker alert present inside the preview panel
+      // OIR-200: a partial import (some valid, some rejected rows) is no longer
+      // blocked — the panel shows a non-blocking status notice (not a hard
+      // alert), and the valid rows remain importable.
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });
-      await expect(previewPanel.getByRole("alert")).toBeVisible();
+      await expect(previewPanel.getByRole("alert")).not.toBeVisible();
+      await expect(previewPanel.getByRole("status")).toContainText("fila rechazada");
 
-      // Confirm blocked
-      await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
+      // Confirm is enabled — the valid row can still be imported
+      await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeEnabled();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);
@@ -190,7 +193,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -236,7 +239,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
 
       // Step 1: open preview
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       // Row table shows the new record
@@ -286,7 +289,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       await page.getByRole("button", { name: "Cerrar vista previa" }).click();

@@ -1,4 +1,6 @@
-import { Link } from "react-router-dom";
+import { useCallback, useEffect } from "react";
+import { Link, useBlocker } from "react-router-dom";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
 import { OrganizationLocationSection } from "../components/contact-form/OrganizationLocationSection";
@@ -15,6 +17,7 @@ export const ContactFormPage = () => {
     existingRecordMissing,
     formState,
     setFormState,
+    isDirtyRef,
     fieldErrors,
     isSubmitting,
     liveMessage,
@@ -25,6 +28,7 @@ export const ContactFormPage = () => {
     addEmailButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
+    clearFieldError,
     setCommaSeparatedField,
     updatePhone,
     removePhone,
@@ -36,8 +40,41 @@ export const ContactFormPage = () => {
     handleSubmit
   } = useContactForm();
 
+  /**
+   * Block navigation (including the Cancelar links below) when the form has
+   * unsaved changes. isDirtyRef is a stable MutableRefObject — the callback
+   * reads the current value at navigation time, avoiding stale-closure
+   * issues. A clean form navigates away immediately with no extra friction.
+   */
+  const shouldBlock = useCallback(() => isDirtyRef.current, [isDirtyRef]);
+  const blocker = useBlocker(shouldBlock);
+
+  /**
+   * Guard window close / reload / browser unload when the form is dirty.
+   * useBlocker only intercepts React Router navigation — it does not cover
+   * Electron window close, page reload, or unload triggered outside the
+   * router. The native beforeunload prompt covers those remaining paths.
+   */
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirtyRef]);
+
+
   if (isLoading || !hasContacts || !hasSettings) {
-    return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;
+    return (
+      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-6 shadow-panel">
+        Cargando formulario…
+      </section>
+    );
   }
 
   if (existingRecordMissing) {
@@ -65,12 +102,13 @@ export const ContactFormPage = () => {
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del dataset.
+            Completa los datos del contacto: teléfonos, correos, ubicación y notas.
           </p>
         </div>
         <Link
           to="/"
           data-keyboard-cancel
+          aria-label="Cancelar y volver al directorio"
           className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
         >
           Cancelar
@@ -88,6 +126,7 @@ export const ContactFormPage = () => {
             fieldErrors={fieldErrors}
             setFormState={setFormState}
             displayNameInputRef={displayNameInputRef}
+            clearFieldError={clearFieldError}
           />
           <OrganizationLocationSection
             formState={formState}
@@ -106,6 +145,7 @@ export const ContactFormPage = () => {
           setPendingFocusTarget={setPendingFocusTarget}
           updatePhone={updatePhone}
           removePhone={removePhone}
+          clearFieldError={clearFieldError}
         />
 
         <EmailsSection
@@ -118,6 +158,7 @@ export const ContactFormPage = () => {
           setPendingFocusTarget={setPendingFocusTarget}
           updateEmail={updateEmail}
           removeEmail={removeEmail}
+          clearFieldError={clearFieldError}
         />
 
         <SocialsSection
@@ -140,7 +181,7 @@ export const ContactFormPage = () => {
                 value={formState.aliases.join(", ")}
                 onChange={(event) => setCommaSeparatedField("aliases", event.target.value)}
                 placeholder="mostrador admisión, centralita"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
             <div>
@@ -152,7 +193,7 @@ export const ContactFormPage = () => {
                 value={formState.tags.join(", ")}
                 onChange={(event) => setCommaSeparatedField("tags", event.target.value)}
                 placeholder="admisión, urgencias"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
           </section>
@@ -166,12 +207,19 @@ export const ContactFormPage = () => {
               value={formState.notes ?? ""}
               onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
               rows={6}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
             />
           </section>
         </div>
 
-        <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+        <div className="flex flex-col gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+          <Link
+            to="/"
+            aria-label="Cancelar sin guardar los cambios"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+          >
+            Cancelar
+          </Link>
           <button
             type="submit"
             disabled={isSubmitting}
@@ -179,14 +227,20 @@ export const ContactFormPage = () => {
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
-          <Link
-            to="/"
-            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
-          >
-            Cancelar
-          </Link>
         </div>
       </form>
+
+      {/* Unsaved-changes guard: shown when a Cancelar link (or any other router
+          navigation) is attempted while the form is dirty. */}
+      <ConfirmDialog
+        isOpen={blocker.state === "blocked"}
+        title="Cambios sin guardar"
+        message="¿Seguro que quieres salir? Los cambios no guardados se perderán."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </section>
   );
 };

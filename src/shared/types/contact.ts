@@ -273,7 +273,6 @@ export interface ConflictSocialSummary {
  */
 export interface ConflictRecordSummary {
   id?: string;
-  externalId?: string;
   displayName: string;
   department?: string;
   service?: string;
@@ -307,7 +306,7 @@ export interface ConflictedImportRecord {
   /**
    * The specific value that triggered the match (OIR-132).
    * For phone-match: the normalized phone number. For email-match: the email address.
-   * For external-id-match: the externalId. Used to highlight the matching field in the diff UI.
+   * Not populated for external-id-match (raw IDs are not rendered to the user).
    */
   matchingFieldValue?: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
@@ -331,6 +330,13 @@ export interface CsvImportResult extends ImportContactsResult {
   updatedCount: number;
   conflictCount: number;
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
+  /**
+   * OIR-200: Rejected rows are skipped rather than blocking the whole import.
+   * This carries the same per-row reasons already surfaced in the preview
+   * (CsvImportPreview.rowIssues) so the post-import summary can list exactly
+   * which rows were skipped and why.
+   */
+  rowIssues: CsvImportIssue[];
 }
 
 export interface AuditLogResult {

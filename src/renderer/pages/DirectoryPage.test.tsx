@@ -90,7 +90,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Directorio" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Búsqueda de contactos" })).toBeInTheDocument();
       expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
@@ -232,6 +232,30 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("Urgencias central")).not.toBeInTheDocument();
   });
 
+  it("filter-chip clear buttons carry the shared touch-target class for a 44px hit area", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "admisión" }
+    });
+
+    const clearButton = await screen.findByRole("button", { name: "Eliminar filtro: búsqueda" });
+    expect(clearButton).toHaveClass("touch-target");
+  });
+
   it("clears selected tags when filter pills are reset", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
@@ -254,6 +278,144 @@ describe("DirectoryPage", () => {
 
     expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
+  it("clears the search text when filter pills are reset", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(searchInput).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
+  it("clears both a tag filter and search text together in a single click", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+
+    await chooseOption("Etiqueta", "admisión");
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+
+    expect(screen.getByText("#admisión")).toBeInTheDocument();
+    expect(searchInput).toHaveValue("admisión");
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
+    expect(searchInput).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
+  it("clears only the targeted filter when each per-filter clear button is used in isolation", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+    await chooseOption("Tipo", "Servicio");
+    await chooseOption("Área", "Gestión y administración");
+    await chooseOption("Etiqueta", "admisión");
+    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
+
+    expect(useAppStore.getState().query).toBe("admisión");
+    expect(useAppStore.getState().selectedType).toBe("service");
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" }));
+
+    expect(searchInput).toHaveValue("");
+    expect(useAppStore.getState().query).toBe("");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: búsqueda" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedType).toBe("service");
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Servicio" }));
+
+    expect(useAppStore.getState().selectedType).toBe("all");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Servicio" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" }));
+
+    expect(useAppStore.getState().selectedArea).toBe("all");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Gestión y administración" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: admisión" }));
+
+    expect(useAppStore.getState().selectedTags).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: admisión" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" }));
+
+    expect(useAppStore.getState().showInactive).toBe(false);
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Inactivos" })).not.toBeInTheDocument();
   });
 
   it("de-duplicates tag options with the same normalized value", async () => {
@@ -485,8 +647,16 @@ describe("DirectoryPage", () => {
       target: { value: "sin-coincidencias" }
     });
 
-    expect(await screen.findByText("No hay resultados para la búsqueda y filtros actuales.")).toHaveAttribute("role", "status");
-    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(await screen.findByText("No se han encontrado resultados para esta búsqueda.")).toHaveAttribute("role", "status");
+
+    // The result count stays a polite live region even at zero results so
+    // "0 resultados" is announced alongside the empty-state panel.
+    const statusRegions = screen.getAllByRole("status");
+    expect(statusRegions).toHaveLength(2);
+    const countRegion = statusRegions.find((region) => region.textContent?.includes("0 resultados"));
+    expect(countRegion).toBeDefined();
+    expect(countRegion).toHaveAttribute("aria-live", "polite");
+    expect(countRegion).toHaveAttribute("aria-atomic", "true");
   });
 
   it("moves selection to the new page when pagination changes", async () => {
@@ -631,6 +801,60 @@ describe("DirectoryPage", () => {
     expect(lastButton).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("Home key jumps selection to the first record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // Move to the last record first
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(secondButton).toHaveAttribute("aria-pressed", "true");
+
+    // Home jumps back to the first record
+    secondButton.focus();
+    fireEvent.keyDown(secondButton, { key: "Home" });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+    expect(secondButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("End key jumps selection to the last record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // First record is selected by default; End jumps to the last record
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "End" });
+
+    const lastButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(lastButton).toHaveAttribute("aria-pressed", "true");
+    expect(firstButton).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("Enter key does not change selection but does not throw", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
@@ -726,6 +950,53 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Detalle del registro seleccionado" })).toBeInTheDocument();
+  });
+
+  it("edit action exposes a contextual aria-label with the selected contact's name", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    const firstRecord = defaultContacts.records[0]!;
+    const editLink = screen.getByRole("link", { name: `Editar registro: ${firstRecord.displayName}` });
+    expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
+    expect(editLink).toHaveTextContent("Editar registro");
+  });
+
+  it("empty detail state icon is hidden from assistive technology", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    // A query with no matches clears the selection, revealing the empty detail state.
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "sin-coincidencias" }
+    });
+
+    const emptyDetail = (await screen.findByText("Selecciona un registro")).closest("div");
+    const icon = emptyDetail?.querySelector("svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
   });
 
   it("selected record name is rendered as an h4 heading", async () => {

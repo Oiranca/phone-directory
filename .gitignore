@@ -55,3 +55,6 @@ aia/
 
 # Audit-gate test harness fixtures (written under scripts/ by write_temp_allowlist)
 scripts/.test-*/
+
+# Ephemeral agent coordination log (not product docs)
+.claude/agent-progress.md

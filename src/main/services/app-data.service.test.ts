@@ -110,7 +110,7 @@ describe("AppDataService", () => {
       )
     ).rejects.toThrow(
       new RegExp(
-        `No se pudo validar la carpeta de backups\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
+        `No se pudo validar la carpeta de copias de seguridad\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
       )
     );
   });
@@ -132,6 +132,27 @@ describe("AppDataService", () => {
         })
       )
     ).rejects.toThrow(/No se permiten enlaces simbólicos/);
+  });
+
+  it("rejects a custom data path that already has a file at that location", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    const existingDataFilePath = path.join(customDataDirectory, "already-here.json");
+    await fs.writeFile(existingDataFilePath, "{}", "utf-8");
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: existingDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
+    );
   });
 
   it("rejects relative custom data paths", async () => {
@@ -161,7 +182,7 @@ describe("AppDataService", () => {
           backupDirectoryPath: "relative/backups"
         })
       )
-    ).rejects.toThrow("La ruta de la carpeta de backups debe ser absoluta.");
+    ).rejects.toThrow("La ruta de la carpeta de copias de seguridad debe ser absoluta.");
   });
 
   it("rejects custom data paths with symlinked ancestor directories", async () => {
@@ -182,6 +203,25 @@ describe("AppDataService", () => {
         })
       )
     ).rejects.toThrow(/No se permiten enlaces simbólicos/);
+  });
+
+  it("rejects a custom data path that already points to an existing file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const existingDataFilePath = path.join(testRoot, "existing-contacts.json");
+    await fs.writeFile(existingDataFilePath, "{}", "utf-8");
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: existingDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      /Ya existe un archivo en esa ruta\. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas\./
+    );
   });
 
   it("surfaces caller context when path validation hits unexpected filesystem errors", async () => {
@@ -1338,7 +1378,7 @@ describe("AppDataService", () => {
       );
 
     await expect(service.createBackup()).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
+      /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -1386,7 +1426,7 @@ describe("AppDataService", () => {
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
+      /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -1553,7 +1593,7 @@ describe("AppDataService", () => {
 
     await expect(service.restoreBackup(sourceFilePath)).rejects.toThrow(
       new RegExp(
-        `No se pudo restaurar el backup seleccionado\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de backups configurada\\.`
+        `No se pudo restaurar la copia de seguridad seleccionada\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\\.`
       )
     );
   });
@@ -1873,7 +1913,7 @@ describe("AppDataService", () => {
       expect(Array.isArray(conflict.matchingRecord.socials)).toBe(true);
     });
 
-    it("sets matchingFieldValue to the externalId for external-id-match conflicts", async () => {
+    it("does not set matchingFieldValue for external-id-match conflicts (privacy: raw ID must not reach renderer)", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -1897,7 +1937,8 @@ describe("AppDataService", () => {
       const conflict = preview.conflictedRecords[0]!;
 
       expect(conflict.conflictType).toBe("external-id-match");
-      expect(conflict.matchingFieldValue).toBe(existing.externalId);
+      // matchingFieldValue must be absent for external-id-match — raw codes are not sent to the renderer.
+      expect(conflict.matchingFieldValue).toBeUndefined();
     });
 
     it("sets matchingFieldValue to the shared phone number for phone-match conflicts", async () => {
@@ -2815,7 +2856,7 @@ describe("AppDataService", () => {
     expect(persisted.metadata.recordCount).toBe(0);
   });
 
-  it("rejects CSV replacement when the preview still contains invalid rows", async () => {
+  it("rejects CSV replacement when every row is invalid and nothing is importable", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -2832,9 +2873,64 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
+    // OIR-200: a file with zero valid rows (and no buscas content) still blocks
+    // the import — this is the "nothing valid" guard, kept intentionally.
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
+      "El archivo no contiene filas válidas para importar."
     );
+  });
+
+  it("OIR-200: imports valid rows while skipping rejected rows instead of blocking the whole file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const initialRecordCount = initial.contacts.records.length;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "partial-invalid.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,phone1Number",
+        "service,Mostrador Válido,Recepción,55555",
+        "person,,Admisión,",
+        "bogus-type,Fila con tipo inválido,Urgencias,66666"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.invalidRowCount).toBe(2);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    // Only the valid row was persisted, appended to the pre-existing dataset.
+    expect(result.createdCount).toBe(1);
+    expect(result.recordCount).toBe(initialRecordCount + 1);
+    expect(
+      result.contacts.records.some((record) => record.displayName === "Mostrador Válido")
+    ).toBe(true);
+
+    // The rejected rows are reported back, never imported.
+    expect(result.invalidRowCount).toBe(2);
+    expect(result.rowIssues).toHaveLength(2);
+    expect(result.rowIssues.some((issue) => issue.messages.includes("El nombre visible es obligatorio."))).toBe(true);
+    expect(
+      result.rowIssues.some((issue) => issue.messages.includes('El tipo "bogus-type" no está soportado.'))
+    ).toBe(true);
+    expect(
+      result.contacts.records.some((record) => record.displayName === "Fila con tipo inválido")
+    ).toBe(false);
+
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+    expect(persisted.records).toHaveLength(initialRecordCount + 1);
+    expect(persisted.records.some((record) => record.displayName === "Mostrador Válido")).toBe(true);
   });
 
   it("updates a later row that matches a record created earlier in the same import", async () => {
@@ -2906,7 +3002,7 @@ describe("AppDataService", () => {
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
-      "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+      "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
     );
   });
 
@@ -3542,7 +3638,7 @@ describe("AppDataService", () => {
       return realOpen(p, flags as any, ...(rest as []));
     });
 
-    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de backups/);
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de copias de seguridad/);
 
     // Only the very first 'wx' open should have been attempted — no retries on EACCES.
     const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
@@ -3568,7 +3664,7 @@ describe("AppDataService", () => {
       })
     );
 
-    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear el backup/);
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear la copia de seguridad/);
 
     // The backup directory must contain no 0-byte placeholder files.
     const entries = await fs.readdir(backupDir);
@@ -3710,7 +3806,7 @@ describe("AppDataService", () => {
     await fs.writeFile(emptyBackupPath, "", "utf-8");
 
     await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
-      /El archivo de backup está vacío y no puede restaurarse/
+      /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
   });
 
@@ -3918,5 +4014,32 @@ describe("AppDataService", () => {
     expect(numbers).toContain("8801");
     expect(numbers).toContain("8802");
     expect(numbers).toContain("8803");
+  });
+
+  it("OIR-181: saveSettings file-exists error message contains no 'dataset' jargon", async () => {
+    // Regression guard: assertDataFilePathAvailable must use plain-language copy
+    // when the destination data file already exists (OIR-181 policy).
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    // Create a second JSON file at a new path so the path is "already taken".
+    const occupiedPath = path.join(testRoot, "data", "occupied.json");
+    await fs.writeFile(occupiedPath, JSON.stringify({ note: "exists" }), "utf-8");
+
+    const error = await service
+      .saveSettings(buildEditableSettings({ dataFilePath: occupiedPath }))
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+
+    // Must NOT contain the banned jargon term.
+    expect(message).not.toMatch(/dataset/i);
+
+    // Must contain the corrected plain-language phrase.
+    expect(message).toContain("archivo de datos");
+    expect(message).toContain("Ya existe un archivo en esa ruta");
   });
 });

@@ -237,32 +237,60 @@ describe("ImportExportPage", () => {
     // PathDisplay component itself — both showing "contacts-1.json".
     expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
+    expect(screen.getByText("Última actualización del directorio")).toBeInTheDocument();
+  });
+
+  it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
+    const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
+    const importJsonBtn = screen.getByRole("button", { name: /Importar JSON/ });
+    const prepareBtn = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
+
+    expect(backupBtn.className).toContain("focus-ring");
+    expect(exportBtn.className).toContain("focus-ring");
+    expect(importJsonBtn.className).toContain("focus-ring");
+    expect(prepareBtn.className).toContain("focus-ring");
+  });
+
+  it("OIR-188: shows the Import JSON card warning in plain natural Spanish (no bolted-on label)", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar."
+      )
+    ).toBeInTheDocument();
   });
 
   it("creates a backup and shows success feedback", async () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.createBackup).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText("Backup creado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad creada.")).toBeInTheDocument();
   });
 
   it("shows the backup service error message when manual backup fails", async () => {
     window.hospitalDirectory.createBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups."));
+      .mockRejectedValue(new Error("No se pudo crear la copia de seguridad del directorio. Ruta afectada: /tmp/backups."));
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     expect(
-      await screen.findByText("No se pudo crear el backup del directorio.")
+      await screen.findByText("No se pudo crear la copia de seguridad del directorio.")
     ).toBeInTheDocument();
   });
 
@@ -297,6 +325,11 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.",
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar JSON/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Importar JSON" })).at(-1)!);
 
@@ -321,7 +354,7 @@ describe("ImportExportPage", () => {
 
     const loadingState = screen.getByRole("status");
     expect(loadingState).toHaveAttribute("aria-busy", "true");
-    expect(loadingState).toHaveTextContent("Cargando importación y backups");
+    expect(loadingState).toHaveTextContent("Cargando importación y copias de seguridad");
 
     resolveBootstrap?.({
       contacts: defaultContacts,
@@ -380,7 +413,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
 
     expect(
-      await screen.findByText("No se pudo actualizar la lista de backups. Inténtalo de nuevo.")
+      await screen.findByText("No se pudo actualizar la lista de copias de seguridad. Inténtalo de nuevo.")
     ).toBeInTheDocument();
   });
 
@@ -403,12 +436,13 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
     expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
-    expect(screen.getByText("Confianza media en la detección del formato. Revisa la vista previa.")).toBeInTheDocument();
+    // OIR-188: confidence note is shown in the preview panel (not in the toast)
+    expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -418,7 +452,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1", []);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
-    expect(await screen.findByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeInTheDocument();
+    expect(await screen.findByText("Importación completada. 1 alta y 1 actualización.")).toBeInTheDocument();
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
@@ -452,7 +486,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
@@ -463,7 +496,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
@@ -483,7 +515,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Conflictos (1)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
 
@@ -530,7 +562,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -540,7 +571,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
@@ -559,7 +589,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
@@ -597,7 +627,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -607,7 +636,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
@@ -626,7 +654,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
@@ -634,7 +662,7 @@ describe("ImportExportPage", () => {
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  it("blocks import confirmation when the preview contains invalid rows", async () => {
+  it("OIR-200: allows a partial import when the preview contains some invalid rows alongside valid rows", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-invalid",
       fileName: "broken.csv",
@@ -674,13 +702,104 @@ describe("ImportExportPage", () => {
         }
       ]
     });
+    window.hospitalDirectory.importCsvDataset = vi.fn().mockResolvedValue({
+      contacts: {
+        ...defaultContacts,
+        records: [
+          {
+            ...defaultContacts.records[0]!,
+            id: "cnt_csv_partial",
+            displayName: "Registro válido"
+          }
+        ]
+      },
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-csv-partial.json",
+      importedFilePath: "/tmp/incoming/broken.csv",
+      recordCount: defaultContacts.records.length,
+      warningCount: 0,
+      invalidRowCount: 1,
+      createdCount: 0,
+      updatedCount: 1,
+      conflictCount: 0,
+      rowIssues: [
+        {
+          rowNumber: 3,
+          displayName: "Fila rota",
+          messages: ["El tipo es obligatorio."]
+        }
+      ]
+    });
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
-    expect(await screen.findByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("1 fila será omitida al importar. 0 altas y 1 actualizaciones previstas para las filas válidas.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+
+    expect(
+      await screen.findByText((content) =>
+        content.includes("1 registro válido") && content.includes("Se omitirá 1 fila rechazada")
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-invalid", []);
+    });
+    expect(
+      await screen.findByText("Importación completada. 0 altas y 1 actualización. Se omitió 1 fila rechazada.")
+    ).toBeInTheDocument();
+  });
+
+  it("OIR-200: still blocks import confirmation when the preview has zero valid rows", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-all-invalid",
+      fileName: "all-broken.csv",
+      totalRowCount: 1,
+      validRowCount: 0,
+      invalidRowCount: 1,
+      warningCount: 0,
+      recordCount: 0,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 0,
+      parsedBuscasCellCount: 0,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [
+        {
+          rowNumber: 2,
+          displayName: "Fila rota",
+          messages: ["El tipo es obligatorio."]
+        }
+      ],
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "rejected",
+          displayName: "Fila rota",
+          errorMessages: ["El tipo es obligatorio."]
+        }
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+
+    expect(
+      await screen.findByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
@@ -727,10 +846,10 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
@@ -743,18 +862,18 @@ describe("ImportExportPage", () => {
       .fn()
       .mockRejectedValue(
         new Error(
-          "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+          "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
         )
       );
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(
       await screen.findByText(
-        "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+        "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
@@ -764,17 +883,17 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
-    expect(await screen.findByText("Backup restaurado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad restaurada.")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
@@ -783,16 +902,16 @@ describe("ImportExportPage", () => {
   it("shows the restore service error message when backup restore fails", async () => {
     window.hospitalDirectory.restoreBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json."));
+      .mockRejectedValue(new Error("No se pudo restaurar la copia de seguridad seleccionada. Ruta afectada: /tmp/backups/contacts-1.json."));
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     expect(
-      await screen.findByText("No se pudo restaurar el backup seleccionado.")
+      await screen.findByText("No se pudo restaurar la copia de seguridad seleccionada.")
     ).toBeInTheDocument();
   });
 
@@ -808,16 +927,16 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
     });
-    expect(screen.getByRole("button", { name: /Crear backup/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Importar CSV\/ODS/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
 
     resolveRestore?.({
@@ -845,9 +964,9 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
 
-    const confirmButton = await screen.findByRole("button", { name: "Restaurar backup" });
+    const confirmButton = await screen.findByRole("button", { name: "Restaurar copia de seguridad" });
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 
@@ -902,7 +1021,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // useLayoutEffect fires synchronously after the DOM update — no timer involved
     await waitFor(() => {
@@ -916,7 +1035,7 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
 
-    const triggerButton = screen.getByRole("button", { name: /Preparar agenda/ });
+    const triggerButton = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
     fireEvent.click(triggerButton);
     await screen.findByText("Vista previa importación");
 
@@ -924,7 +1043,7 @@ describe("ImportExportPage", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(
-        screen.getByRole("button", { name: /Preparar agenda/ })
+        screen.getByRole("button", { name: /Importar CSV\/ODS/ })
       );
     });
   });
@@ -971,5 +1090,111 @@ describe("ImportExportPage", () => {
     expect(screen.queryByText(/Cargando importación/)).not.toBeInTheDocument();
     // listBackups must never be called
     expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-182 — import P1 UX fixes
+  // ---------------------------------------------------------------------------
+
+  it("OIR-182 item 1: shows analysis spinner while previewCsvImport is pending", async () => {
+    // Intercept with a never-resolving promise so isPreparingCsvPreview stays true
+    let resolvePreview!: (value: unknown) => void;
+    const pendingPreview = new Promise((resolve) => { resolvePreview = resolve; });
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockReturnValue(pendingPreview);
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+
+    // Spinner must appear while promise is in flight
+    expect(await screen.findByText(/Analizando el archivo/)).toBeInTheDocument();
+    const spinnerStatus = screen.getByRole("status");
+    expect(spinnerStatus).toBeInTheDocument();
+
+    // Resolve to avoid state-update-after-unmount warning
+    resolvePreview(null);
+  });
+
+  it("OIR-182 item 10: shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-conflict-toast",
+      fileName: "conflicts.csv",
+      detectedFormat: "exportación cruda",
+      detectionConfidence: "high",
+      totalRowCount: 2,
+      validRowCount: 2,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 2,
+      mergedRecordCount: 2,
+      createdCount: 0,
+      updatedCount: 2,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      buscasSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBuscasCellCount: 0,
+      conflictCount: 2,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: { id: "ci-0", displayName: "Contacto A", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-0", displayName: "Existente A", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        },
+        {
+          recordIndex: 1,
+          importedRecord: { id: "ci-1", displayName: "Contacto B", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-1", displayName: "Existente B", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+
+    // Wait for the preview panel to load
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // "Todo listo" must NOT appear when there are conflicts to resolve
+    expect(screen.queryByText(/Todo listo/)).not.toBeInTheDocument();
+
+    // The conflict warning message (in toast or panel alert) must contain "Para cada uno"
+    expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
+  });
+
+  it("OIR-182 item 9 / OIR-188: confidence note shown in panel, not in toast, when detectionConfidence is not 'high'", async () => {
+    // Default mock already has detectionConfidence="medium" and conflictCount=0.
+    // OIR-188: confidence note moved from toast to panel.
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+
+    // Wait for panel to appear (preview received)
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // OIR-188: confidence note appears in the panel (amber paragraph).
+    expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)
+    ).toBeInTheDocument();
+
+    // The toast must NOT include the confidence note — it covers status/count only.
+    // Warning toasts use role="alert". No alert element must mention confidence.
+    const alerts = screen
+      .getAllByRole("alert")
+      .filter((el) => el.textContent?.includes("Confianza media"));
+    expect(alerts).toHaveLength(0);
   });
 });

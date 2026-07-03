@@ -75,7 +75,7 @@ export const ImportExportPage = () => {
     } catch {
       pushToast({
         type: "error",
-        message: "No se pudo cargar la lista de backups. Inténtalo de nuevo."
+        message: "No se pudo cargar la lista de copias de seguridad. Inténtalo de nuevo."
       });
     } finally {
       setIsLoading(false);
@@ -111,7 +111,7 @@ export const ImportExportPage = () => {
     } catch {
       pushToast({
         type: "error",
-        message: "No se pudo actualizar la lista de backups. Inténtalo de nuevo."
+        message: "No se pudo actualizar la lista de copias de seguridad. Inténtalo de nuevo."
       });
     }
   };
@@ -123,12 +123,12 @@ export const ImportExportPage = () => {
       await refreshBackups();
       pushToast({
         type: "success",
-        message: "Backup creado."
+        message: "Copia de seguridad creada."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: toCompactToastMessage(error, "No se pudo crear el backup manual.")
+        message: toCompactToastMessage(error, "No se pudo crear la copia de seguridad manual.")
       });
     } finally {
       setIsCreatingBackup(false);
@@ -207,12 +207,12 @@ export const ImportExportPage = () => {
       await refreshBackups();
       pushToast({
         type: "success",
-        message: "Backup restaurado."
+        message: "Copia de seguridad restaurada."
       });
     } catch (error) {
       pushToast({
         type: "error",
-        message: toCompactToastMessage(error, "No se pudo restaurar el backup seleccionado.")
+        message: toCompactToastMessage(error, "No se pudo restaurar la copia de seguridad seleccionada.")
       });
     } finally {
       setRestoringBackupPath("");
@@ -235,25 +235,45 @@ export const ImportExportPage = () => {
 
       setCsvPreview(preview);
 
-      if (preview.invalidRowCount > 0) {
+      // OIR-200: nothing importable at all is still blocked (no valid contact
+      // rows and no buscas content) — everything else is a partial import.
+      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+      if (preview.invalidRowCount > 0 && !hasImportableContent) {
         pushToast({
           type: "error",
-          message: "El archivo tiene filas inválidas. Corrige el origen antes de importar."
+          message: "El archivo no contiene filas válidas para importar. Corrige el origen antes de importar."
         });
         return;
       }
 
-      pushToast({
-        type: preview.warningCount > 0 ? "warning" : "success",
-        message: preview.warningCount > 0
-          ? `Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-          : `Importación lista. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-      });
+      // OIR-182 items 9+10: single toast per action; gate "Todo listo" when conflicts exist.
+      // OIR-188: confidence note shown in panel — toast covers status/count only.
+      const unresolvedCount = preview.conflictCount ?? 0;
 
-      if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
+      // OIR-200: a partial import (some rows skipped, rest still importable) takes
+      // priority over the conflict/success messaging below — it is the most
+      // surprising outcome for the operator, so it gets its own single toast.
+      if (preview.invalidRowCount > 0) {
         pushToast({
           type: "warning",
-          message: `Confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} en la detección del formato. Revisa la vista previa.`
+          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`
+        });
+      } else if (unresolvedCount > 0) {
+        // Item 10: "Todo listo" is contradictory when conflicts still need resolving.
+        pushToast({
+          type: "warning",
+          message: `${unresolvedCount === 1
+            ? "Hay 1 registro que ya existe en la agenda"
+            : `Hay ${unresolvedCount} registros que ya existen en la agenda`}. Para cada uno elige qué hacer antes de continuar.`
+        });
+      } else {
+        // Item 9: clean status/count toast — confidence note shown in panel.
+        pushToast({
+          type: preview.warningCount > 0 ? "warning" : "success",
+          message: preview.warningCount > 0
+            ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
+            : `Todo listo: ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
         });
       }
     } catch (error) {
@@ -268,7 +288,16 @@ export const ImportExportPage = () => {
   };
 
   const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
-    if (preview.invalidRowCount > 0) {
+    // OIR-200: rejected rows no longer block the import — they are skipped. The
+    // only remaining hard blocker is having nothing importable at all, mirroring
+    // the guard kept in AppDataService.importCsvDataset.
+    const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+    if (!hasImportableContent) {
+      pushToast({
+        type: "error",
+        message: "El archivo no contiene filas válidas para importar."
+      });
       return;
     }
 
@@ -309,7 +338,11 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "success",
-        message: `Importación completada. ${result.createdCount} altas y ${result.updatedCount} actualizaciones.`
+        message: `Importación completada. ${result.createdCount} ${result.createdCount === 1 ? "alta" : "altas"} y ${result.updatedCount} ${result.updatedCount === 1 ? "actualización" : "actualizaciones"}.${
+          result.invalidRowCount > 0
+            ? ` Se ${result.invalidRowCount === 1 ? "omitió" : "omitieron"} ${result.invalidRowCount} ${result.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+            : ""
+        }`
       });
     } catch (error) {
       pushToast({
@@ -385,7 +418,7 @@ export const ImportExportPage = () => {
       return {
         title: "Confirmar importación JSON",
         message:
-          "La importación reemplaza todo el directorio actual y crea un backup automático antes de continuar. ¿Quieres seguir?",
+          "La importación reemplaza todo el directorio actual y crea una copia de seguridad automática antes de continuar. ¿Deseas continuar?",
         confirmLabel: "Importar JSON"
       };
     }
@@ -393,19 +426,38 @@ export const ImportExportPage = () => {
     if (pendingConfirmation.kind === "import-csv") {
       const preview = pendingConfirmation.preview;
 
+      // OIR-182 item 8: show the applied conflict policies in the dialog so the
+      // user sees what was chosen (not the system defaults) before confirming.
+      const conflictedRecords = preview.conflictedRecords ?? [];
+      const policyParts: string[] = [];
+      if (conflictedRecords.length > 0) {
+        const skipCount = conflictedRecords.filter((c) => c.selectedPolicy === "skip").length;
+        const overwriteCount = conflictedRecords.filter((c) => c.selectedPolicy === "overwrite").length;
+        const mergeCount = conflictedRecords.filter((c) => c.selectedPolicy === "merge-fields").length;
+        if (skipCount > 0) policyParts.push(`${skipCount} ${skipCount === 1 ? "se omitirá" : "se omitirán"}`);
+        if (overwriteCount > 0) policyParts.push(`${overwriteCount} ${overwriteCount === 1 ? "se sobrescribirá" : "se sobrescribirán"}`);
+        if (mergeCount > 0) policyParts.push(`${mergeCount} ${mergeCount === 1 ? "se combinará" : "se combinarán"}`);
+      }
+      const policyNote = policyParts.length > 0 ? ` Conflictos: ${policyParts.join(", ")}.` : "";
+      const confidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
+        ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
+        : "";
+
       return {
         title: "Confirmar importación de agenda",
-        message: `Se importarán ${preview.validRowCount} registros válidos desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
-          ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
-          : ""} Se creará un backup automático. ¿Quieres continuar?`,
+        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${
+          preview.invalidRowCount > 0
+            ? ` Se ${preview.invalidRowCount === 1 ? "omitirá" : "omitirán"} ${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+            : ""
+        }${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"
       };
     }
 
     return {
-      title: "Restaurar backup",
+      title: "Restaurar copia de seguridad",
       message: `Se restaurará ${pendingConfirmation.backup.fileName} como directorio activo y antes se creará una copia de seguridad automática del estado actual. ¿Quieres continuar?`,
-      confirmLabel: "Restaurar backup"
+      confirmLabel: "Restaurar copia de seguridad"
     };
   })();
 
@@ -414,12 +466,12 @@ export const ImportExportPage = () => {
   }
 
   if (isLoading || storeIsLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y backups…</section>;
+    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y copias de seguridad…</section>;
   }
 
   return (
     <section className="space-y-6">
-      <h2 className="sr-only">Importar y exportar datos</h2>
+      <h2 className="text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -428,11 +480,11 @@ export const ImportExportPage = () => {
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Última actualización del dataset</p>
+            <p className="text-sm font-semibold text-slate-500">Última actualización del directorio</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{formatTimestamp(contacts.exportedAt)}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Editor local</p>
+            <p className="text-sm font-semibold text-slate-500">Responsable local</p>
             <p className="mt-2 text-sm font-medium text-slate-700">{settings.editorName || "Sin configurar"}</p>
           </div>
         </div>
@@ -442,11 +494,11 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleCreateBackup()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
-            <p className="text-lg font-semibold text-scs-blueDark">Crear backup</p>
+            <p className="text-lg font-semibold text-scs-blueDark">Crear copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
-              Genera una copia inmediata del <code>contacts.json</code> actual en la carpeta local de backups.
+              Genera una copia inmediata del archivo de directorio actual en la carpeta local de copias de seguridad.
             </p>
             <p className="mt-4 text-sm font-semibold text-scs-blue">
               {isCreatingBackup ? "Creando…" : "Crear ahora"}
@@ -457,7 +509,7 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handleExport()}
             disabled={isMutating}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -472,11 +524,11 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => setPendingConfirmation({ kind: "import-json" })}
             disabled={isMutating}
-            className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
           >
             <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Reemplaza el directorio completo por un archivo válido. Acción destructiva con backup previo.
+              Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.
             </p>
             <p className="mt-4 text-sm font-semibold text-amber-900">
               {isImporting ? "Importando…" : "Seleccionar archivo"}
@@ -488,9 +540,9 @@ export const ImportExportPage = () => {
             type="button"
             onClick={() => void handlePreviewCsvImport()}
             disabled={isMutating}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
+            className="focus-ring rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
           >
-            <p className="text-lg font-semibold text-emerald-900">Preparar agenda</p>
+            <p className="text-lg font-semibold text-emerald-900">Importar CSV/ODS</p>
             <p className="mt-2 text-sm text-emerald-900/80">
               Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
             </p>
@@ -499,6 +551,26 @@ export const ImportExportPage = () => {
             </p>
           </button>
         </div>
+
+        {/* OIR-182 item 1: visible spinner while the file is being analysed */}
+        {isPreparingCsvPreview && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          >
+            <svg
+              className="h-5 w-5 animate-spin text-emerald-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span>Analizando el archivo, por favor espera…</span>
+          </div>
+        )}
 
         {csvPreview && (
           <CsvImportPreviewPanel
@@ -520,13 +592,13 @@ export const ImportExportPage = () => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
-            <h3 className="mt-2 text-2xl font-semibold text-scs-blueDark">Backups locales</h3>
+            <h3 className="mt-2 text-2xl font-semibold text-scs-blueDark">Copias de seguridad locales</h3>
           </div>
           <button
             type="button"
             onClick={() => void refreshBackups()}
             disabled={isMutating}
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+            className="focus-ring rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
           >
             Actualizar
           </button>
@@ -535,7 +607,7 @@ export const ImportExportPage = () => {
         <div className="mt-6 space-y-3">
           {backups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-              Todavía no hay backups locales disponibles.
+              Aún no hay copias de seguridad locales disponibles.
             </div>
           ) : (
             backups.map((backup) => (
@@ -550,9 +622,9 @@ export const ImportExportPage = () => {
                   type="button"
                   onClick={() => setPendingConfirmation({ kind: "restore-backup", backup })}
                   disabled={isMutating}
-                  className="mt-4 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
+                  className="focus-ring mt-4 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
                 >
-                  {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar este backup"}
+                  {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar esta copia de seguridad"}
                 </button>
               </article>
             ))

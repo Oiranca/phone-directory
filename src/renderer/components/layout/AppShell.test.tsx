@@ -59,9 +59,16 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
-  it("shows Offline badge", () => {
+  it("shows Local badge", () => {
     renderShell();
-    expect(screen.getByText("Offline")).toBeInTheDocument();
+    expect(screen.getByText("Local")).toBeInTheDocument();
+  });
+
+  it("header shows the plain 'Agenda' heading and never mentions 'MVP'", () => {
+    renderShell();
+    const header = screen.getByRole("banner");
+    expect(screen.getByRole("heading", { level: 1, name: "Agenda" })).toBeInTheDocument();
+    expect(header.textContent).not.toMatch(/MVP/i);
   });
 
   it("does not show recovery banner", () => {
@@ -83,11 +90,11 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("main")).toHaveClass("focus-ring");
   });
 
-  it("focuses directory search with slash when focus is not in text entry", () => {
+  it("focuses data-page-search input with slash when focus is not in text entry", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-page-search aria-label="Buscar contactos" />
         </AppShell>
       </MemoryRouter>
     );
@@ -97,11 +104,29 @@ describe("AppShell — default mode", () => {
     expect(screen.getByLabelText("Buscar contactos")).toHaveFocus();
   });
 
+  it("prefers data-page-search over the directory-search id fallback when both are present", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          {/* data-page-search is the preferred target (current-page search) */}
+          <input data-page-search aria-label="Buscar en página actual" />
+          {/* id fallback — should NOT receive focus when data-page-search is present */}
+          <input id="directory-search" aria-label="Buscar contactos" />
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    fireEvent.keyDown(window, { key: "/" });
+
+    expect(screen.getByLabelText("Buscar en página actual")).toHaveFocus();
+    expect(screen.getByLabelText("Buscar contactos")).not.toHaveFocus();
+  });
+
   it("keeps slash as text input when typing in a text field", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-page-search aria-label="Buscar contactos" />
           <input aria-label="Campo activo" />
         </AppShell>
       </MemoryRouter>
@@ -126,6 +151,25 @@ describe("AppShell — default mode", () => {
     fireEvent.keyDown(window, { key: "n", ctrlKey: true });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/contacts/new");
+  });
+
+  it("does not steal modifier+n while an in-progress form is open (e.g. Buscas inline form)", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          <LocationProbe />
+          <button type="button" data-keyboard-cancel>Cancelar</button>
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    // fireEvent returns false when preventDefault was called on the event.
+    const notPrevented = fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
+    // The keypress must still be consumed so Electron/Chromium's native
+    // Ctrl/Cmd+N (new window) can't fire while an unsaved form is open.
+    expect(notPrevented).toBe(false);
   });
 
   it("submits the active keyboard form with modifier+s", () => {
@@ -223,7 +267,7 @@ describe("AppShell — recovery mode", () => {
     renderShell({ isRecoveryMode: true });
     expect(
       screen.getByText(
-        "El directorio está bloqueado hasta importar una copia JSON válida o restablecer un dataset vacío."
+        "El directorio está bloqueado hasta importar una copia JSON válida o restablecer el directorio vacío."
       )
     ).toBeInTheDocument();
   });

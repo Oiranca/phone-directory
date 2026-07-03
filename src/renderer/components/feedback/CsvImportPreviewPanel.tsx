@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -54,7 +55,7 @@ const PREVIEW_ROWS_PER_PAGE = 100;
 const CONFLICTS_PER_PAGE = 20;
 
 const CONFLICT_REASON_LABELS: Record<string, string> = {
-  "conflict_reason.external_id": "Mismo identificador externo",
+  "conflict_reason.external_id": "Este contacto ya existe en la agenda (mismo código)",
   "conflict_reason.phone_match": "Teléfono coincidente",
   "conflict_reason.email_match": "Correo coincidente"
 };
@@ -122,9 +123,9 @@ const ConflictRecordCol = ({
       {/* Phones */}
       {phones.length > 0 && (
         <ul className="mt-2 space-y-0.5" aria-label="Teléfonos">
-          {phones.map((phone, i) => (
+          {phones.map((phone, phoneIndex) => (
             <li
-              key={i}
+              key={`${phone.number}|${phone.label ?? ""}|${phoneIndex}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingPhone(phone.number)
@@ -133,7 +134,13 @@ const ConflictRecordCol = ({
               ].join(" ")}
             >
               {isMatchingPhone(phone.number) && (
-                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+                <span
+                  className="mr-1 text-amber-700"
+                  title="Coincidencia automática con el otro registro (no es un campo obligatorio)"
+                  aria-label="Coincidencia automática con el otro registro, no es un campo obligatorio"
+                >
+                  *
+                </span>
               )}
               {phone.number}
               {phone.label && <span className="ml-1 text-slate-500">({phone.label})</span>}
@@ -145,9 +152,9 @@ const ConflictRecordCol = ({
       {/* Emails */}
       {emails.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Correos">
-          {emails.map((email, i) => (
+          {emails.map((email, emailIndex) => (
             <li
-              key={i}
+              key={`${email.address}|${email.label ?? ""}|${emailIndex}`}
               className={[
                 "rounded px-1.5 py-0.5 text-xs",
                 isMatchingEmail(email.address)
@@ -156,7 +163,13 @@ const ConflictRecordCol = ({
               ].join(" ")}
             >
               {isMatchingEmail(email.address) && (
-                <span className="mr-1 text-amber-700" aria-label="Campo coincidente">*</span>
+                <span
+                  className="mr-1 text-amber-700"
+                  title="Coincidencia automática con el otro registro (no es un campo obligatorio)"
+                  aria-label="Coincidencia automática con el otro registro, no es un campo obligatorio"
+                >
+                  *
+                </span>
               )}
               {email.address}
               {email.label && <span className="ml-1 text-slate-500">({email.label})</span>}
@@ -168,19 +181,22 @@ const ConflictRecordCol = ({
       {/* Socials */}
       {socials.length > 0 && (
         <ul className="mt-1 space-y-0.5" aria-label="Redes sociales">
-          {socials.map((social, i) => (
-            <li key={i} className="text-xs text-slate-600">
+          {socials.map((social, socialIndex) => (
+            <li
+              key={`${social.platform}|${social.handle ?? social.url ?? ""}|${social.label ?? ""}|${socialIndex}`}
+              className="text-xs text-slate-600"
+            >
               {social.platform}
               {social.handle && <span className="ml-1">@{social.handle}</span>}
               {!social.handle && social.url && <span className="ml-1">{social.url}</span>}
-              {social.label && <span className="ml-1 text-slate-400">({social.label})</span>}
+              {social.label && <span className="ml-1 text-slate-600">({social.label})</span>}
             </li>
           ))}
         </ul>
       )}
 
       {phones.length === 0 && emails.length === 0 && socials.length === 0 && (
-        <p className="mt-1 text-xs italic text-slate-400">Sin teléfonos ni correos</p>
+        <p className="mt-1 text-xs italic text-slate-600">Sin teléfonos ni correos</p>
       )}
     </div>
   );
@@ -200,12 +216,15 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
-  const hasBlockers = preview.invalidRowCount > 0;
+  const hasRejectedRows = preview.invalidRowCount > 0;
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
   // OIR-130: A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
   // Treat it as confirmable. Only block when BOTH contact rows AND buscas content are absent.
   const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
-  const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || !hasImportableContent;
+  // OIR-200: Rejected rows alone no longer block confirmation — they are skipped
+  // and imported partially alongside the valid rows. The only real blocker left
+  // is having nothing importable at all (see hasImportableContent above).
+  const isConfirmDisabled = isMutating || hasUnresolvedConflicts || !hasImportableContent;
 
   // ---------------------------------------------------------------------------
   // OIR-133 — multi-select state (purely local UI, no IPC/main change needed).
@@ -253,6 +272,41 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const allSelected = allIndices.length > 0 && allIndices.every((idx) => selectedIndices.has(idx));
   const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
   const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
+
+  // OIR-182 item 3: count how many conflicts already have a policy selected.
+  const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
+
+  // PR #106 review: replace window.confirm with the shared accessible ConfirmDialog.
+  // closeButtonRef lets us restore focus to the trigger button when the operator
+  // cancels the discard-warning dialog (same convention as other ConfirmDialog usages).
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // OIR-182 item 4 / Finding B (PR111): warn before closing whenever there is
+  // unsaved conflict-resolution work — including the fully-resolved-but-not-yet-
+  // confirmed state, since selectedPolicy choices only take effect once the
+  // operator clicks "Confirmar importación" (onConfirm). Closing before that,
+  // even with every conflict resolved, would silently discard all the work.
+  const handleClose = () => {
+    if (resolvedCount > 0) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    onClose();
+  };
+
+  const handleCancelDiscardConfirm = () => {
+    setShowDiscardConfirm(false);
+    // Restore focus to the button that triggered the dialog.
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardConfirm(false);
+    onClose();
+  };
 
   const handleToggleOne = useCallback((recordIndex: number) => {
     setSelectedIndices((prev) => {
@@ -310,47 +364,63 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             {preview.fileName}
           </h3>
           {preview.detectedFormat && (
-            <p className="mt-2 text-sm text-emerald-900/80">
-              Formato detectado: {preview.detectedFormat}
-              {preview.detectionConfidence
-                ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})`
-                : ""}
-            </p>
+            <>
+              <p className="mt-2 text-sm text-emerald-900/80">
+                Formato detectado: {preview.detectedFormat}
+                {preview.detectionConfidence ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})` : ""}
+              </p>
+              {preview.detectionConfidence === "medium" && (
+                <p className="mt-1 text-sm text-amber-800">
+                  Confianza media en la detección del formato. Revisa la vista previa.
+                </p>
+              )}
+              {preview.detectionConfidence === "low" && (
+                <p className="mt-1 text-sm text-red-800">
+                  No estamos seguros de haber leído bien el archivo. Revisa la vista previa antes de importar.
+                </p>
+              )}
+            </>
           )}
         </div>
+        {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
+            ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isMutating}
-            className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
+            className="focus-ring rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
           >
             Cerrar vista previa
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isConfirmDisabled}
-            className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isImporting ? "Importando…" : "Confirmar importación"}
           </button>
         </div>
       </div>
 
-      {/* Blocker message */}
-      {hasBlockers && (
+      {/* Nothing-importable blocker (OIR-200: only shown when there are no valid rows at all) */}
+      {hasRejectedRows && !hasImportableContent && (
         <div
           role="alert"
           className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
         >
-          El archivo contiene {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.
-          Corrige el origen antes de importar o cierra la vista previa para seleccionar otro archivo.
+          Hay {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila con errores que no se importará" : "filas con errores que no se importarán"}.
+          Corrígelas en la agenda original o cierra esta vista.
+        </div>
+      )}
+
+      {/* Partial-import notice (OIR-200): rejected rows are skipped, valid rows still import */}
+      {hasRejectedRows && hasImportableContent && (
+        <div
+          role="status"
+          className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+        >
+          {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"} se
+          {preview.invalidRowCount === 1 ? " omitirá" : " omitirán"} al importar. El resto de filas válidas se
+          importará con normalidad. Revisa los motivos en la tabla antes de confirmar.
         </div>
       )}
 
       {/* Warning-only acknowledgement */}
-      {!hasBlockers && preview.warningCount > 0 && (
+      {hasImportableContent && preview.warningCount > 0 && (
         <div
           role="status"
           className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -362,7 +432,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {!hasBlockers && conflictCount > 0 && (
+      {hasImportableContent && conflictCount > 0 && (
         <div
           role={hasUnresolvedConflicts ? "alert" : "status"}
           className={[
@@ -373,10 +443,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           ].join(" ")}
         >
           <span className="font-semibold">
-            {conflictCount} {conflictCount === 1 ? "conflicto detectado" : "conflictos detectados"}.
+            Hay {conflictCount} {conflictCount === 1 ? "registro que ya existe en la agenda" : "registros que ya existen en la agenda"}.
           </span>{" "}
           {hasUnresolvedConflicts
-            ? "Selecciona una política para cada conflicto antes de confirmar."
+            ? "Para cada uno elige qué hacer (omitir, sustituir o combinar) antes de continuar."
             : "Todas las políticas de conflicto están seleccionadas."}
         </div>
       )}
@@ -385,6 +455,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
+          aria-live="polite"
+          aria-atomic="true"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
@@ -396,6 +468,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
+          aria-live="polite"
+          aria-atomic="true"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
@@ -510,13 +584,22 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </div>
           </div>
 
-          <p className="text-sm font-semibold text-emerald-950">
-            Conflictos ({conflictedRecords.length})
-          </p>
+          {/* OIR-182 item 3: resolution progress counter (sibling span preserves exact text for tests) */}
+          <div className="flex items-baseline gap-3">
+            <p className="text-sm font-semibold text-emerald-950">
+              Conflictos ({conflictedRecords.length})
+            </p>
+            {conflictedRecords.length > 0 && (
+              <span aria-live="polite" aria-atomic="true" className="text-xs text-emerald-700">
+                {resolvedCount} de {conflictedRecords.length} resueltos
+              </span>
+            )}
+          </div>
           <div className="mt-3 space-y-4">
             {paginatedConflicts.map((conflict) => {
               const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
-              const matchSignal = conflict.matchingFieldValue
+              // Strip the raw machine ID for external_id conflicts — only show the human label.
+              const matchSignal = conflict.matchingFieldValue && conflict.conflictReasonKey !== "conflict_reason.external_id"
                 ? `${reasonLabel}: ${conflict.matchingFieldValue}`
                 : reasonLabel;
 
@@ -553,7 +636,13 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   <div className="mb-3 flex items-start gap-3">
                     <input
                       type="checkbox"
-                      aria-label={`Seleccionar conflicto ${conflict.recordIndex + 1}`}
+                      // Always append the 1-based conflict index so the accessible name stays
+                      // unique even when two imported rows share the same displayName.
+                      aria-label={
+                        conflict.importedRecord.displayName
+                          ? `Seleccionar ${conflict.importedRecord.displayName} (conflicto ${conflict.recordIndex + 1})`
+                          : `Seleccionar conflicto ${conflict.recordIndex + 1}`
+                      }
                       checked={isSelected}
                       disabled={isMutating}
                       onChange={() => handleToggleOne(conflict.recordIndex)}
@@ -599,6 +688,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                                   disabled={isMutating}
                                   onChange={() => onPolicyChange(conflict.recordIndex, policy)}
                                   aria-describedby={descId}
+                                  aria-required="true"
                                   className="h-4 w-4 shrink-0"
                                 />
                                 {POLICY_LABELS[policy]}
@@ -650,6 +740,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces conflict page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {conflictsPage + 1} de {Math.ceil(conflictedRecords.length / CONFLICTS_PER_PAGE)}
+              </span>
             </nav>
           )}
         </div>
@@ -661,7 +755,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           <p className="text-sm font-semibold text-emerald-950">Tipos detectados</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {Object.entries(preview.typeCounts).length === 0 ? (
-              <span className="text-sm text-emerald-900/80">Sin registros válidos todavía.</span>
+              <span className="text-sm text-emerald-900/80">Aún no hay registros válidos.</span>
             ) : (
               Object.entries(preview.typeCounts).map(([type, count]) => (
                 <span key={type} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
@@ -753,7 +847,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                       </span>
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800">
-                      {row.displayName ?? <span className="italic text-slate-400">Sin nombre</span>}
+                      {row.displayName ?? <span className="italic text-slate-600">Sin nombre</span>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-600">
                       {row.type ?? "—"}
@@ -791,7 +885,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                       )}
                       {(!row.errorMessages || row.errorMessages.length === 0) &&
                         (!row.warningMessages || row.warningMessages.length === 0) && (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-slate-600">—</span>
                         )}
                     </td>
                   </tr>
@@ -830,6 +924,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces preview row page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {safePage} de {totalPreviewPages}
+              </span>
             </nav>
           )}
         </div>
@@ -841,6 +939,41 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           El archivo no contiene filas de datos.
         </div>
       )}
+
+      {/* OIR-182 item 2: single sticky confirm footer — CTA appears in one place only */}
+      <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-1">
+            {hasUnresolvedConflicts && (
+              <p id="csv-confirm-disabled-hint" className="text-xs text-amber-800">
+                Resuelve todos los conflictos antes de confirmar.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isConfirmDisabled}
+              aria-describedby={hasUnresolvedConflicts ? "csv-confirm-disabled-hint" : undefined}
+              className="focus-ring rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {isImporting ? "Importando…" : "Confirmar importación"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* PR #106 review: shared accessible ConfirmDialog replaces window.confirm for the
+          discard-warning prompt shown when closing with unsaved conflict resolutions. */}
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        title="Cerrar vista previa"
+        message="Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?"
+        confirmLabel="Cerrar igualmente"
+        cancelLabel="Cancelar"
+        onConfirm={handleConfirmDiscard}
+        onCancel={handleCancelDiscardConfirm}
+        isDestructive={true}
+      />
     </section>
   );
 };
