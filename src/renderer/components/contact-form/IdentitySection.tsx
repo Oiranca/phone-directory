@@ -24,6 +24,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
         onChange={(event) => setFormState((current) => ({ ...current, displayName: event.target.value }))}
         required
         aria-required="true"
+        placeholder="Admisión — Mostrador principal"
         aria-invalid={!!fieldErrors.displayName}
         aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
         className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:ring-2"

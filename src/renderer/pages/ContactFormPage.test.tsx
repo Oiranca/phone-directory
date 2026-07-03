@@ -301,6 +301,45 @@ describe("ContactFormPage", () => {
     expect(screen.queryByText("No se pudo abrir el formulario")).not.toBeInTheDocument();
   });
 
+  it("announces the loading state to screen readers with role status and aria-live", () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    renderWithRoute("/contacts/new");
+
+    const loadingRegion = screen.getByRole("status");
+    expect(loadingRegion).toHaveTextContent("Cargando formulario…");
+    expect(loadingRegion).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("gives each Cancelar link a distinct accessible name", async () => {
+    renderWithRoute("/contacts/new");
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("link", { name: "Cancelar y volver al directorio" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Cancelar sin guardar los cambios" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps footer tab order aligned with visual order (Cancelar before submit, no col-reverse)", async () => {
+    renderWithRoute("/contacts/new");
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    const cancelLink = screen.getByRole("link", { name: "Cancelar sin guardar los cambios" });
+    const submitButton = screen.getByRole("button", { name: "Crear registro" });
+
+    // DOM (tab) order: Cancelar precedes the submit button
+    expect(
+      cancelLink.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // Visual order is no longer reversed relative to DOM order
+    expect(cancelLink.parentElement?.className).not.toContain("flex-col-reverse");
+  });
+
   it("calls ensureBootstrapLoaded on mount and shows form after load (direct route entry)", async () => {
     renderWithRoute("/contacts/new");
 
