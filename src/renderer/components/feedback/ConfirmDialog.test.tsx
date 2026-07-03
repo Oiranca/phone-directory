@@ -193,4 +193,60 @@ describe('ConfirmDialog', () => {
     fireEvent(dialog, new Event('cancel', { cancelable: true }));
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  // ── Focus management contract ────────────────────────────────────────────
+
+  it('moves focus to the Cancel button once the dialog opens', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+  });
+
+  it('falls back to the first enabled action when Cancel is disabled', () => {
+    render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the dialog closes', () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          <ConfirmDialog {...defaultProps} isOpen={open} />
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness open={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness open={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    rerender(<Harness open={false} />);
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
+    function Harness({ showDialog }: { showDialog: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          {showDialog && <ConfirmDialog {...defaultProps} isOpen={true} />}
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness showDialog={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness showDialog={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    rerender(<Harness showDialog={false} />);
+    expect(trigger).toHaveFocus();
+  });
 });
