@@ -1312,7 +1312,7 @@ export class AppDataService {
 
       if (error instanceof Error && error.message === "file-exists") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el dataset actual o restablece las rutas gestionadas.`
+          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
         );
       }
 
