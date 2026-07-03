@@ -130,7 +130,7 @@ const validateCsvHeaders = (rawSource: string) => {
 
   if (unsupportedColumns.length > 0) {
     throw new Error(
-      `La cabecera del CSV contiene columnas fuera de la plantilla MVP: ${unsupportedColumns.join(", ")}. Usa la plantilla oficial antes de importar.`
+      `La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: ${unsupportedColumns.join(", ")}. Corrige el archivo antes de importarlo.`
     );
   }
 };

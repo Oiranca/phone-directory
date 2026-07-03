@@ -2834,7 +2834,7 @@ describe("AppDataService", () => {
     );
 
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
+      "El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo."
     );
   });
 
@@ -2907,7 +2907,7 @@ describe("AppDataService", () => {
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
-      "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+      "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
     );
   });
 

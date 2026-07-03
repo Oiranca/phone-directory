@@ -166,6 +166,9 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 #### [OIR-130-fix] software-engineer — buscas-only lost write
 - [10:00] Task started — fixing buscas-only workbook zero-row guard + silent catch logging in app-data.service.ts
 
+#### [OIR-181] software-engineer — copy jargon fix
+- [15:44] Task started: checked out existing branch fix/oir-181-copy-errores in worktree; making 2 targeted copy fixes (app-data.service.ts "filas inválidas" phrasing + csv-import.service.ts "plantilla MVP" jargon)
+
 #### [OIR-186] pr-comment-responder — Codex review fixes (PR #99)
 - [19:45] Task start: responding to 2 Codex inline comments on fix/oir-186-buscas-settings-p1
 - [19:46] Fix 1: useEffect → useLayoutEffect keyed [showForm, editingId] so switching create→edit refocuses first field

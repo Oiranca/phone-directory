@@ -753,7 +753,7 @@ describe("ImportExportPage", () => {
       .fn()
       .mockRejectedValue(
         new Error(
-          "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+          "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
         )
       );
 
@@ -764,7 +764,7 @@ describe("ImportExportPage", () => {
 
     expect(
       await screen.findByText(
-        "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+        "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
