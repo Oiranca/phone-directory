@@ -235,10 +235,14 @@ export const ImportExportPage = () => {
 
       setCsvPreview(preview);
 
-      if (preview.invalidRowCount > 0) {
+      // OIR-200: nothing importable at all is still blocked (no valid contact
+      // rows and no buscas content) — everything else is a partial import.
+      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+      if (preview.invalidRowCount > 0 && !hasImportableContent) {
         pushToast({
           type: "error",
-          message: "Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo."
+          message: "El archivo no contiene filas válidas para importar. Corrige el origen antes de importar."
         });
         return;
       }
@@ -247,7 +251,15 @@ export const ImportExportPage = () => {
       // OIR-188: confidence note shown in panel — toast covers status/count only.
       const unresolvedCount = preview.conflictCount ?? 0;
 
-      if (unresolvedCount > 0) {
+      // OIR-200: a partial import (some rows skipped, rest still importable) takes
+      // priority over the conflict/success messaging below — it is the most
+      // surprising outcome for the operator, so it gets its own single toast.
+      if (preview.invalidRowCount > 0) {
+        pushToast({
+          type: "warning",
+          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`
+        });
+      } else if (unresolvedCount > 0) {
         // Item 10: "Todo listo" is contradictory when conflicts still need resolving.
         pushToast({
           type: "warning",
@@ -276,7 +288,16 @@ export const ImportExportPage = () => {
   };
 
   const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
-    if (preview.invalidRowCount > 0) {
+    // OIR-200: rejected rows no longer block the import — they are skipped. The
+    // only remaining hard blocker is having nothing importable at all, mirroring
+    // the guard kept in AppDataService.importCsvDataset.
+    const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+    if (!hasImportableContent) {
+      pushToast({
+        type: "error",
+        message: "El archivo no contiene filas válidas para importar."
+      });
       return;
     }
 
@@ -317,7 +338,11 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "success",
-        message: `Importación completada. ${result.createdCount} ${result.createdCount === 1 ? "alta" : "altas"} y ${result.updatedCount} ${result.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
+        message: `Importación completada. ${result.createdCount} ${result.createdCount === 1 ? "alta" : "altas"} y ${result.updatedCount} ${result.updatedCount === 1 ? "actualización" : "actualizaciones"}.${
+          result.invalidRowCount > 0
+            ? ` Se ${result.invalidRowCount === 1 ? "omitió" : "omitieron"} ${result.invalidRowCount} ${result.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+            : ""
+        }`
       });
     } catch (error) {
       pushToast({
@@ -420,7 +445,11 @@ export const ImportExportPage = () => {
 
       return {
         title: "Confirmar importación de agenda",
-        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
+        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${
+          preview.invalidRowCount > 0
+            ? ` Se ${preview.invalidRowCount === 1 ? "omitirá" : "omitirán"} ${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+            : ""
+        }${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"
       };
     }

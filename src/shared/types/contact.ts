@@ -330,6 +330,13 @@ export interface CsvImportResult extends ImportContactsResult {
   updatedCount: number;
   conflictCount: number;
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
+  /**
+   * OIR-200: Rejected rows are skipped rather than blocking the whole import.
+   * This carries the same per-row reasons already surfaced in the preview
+   * (CsvImportPreview.rowIssues) so the post-import summary can list exactly
+   * which rows were skipped and why.
+   */
+  rowIssues: CsvImportIssue[];
 }
 
 export interface AuditLogResult {

@@ -467,12 +467,17 @@ export class AppDataService {
       editorName
     );
 
-    if (preview.invalidRowCount > 0) {
-      throw new Error("El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo.");
-    }
+    // OIR-200: A partially-invalid file no longer blocks the whole import. Rejected
+    // rows are already excluded from `dataset` — buildImportPreviewFromRows only
+    // pushes a row into `dataset.records` after it passes Zod validation via
+    // contactRecordSchema.parse — so proceeding here can never persist a rejected
+    // row. Rejected rows (and their existing per-row reasons in preview.rowIssues)
+    // are simply skipped and reported back in the result below.
 
     // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
-    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook.
+    // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook
+    // that has nothing importable at all (no valid contact rows AND no buscas
+    // content). This is the one case that must still block the import.
     if (preview.validRowCount === 0 && buscasParseResult.parsedCellCount === 0) {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
@@ -523,7 +528,10 @@ export class AppDataService {
       createdCount: merged.createdCount,
       updatedCount: merged.updatedCount,
       conflictCount: conflicts.length,
-      conflictPolicyCounts: merged.conflictPolicyCounts
+      conflictPolicyCounts: merged.conflictPolicyCounts,
+      // OIR-200: surface the same per-row rejection reasons already computed
+      // for the preview so the renderer can report exactly what was skipped.
+      rowIssues: preview.rowIssues
     };
     });
   }

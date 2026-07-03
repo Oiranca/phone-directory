@@ -216,12 +216,15 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
-  const hasBlockers = preview.invalidRowCount > 0;
+  const hasRejectedRows = preview.invalidRowCount > 0;
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
   // OIR-130: A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
   // Treat it as confirmable. Only block when BOTH contact rows AND buscas content are absent.
   const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
-  const isConfirmDisabled = isMutating || hasBlockers || hasUnresolvedConflicts || !hasImportableContent;
+  // OIR-200: Rejected rows alone no longer block confirmation — they are skipped
+  // and imported partially alongside the valid rows. The only real blocker left
+  // is having nothing importable at all (see hasImportableContent above).
+  const isConfirmDisabled = isMutating || hasUnresolvedConflicts || !hasImportableContent;
 
   // ---------------------------------------------------------------------------
   // OIR-133 — multi-select state (purely local UI, no IPC/main change needed).
@@ -393,8 +396,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       </div>
 
-      {/* Blocker message */}
-      {hasBlockers && (
+      {/* Nothing-importable blocker (OIR-200: only shown when there are no valid rows at all) */}
+      {hasRejectedRows && !hasImportableContent && (
         <div
           role="alert"
           className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
@@ -404,8 +407,20 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
+      {/* Partial-import notice (OIR-200): rejected rows are skipped, valid rows still import */}
+      {hasRejectedRows && hasImportableContent && (
+        <div
+          role="status"
+          className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+        >
+          {preview.invalidRowCount} {preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"} se
+          {preview.invalidRowCount === 1 ? " omitirá" : " omitirán"} al importar. El resto de filas válidas se
+          importará con normalidad. Revisa los motivos en la tabla antes de confirmar.
+        </div>
+      )}
+
       {/* Warning-only acknowledgement */}
-      {!hasBlockers && preview.warningCount > 0 && (
+      {hasImportableContent && preview.warningCount > 0 && (
         <div
           role="status"
           className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -417,7 +432,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {!hasBlockers && conflictCount > 0 && (
+      {hasImportableContent && conflictCount > 0 && (
         <div
           role={hasUnresolvedConflicts ? "alert" : "status"}
           className={[
