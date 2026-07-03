@@ -153,6 +153,25 @@ describe("AppShell — default mode", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/contacts/new");
   });
 
+  it("does not steal modifier+n while an in-progress form is open (e.g. Buscas inline form)", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          <LocationProbe />
+          <button type="button" data-keyboard-cancel>Cancelar</button>
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    // fireEvent returns false when preventDefault was called on the event.
+    const notPrevented = fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
+    // The keypress must still be consumed so Electron/Chromium's native
+    // Ctrl/Cmd+N (new window) can't fire while an unsaved form is open.
+    expect(notPrevented).toBe(false);
+  });
+
   it("submits the active keyboard form with modifier+s", () => {
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
     render(

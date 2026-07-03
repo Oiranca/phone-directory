@@ -462,6 +462,30 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("Browse data file button announces a busy accessible name while the picker is open", async () => {
+    let resolve!: (v: string | null) => void;
+    window.hospitalDirectory.browseForPath = vi.fn().mockReturnValue(
+      new Promise<string | null>((res) => { resolve = res; })
+    );
+
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    const browseButton = screen.getByRole("button", { name: "Seleccionar archivo de datos" });
+    fireEvent.click(browseButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Examinando archivos…" })).toHaveAttribute("aria-busy", "true");
+    });
+    expect(screen.getByRole("button", { name: "Examinando archivos…" })).toHaveTextContent("Examinando…");
+
+    resolve(null);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Seleccionar archivo de datos" })).toHaveAttribute("aria-busy", "false");
+    });
+  });
+
   it("Browse rejection shows an error toast without mutating the path field", async () => {
     window.hospitalDirectory.browseForPath = vi.fn().mockRejectedValue(new Error("dialog failed"));
 

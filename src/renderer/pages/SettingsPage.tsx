@@ -300,11 +300,11 @@ export const SettingsPage = () => {
                   type="button"
                   onClick={() => void handleBrowseDataFile()}
                   disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
-                  aria-label="Seleccionar archivo de datos"
+                  aria-label={isBrowsingDataFile ? "Examinando archivos…" : "Seleccionar archivo de datos"}
                   aria-busy={isBrowsingDataFile}
                   className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isBrowsingDataFile ? "…" : "Examinar"}
+                  {isBrowsingDataFile ? "Examinando…" : "Examinar"}
                 </button>
               </div>
               <p id="settings-data-file-path-hint" className="mt-2 text-xs text-slate-500">
@@ -320,7 +320,7 @@ export const SettingsPage = () => {
                   type="text"
                   value={backupDirectoryPath}
                   onChange={handleBackupDirectoryPathChange}
-                  placeholder="/ruta/a/la/carpeta/backups"
+                  placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
                   aria-describedby="settings-backup-directory-path-hint"
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                 />
