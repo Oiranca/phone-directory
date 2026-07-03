@@ -393,7 +393,7 @@ export const ImportExportPage = () => {
       return {
         title: "Confirmar importación JSON",
         message:
-          "La importación reemplaza todo el directorio actual y crea una copia de seguridad automática antes de continuar. ¿Quieres seguir?",
+          "La importación reemplaza todo el directorio actual y crea una copia de seguridad automática antes de continuar. ¿Deseas continuar?",
         confirmLabel: "Importar JSON"
       };
     }
@@ -442,7 +442,7 @@ export const ImportExportPage = () => {
 
   return (
     <section className="space-y-6">
-      <h2 className="sr-only">Importar y exportar datos</h2>
+      <h2 className="text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
