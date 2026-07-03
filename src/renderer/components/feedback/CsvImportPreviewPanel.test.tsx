@@ -1165,6 +1165,28 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("checkbox", { name: /Seleccionar todos/ })).toBeInTheDocument();
     });
 
+    // Regression: two imported rows with an identical displayName must still get
+    // distinct accessible names for their per-conflict checkbox (the recordIndex
+    // disambiguator was dropped in a prior change, causing duplicate aria-labels).
+    it("keeps per-conflict checkbox aria-labels unique when displayName repeats across conflicts", () => {
+      const duplicateNamePreview = {
+        ...twoConflictPreview,
+        conflictedRecords: twoConflictPreview.conflictedRecords.map((conflict) => ({
+          ...conflict,
+          importedRecord: { ...conflict.importedRecord, displayName: "Servicio Repetido" }
+        }))
+      };
+
+      renderPanel(duplicateNamePreview);
+
+      const first = screen.getByRole("checkbox", { name: "Seleccionar Servicio Repetido (conflicto 1)" });
+      const second = screen.getByRole("checkbox", { name: "Seleccionar Servicio Repetido (conflicto 2)" });
+
+      expect(first).toBeInTheDocument();
+      expect(second).toBeInTheDocument();
+      expect(first).not.toBe(second);
+    });
+
     // --- select-all / deselect-all ---
 
     it("select-all checks all per-conflict checkboxes", () => {
@@ -1618,7 +1640,7 @@ describe("CsvImportPreviewPanel", () => {
 
       // Select first conflict on page 1 (recordIndex 0 → displayName "Importado 1")
       const selectFirstConflict = () =>
-        screen.getByRole("checkbox", { name: "Seleccionar Importado 1" });
+        screen.getByRole("checkbox", { name: "Seleccionar Importado 1 (conflicto 1)" });
       fireEvent.click(selectFirstConflict());
       expect(selectFirstConflict()).toBeChecked();
 
