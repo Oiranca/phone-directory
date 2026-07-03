@@ -534,4 +534,15 @@ describe("SettingsPage", () => {
     expect(statusContainer).not.toBeNull();
     expect(statusContainer!.className).not.toContain("shadow-sm");
   });
+
+  it("OIR-188: describes the data path help copy in Spanish without the English word 'dataset'", async () => {
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    expect(
+      screen.getByText(
+        "La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual."
+      )
+    ).toBeInTheDocument();
+  });
 });
