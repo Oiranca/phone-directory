@@ -108,6 +108,10 @@ export const DeduplicatePage = () => {
   const headingRef = useRef<HTMLHeadingElement>(null);
   // pendingFocusRef — flag set before state updates to trigger focus restore in effect
   const pendingFocusRef = useRef<boolean>(false);
+  // radioButtonRefs — tracks the "Conservar este" radio buttons by record id so
+  // arrow-key navigation can move DOM focus to the newly-selected option
+  // (roving tabindex pattern: only one radio per pair stays in the tab order).
+  const radioButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Restore focus after pairStates changes following a merge confirmation
   useEffect(() => {
@@ -163,6 +167,30 @@ export const DeduplicatePage = () => {
         ps.pair.id === pairId ? { ...ps, keepId } : ps
       )
     );
+  };
+
+  // Roving-tabindex arrow key navigation for the "keep this / keep both" radiogroup.
+  // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
+  // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the
+  // WAI-ARIA radiogroup keyboard contract.
+  const handleRadioGroupKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    pairId: string,
+    optionIds: string[],
+    currentId: string
+  ) => {
+    const previousKeys = ["ArrowUp", "ArrowLeft"];
+    const nextKeys = ["ArrowDown", "ArrowRight"];
+    if (!previousKeys.includes(event.key) && !nextKeys.includes(event.key)) return;
+
+    event.preventDefault();
+    const currentIndex = optionIds.indexOf(currentId);
+    const delta = nextKeys.includes(event.key) ? 1 : -1;
+    const nextIndex = (currentIndex + delta + optionIds.length) % optionIds.length;
+    const nextId = optionIds[nextIndex]!;
+
+    handleKeepSelect(pairId, nextId);
+    radioButtonRefs.current.get(nextId)?.focus();
   };
 
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
@@ -391,9 +419,20 @@ export const DeduplicatePage = () => {
                 role="radiogroup"
                 aria-label="Elegir cuál conservar"
                 className="grid gap-4 sm:grid-cols-2"
+                onKeyDown={(event) =>
+                  handleRadioGroupKeyDown(
+                    event,
+                    pair.id,
+                    [pair.recordA.id, pair.recordB.id],
+                    keepId ?? pair.recordA.id
+                  )
+                }
               >
                 {[pair.recordA, pair.recordB].map((record) => {
                   const isSelected = keepId === record.id;
+                  // Roving tabindex: only the selected option (or the first option
+                  // when nothing is selected yet) stays in the tab order.
+                  const isTabbable = (keepId ?? pair.recordA.id) === record.id;
 
                   return (
                     <div
@@ -426,6 +465,11 @@ export const DeduplicatePage = () => {
                         aria-checked={isSelected}
                         aria-label={`Conservar ${record.displayName}`}
                         data-keep-btn
+                        ref={(el) => {
+                          if (el) radioButtonRefs.current.set(record.id, el);
+                          else radioButtonRefs.current.delete(record.id);
+                        }}
+                        tabIndex={isTabbable ? 0 : -1}
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}
                         className={[
