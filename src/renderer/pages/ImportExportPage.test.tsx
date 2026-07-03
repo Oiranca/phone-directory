@@ -424,7 +424,8 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
     expect(screen.getByText(/Tipo de archivo: exportación cruda de hoja de servicios/)).toBeInTheDocument();
-    expect(screen.getByText("Confianza media en la detección del formato. Revisa la vista previa.")).toBeInTheDocument();
+    // OIR-182: confidence note is now merged into the primary toast (no second toast)
+    expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -981,5 +982,110 @@ describe("ImportExportPage", () => {
     expect(screen.queryByText(/Cargando importación/)).not.toBeInTheDocument();
     // listBackups must never be called
     expect(window.hospitalDirectory.listBackups).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-182 — import P1 UX fixes
+  // ---------------------------------------------------------------------------
+
+  it("OIR-182 item 1: shows analysis spinner while previewCsvImport is pending", async () => {
+    // Intercept with a never-resolving promise so isPreparingCsvPreview stays true
+    let resolvePreview!: (value: unknown) => void;
+    const pendingPreview = new Promise((resolve) => { resolvePreview = resolve; });
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockReturnValue(pendingPreview);
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Spinner must appear while promise is in flight
+    expect(await screen.findByText(/Analizando el archivo/)).toBeInTheDocument();
+    const spinnerStatus = screen.getByRole("status");
+    expect(spinnerStatus).toBeInTheDocument();
+
+    // Resolve to avoid state-update-after-unmount warning
+    resolvePreview(null);
+  });
+
+  it("OIR-182 item 10: shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-conflict-toast",
+      fileName: "conflicts.csv",
+      detectedFormat: "exportación cruda",
+      detectionConfidence: "high",
+      totalRowCount: 2,
+      validRowCount: 2,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 2,
+      mergedRecordCount: 2,
+      createdCount: 0,
+      updatedCount: 2,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      buscasSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBuscasCellCount: 0,
+      conflictCount: 2,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: { id: "ci-0", displayName: "Contacto A", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-0", displayName: "Existente A", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        },
+        {
+          recordIndex: 1,
+          importedRecord: { id: "ci-1", displayName: "Contacto B", phones: [], emails: [], socials: [] },
+          matchingRecord: { id: "ce-1", displayName: "Existente B", phones: [], emails: [], socials: [] },
+          matchingRecordIndex: 1,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id"
+        }
+      ]
+    });
+
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Wait for the preview panel to load
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // "Todo listo" must NOT appear when there are conflicts to resolve
+    expect(screen.queryByText(/Todo listo/)).not.toBeInTheDocument();
+
+    // The conflict warning message (in toast or panel alert) must contain "Para cada uno"
+    expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
+  });
+
+  it("OIR-182 item 9: emits only one toast (confidence note merged) when detectionConfidence is not 'high'", async () => {
+    // Default mock already has detectionConfidence="medium" and conflictCount=0.
+    // After OIR-182 there must be exactly ONE toast element: the merged warning toast.
+    renderPage();
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    // Wait for panel to appear (preview received)
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    // The merged toast must contain both "Todo listo" and "Confianza media" in one element.
+    // This would NOT find a match if they were in two separate toast elements.
+    expect(screen.getByText(/Todo listo.+Confianza media/)).toBeInTheDocument();
+
+    // Warning toasts use role="alert". There must be exactly 1 alert mentioning confidence.
+    const alerts = screen
+      .getAllByRole("alert")
+      .filter((el) => el.textContent?.includes("Confianza media"));
+    expect(alerts).toHaveLength(1);
   });
 });

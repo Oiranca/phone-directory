@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -254,6 +255,39 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
   const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
 
+  // OIR-182 item 3: count how many conflicts already have a policy selected.
+  const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
+
+  // PR #106 review: replace window.confirm with the shared accessible ConfirmDialog.
+  // closeButtonRef lets us restore focus to the trigger button when the operator
+  // cancels the discard-warning dialog (same convention as other ConfirmDialog usages).
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // OIR-182 item 4: warn before closing whenever any resolution work would be lost.
+  // Prompt on any resolvedCount > 0 — not only partial — because closing before
+  // importing discards the work even when all conflicts have been resolved.
+  const handleClose = () => {
+    if (resolvedCount > 0) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    onClose();
+  };
+
+  const handleCancelDiscardConfirm = () => {
+    setShowDiscardConfirm(false);
+    // Restore focus to the button that triggered the dialog.
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardConfirm(false);
+    onClose();
+  };
+
   const handleToggleOne = useCallback((recordIndex: number) => {
     setSelectedIndices((prev) => {
       const next = new Set(prev);
@@ -320,22 +354,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </p>
           )}
         </div>
+        {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
+            ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isMutating}
             className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
           >
             Cerrar vista previa
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isConfirmDisabled}
-            className="rounded-full bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isImporting ? "Importando…" : "Confirmar importación"}
           </button>
         </div>
       </div>
@@ -512,9 +540,17 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </div>
           </div>
 
-          <p className="text-sm font-semibold text-emerald-950">
-            Conflictos ({conflictedRecords.length})
-          </p>
+          {/* OIR-182 item 3: resolution progress counter (sibling span preserves exact text for tests) */}
+          <div className="flex items-baseline gap-3">
+            <p className="text-sm font-semibold text-emerald-950">
+              Conflictos ({conflictedRecords.length})
+            </p>
+            {conflictedRecords.length > 0 && (
+              <span aria-live="polite" aria-atomic="true" className="text-xs text-emerald-700">
+                {resolvedCount} de {conflictedRecords.length} resueltos
+              </span>
+            )}
+          </div>
           <div className="mt-3 space-y-4">
             {paginatedConflicts.map((conflict) => {
               const reasonLabel = CONFLICT_REASON_LABELS[conflict.conflictReasonKey] ?? "Coincidencia detectada";
@@ -556,7 +592,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   <div className="mb-3 flex items-start gap-3">
                     <input
                       type="checkbox"
-                      aria-label={`Seleccionar conflicto ${conflict.recordIndex + 1}`}
+                      aria-label={`Seleccionar ${conflict.importedRecord.displayName ?? "conflicto"} (fila ${conflict.recordIndex + 1})`}
                       checked={isSelected}
                       disabled={isMutating}
                       onChange={() => handleToggleOne(conflict.recordIndex)}
@@ -602,6 +638,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                                   disabled={isMutating}
                                   onChange={() => onPolicyChange(conflict.recordIndex, policy)}
                                   aria-describedby={descId}
+                                  aria-required="true"
                                   className="h-4 w-4 shrink-0"
                                 />
                                 {POLICY_LABELS[policy]}
@@ -653,6 +690,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces conflict page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {conflictsPage + 1} de {Math.ceil(conflictedRecords.length / CONFLICTS_PER_PAGE)}
+              </span>
             </nav>
           )}
         </div>
@@ -833,6 +874,10 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
+              {/* OIR-182 item 7: live region announces preview row page changes to screen readers */}
+              <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                Página {safePage} de {totalPreviewPages}
+              </span>
             </nav>
           )}
         </div>
@@ -844,6 +889,33 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           El archivo no contiene filas de datos.
         </div>
       )}
+
+      {/* OIR-182 item 2: single sticky confirm footer — CTA appears in one place only */}
+      <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isConfirmDisabled}
+            className="rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {isImporting ? "Importando…" : "Confirmar importación"}
+          </button>
+        </div>
+      </div>
+
+      {/* PR #106 review: shared accessible ConfirmDialog replaces window.confirm for the
+          discard-warning prompt shown when closing with unsaved conflict resolutions. */}
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        title="Cerrar vista previa"
+        message="Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?"
+        confirmLabel="Cerrar igualmente"
+        cancelLabel="Cancelar"
+        onConfirm={handleConfirmDiscard}
+        onCancel={handleCancelDiscardConfirm}
+        isDestructive={true}
+      />
     </section>
   );
 };
