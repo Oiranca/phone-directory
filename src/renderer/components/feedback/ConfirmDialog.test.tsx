@@ -153,6 +153,17 @@ describe('ConfirmDialog', () => {
     expect(confirmButton).not.toBeDisabled();
   });
 
+  it('does not fire onConfirm when confirm button is clicked while confirmDisabled is true', () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onConfirm={onConfirm} confirmDisabled={true} />);
+    // The onClick guard (`if (confirmDisabled) return;`) prevents the call
+    // even when fireEvent.click bypasses the disabled attribute (e.g. a
+    // programmatic/synthetic click), keeping it defensively symmetric with
+    // the cancel button's existing guard.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('marks cancel button as disabled when cancelDisabled is true', () => {
     render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
     const cancelButton = screen.getByRole('button', { name: 'Cancelar' });

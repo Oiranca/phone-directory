@@ -213,6 +213,21 @@ describe("PathDisplay", () => {
       render(<PathDisplay path="/data/contacts.json" />);
       expect(screen.getByRole("button", { name: "Copiar ruta completa" })).toBeInTheDocument();
     });
+
+    it("toggle and copy buttons use the shared focus-ring utility (not a bare focus: variant)", () => {
+      // Regression test: these buttons previously used inline `focus:` classes,
+      // which show the ring on mouse/touch clicks, not just keyboard focus.
+      // The shared `.focus-ring` utility (globals.css) applies focus-visible:
+      // only, matching the convention used elsewhere in the app.
+      render(<PathDisplay path="/data/contacts.json" />);
+      const toggleButton = screen.getByRole("button", { name: "Mostrar ruta completa" });
+      const copyButton = screen.getByRole("button", { name: "Copiar ruta completa" });
+
+      expect(toggleButton).toHaveClass("focus-ring");
+      expect(copyButton).toHaveClass("focus-ring");
+      expect(toggleButton.className).not.toMatch(/(?<!-)focus:ring/);
+      expect(copyButton.className).not.toMatch(/(?<!-)focus:ring/);
+    });
   });
 
   describe("path prop change resets revealed and copied state (FIX 3 — no auto-exposure)", () => {

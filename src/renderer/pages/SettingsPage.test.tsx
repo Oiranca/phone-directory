@@ -164,18 +164,19 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Activar auto-backup" }));
-    fireEvent.change(screen.getByLabelText("Trigger del auto-backup"), {
-      target: { value: "intervalHours" }
-    });
+    // Auto-backup trigger uses the shared SelectField combobox (not a native
+    // <select>), so options are chosen by opening the listbox and clicking
+    // the desired option rather than firing a native "change" event.
+    fireEvent.click(screen.getByRole("combobox", { name: "Cuándo crear el auto-backup" }));
+    fireEvent.click(screen.getByRole("option", { name: "Cada N horas" }));
     fireEvent.change(screen.getByLabelText("Horas entre auto-backups"), {
       target: { value: "1.5" }
     });
     fireEvent.change(screen.getByLabelText("Retención de auto-backups"), {
       target: { value: "999" }
     });
-    fireEvent.change(screen.getByLabelText("Trigger del auto-backup"), {
-      target: { value: "launch" }
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Cuándo crear el auto-backup" }));
+    fireEvent.click(screen.getByRole("option", { name: "Al abrir la app" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     await waitFor(() => {

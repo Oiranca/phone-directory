@@ -64,7 +64,7 @@ export function ConfirmDialog({
         </button>
         <button
           type="button"
-          onClick={onConfirm}
+          onClick={() => { if (confirmDisabled) return; onConfirm(); }}
           disabled={confirmDisabled}
           className={`px-4 py-2 text-sm font-medium text-white rounded-md focus-ring touch-target disabled:opacity-60 disabled:cursor-not-allowed ${
             isDestructive ? 'state-destructive' : 'bg-scs-blue hover:bg-scs-blueDark'

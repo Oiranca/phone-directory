@@ -1,8 +1,15 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { PathDisplay } from "../components/feedback/PathDisplay";
 import { useToast } from "../components/feedback/ToastRegion";
+import { SelectField } from "../components/inputs/SelectField";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
+
+const autoBackupTriggerOptions: { value: "launch" | "intervalHours" | "editCount"; label: string }[] = [
+  { value: "launch", label: "Al abrir la app" },
+  { value: "intervalHours", label: "Cada N horas" },
+  { value: "editCount", label: "Cada N ediciones" }
+];
 
 const clampInteger = (value: string, minimum: number, maximum: number) => {
   const parsed = Math.trunc(Number(value));
@@ -374,23 +381,19 @@ export const SettingsPage = () => {
               </label>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">Cuándo crear el auto-backup</span>
-                  <select
-                    aria-label="Trigger del auto-backup"
+                <div>
+                  <SelectField
+                    id="auto-backup-trigger"
+                    label="Cuándo crear el auto-backup"
                     value={autoBackupTrigger}
-                    onChange={(event) => {
-                      setAutoBackupTrigger(event.target.value as "launch" | "intervalHours" | "editCount");
+                    onChange={(value) => {
+                      setAutoBackupTrigger(value as "launch" | "intervalHours" | "editCount");
                       setSaveError("");
                     }}
+                    options={autoBackupTriggerOptions}
                     disabled={!autoBackupEnabled}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-scs-blue focus:ring-2 focus:ring-scs-blue/20 disabled:opacity-60"
-                  >
-                    <option value="launch">Al abrir la app</option>
-                    <option value="intervalHours">Cada N horas</option>
-                    <option value="editCount">Cada N ediciones</option>
-                  </select>
-                </label>
+                  />
+                </div>
 
                 <label className="block">
                   <span className="text-sm font-semibold text-slate-700">Retención de auto-backups</span>
