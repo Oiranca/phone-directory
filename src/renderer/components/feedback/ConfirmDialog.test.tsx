@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -153,6 +154,17 @@ describe('ConfirmDialog', () => {
     expect(confirmButton).not.toBeDisabled();
   });
 
+  it('does not fire onConfirm when confirm button is clicked while confirmDisabled is true', () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onConfirm={onConfirm} confirmDisabled={true} />);
+    // The onClick guard (`if (confirmDisabled) return;`) prevents the call
+    // even when fireEvent.click bypasses the disabled attribute (e.g. a
+    // programmatic/synthetic click), keeping it defensively symmetric with
+    // the cancel button's existing guard.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('marks cancel button as disabled when cancelDisabled is true', () => {
     render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
     const cancelButton = screen.getByRole('button', { name: 'Cancelar' });
@@ -194,19 +206,98 @@ describe('ConfirmDialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  // ── Focus management contract ────────────────────────────────────────────
+  // ── Focus management contract ────────────────────────────────────────────────
 
-  it('moves focus to the Cancel button once the dialog opens', () => {
+  it('moves focus to the Cancel button right after the dialog opens', () => {
     render(<ConfirmDialog {...defaultProps} />);
     expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
   });
 
-  it('falls back to the first enabled action when Cancel is disabled', () => {
+  it('falls back to focusing the first enabled action (Confirm) when Cancel is disabled', () => {
     render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
     expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveFocus();
   });
 
-  it('restores focus to the trigger element when the dialog closes', () => {
+  it('restores focus to the trigger element when the dialog is closed via Cancel', () => {
+    function Wrapper() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setIsOpen(true)}>Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onCancel={() => setIsOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the dialog is closed via Confirm', () => {
+    function Wrapper() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setIsOpen(true)}>Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onConfirm={() => setIsOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
+    function Wrapper({ mounted }: { mounted: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          {mounted && <ConfirmDialog {...defaultProps} />}
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Wrapper mounted={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Wrapper mounted={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    rerender(<Wrapper mounted={false} />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the isOpen prop flips to false directly (not via Cancel/Confirm)', () => {
     function Harness({ open }: { open: boolean }) {
       return (
         <div>
@@ -224,7 +315,13 @@ describe('ConfirmDialog', () => {
     rerender(<Harness open={true} />);
     expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
 
+    // The parent flips `isOpen` to false directly (e.g. an external state
+    // controller), never going through this component's Cancel/Confirm
+    // handlers. The effect keyed on `isOpen` must still close the dialog
+    // and restore focus to the trigger.
     rerender(<Harness open={false} />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
 
@@ -268,31 +365,6 @@ describe('ConfirmDialog', () => {
     expect(trigger).not.toHaveFocus();
 
     rerender(<Harness isOpen={false} />);
-    expect(trigger).toHaveFocus();
-  });
-
-  // Covers callers such as ImportExportPage that remove the component from the
-  // DOM instead of passing isOpen=false, so the mounted-path focus restore
-  // never runs — the unmount cleanup effect must handle this path instead.
-  it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
-    function Harness({ showDialog }: { showDialog: boolean }) {
-      return (
-        <div>
-          <button type="button">Abrir</button>
-          {showDialog && <ConfirmDialog {...defaultProps} isOpen={true} />}
-        </div>
-      );
-    }
-
-    const { rerender } = render(<Harness showDialog={false} />);
-    const trigger = screen.getByRole('button', { name: 'Abrir' });
-    trigger.focus();
-    expect(trigger).toHaveFocus();
-
-    rerender(<Harness showDialog={true} />);
-    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
-
-    rerender(<Harness showDialog={false} />);
     expect(trigger).toHaveFocus();
   });
 });

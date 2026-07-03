@@ -50,6 +50,9 @@ export function ConfirmDialog({
       if (dialog && !dialog.open) {
         triggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
         dialog.showModal();
+        // Move focus to a safe, enabled action right after opening. Prefer Cancel
+        // (the non-destructive default); fall back to the first enabled action
+        // (Confirm) if Cancel is disabled, so keyboard users never land on nothing.
         const focusTarget = !cancelDisabled
           ? cancelButtonRef.current
           : !confirmDisabled
@@ -67,8 +70,9 @@ export function ConfirmDialog({
     }
   }, [isOpen, cancelDisabled, confirmDisabled]);
 
-  // Close the native dialog and restore focus to the trigger if the parent
-  // unmounts this component while the dialog is still open. Uses
+  // Safety net: if the parent unmounts this component entirely while the dialog
+  // is still open (rather than flipping isOpen to false first), still close the
+  // dialog and restore focus to the previously-focused trigger element. Uses
   // `lastDialogNodeRef`/`triggerRef` (not the possibly-nulled `dialogRef`)
   // because React detaches child refs before this cleanup runs.
   useEffect(() => {
