@@ -424,7 +424,7 @@ export const DeduplicatePage = () => {
                 aria-describedby={`pair-score-${pair.id} pair-reasons-${pair.id}`}
                 className="grid gap-4 sm:grid-cols-2"
               >
-                {[pair.recordA, pair.recordB].map((record) => {
+                {[pair.recordA, pair.recordB].map((record, recordIndex) => {
                   const isSelected = keepId === record.id;
 
                   return (
@@ -456,7 +456,10 @@ export const DeduplicatePage = () => {
                         type="button"
                         role="radio"
                         aria-checked={isSelected}
-                        aria-label={`Conservar ${record.displayName}`}
+                        // Duplicate-detection candidates frequently share the exact same
+                        // displayName, so appending the 1-based position keeps the two
+                        // radio accessible names distinguishable for screen reader users.
+                        aria-label={`Conservar ${record.displayName} (registro ${recordIndex + 1})`}
                         data-keep-btn
                         onClick={() => handleKeepSelect(pair.id, record.id)}
                         disabled={!!mergingId}

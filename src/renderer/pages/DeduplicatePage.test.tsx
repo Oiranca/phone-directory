@@ -130,6 +130,19 @@ describe("DeduplicatePage", () => {
     expect(screen.getByText("70006")).toBeInTheDocument();
   });
 
+  // Regression: duplicate-detection pairs frequently share the exact same
+  // displayName (that's often *why* they were flagged as duplicates), so the
+  // two "Conservar" radio buttons must still expose distinct accessible names.
+  it("gives the two Conservar radio buttons distinct accessible names when both records share the same displayName", async () => {
+    renderPage();
+
+    await screen.findAllByText("Admisión General");
+
+    const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+    expect(keepButtons).toHaveLength(2);
+    expect(keepButtons[0]!.getAttribute("aria-label")).not.toBe(keepButtons[1]!.getAttribute("aria-label"));
+  });
+
   it("enables Fusionar button after selecting Conservar este on one side", async () => {
     renderPage();
 

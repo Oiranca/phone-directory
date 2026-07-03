@@ -100,8 +100,8 @@ test.describe("OIR-22 critical MVP flows", () => {
       await expect(page.getByText("Exportación completada.")).toBeVisible();
       await expect(fs.access(exportPath)).resolves.toBeUndefined();
 
-      await page.getByRole("button", { name: /Crear backup/i }).click();
-      await expect(page.getByText("Backup creado.")).toBeVisible();
+      await page.getByRole("button", { name: /Crear copia de seguridad/i }).click();
+      await expect(page.getByText("Copia de seguridad creada.")).toBeVisible();
       await expect(listBackupFiles(workspace.userDataPath)).resolves.toHaveLength(1);
 
       await page.getByRole("button", { name: /Importar JSON/i }).click();
@@ -141,7 +141,7 @@ test.describe("OIR-22 critical MVP flows", () => {
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
       await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
       await expect(page.getByRole("heading", { name: "directory.csv" })).toBeVisible();
       await expect(page.getByText("Altas", { exact: true })).toBeVisible();
