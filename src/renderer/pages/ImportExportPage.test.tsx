@@ -239,30 +239,46 @@ describe("ImportExportPage", () => {
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
   });
 
+  it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+
+    const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
+    const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
+    const importJsonBtn = screen.getByRole("button", { name: /Importar JSON/ });
+    const prepareBtn = screen.getByRole("button", { name: /Preparar agenda/ });
+
+    expect(backupBtn.className).toContain("focus-ring");
+    expect(exportBtn.className).toContain("focus-ring");
+    expect(importJsonBtn.className).toContain("focus-ring");
+    expect(prepareBtn.className).toContain("focus-ring");
+  });
+
   it("creates a backup and shows success feedback", async () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.createBackup).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText("Backup creado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad creada.")).toBeInTheDocument();
   });
 
   it("shows the backup service error message when manual backup fails", async () => {
     window.hospitalDirectory.createBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups."));
+      .mockRejectedValue(new Error("No se pudo crear la copia de seguridad del directorio. Ruta afectada: /tmp/backups."));
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Crear backup/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     expect(
-      await screen.findByText("No se pudo crear el backup del directorio.")
+      await screen.findByText("No se pudo crear la copia de seguridad del directorio.")
     ).toBeInTheDocument();
   });
 
@@ -321,7 +337,7 @@ describe("ImportExportPage", () => {
 
     const loadingState = screen.getByRole("status");
     expect(loadingState).toHaveAttribute("aria-busy", "true");
-    expect(loadingState).toHaveTextContent("Cargando importación y backups");
+    expect(loadingState).toHaveTextContent("Cargando importación y copias de seguridad");
 
     resolveBootstrap?.({
       contacts: defaultContacts,
@@ -380,7 +396,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
 
     expect(
-      await screen.findByText("No se pudo actualizar la lista de backups. Inténtalo de nuevo.")
+      await screen.findByText("No se pudo actualizar la lista de copias de seguridad. Inténtalo de nuevo.")
     ).toBeInTheDocument();
   });
 
@@ -407,7 +423,7 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
-    expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
+    expect(screen.getByText(/Tipo de archivo: exportación cruda de hoja de servicios/)).toBeInTheDocument();
     expect(screen.getByText("Confianza media en la detección del formato. Revisa la vista previa.")).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
@@ -418,7 +434,7 @@ describe("ImportExportPage", () => {
       expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-1", []);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
-    expect(await screen.findByText("Importación completada. 1 altas y 1 actualizaciones.")).toBeInTheDocument();
+    expect(await screen.findByText("Importación completada. 1 alta y 1 actualización.")).toBeInTheDocument();
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
@@ -452,7 +468,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             department: "Admisión",
@@ -463,7 +478,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             department: "Admisión",
@@ -530,7 +544,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -540,7 +553,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
@@ -597,7 +609,6 @@ describe("ImportExportPage", () => {
           recordIndex: 0,
           importedRecord: {
             id: "import-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador importado",
             status: "active",
@@ -607,7 +618,6 @@ describe("ImportExportPage", () => {
           },
           matchingRecord: {
             id: "existing-1",
-            externalId: "legacy-1",
             type: "service",
             displayName: "Mostrador actual",
             status: "active",
@@ -680,7 +690,7 @@ describe("ImportExportPage", () => {
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    expect(await screen.findByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeInTheDocument();
+    expect(await screen.findByText("Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
@@ -743,7 +753,7 @@ describe("ImportExportPage", () => {
       .fn()
       .mockRejectedValue(
         new Error(
-          "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+          "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
         )
       );
 
@@ -754,7 +764,7 @@ describe("ImportExportPage", () => {
 
     expect(
       await screen.findByText(
-        "La cabecera del CSV contiene columnas fuera de la plantilla MVP: legacyDesk. Usa la plantilla oficial antes de importar."
+        "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
       )
     ).toBeInTheDocument();
     expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
@@ -767,14 +777,14 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
-    expect(await screen.findByText("Backup restaurado.")).toBeInTheDocument();
+    expect(await screen.findByText("Copia de seguridad restaurada.")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
@@ -783,16 +793,16 @@ describe("ImportExportPage", () => {
   it("shows the restore service error message when backup restore fails", async () => {
     window.hospitalDirectory.restoreBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json."));
+      .mockRejectedValue(new Error("No se pudo restaurar la copia de seguridad seleccionada. Ruta afectada: /tmp/backups/contacts-1.json."));
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     expect(
-      await screen.findByText("No se pudo restaurar el backup seleccionado.")
+      await screen.findByText("No se pudo restaurar la copia de seguridad seleccionada.")
     ).toBeInTheDocument();
   });
 
@@ -808,13 +818,13 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
     });
-    expect(screen.getByRole("button", { name: /Crear backup/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
@@ -845,9 +855,9 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar este backup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
 
-    const confirmButton = await screen.findByRole("button", { name: "Restaurar backup" });
+    const confirmButton = await screen.findByRole("button", { name: "Restaurar copia de seguridad" });
     fireEvent.click(confirmButton);
     fireEvent.click(confirmButton);
 

@@ -16,6 +16,6 @@ describe('NotFoundPage', () => {
 
   it('shows the explanatory copy', () => {
     render(<NotFoundPage />);
-    expect(screen.getByText('La ruta solicitada no existe.')).toBeInTheDocument();
+    expect(screen.getByText('La ruta solicitada no existe en esta aplicación.')).toBeInTheDocument();
   });
 });

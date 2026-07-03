@@ -65,7 +65,7 @@ export const ContactFormPage = () => {
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Completa la ficha operativa con teléfonos, correos, ubicación y notas. La validación usa el mismo esquema compartido del directorio.
+            Completa los datos del contacto: teléfonos, correos, ubicación y notas.
           </p>
         </div>
         <Link

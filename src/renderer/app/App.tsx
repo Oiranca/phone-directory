@@ -135,14 +135,14 @@ const RecoveryPanel = () => {
           disabled={isImporting || isResetting || isRestoringPaths}
           className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900 disabled:opacity-60"
         >
-          {isRestoringPaths ? "Restaurando rutas…" : "Usar rutas predeterminadas"}
+          {isRestoringPaths ? "Restaurando rutas…" : "Usar rutas gestionadas"}
         </button>
       </div>
 
       <ConfirmDialog
         isOpen={isResetDialogOpen}
         title="Restablecer directorio vacío"
-        message="Se creará una copia de seguridad del archivo dañado y después se restablecerá un directorio vacío. ¿Quieres continuar?"
+        message="Antes se guardará una copia de seguridad de los datos de la agenda y después se restablecerá un directorio vacío. ¿Quieres continuar?"
         confirmLabel="Restablecer directorio vacío"
         cancelLabel="Cancelar"
         isDestructive={true}
@@ -179,7 +179,7 @@ export const App = () => {
     return window.hospitalDirectory.onAutoBackupFailure(({ message }) => {
       pushToast({
         type: "error",
-        message: toCompactToastMessage(message, "No se pudo crear el auto-backup.")
+        message: toCompactToastMessage(message, "No se pudo crear la copia de seguridad automática.")
       });
     });
   }, [pushToast]);

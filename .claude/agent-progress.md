@@ -166,6 +166,14 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 #### [OIR-130-fix] software-engineer — buscas-only lost write
 - [10:00] Task started — fixing buscas-only workbook zero-row guard + silent catch logging in app-data.service.ts
 
+#### [OIR-181] software-engineer — copy jargon fix
+- [15:44] Task started: checked out existing branch fix/oir-181-copy-errores in worktree; making 2 targeted copy fixes (app-data.service.ts "filas inválidas" phrasing + csv-import.service.ts "plantilla MVP" jargon)
+- [15:46] app-data.service.ts:471 reworded to "El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo."; test assertion updated at app-data.service.test.ts:2837
+- [15:46] csv-import.service.ts:133 reworded to drop "MVP" — "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: ${unsupportedColumns.join(", ")}. Corrige el archivo antes de importarlo."; updated assertions in csv-import.service.test.ts:63, app-data.service.test.ts:2910, ImportExportPage.test.tsx:756+767
+- [15:46] npm run build: PASS (vite + tsc electron clean)
+- [15:47] vitest (app-data.service.test.ts + csv-import.service.test.ts + ImportExportPage.test.tsx): 153 passed, 0 failed
+- [15:47] ✅ Complete — committed f213060, pushed to origin/fix/oir-181-copy-errores (PR #105 stays open, targeting main, no merge performed)
+
 #### [OIR-186] pr-comment-responder — Codex review fixes (PR #99)
 - [19:45] Task start: responding to 2 Codex inline comments on fix/oir-186-buscas-settings-p1
 - [19:46] Fix 1: useEffect → useLayoutEffect keyed [showForm, editingId] so switching create→edit refocuses first field
@@ -176,3 +184,8 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 #### [OIR-AUDIT-INTEGRATION] software-engineer — build integration/oir-audit-merge-prep (18 PRs)
 - [18:24] Task started — created integration/oir-audit-merge-prep from origin/main (6c45886). Baseline: build clean, vitest 1379 passed (50 files).
 - [18:26] PR 1/18 fix/oir-180-transversal-t1-t9 (#104): merged clean, no conflicts. build clean. vitest 1383 passed (50 files).
+#### eng-oir181 — Fix PR #105 regression test
+- [00:00] Task start: add AppShell regression test locking header copy "Agenda" without "MVP" (review comment 3520683805)
+- [16:14] Added regression test in AppShell.test.tsx asserting header heading "Agenda" present and "MVP" absent (header copy itself already correct, no AppShell.tsx change needed)
+- [16:14] Gates: npx vitest AppShell.test.tsx 24/24 passed; npm test 1384/1384 (50 files) passed; npm run build passed
+- [16:14] ✅ Complete — commit 718e03c on fix/oir-181-copy-errores, pushing to origin

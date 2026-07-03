@@ -60,7 +60,7 @@ describe("buildCsvImportPreview", () => {
     );
 
     await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
-      "columnas fuera de la plantilla MVP"
+      "no pertenecen a la plantilla oficial"
     );
   });
 
