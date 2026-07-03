@@ -180,3 +180,9 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [19:46] Fix 2: search sr-only label + placeholder now include "titular" and "hoja ODS" to reflect imported ODS filtering
 - [19:47] Tests: added 2 new tests — refocus on create→edit switch, ODS label/placeholder assertion
 - [19:47] Gates: pnpm typecheck ✅, pnpm test 1333/1333 ✅, pnpm build ✅
+
+#### eng-oir181 — Fix PR #105 regression test
+- [00:00] Task start: add AppShell regression test locking header copy "Agenda" without "MVP" (review comment 3520683805)
+- [16:14] Added regression test in AppShell.test.tsx asserting header heading "Agenda" present and "MVP" absent (header copy itself already correct, no AppShell.tsx change needed)
+- [16:14] Gates: npx vitest AppShell.test.tsx 24/24 passed; npm test 1384/1384 (50 files) passed; npm run build passed
+- [16:14] ✅ Complete — commit 718e03c on fix/oir-181-copy-errores, pushing to origin
