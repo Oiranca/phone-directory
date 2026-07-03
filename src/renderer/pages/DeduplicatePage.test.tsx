@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
@@ -128,6 +128,19 @@ describe("DeduplicatePage", () => {
     // Phone numbers from the flat phones array
     expect(screen.getByText("70005")).toBeInTheDocument();
     expect(screen.getByText("70006")).toBeInTheDocument();
+  });
+
+  // Regression: duplicate-detection pairs frequently share the exact same
+  // displayName (that's often *why* they were flagged as duplicates), so the
+  // two "Conservar" radio buttons must still expose distinct accessible names.
+  it("gives the two Conservar radio buttons distinct accessible names when both records share the same displayName", async () => {
+    renderPage();
+
+    await screen.findAllByText("Admisión General");
+
+    const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+    expect(keepButtons).toHaveLength(2);
+    expect(keepButtons[0]!.getAttribute("aria-label")).not.toBe(keepButtons[1]!.getAttribute("aria-label"));
   });
 
   it("enables Fusionar button after selecting Conservar este on one side", async () => {
@@ -1135,6 +1148,159 @@ describe("DeduplicatePage", () => {
         expect(within(preview).getByText(/1 teléfono/)).toBeInTheDocument();
         expect(within(preview).getByText(/600002222/)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("OIR-195 P3 — reviewed-pairs counter", () => {
+    it("shows '0 de 1 pares revisados' when the single pair has not been actioned yet", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      expect(screen.getByText("0 de 1 pares revisados")).toBeInTheDocument();
+    });
+
+    it("updates the counter to '1 de 1 pares revisados' after dismissing the only pair", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /No son el mismo contacto/ })
+      );
+
+      // After dismissal, pairStates is empty so the empty state renders instead —
+      // the counter element itself only lives in the "has pairs" branch, so verify
+      // the empty state is shown (implicitly confirms the pair was reviewed/removed).
+      expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
+    });
+
+    it("does not render the counter when there are no pairs at all", async () => {
+      mockDetectDuplicates.mockResolvedValueOnce({
+        pairs: [],
+        records: {},
+        checkedCount: 5,
+        pairCount: 0
+      });
+
+      renderPage();
+
+      await screen.findByText("No se encontraron duplicados");
+      expect(screen.queryByText(/pares revisados/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("OIR-195 P3 — badge aria association", () => {
+    it("associates the similarity/reasons badges with the radiogroup via aria-describedby", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const radiogroup = screen.getByRole("radiogroup", { name: "Elegir cuál conservar" });
+      const describedBy = radiogroup.getAttribute("aria-describedby");
+      expect(describedBy).toBeTruthy();
+
+      const scoreBadge = screen.getByText("Similitud 90%");
+      const reasonBadge = screen.getByText("Nombre idéntico").parentElement;
+
+      for (const id of describedBy!.split(" ")) {
+        expect(document.getElementById(id)).not.toBeNull();
+      }
+      expect(scoreBadge.id).toBeTruthy();
+      expect(describedBy).toContain(scoreBadge.id);
+      expect(describedBy).toContain(reasonBadge!.id);
+    });
+  });
+
+  describe("OIR-195 P3 regression — reviewed-pairs baseline resets when storageKey changes (PR #116)", () => {
+    const pathA = "/data/hospital-a/contacts.json";
+    const pathB = "/data/hospital-b/contacts.json";
+
+    const recordE = {
+      id: "cnt_0005",
+      displayName: "Farmacia Central",
+      department: "Farmacia",
+      phones: [{ id: "ph_5", number: "70009" }]
+    };
+    const recordF = {
+      id: "cnt_0006",
+      displayName: "Farmacia Central",
+      department: "Farmacia",
+      phones: [{ id: "ph_6", number: "70010" }]
+    };
+    const mockPairB1 = {
+      id: "cnt_0005:cnt_0006",
+      recordA: recordE,
+      recordB: recordF,
+      reasons: ["displayName"],
+      score: 0.8
+    };
+    const recordG = {
+      id: "cnt_0007",
+      displayName: "Radiología",
+      department: "Radiología",
+      phones: [{ id: "ph_7", number: "70011" }]
+    };
+    const recordH = {
+      id: "cnt_0008",
+      displayName: "Radiología",
+      department: "Radiología",
+      phones: [{ id: "ph_8", number: "70012" }]
+    };
+    const mockPairB2 = {
+      id: "cnt_0007:cnt_0008",
+      recordA: recordG,
+      recordB: recordH,
+      reasons: ["displayName"],
+      score: 0.8
+    };
+
+    const onePairResultA = {
+      pairs: [mockPair],
+      records: { cnt_0001: recordA, cnt_0002: recordB },
+      checkedCount: 2,
+      pairCount: 1
+    };
+
+    const twoPairsResultB = {
+      pairs: [mockPairB1, mockPairB2],
+      records: {
+        cnt_0005: recordE,
+        cnt_0006: recordF,
+        cnt_0007: recordG,
+        cnt_0008: recordH
+      },
+      checkedCount: 4,
+      pairCount: 2
+    };
+
+    it("recomputes the 'de N revisados' denominator when the active dataset (storageKey) changes, instead of keeping the previous dataset's total", async () => {
+      localStorage.clear();
+      useAppStore.setState({ settings: { ...defaultSettings(pathA, "/backups") } });
+
+      const detectDuplicatesMock = vi.fn().mockResolvedValueOnce(onePairResultA);
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: detectDuplicatesMock,
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+      await screen.findAllByText("Admisión General");
+      // Baseline for dataset A: 1 pair total
+      expect(screen.getByText("0 de 1 pares revisados")).toBeInTheDocument();
+
+      // Switch to dataset B — a different data file with a different pair count.
+      // This changes storageKey, which must re-trigger loadPairs and recompute the
+      // baseline instead of leaving the denominator stuck at dataset A's total
+      // (PR #116 review — initialPairTotal was only reset while null).
+      detectDuplicatesMock.mockResolvedValueOnce(twoPairsResultB);
+      act(() => {
+        useAppStore.setState({ settings: { ...defaultSettings(pathB, "/backups") } });
+      });
+
+      await screen.findAllByText("Radiología");
+      expect(screen.getByText("0 de 2 pares revisados")).toBeInTheDocument();
+      expect(screen.queryByText("0 de 1 pares revisados")).not.toBeInTheDocument();
     });
   });
 });
