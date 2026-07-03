@@ -110,7 +110,7 @@ describe("AppDataService", () => {
       )
     ).rejects.toThrow(
       new RegExp(
-        `No se pudo validar la carpeta de backups\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
+        `No se pudo validar la carpeta de copias de seguridad\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
       )
     );
   });
@@ -161,7 +161,7 @@ describe("AppDataService", () => {
           backupDirectoryPath: "relative/backups"
         })
       )
-    ).rejects.toThrow("La ruta de la carpeta de backups debe ser absoluta.");
+    ).rejects.toThrow("La ruta de la carpeta de copias de seguridad debe ser absoluta.");
   });
 
   it("rejects custom data paths with symlinked ancestor directories", async () => {
@@ -1338,7 +1338,7 @@ describe("AppDataService", () => {
       );
 
     await expect(service.createBackup()).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
+      /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -1386,7 +1386,7 @@ describe("AppDataService", () => {
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
-      /No se pudo crear el backup del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
+      /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
     );
     expect(copyFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -1553,7 +1553,7 @@ describe("AppDataService", () => {
 
     await expect(service.restoreBackup(sourceFilePath)).rejects.toThrow(
       new RegExp(
-        `No se pudo restaurar el backup seleccionado\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de backups configurada\\.`
+        `No se pudo restaurar la copia de seguridad seleccionada\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\\.`
       )
     );
   });
@@ -3543,7 +3543,7 @@ describe("AppDataService", () => {
       return realOpen(p, flags as any, ...(rest as []));
     });
 
-    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de backups/);
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo preparar la carpeta de copias de seguridad/);
 
     // Only the very first 'wx' open should have been attempted — no retries on EACCES.
     const wxCalls = openSpy.mock.calls.filter(([, flags]) => flags === "wx");
@@ -3569,7 +3569,7 @@ describe("AppDataService", () => {
       })
     );
 
-    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear el backup/);
+    await expect(service.createBackup()).rejects.toThrow(/No se pudo crear la copia de seguridad/);
 
     // The backup directory must contain no 0-byte placeholder files.
     const entries = await fs.readdir(backupDir);
@@ -3711,7 +3711,7 @@ describe("AppDataService", () => {
     await fs.writeFile(emptyBackupPath, "", "utf-8");
 
     await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
-      /El archivo de backup está vacío y no puede restaurarse/
+      /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
   });
 

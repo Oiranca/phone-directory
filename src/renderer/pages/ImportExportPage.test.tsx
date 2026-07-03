@@ -270,7 +270,7 @@ describe("ImportExportPage", () => {
   it("shows the backup service error message when manual backup fails", async () => {
     window.hospitalDirectory.createBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo crear el backup del directorio. Ruta afectada: /tmp/backups."));
+      .mockRejectedValue(new Error("No se pudo crear la copia de seguridad del directorio. Ruta afectada: /tmp/backups."));
 
     renderPage();
 
@@ -278,7 +278,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     expect(
-      await screen.findByText("No se pudo crear el backup del directorio.")
+      await screen.findByText("No se pudo crear la copia de seguridad del directorio.")
     ).toBeInTheDocument();
   });
 
@@ -793,7 +793,7 @@ describe("ImportExportPage", () => {
   it("shows the restore service error message when backup restore fails", async () => {
     window.hospitalDirectory.restoreBackup = vi
       .fn()
-      .mockRejectedValue(new Error("No se pudo restaurar el backup seleccionado. Ruta afectada: /tmp/backups/contacts-1.json."));
+      .mockRejectedValue(new Error("No se pudo restaurar la copia de seguridad seleccionada. Ruta afectada: /tmp/backups/contacts-1.json."));
 
     renderPage();
 
@@ -802,7 +802,7 @@ describe("ImportExportPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
     expect(
-      await screen.findByText("No se pudo restaurar el backup seleccionado.")
+      await screen.findByText("No se pudo restaurar la copia de seguridad seleccionada.")
     ).toBeInTheDocument();
   });
 
