@@ -25,26 +25,60 @@ export function ConfirmDialog({
   confirmDisabled = false,
   cancelDisabled = false
 }: ConfirmDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const messageId = useId();
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (isOpen && dialog && !dialog.open) {
-      dialog.showModal();
-    } else if (!isOpen && dialog && dialog.open) {
-      dialog.close();
-    }
-  }, [isOpen]);
+  // Keeps a reference to the dialog node even after React removes it from the
+  // tree (which happens the same render that `isOpen` flips to false), so the
+  // close/focus-restore logic below can still act on it imperatively.
+  const lastDialogNodeRef = useRef<HTMLDialogElement | null>(null);
+  const setDialogRef = (node: HTMLDialogElement | null) => {
+    dialogRef.current = node;
+    if (node) lastDialogNodeRef.current = node;
+  };
 
-  // P2: close the native dialog on unmount to avoid leaving focus in a broken state
-  // when the parent unmounts while the dialog is still open.
+  // The element that had focus right before the dialog opened, so it can be
+  // restored once the dialog closes (either normally or via parent unmount).
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.open) {
+        triggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+        dialog.showModal();
+        const focusTarget = !cancelDisabled
+          ? cancelButtonRef.current
+          : !confirmDisabled
+            ? confirmButtonRef.current
+            : null;
+        focusTarget?.focus();
+      }
+    } else {
+      const dialog = lastDialogNodeRef.current;
+      if (dialog?.open) {
+        dialog.close();
+      }
+      triggerRef.current?.focus();
+      triggerRef.current = null;
+    }
+  }, [isOpen, cancelDisabled, confirmDisabled]);
+
+  // Close the native dialog and restore focus to the trigger if the parent
+  // unmounts this component while the dialog is still open. Uses
+  // `lastDialogNodeRef`/`triggerRef` (not the possibly-nulled `dialogRef`)
+  // because React detaches child refs before this cleanup runs.
   useEffect(() => {
     return () => {
-      if (dialogRef.current?.open) {
-        dialogRef.current.close();
+      const dialog = lastDialogNodeRef.current;
+      if (dialog?.open) {
+        dialog.close();
       }
+      triggerRef.current?.focus();
+      triggerRef.current = null;
     };
   }, []);
 
@@ -52,7 +86,7 @@ export function ConfirmDialog({
 
   return (
     <dialog
-      ref={dialogRef}
+      ref={setDialogRef}
       onCancel={(event) => {
         event.preventDefault();
         if (!cancelDisabled) onCancel();
@@ -65,6 +99,7 @@ export function ConfirmDialog({
       <p id={messageId} className="text-slate-600 mb-8 leading-relaxed">{message}</p>
       <div className="flex justify-end gap-3">
         <button
+          ref={cancelButtonRef}
           type="button"
           onClick={() => { if (!cancelDisabled) onCancel(); }}
           disabled={cancelDisabled}
@@ -73,6 +108,7 @@ export function ConfirmDialog({
           {cancelLabel}
         </button>
         <button
+          ref={confirmButtonRef}
           type="button"
           onClick={() => { if (!confirmDisabled) onConfirm(); }}
           disabled={confirmDisabled}
