@@ -280,6 +280,63 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("clears the search text when filter pills are reset", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(searchInput).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
+  it("clears both a tag filter and search text together in a single click", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+
+    await chooseOption("Etiqueta", "admisión");
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+
+    expect(screen.getByText("#admisión")).toBeInTheDocument();
+    expect(searchInput).toHaveValue("admisión");
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
+    expect(searchInput).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
   it("de-duplicates tag options with the same normalized value", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
