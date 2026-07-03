@@ -487,7 +487,7 @@ describe("ContactFormPage", () => {
 
       fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "612345678" } });
 
-      expect(screen.getByRole("button", { name: "Eliminar teléfono 612345678" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 1: 612345678" })).toBeInTheDocument();
     });
 
     it("uses position-based aria-label for Eliminar on an email with no address yet", async () => {
@@ -509,7 +509,7 @@ describe("ContactFormPage", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: "Eliminar email usuario@ejemplo.com" })
+        screen.getByRole("button", { name: "Eliminar email 1: usuario@ejemplo.com" })
       ).toBeInTheDocument();
     });
 
@@ -520,6 +520,52 @@ describe("ContactFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
 
       expect(screen.getByRole("button", { name: "Eliminar red social 1" })).toBeInTheDocument();
+    });
+
+    // Red-team regression (PR#109): two rows sharing the same value must not
+    // collide on the same aria-label — the index is always part of the label.
+    it("keeps Eliminar aria-labels unique when two phones share the same number", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
+
+      const phoneInputs = screen.getAllByLabelText(/número/i);
+      fireEvent.change(phoneInputs[0]!, { target: { value: "612345678" } });
+      fireEvent.change(phoneInputs[1]!, { target: { value: "612345678" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 1: 612345678" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar teléfono 2: 612345678" })).toBeInTheDocument();
+    });
+
+    it("keeps Eliminar aria-labels unique when two emails share the same address", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+      fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
+
+      const emailInputs = screen.getAllByLabelText("Correo electrónico");
+      fireEvent.change(emailInputs[0]!, { target: { value: "usuario@ejemplo.com" } });
+      fireEvent.change(emailInputs[1]!, { target: { value: "usuario@ejemplo.com" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar email 1: usuario@ejemplo.com" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar email 2: usuario@ejemplo.com" })).toBeInTheDocument();
+    });
+
+    it("keeps Eliminar aria-labels unique when two social rows share the same handle", async () => {
+      renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+      fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
+
+      const handleInputs = screen.getAllByLabelText("Handle / usuario");
+      fireEvent.change(handleInputs[0]!, { target: { value: "misma_cuenta" } });
+      fireEvent.change(handleInputs[1]!, { target: { value: "misma_cuenta" } });
+
+      expect(screen.getByRole("button", { name: "Eliminar red social 1: misma_cuenta" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Eliminar red social 2: misma_cuenta" })).toBeInTheDocument();
     });
   });
 

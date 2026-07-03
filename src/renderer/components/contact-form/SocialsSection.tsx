@@ -90,7 +90,7 @@ export const SocialsSection = ({
                 }}
                 aria-label={
                   (social.url ?? "").trim() || (social.handle ?? "").trim()
-                    ? `Eliminar red social ${(social.url ?? "").trim() || (social.handle ?? "").trim()}`
+                    ? `Eliminar red social ${index + 1}: ${(social.url ?? "").trim() || (social.handle ?? "").trim()}`
                     : `Eliminar red social ${index + 1}`
                 }
                 className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"

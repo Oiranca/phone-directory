@@ -67,7 +67,11 @@ export const PhonesSection = ({
             <button
               type="button"
               onClick={() => removePhone(phone.id)}
-              aria-label={phone.number.trim() ? `Eliminar teléfono ${phone.number.trim()}` : `Eliminar teléfono ${index + 1}`}
+              aria-label={
+                phone.number.trim()
+                  ? `Eliminar teléfono ${index + 1}: ${phone.number.trim()}`
+                  : `Eliminar teléfono ${index + 1}`
+              }
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
