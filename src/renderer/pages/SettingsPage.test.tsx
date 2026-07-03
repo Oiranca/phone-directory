@@ -534,4 +534,14 @@ describe("SettingsPage", () => {
     expect(statusContainer).not.toBeNull();
     expect(statusContainer!.className).not.toContain("shadow-sm");
   });
+
+  it("data-path help copy uses plain 'directorio' wording, not 'dataset' jargon (OIR-193)", async () => {
+    renderPage();
+    expect(
+      await screen.findByText(
+        "La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual."
+      )
+    ).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain("dataset");
+  });
 });
