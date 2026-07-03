@@ -177,3 +177,4 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [16:11] Checked out fix/oir-191-shell-p2 (55799e7), reading DirectoryPage.tsx and test file
 
 - [16:14] Added isolation test in DirectoryPage.test.tsx; targeted vitest run: 31/31 pass
+- [16:16] ✅ Complete — Added test "clears only the targeted filter when each per-filter clear button is used in isolation" to DirectoryPage.test.tsx; npm test 1427/1427 pass (50 files), npm run build clean; pushed to fix/oir-191-shell-p2 SHA 5204292
