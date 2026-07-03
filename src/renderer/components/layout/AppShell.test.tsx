@@ -128,6 +128,21 @@ describe("AppShell — default mode", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/contacts/new");
   });
 
+  it("does not steal modifier+n while an in-progress form is open (e.g. Buscas inline form)", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell>
+          <LocationProbe />
+          <button type="button" data-keyboard-cancel>Cancelar</button>
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
+  });
+
   it("submits the active keyboard form with modifier+s", () => {
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
     render(

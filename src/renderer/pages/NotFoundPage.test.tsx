@@ -16,6 +16,18 @@ describe('NotFoundPage', () => {
 
   it('shows the explanatory copy', () => {
     render(<NotFoundPage />);
-    expect(screen.getByText('La ruta solicitada no existe en este MVP.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'No hemos encontrado esta página. Puede que el enlace esté desactualizado o que la dirección tenga un error; vuelve al directorio para seguir trabajando.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('associates the section with its heading via aria-labelledby', () => {
+    render(<NotFoundPage />);
+    const heading = screen.getByRole('heading', { level: 2 });
+    const section = heading.closest('section');
+    expect(section).toHaveAttribute('aria-labelledby', heading.id);
+    expect(heading.id).toBeTruthy();
   });
 });

@@ -73,6 +73,19 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       }
 
       if (isModifierShortcut && key === "n") {
+        // Ctrl/Cmd+N always jumps to "Nuevo registro", but some pages (e.g. Buscas'
+        // inline create/edit form, or an existing contact being edited) keep unsaved
+        // work in local component state that isn't tied to the URL and has no
+        // dirty-check guard yet. Reuse the same `[data-keyboard-cancel]` marker the
+        // Escape shortcut already relies on to detect "there is an open form on this
+        // screen right now" and suppress the navigation in that case instead of
+        // silently discarding it. When no such form is open, the shortcut behaves as
+        // before and navigates immediately.
+        const hasOpenForm = document.querySelector<HTMLElement>("[data-keyboard-cancel]");
+        if (hasOpenForm) {
+          return;
+        }
+
         event.preventDefault();
         navigate("/contacts/new");
         return;

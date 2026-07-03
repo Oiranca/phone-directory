@@ -330,7 +330,7 @@ export const BuscasPage = () => {
                 required
                 value={formData.shift}
                 onChange={(e) => setField("shift", e.target.value as EditableBuscaRecord["shift"])}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
+                className="focus-ring w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus:border-scs-blue focus:bg-white focus:ring-2"
               >
                 {BUSCA_SHIFTS.map((shift) => (
                   <option key={shift} value={shift}>
