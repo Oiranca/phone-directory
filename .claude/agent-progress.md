@@ -172,3 +172,8 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [19:46] Fix 2: search sr-only label + placeholder now include "titular" and "hoja ODS" to reflect imported ODS filtering
 - [19:47] Tests: added 2 new tests — refocus on create→edit switch, ODS label/placeholder assertion
 - [19:47] Gates: pnpm typecheck ✅, pnpm test 1333/1333 ✅, pnpm build ✅
+
+#### eng-oir191 — Fix PR #110 per-filter clear tests
+- [16:11] Checked out fix/oir-191-shell-p2 (55799e7), reading DirectoryPage.tsx and test file
+
+- [16:14] Added isolation test in DirectoryPage.test.tsx; targeted vitest run: 31/31 pass

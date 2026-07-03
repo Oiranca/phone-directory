@@ -337,6 +337,87 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("clears only the targeted filter when each per-filter clear button is used in isolation", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    const searchInput = await screen.findByLabelText("Buscar contactos");
+
+    fireEvent.change(searchInput, { target: { value: "admisión" } });
+    await chooseOption("Tipo", "Servicio");
+    await chooseOption("Área", "Gestión y administración");
+    await chooseOption("Etiqueta", "admisión");
+    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
+
+    expect(useAppStore.getState().query).toBe("admisión");
+    expect(useAppStore.getState().selectedType).toBe("service");
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" }));
+
+    expect(searchInput).toHaveValue("");
+    expect(useAppStore.getState().query).toBe("");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: búsqueda" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedType).toBe("service");
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Servicio" }));
+
+    expect(useAppStore.getState().selectedType).toBe("all");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Servicio" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" }));
+
+    expect(useAppStore.getState().selectedArea).toBe("all");
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Gestión y administración" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: admisión" }));
+
+    expect(useAppStore.getState().selectedTags).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: admisión" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().showInactive).toBe(true);
+    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" }));
+
+    expect(useAppStore.getState().showInactive).toBe(false);
+    expect(screen.queryByRole("button", { name: "Eliminar filtro: Inactivos" })).not.toBeInTheDocument();
+  });
+
   it("de-duplicates tag options with the same normalized value", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
