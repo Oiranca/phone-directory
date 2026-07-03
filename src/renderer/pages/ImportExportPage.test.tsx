@@ -714,6 +714,13 @@ describe("ImportExportPage", () => {
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+
+    expect(
+      await screen.findByText((content) =>
+        content.includes("1 registros válidos") && content.includes("Se omitirán 1 fila rechazada")
+      )
+    ).toBeInTheDocument();
+
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
     await waitFor(() => {
