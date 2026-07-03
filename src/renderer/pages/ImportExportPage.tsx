@@ -235,20 +235,31 @@ export const ImportExportPage = () => {
 
       setCsvPreview(preview);
 
-      if (preview.invalidRowCount > 0) {
+      // OIR-200: nothing importable at all is still blocked (no valid contact
+      // rows and no buscas content) — everything else is a partial import.
+      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+      if (preview.invalidRowCount > 0 && !hasImportableContent) {
         pushToast({
           type: "error",
-          message: "El archivo tiene filas inválidas. Corrige el origen antes de importar."
+          message: "El archivo no contiene filas válidas para importar. Corrige el origen antes de importar."
         });
         return;
       }
 
-      pushToast({
-        type: preview.warningCount > 0 ? "warning" : "success",
-        message: preview.warningCount > 0
-          ? `Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-          : `Importación lista. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
-      });
+      if (preview.invalidRowCount > 0) {
+        pushToast({
+          type: "warning",
+          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`
+        });
+      } else {
+        pushToast({
+          type: preview.warningCount > 0 ? "warning" : "success",
+          message: preview.warningCount > 0
+            ? `Importación lista con ${preview.warningCount} advertencias. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+            : `Importación lista. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas.`
+        });
+      }
 
       if (preview.detectionConfidence === "medium" || preview.detectionConfidence === "low") {
         pushToast({
@@ -268,7 +279,16 @@ export const ImportExportPage = () => {
   };
 
   const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
-    if (preview.invalidRowCount > 0) {
+    // OIR-200: rejected rows no longer block the import — they are skipped. The
+    // only remaining hard blocker is having nothing importable at all, mirroring
+    // the guard kept in AppDataService.importCsvDataset.
+    const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+
+    if (!hasImportableContent) {
+      pushToast({
+        type: "error",
+        message: "El archivo no contiene filas válidas para importar."
+      });
       return;
     }
 
@@ -309,7 +329,11 @@ export const ImportExportPage = () => {
       setCsvPreview(null);
       pushToast({
         type: "success",
-        message: `Importación completada. ${result.createdCount} altas y ${result.updatedCount} actualizaciones.`
+        message: `Importación completada. ${result.createdCount} altas y ${result.updatedCount} actualizaciones.${
+          result.invalidRowCount > 0
+            ? ` Se ${result.invalidRowCount === 1 ? "omitió" : "omitieron"} ${result.invalidRowCount} ${result.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+            : ""
+        }`
       });
     } catch (error) {
       pushToast({
@@ -395,7 +419,9 @@ export const ImportExportPage = () => {
 
       return {
         title: "Confirmar importación de agenda",
-        message: `Se importarán ${preview.validRowCount} registros válidos desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
+        message: `Se importarán ${preview.validRowCount} registros válidos desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${preview.invalidRowCount > 0
+          ? ` Se omitirán ${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
+          : ""}${preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
           ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
           : ""} Se creará un backup automático. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"

@@ -229,18 +229,26 @@ describe("CsvImportPreviewPanel", () => {
       ]
     };
 
-    it("renders the blocker alert when there are rejected rows", () => {
+    it("renders an informational (non-blocking) notice about rejected rows (OIR-200)", () => {
       renderPanel(mixedPreview);
 
-      const alert = screen.getByRole("alert");
-      expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent("2 filas rechazadas");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      const status = screen.getByRole("status");
+      expect(status).toBeInTheDocument();
+      expect(status).toHaveTextContent("2 filas rechazadas");
     });
 
-    it("disables the confirm button when invalid rows exist", () => {
+    it("enables the confirm button when at least one row is valid, even with rejected rows present (OIR-200)", () => {
       renderPanel(mixedPreview);
 
-      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+    });
+
+    it("calls onConfirm for a partial import when confirm is clicked (OIR-200)", () => {
+      const { onConfirm } = renderPanel(mixedPreview);
+
+      fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
     it("shows rejected status badge for invalid rows", () => {

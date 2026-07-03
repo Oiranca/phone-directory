@@ -634,7 +634,7 @@ describe("ImportExportPage", () => {
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  it("blocks import confirmation when the preview contains invalid rows", async () => {
+  it("OIR-200: allows a partial import when the preview contains some invalid rows alongside valid rows", async () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
       importToken: "csv-token-invalid",
       fileName: "broken.csv",
@@ -674,13 +674,97 @@ describe("ImportExportPage", () => {
         }
       ]
     });
+    window.hospitalDirectory.importCsvDataset = vi.fn().mockResolvedValue({
+      contacts: {
+        ...defaultContacts,
+        records: [
+          {
+            ...defaultContacts.records[0]!,
+            id: "cnt_csv_partial",
+            displayName: "Registro válido"
+          }
+        ]
+      },
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-csv-partial.json",
+      importedFilePath: "/tmp/incoming/broken.csv",
+      recordCount: defaultContacts.records.length,
+      warningCount: 0,
+      invalidRowCount: 1,
+      createdCount: 0,
+      updatedCount: 1,
+      conflictCount: 0,
+      rowIssues: [
+        {
+          rowNumber: 3,
+          displayName: "Fila rota",
+          messages: ["El tipo es obligatorio."]
+        }
+      ]
+    });
 
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
 
-    expect(await screen.findByText("El archivo tiene filas inválidas. Corrige el origen antes de importar.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("1 fila será omitida al importar. 0 altas y 1 actualizaciones previstas para las filas válidas.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalledWith("csv-token-invalid", []);
+    });
+    expect(
+      await screen.findByText("Importación completada. 0 altas y 1 actualizaciones. Se omitió 1 fila rechazada.")
+    ).toBeInTheDocument();
+  });
+
+  it("OIR-200: still blocks import confirmation when the preview has zero valid rows", async () => {
+    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
+      importToken: "csv-token-all-invalid",
+      fileName: "all-broken.csv",
+      totalRowCount: 1,
+      validRowCount: 0,
+      invalidRowCount: 1,
+      warningCount: 0,
+      recordCount: 0,
+      mergedRecordCount: defaultContacts.records.length,
+      createdCount: 0,
+      updatedCount: 0,
+      parsedBuscasCellCount: 0,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [
+        {
+          rowNumber: 2,
+          displayName: "Fila rota",
+          messages: ["El tipo es obligatorio."]
+        }
+      ],
+      warnings: [],
+      previewRows: [
+        {
+          rowNumber: 2,
+          status: "rejected",
+          displayName: "Fila rota",
+          errorMessages: ["El tipo es obligatorio."]
+        }
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+
+    expect(
+      await screen.findByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });

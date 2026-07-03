@@ -2815,7 +2815,7 @@ describe("AppDataService", () => {
     expect(persisted.metadata.recordCount).toBe(0);
   });
 
-  it("rejects CSV replacement when the preview still contains invalid rows", async () => {
+  it("rejects CSV replacement when every row is invalid and nothing is importable", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -2832,9 +2832,64 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
+    // OIR-200: a file with zero valid rows (and no buscas content) still blocks
+    // the import — this is the "nothing valid" guard, kept intentionally.
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
-      "El archivo contiene filas inválidas. Corrige el origen antes de importarlo."
+      "El archivo no contiene filas válidas para importar."
     );
+  });
+
+  it("OIR-200: imports valid rows while skipping rejected rows instead of blocking the whole file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const initialRecordCount = initial.contacts.records.length;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "partial-invalid.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "type,displayName,department,phone1Number",
+        "service,Mostrador Válido,Recepción,55555",
+        "person,,Admisión,",
+        "bogus-type,Fila con tipo inválido,Urgencias,66666"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.invalidRowCount).toBe(2);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+
+    // Only the valid row was persisted, appended to the pre-existing dataset.
+    expect(result.createdCount).toBe(1);
+    expect(result.recordCount).toBe(initialRecordCount + 1);
+    expect(
+      result.contacts.records.some((record) => record.displayName === "Mostrador Válido")
+    ).toBe(true);
+
+    // The rejected rows are reported back, never imported.
+    expect(result.invalidRowCount).toBe(2);
+    expect(result.rowIssues).toHaveLength(2);
+    expect(result.rowIssues.some((issue) => issue.messages.includes("El nombre visible es obligatorio."))).toBe(true);
+    expect(
+      result.rowIssues.some((issue) => issue.messages.includes('El tipo "bogus-type" no está soportado.'))
+    ).toBe(true);
+    expect(
+      result.contacts.records.some((record) => record.displayName === "Fila con tipo inválido")
+    ).toBe(false);
+
+    const persisted = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
+    ) as { records: Array<{ displayName: string }> };
+    expect(persisted.records).toHaveLength(initialRecordCount + 1);
+    expect(persisted.records.some((record) => record.displayName === "Mostrador Válido")).toBe(true);
   });
 
   it("updates a later row that matches a record created earlier in the same import", async () => {
