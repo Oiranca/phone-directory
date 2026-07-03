@@ -271,14 +271,17 @@ export const useContactForm = (): UseContactFormResult => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   /**
-   * Ref-based dirty flag — updated synchronously so the useBlocker callback
-   * always reads the latest value when a navigation is attempted.
+   * Ref-based dirty flag — updated synchronously so navigation guards (e.g.
+   * useBlocker in ContactFormPage) always read the latest value at the moment
+   * a navigation is attempted, avoiding stale-closure issues.
    */
   const isDirtyRef = useRef<boolean>(false);
 
   /**
    * User-facing state setter: marks the form as dirty whenever the user
-   * makes any change. Internal reset paths use setFormStateRaw directly.
+   * makes any change. Internal reset paths (loading a record, clearing after
+   * a successful save) use setFormStateRaw directly so they do not flag the
+   * form as dirty.
    */
   const setFormState = useCallback<React.Dispatch<React.SetStateAction<ContactFormState>>>((action) => {
     isDirtyRef.current = true;
@@ -552,7 +555,8 @@ export const useContactForm = (): UseContactFormResult => {
       setContacts(result.contacts);
       setSettings(result.settings);
       setSelectedRecordId(result.savedRecordId);
-      // Reset dirty flag synchronously before navigate so useBlocker does not intercept.
+      // Reset synchronously before navigating so the just-completed save
+      // never triggers the unsaved-changes navigation guard.
       isDirtyRef.current = false;
       navigate("/");
     } catch (error) {
@@ -575,6 +579,7 @@ export const useContactForm = (): UseContactFormResult => {
     existingRecordMissing: isEditing && !existingRecord && !isLoading,
     formState,
     setFormState,
+    isDirtyRef,
     fieldErrors,
     isSubmitting,
     liveMessage,
@@ -585,7 +590,6 @@ export const useContactForm = (): UseContactFormResult => {
     addEmailButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
-    isDirtyRef,
     clearFieldError,
     setCommaSeparatedField,
     updatePhone,

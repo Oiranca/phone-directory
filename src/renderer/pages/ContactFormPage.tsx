@@ -17,6 +17,7 @@ export const ContactFormPage = () => {
     existingRecordMissing,
     formState,
     setFormState,
+    isDirtyRef,
     fieldErrors,
     isSubmitting,
     liveMessage,
@@ -27,7 +28,6 @@ export const ContactFormPage = () => {
     addEmailButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
-    isDirtyRef,
     clearFieldError,
     setCommaSeparatedField,
     updatePhone,
@@ -41,11 +41,12 @@ export const ContactFormPage = () => {
   } = useContactForm();
 
   /**
-   * Block navigation when the form has unsaved changes.
-   * isDirtyRef is a stable MutableRefObject — the callback reads the current
-   * value at navigation time, avoiding stale-closure issues.
+   * Block navigation (including the Cancelar links below) when the form has
+   * unsaved changes. isDirtyRef is a stable MutableRefObject — the callback
+   * reads the current value at navigation time, avoiding stale-closure
+   * issues. A clean form navigates away immediately with no extra friction.
    */
-  const shouldBlock = useCallback(() => isDirtyRef.current, []);
+  const shouldBlock = useCallback(() => isDirtyRef.current, [isDirtyRef]);
   const blocker = useBlocker(shouldBlock);
 
   /**
@@ -67,8 +68,13 @@ export const ContactFormPage = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirtyRef]);
 
+
   if (isLoading || !hasContacts || !hasSettings) {
-    return <section className="rounded-3xl bg-white p-6 shadow-panel">Cargando formulario…</section>;
+    return (
+      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-6 shadow-panel">
+        Cargando formulario…
+      </section>
+    );
   }
 
   if (existingRecordMissing) {
@@ -102,6 +108,7 @@ export const ContactFormPage = () => {
         <Link
           to="/"
           data-keyboard-cancel
+          aria-label="Cancelar y volver al directorio"
           className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
         >
           Cancelar
@@ -205,7 +212,14 @@ export const ContactFormPage = () => {
           </section>
         </div>
 
-        <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+        <div className="flex flex-col gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+          <Link
+            to="/"
+            aria-label="Cancelar sin guardar los cambios"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+          >
+            Cancelar
+          </Link>
           <button
             type="submit"
             disabled={isSubmitting}
@@ -213,16 +227,11 @@ export const ContactFormPage = () => {
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>
-          <Link
-            to="/"
-            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
-          >
-            Cancelar
-          </Link>
         </div>
       </form>
 
-      {/* Unsaved-changes guard (Fix 5): shown when the router tries to navigate away with dirty form */}
+      {/* Unsaved-changes guard: shown when a Cancelar link (or any other router
+          navigation) is attempted while the form is dirty. */}
       <ConfirmDialog
         isOpen={blocker.state === "blocked"}
         title="Cambios sin guardar"

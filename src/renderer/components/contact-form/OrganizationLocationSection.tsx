@@ -147,7 +147,7 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
 
       <div>
         <label htmlFor="locationText" className="text-sm font-medium text-slate-700">
-          Texto libre de ubicación
+          Descripción de ubicación
         </label>
         <input
           id="locationText"

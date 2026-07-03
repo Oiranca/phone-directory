@@ -8,6 +8,7 @@ import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 
 // Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
 // Required for ConfirmDialog (used by the unsaved-changes blocker guard).
+const originalHTMLDialogElement = globalThis.HTMLDialogElement;
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
 let originalShowModal: (() => void) | undefined;
 let originalClose: (() => void) | undefined;
@@ -23,23 +24,29 @@ beforeAll(() => {
   dialogPrototype =
     typeof globalThis.HTMLDialogElement !== "undefined"
       ? globalThis.HTMLDialogElement.prototype
-      : HTMLElement.prototype;
+      : undefined;
 
-  originalShowModal = dialogPrototype.showModal;
-  originalClose = dialogPrototype.close;
+  originalShowModal = dialogPrototype?.showModal;
+  originalClose = dialogPrototype?.close;
 
-  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = true;
-  });
-  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = false;
-  });
+  if (dialogPrototype) {
+    dialogPrototype.showModal = vi.fn(function (this: HTMLElement & { open?: boolean }) {
+      this.open = true;
+    });
+    dialogPrototype.close = vi.fn(function (this: HTMLElement & { open?: boolean }) {
+      this.open = false;
+    });
+  }
 });
 
 afterAll(() => {
   if (dialogPrototype) {
     dialogPrototype.showModal = originalShowModal;
     dialogPrototype.close = originalClose;
+  }
+
+  if (originalHTMLDialogElement) {
+    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
   }
 });
 
@@ -342,6 +349,45 @@ describe("ContactFormPage", () => {
     expect(screen.queryByText("No se pudo abrir el formulario")).not.toBeInTheDocument();
   });
 
+  it("announces the loading state to screen readers with role status and aria-live", () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    renderWithRoute("/contacts/new");
+
+    const loadingRegion = screen.getByRole("status");
+    expect(loadingRegion).toHaveTextContent("Cargando formulario…");
+    expect(loadingRegion).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("gives each Cancelar link a distinct accessible name", async () => {
+    renderWithRoute("/contacts/new");
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("link", { name: "Cancelar y volver al directorio" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Cancelar sin guardar los cambios" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps footer tab order aligned with visual order (Cancelar before submit, no col-reverse)", async () => {
+    renderWithRoute("/contacts/new");
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    const cancelLink = screen.getByRole("link", { name: "Cancelar sin guardar los cambios" });
+    const submitButton = screen.getByRole("button", { name: "Crear registro" });
+
+    // DOM (tab) order: Cancelar precedes the submit button
+    expect(
+      cancelLink.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // Visual order is no longer reversed relative to DOM order
+    expect(cancelLink.parentElement?.className).not.toContain("flex-col-reverse");
+  });
+
   it("calls ensureBootstrapLoaded on mount and shows form after load (direct route entry)", async () => {
     renderWithRoute("/contacts/new");
 
@@ -567,19 +613,9 @@ describe("ContactFormPage", () => {
     });
   });
 
-  describe("Fix 5 — unsaved-changes navigation guard (useBlocker)", () => {
-    it("does not show the guard dialog when the form is clean (no changes made)", async () => {
-      renderWithRoute("/contacts/new");
-      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
-
-      // Navigate away without touching the form — no dialog should appear
-      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
-
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-
-    it("shows the unsaved-changes dialog when navigating away with a dirty form", async () => {
-      renderWithRoute("/contacts/new");
+  describe("unsaved-changes guard on Cancelar links", () => {
+    it("opens the confirmation dialog instead of navigating when Cancelar is clicked on a dirty form", async () => {
+      const router = renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
       // Make the form dirty
@@ -587,40 +623,41 @@ describe("ContactFormPage", () => {
         target: { value: "Hospital Norte" }
       });
 
-      // Try to navigate away via the top Cancelar link
-      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+      // Both Cancelar links must be guarded — exercise each one in turn.
+      for (const cancelName of ["Cancelar y volver al directorio", "Cancelar sin guardar los cambios"]) {
+        fireEvent.click(screen.getByRole("link", { name: cancelName }));
 
-      // Blocker dialog must appear
-      expect(
-        await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
-      ).toBeInTheDocument();
+        expect(
+          await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
+        ).toBeInTheDocument();
+        expect(router.state.location.pathname).toBe("/contacts/new");
+
+        // Dismiss so the next iteration starts from a clean dialog state
+        fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      }
     });
 
-    it("cancels navigation when the user clicks Seguir editando in the blocker dialog", async () => {
+    it("navigates directly to / when Cancelar is clicked on a clean form", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar y volver al directorio" }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+      expect(screen.queryByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")).not.toBeInTheDocument();
+    });
+
+    it("allows navigation from a dirty form after confirming Salir sin guardar", async () => {
       const router = renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
       fireEvent.change(screen.getByLabelText(/nombre visible/i), {
         target: { value: "Hospital Norte" }
       });
-      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
-      await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.");
-
-      fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
-
-      // Dialog gone, still on the form page
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(router.state.location.pathname).toBe("/contacts/new");
-    });
-
-    it("allows navigation when the user confirms leaving in the blocker dialog", async () => {
-      const router = renderWithRoute("/contacts/new");
-      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
-
-      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
-        target: { value: "Hospital Norte" }
-      });
-      fireEvent.click(screen.getAllByRole("link", { name: "Cancelar" })[0]!);
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar sin guardar los cambios" }));
       await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.");
 
       fireEvent.click(screen.getByRole("button", { name: "Salir sin guardar" }));
