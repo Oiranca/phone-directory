@@ -172,3 +172,9 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [19:46] Fix 2: search sr-only label + placeholder now include "titular" and "hoja ODS" to reflect imported ODS filtering
 - [19:47] Tests: added 2 new tests — refocus on create→edit switch, ODS label/placeholder assertion
 - [19:47] Gates: pnpm typecheck ✅, pnpm test 1333/1333 ✅, pnpm build ✅
+
+#### [17] software-engineer — OIR-199 ConfirmDialog focus/close review fix
+- [12:39] Ported effect-driven open/close/focus-restore pattern from fix/oir-193-shared-p2 (PR #109) onto ConfirmDialog.tsx (fix/oir-199-shared-p3, PR #119), preserving gray-* Tailwind classes and confirmDisabled guard. Removed imperative closeDialogAndRestoreFocus() calls from Cancel/Confirm onClick handlers.
+- [12:39] Added 2 regression tests (prop-driven close, deferred onConfirm keeps dialog open). ConfirmDialog.test.tsx: 24/24 passed. Full suite: 50 files / 1389 tests passed.
+- [12:41] Committed 464102f, pushed to origin/fix/oir-199-shared-p3, verified via git ls-remote (SHA match).
+- [12:42] ✅ Complete — Posted 2 threaded replies to review comments 3519251706 and 3519406770.
