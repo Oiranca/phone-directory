@@ -66,7 +66,11 @@ export const EmailsSection = ({
             <button
               type="button"
               onClick={() => removeEmail(email.id)}
-              aria-label={email.address.trim() ? `Eliminar email ${email.address.trim()}` : `Eliminar email ${index + 1}`}
+              aria-label={
+                email.address.trim()
+                  ? `Eliminar email ${index + 1}: ${email.address.trim()}`
+                  : `Eliminar email ${index + 1}`
+              }
               className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
             >
               Eliminar
