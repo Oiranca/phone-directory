@@ -228,6 +228,49 @@ describe('ConfirmDialog', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('keeps the dialog open and focus inside it when onConfirm does not synchronously close (isOpen stays true)', () => {
+    let confirmCount = 0;
+
+    function Harness({ isOpen }: { isOpen: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onConfirm={() => {
+              // Simulates deferred work (e.g. an async IPC call) that only
+              // flips `isOpen` to false later, once it resolves — not
+              // synchronously from within the click handler.
+              confirmCount += 1;
+            }}
+          />
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness isOpen={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness isOpen={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(confirmCount).toBe(1);
+
+    // `isOpen` never flipped to false, so the dialog must remain open and
+    // focus must stay inside it — not jump back to the trigger — until the
+    // parent actually closes it.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+    expect(trigger).not.toHaveFocus();
+
+    rerender(<Harness isOpen={false} />);
+    expect(trigger).toHaveFocus();
+  });
+
   it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
     function Harness({ showDialog }: { showDialog: boolean }) {
       return (
