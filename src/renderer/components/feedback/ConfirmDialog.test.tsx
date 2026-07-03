@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -203,5 +204,96 @@ describe('ConfirmDialog', () => {
     const dialog = screen.getByRole('dialog');
     fireEvent(dialog, new Event('cancel', { cancelable: true }));
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  // ── Focus management contract ────────────────────────────────────────────────
+
+  it('moves focus to the Cancel button right after the dialog opens', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+  });
+
+  it('falls back to focusing the first enabled action (Confirm) when Cancel is disabled', () => {
+    render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the dialog is closed via Cancel', () => {
+    function Wrapper() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setIsOpen(true)}>Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onCancel={() => setIsOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the dialog is closed via Confirm', () => {
+    function Wrapper() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setIsOpen(true)}>Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onConfirm={() => setIsOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
+    function Wrapper({ mounted }: { mounted: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          {mounted && <ConfirmDialog {...defaultProps} />}
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Wrapper mounted={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Wrapper mounted={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    rerender(<Wrapper mounted={false} />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 });
