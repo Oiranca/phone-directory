@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import type {
@@ -8,6 +8,7 @@ import type {
   ConflictRecordSummary,
   MergePolicy
 } from "../../../shared/types/contact";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const STATUS_LABELS: Record<CsvImportPreviewRow["status"], string> = {
   accepted: "Aceptada",
@@ -257,16 +258,35 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // OIR-182 item 3: count how many conflicts already have a policy selected.
   const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
 
-  // OIR-182 item 4: warn before closing whenever any resolution work would be lost.
-  // Prompt on any resolvedCount > 0 — not only partial — because closing before
-  // importing discards the work even when all conflicts have been resolved.
+  // OIR-194 review: replace the native window.confirm with the shared, accessible
+  // ConfirmDialog so the close-guard has app-controlled semantics, styling, a
+  // testable dialog contract, and focus restoration back to the button that
+  // triggered it — instead of blocking the renderer with a native prompt.
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
+
+  // OIR-182 item 4 / OIR-194 review: warn before closing whenever any resolution
+  // work would be lost. Trigger on any resolvedCount > 0 — not only a partial
+  // subset — because closing before importing discards the selected policies
+  // even when every conflict has already been resolved.
   const handleClose = () => {
     if (resolvedCount > 0) {
-      // eslint-disable-next-line no-alert
-      if (!window.confirm("Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?")) {
-        return;
-      }
+      setIsCloseConfirmOpen(true);
+      return;
     }
+    onClose();
+  };
+
+  const handleCancelCloseConfirm = () => {
+    setIsCloseConfirmOpen(false);
+    // Restore focus to the button that triggered the dialog.
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+  };
+
+  const handleConfirmClose = () => {
+    setIsCloseConfirmOpen(false);
     onClose();
   };
 
@@ -340,6 +360,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
             type="button"
+            ref={closeButtonRef}
             onClick={handleClose}
             disabled={isMutating}
             className="rounded-full border border-emerald-300 px-4 py-2 text-center text-sm font-semibold text-emerald-900 disabled:opacity-60"
@@ -884,6 +905,18 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           </button>
         </div>
       </div>
+
+      {/* OIR-194 review: accessible replacement for the native window.confirm close-guard. */}
+      <ConfirmDialog
+        isOpen={isCloseConfirmOpen}
+        title="Cerrar vista previa"
+        message="Tienes conflictos resueltos. Si cierras ahora sin importar, perderás ese trabajo. ¿Quieres cerrar igualmente?"
+        confirmLabel="Cerrar igualmente"
+        cancelLabel="Cancelar"
+        onConfirm={handleConfirmClose}
+        onCancel={handleCancelCloseConfirm}
+        isDestructive={true}
+      />
     </section>
   );
 };
