@@ -19,10 +19,10 @@ export function StatePanel({ title, message, icon, action, titleAs = 'h2', role 
   const ariaLive = role === 'alert' ? 'assertive' : 'polite';
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 my-4" role={role} aria-live={ariaLive}>
-      {icon && <div className="text-gray-400 mb-4" aria-hidden="true">{icon}</div>}
-      <TitleTag className="text-lg font-semibold text-gray-900 mb-2">{title}</TitleTag>
-      <p className="text-sm text-gray-600 max-w-sm mb-6">{message}</p>
+    <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 my-4" role={role} aria-live={ariaLive}>
+      {icon && <div className="text-slate-400 mb-4" aria-hidden="true">{icon}</div>}
+      <TitleTag className="text-lg font-semibold text-scs-ink mb-2">{title}</TitleTag>
+      <p className="text-sm text-slate-600 max-w-sm mb-6">{message}</p>
       {action && <div>{action}</div>}
     </div>
   );

@@ -25,69 +25,68 @@ export function ConfirmDialog({
   confirmDisabled = false,
   cancelDisabled = false
 }: ConfirmDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  /** Capture the element that had focus before the dialog opened so we can restore it on close. */
-  const triggerElementRef = useRef<Element | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const messageId = useId();
 
+  // Keeps a reference to the dialog node even after React removes it from the
+  // tree (which happens the same render that `isOpen` flips to false), so the
+  // close/focus-restore logic below can still act on it imperatively.
+  const lastDialogNodeRef = useRef<HTMLDialogElement | null>(null);
+  const setDialogRef = (node: HTMLDialogElement | null) => {
+    dialogRef.current = node;
+    if (node) lastDialogNodeRef.current = node;
+  };
+
+  // The element that had focus right before the dialog opened, so it can be
+  // restored once the dialog closes (either normally or via parent unmount).
+  const triggerRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (isOpen && dialog && !dialog.open) {
-      // Capture the active element before showModal() steals focus.
-      triggerElementRef.current = document.activeElement;
-      dialog.showModal();
-      // Move focus to the cancel button (safe default — avoids accidental destructive confirm).
-      // If the cancel button is disabled, fall back to the first enabled button in the dialog.
-      requestAnimationFrame(() => {
-        const btn = cancelButtonRef.current;
-        if (btn && !btn.disabled) {
-          btn.focus();
-        } else {
-          dialogRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
-        }
-      });
-    } else if (!isOpen) {
-      // Close the dialog if it is still in the DOM — the component may have already rendered
-      // null and removed the element before this effect fires.
-      if (dialog && dialog.open) {
+    if (isOpen) {
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.open) {
+        triggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+        dialog.showModal();
+        const focusTarget = !cancelDisabled
+          ? cancelButtonRef.current
+          : !confirmDisabled
+            ? confirmButtonRef.current
+            : null;
+        focusTarget?.focus();
+      }
+    } else {
+      const dialog = lastDialogNodeRef.current;
+      if (dialog?.open) {
         dialog.close();
       }
-      // Restore focus unconditionally so keyboard users keep their place even
-      // when the dialog element was already removed from the DOM on re-render.
-      const trigger = triggerElementRef.current;
-      if (trigger instanceof HTMLElement) {
-        requestAnimationFrame(() => {
-          trigger.focus();
-        });
-      }
-      triggerElementRef.current = null;
+      triggerRef.current?.focus();
+      triggerRef.current = null;
     }
-  }, [isOpen]);
+  }, [isOpen, cancelDisabled, confirmDisabled]);
 
-  // Unmount path: if the caller removes the component from the DOM while the
-  // dialog is still showing (e.g. ImportExportPage sets conditional rendering to
-  // false instead of passing isOpen=false), restore focus to the original trigger
-  // element so keyboard users keep their place.
+  // Close the native dialog and restore focus to the trigger if the parent
+  // unmounts this component while the dialog is still open. Uses
+  // `lastDialogNodeRef`/`triggerRef` (not the possibly-nulled `dialogRef`)
+  // because React detaches child refs before this cleanup runs.
   useEffect(() => {
     return () => {
-      if (dialogRef.current?.open) {
-        dialogRef.current.close();
+      const dialog = lastDialogNodeRef.current;
+      if (dialog?.open) {
+        dialog.close();
       }
-      const trigger = triggerElementRef.current;
-      if (trigger instanceof HTMLElement) {
-        trigger.focus({ preventScroll: true });
-      }
-      triggerElementRef.current = null;
+      triggerRef.current?.focus();
+      triggerRef.current = null;
     };
-  }, []); // empty deps — cleanup only runs on unmount
+  }, []);
 
   if (!isOpen) return null;
 
   return (
     <dialog
-      ref={dialogRef}
+      ref={setDialogRef}
       onCancel={(event) => {
         event.preventDefault();
         if (!cancelDisabled) onCancel();
@@ -109,8 +108,9 @@ export function ConfirmDialog({
           {cancelLabel}
         </button>
         <button
+          ref={confirmButtonRef}
           type="button"
-          onClick={onConfirm}
+          onClick={() => { if (!confirmDisabled) onConfirm(); }}
           disabled={confirmDisabled}
           className={`px-4 py-2 text-sm font-medium text-white rounded-2xl focus-ring touch-target disabled:opacity-60 disabled:cursor-not-allowed ${
             isDestructive ? 'state-destructive' : 'bg-scs-blue hover:bg-scs-blueDark'

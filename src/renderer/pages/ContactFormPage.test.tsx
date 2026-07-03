@@ -681,5 +681,25 @@ describe("ContactFormPage", () => {
       expect(event.defaultPrevented).toBe(true);
       expect(returnValueSetter).toHaveBeenCalledWith("");
     });
+
+    it("removes the beforeunload listener on unmount", async () => {
+      const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
+      const { unmount } = render(
+        <ToastProvider>
+          <RouterProvider
+            router={createMemoryRouter(
+              [{ path: "/contacts/new", element: <ContactFormPage /> }],
+              { initialEntries: ["/contacts/new"] }
+            )}
+          />
+        </ToastProvider>
+      );
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      unmount();
+
+      expect(removeEventListenerSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function));
+      removeEventListenerSpy.mockRestore();
+    });
   });
 });

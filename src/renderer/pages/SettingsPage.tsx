@@ -268,32 +268,32 @@ export const SettingsPage = () => {
           </p>
 
           <div className="mt-6 space-y-5">
-            <label htmlFor="settings-editor-name" className="block">
-              <span className="text-sm font-semibold text-slate-700">Nombre del editor</span>
+            <div>
+              <label htmlFor="settings-editor-name" className="block text-sm font-semibold text-slate-700">Nombre del editor</label>
               <input
                 id="settings-editor-name"
-                aria-label="Nombre del editor"
                 type="text"
                 value={editorName}
                 onChange={handleEditorNameChange}
                 placeholder="Ej. Turno mañana"
+                aria-describedby="settings-editor-name-hint"
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
               />
-              <span className="mt-2 block text-xs text-slate-500">
+              <p id="settings-editor-name-hint" className="mt-2 text-xs text-slate-500">
                 Se usa en auditoría, importaciones CSV y futuras exportaciones.
-              </span>
-            </label>
+              </p>
+            </div>
 
-            <label htmlFor="settings-data-file-path" className="block">
-              <span className="text-sm font-semibold text-slate-700">Ruta del archivo de datos</span>
+            <div>
+              <label htmlFor="settings-data-file-path" className="block text-sm font-semibold text-slate-700">Ruta del archivo de datos</label>
               <div className="mt-2 flex gap-2">
                 <input
                   id="settings-data-file-path"
-                  aria-label="Ruta del archivo de datos"
                   type="text"
                   value={dataFilePath}
                   onChange={handleDataFilePathChange}
                   placeholder="/ruta/al/directorio/contacts.json"
+                  aria-describedby="settings-data-file-path-hint"
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                 />
                 <button
@@ -307,21 +307,21 @@ export const SettingsPage = () => {
                   {isBrowsingDataFile ? "…" : "Examinar"}
                 </button>
               </div>
-              <span className="mt-2 block text-xs text-slate-500">
+              <p id="settings-data-file-path-hint" className="mt-2 text-xs text-slate-500">
                 Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura.
-              </span>
-            </label>
+              </p>
+            </div>
 
-            <label htmlFor="settings-backup-directory-path" className="block">
-              <span className="text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</span>
+            <div>
+              <label htmlFor="settings-backup-directory-path" className="block text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</label>
               <div className="mt-2 flex gap-2">
                 <input
                   id="settings-backup-directory-path"
-                  aria-label="Ruta de la carpeta de copias de seguridad"
                   type="text"
                   value={backupDirectoryPath}
                   onChange={handleBackupDirectoryPathChange}
                   placeholder="/ruta/a/la/carpeta/backups"
+                  aria-describedby="settings-backup-directory-path-hint"
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                 />
                 <button
@@ -335,49 +335,51 @@ export const SettingsPage = () => {
                   {isBrowsingBackupDir ? "…" : "Examinar"}
                 </button>
               </div>
-              <span className="mt-2 block text-xs text-slate-500">
+              <p id="settings-backup-directory-path-hint" className="mt-2 text-xs text-slate-500">
                 Debe ser una ruta absoluta. La carpeta debe existir y permitir lectura y escritura para crear copias de seguridad.
-              </span>
-            </label>
+              </p>
+            </div>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <input
-                aria-label="Mostrar inactivos al iniciar"
+                id="settings-show-inactive"
                 type="checkbox"
                 checked={showInactiveByDefault}
                 onChange={handleShowInactiveChange}
+                aria-describedby="settings-show-inactive-desc"
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
               />
-              <span>
-                <span className="block text-sm font-semibold text-slate-700">Mostrar inactivos al iniciar</span>
-                <span className="mt-1 block text-sm text-slate-600">
+              <div>
+                <label htmlFor="settings-show-inactive" className="block text-sm font-semibold text-slate-700">Mostrar inactivos al iniciar</label>
+                <p id="settings-show-inactive-desc" className="mt-1 text-sm text-slate-600">
                   Activa el filtro de registros inactivos cada vez que se cargue la aplicación.
-                </span>
-              </span>
-            </label>
+                </p>
+              </div>
+            </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <label className="flex items-start gap-3">
+              <div className="flex items-start gap-3">
                 <input
-                  aria-label="Activar copia de seguridad automática"
+                  id="settings-autobackup-enabled"
                   type="checkbox"
                   checked={autoBackupEnabled}
                   onChange={handleAutoBackupEnabledChange}
+                  aria-describedby="settings-autobackup-enabled-desc"
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
                 />
-                <span>
-                  <span className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</span>
-                  <span className="mt-1 block text-sm text-slate-600">
+                <div>
+                  <label htmlFor="settings-autobackup-enabled" className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</label>
+                  <p id="settings-autobackup-enabled-desc" className="mt-1 text-sm text-slate-600">
                     Crea copias automáticas en segundo plano para reducir el riesgo entre copias de seguridad manuales.
-                  </span>
-                </span>
-              </label>
+                  </p>
+                </div>
+              </div>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">Cuándo crear la copia de seguridad automática</span>
+                <div>
+                  <label htmlFor="settings-autobackup-trigger" className="block text-sm font-semibold text-slate-700">Cuándo crear la copia de seguridad automática</label>
                   <select
-                    aria-label="Activación de la copia de seguridad automática"
+                    id="settings-autobackup-trigger"
                     value={autoBackupTrigger}
                     onChange={(event) => {
                       setAutoBackupTrigger(event.target.value as "launch" | "intervalHours" | "editCount");
@@ -390,12 +392,12 @@ export const SettingsPage = () => {
                     <option value="intervalHours">Cada N horas</option>
                     <option value="editCount">Cada N ediciones</option>
                   </select>
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">Retención de copias de seguridad automáticas</span>
+                <div>
+                  <label htmlFor="settings-autobackup-retention" className="block text-sm font-semibold text-slate-700">Retención de copias de seguridad automáticas</label>
                   <input
-                    aria-label="Retención de copias de seguridad automáticas"
+                    id="settings-autobackup-retention"
                     type="number"
                     min={1}
                     max={100}
@@ -408,14 +410,14 @@ export const SettingsPage = () => {
                     disabled={!autoBackupEnabled}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   />
-                </label>
+                </div>
               </div>
 
               {autoBackupEnabled && autoBackupTrigger === "intervalHours" ? (
-                <label className="mt-4 block">
-                  <span className="text-sm font-semibold text-slate-700">Horas entre copias de seguridad automáticas</span>
+                <div className="mt-4">
+                  <label htmlFor="settings-autobackup-interval-hours" className="block text-sm font-semibold text-slate-700">Horas entre copias de seguridad automáticas</label>
                   <input
-                    aria-label="Horas entre copias de seguridad automáticas"
+                    id="settings-autobackup-interval-hours"
                     type="number"
                     min={1}
                     max={168}
@@ -427,14 +429,14 @@ export const SettingsPage = () => {
                     }}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
-                </label>
+                </div>
               ) : null}
 
               {autoBackupEnabled && autoBackupTrigger === "editCount" ? (
-                <label className="mt-4 block">
-                  <span className="text-sm font-semibold text-slate-700">Ediciones entre copias de seguridad automáticas</span>
+                <div className="mt-4">
+                  <label htmlFor="settings-autobackup-edit-count" className="block text-sm font-semibold text-slate-700">Ediciones entre copias de seguridad automáticas</label>
                   <input
-                    aria-label="Ediciones entre copias de seguridad automáticas"
+                    id="settings-autobackup-edit-count"
                     type="number"
                     min={1}
                     max={1000}
@@ -446,7 +448,7 @@ export const SettingsPage = () => {
                     }}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
-                </label>
+                </div>
               ) : null}
             </div>
           </div>

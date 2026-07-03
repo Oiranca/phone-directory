@@ -194,43 +194,105 @@ describe('ConfirmDialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  // ── Focus restoration on unmount path ───────────────────────────────────────
-  // Callers such as ImportExportPage remove the component from the DOM instead
-  // of passing isOpen=false, so the mounted-path focus restore never runs.
-  // A cleanup effect on the empty-dep useEffect handles this path.
+  // ── Focus management contract ────────────────────────────────────────────
 
-  it('restores focus to the trigger element when unmounted while the dialog is showing', () => {
-    const Wrapper = ({ show }: { show: boolean }) => (
-      <>
-        <button type="button" aria-label="Abrir diálogo">Abrir</button>
-        {show && (
-          <ConfirmDialog
-            isOpen={true}
-            title="Test"
-            message="Test message"
-            onConfirm={vi.fn()}
-            onCancel={vi.fn()}
-          />
-        )}
-      </>
-    );
+  it('moves focus to the Cancel button once the dialog opens', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+  });
 
-    // Render without the dialog, focus the trigger button so it is captured as
-    // document.activeElement when the dialog mounts.
-    const { rerender } = render(<Wrapper show={false} />);
-    const trigger = screen.getByRole('button', { name: 'Abrir diálogo' });
+  it('falls back to the first enabled action when Cancel is disabled', () => {
+    render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveFocus();
+  });
+
+  it('restores focus to the trigger element when the dialog closes', () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          <ConfirmDialog {...defaultProps} isOpen={open} />
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness open={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
     trigger.focus();
     expect(trigger).toHaveFocus();
 
-    // Mount the dialog — the isOpen effect captures document.activeElement (trigger)
-    // and calls showModal().
-    rerender(<Wrapper show={true} />);
+    rerender(<Harness open={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
 
-    // Unmount the dialog by removing it from the tree (simulates caller toggling
-    // conditional rendering to false without passing isOpen=false).
-    rerender(<Wrapper show={false} />);
+    rerender(<Harness open={false} />);
+    expect(trigger).toHaveFocus();
+  });
 
-    // The unmount cleanup effect must have restored focus to the trigger.
+  it('keeps the dialog open and focus inside it when onConfirm does not synchronously close (isOpen stays true)', () => {
+    let confirmCount = 0;
+
+    function Harness({ isOpen }: { isOpen: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          <ConfirmDialog
+            {...defaultProps}
+            isOpen={isOpen}
+            onConfirm={() => {
+              // Simulates deferred work (e.g. an async IPC call) that only
+              // flips `isOpen` to false later, once it resolves — not
+              // synchronously from within the click handler.
+              confirmCount += 1;
+            }}
+          />
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness isOpen={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness isOpen={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(confirmCount).toBe(1);
+
+    // `isOpen` never flipped to false, so the dialog must remain open and
+    // focus must stay inside it — not jump back to the trigger — until the
+    // parent actually closes it.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+    expect(trigger).not.toHaveFocus();
+
+    rerender(<Harness isOpen={false} />);
+    expect(trigger).toHaveFocus();
+  });
+
+  // Covers callers such as ImportExportPage that remove the component from the
+  // DOM instead of passing isOpen=false, so the mounted-path focus restore
+  // never runs — the unmount cleanup effect must handle this path instead.
+  it('restores focus to the trigger element when the parent unmounts the dialog while open', () => {
+    function Harness({ showDialog }: { showDialog: boolean }) {
+      return (
+        <div>
+          <button type="button">Abrir</button>
+          {showDialog && <ConfirmDialog {...defaultProps} isOpen={true} />}
+        </div>
+      );
+    }
+
+    const { rerender } = render(<Harness showDialog={false} />);
+    const trigger = screen.getByRole('button', { name: 'Abrir' });
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness showDialog={true} />);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+
+    rerender(<Harness showDialog={false} />);
     expect(trigger).toHaveFocus();
   });
 });
