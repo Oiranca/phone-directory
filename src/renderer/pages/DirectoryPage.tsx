@@ -308,6 +308,32 @@ export const DirectoryPage = () => {
           button.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
       });
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      const firstRecord = currentPageRecords[0]!;
+      setSelectedRecordId(firstRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(firstRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
+    } else if (event.key === "End") {
+      event.preventDefault();
+      const lastRecord = currentPageRecords[currentPageRecords.length - 1]!;
+      setSelectedRecordId(lastRecord.id);
+      requestAnimationFrame(() => {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(
+          `[data-record-id="${CSS.escape(lastRecord.id)}"]`
+        );
+        button?.focus();
+        if (button && typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      });
     } else if (event.key === "Enter") {
       // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
       // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
@@ -457,9 +483,9 @@ export const DirectoryPage = () => {
               <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
             </label>
             <p
-              role={visibleRecords.length > 0 ? "status" : undefined}
-              aria-live={visibleRecords.length > 0 ? "polite" : "off"}
-              aria-atomic={visibleRecords.length > 0 ? "true" : undefined}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
               className="text-xs font-medium text-slate-500"
             >
               {visibleRecords.length} resultados
@@ -705,6 +731,7 @@ export const DirectoryPage = () => {
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
+                      aria-label={`Editar registro: ${selectedRecord.displayName}`}
                       className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
                       Editar registro
@@ -901,7 +928,7 @@ export const DirectoryPage = () => {
             ) : (
               <div className="flex h-64 flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-slate-50 p-4 mb-4">
-                  <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg aria-hidden="true" className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                   </svg>
                 </div>

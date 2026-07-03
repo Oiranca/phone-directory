@@ -648,7 +648,15 @@ describe("DirectoryPage", () => {
     });
 
     expect(await screen.findByText("No se han encontrado resultados para esta búsqueda.")).toHaveAttribute("role", "status");
-    expect(screen.getAllByRole("status")).toHaveLength(1);
+
+    // The result count stays a polite live region even at zero results so
+    // "0 resultados" is announced alongside the empty-state panel.
+    const statusRegions = screen.getAllByRole("status");
+    expect(statusRegions).toHaveLength(2);
+    const countRegion = statusRegions.find((region) => region.textContent?.includes("0 resultados"));
+    expect(countRegion).toBeDefined();
+    expect(countRegion).toHaveAttribute("aria-live", "polite");
+    expect(countRegion).toHaveAttribute("aria-atomic", "true");
   });
 
   it("moves selection to the new page when pagination changes", async () => {
@@ -793,6 +801,60 @@ describe("DirectoryPage", () => {
     expect(lastButton).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("Home key jumps selection to the first record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // Move to the last record first
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+    const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(secondButton).toHaveAttribute("aria-pressed", "true");
+
+    // Home jumps back to the first record
+    secondButton.focus();
+    fireEvent.keyDown(secondButton, { key: "Home" });
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+    expect(secondButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("End key jumps selection to the last record in the list", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    await screen.findByRole("list", { name: "Resultados del directorio" });
+
+    // First record is selected by default; End jumps to the last record
+    const firstButton = screen.getByRole("button", { name: /admisión general/i });
+    firstButton.focus();
+    fireEvent.keyDown(firstButton, { key: "End" });
+
+    const lastButton = screen.getByRole("button", { name: /centro de salud demo/i });
+    expect(lastButton).toHaveAttribute("aria-pressed", "true");
+    expect(firstButton).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("Enter key does not change selection but does not throw", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
@@ -888,6 +950,53 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Detalle del registro seleccionado" })).toBeInTheDocument();
+  });
+
+  it("edit action exposes a contextual aria-label with the selected contact's name", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    const firstRecord = defaultContacts.records[0]!;
+    const editLink = screen.getByRole("link", { name: `Editar registro: ${firstRecord.displayName}` });
+    expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
+    expect(editLink).toHaveTextContent("Editar registro");
+  });
+
+  it("empty detail state icon is hidden from assistive technology", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    // A query with no matches clears the selection, revealing the empty detail state.
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "sin-coincidencias" }
+    });
+
+    const emptyDetail = (await screen.findByText("Selecciona un registro")).closest("div");
+    const icon = emptyDetail?.querySelector("svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
   });
 
   it("selected record name is rendered as an h4 heading", async () => {
