@@ -172,3 +172,6 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 - [19:46] Fix 2: search sr-only label + placeholder now include "titular" and "hoja ODS" to reflect imported ODS filtering
 - [19:47] Tests: added 2 new tests — refocus on create→edit switch, ODS label/placeholder assertion
 - [19:47] Gates: pnpm typecheck ✅, pnpm test 1333/1333 ✅, pnpm build ✅
+
+#### [OIR-AUDIT-INTEGRATION] software-engineer — build integration/oir-audit-merge-prep (18 PRs)
+- [18:24] Task started — created integration/oir-audit-merge-prep from origin/main (6c45886). Baseline: build clean, vitest 1379 passed (50 files).
