@@ -231,6 +231,30 @@ describe("DeduplicatePage", () => {
       await triggerMerge();
       expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
     });
+
+    it("focus lands on the empty-state heading (not body) when last pair is merged and refresh returns zero pairs", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Open the confirm dialog
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      // Click the dialog confirm button
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      // Wait for the empty-state heading to appear (refresh returned zero pairs)
+      const emptyHeading = await screen.findByRole("heading", { name: "No se encontraron duplicados" });
+
+      // Focus must land on the empty-state heading, not document.body
+      await waitFor(() => {
+        expect(document.activeElement).toBe(emptyHeading);
+        expect(document.activeElement).not.toBe(document.body);
+      });
+    });
   });
 
   describe("merge store reconciliation — merge succeeds + refresh fails (graceful degradation)", () => {
@@ -312,6 +336,43 @@ describe("DeduplicatePage", () => {
         const survivor = records.find((r) => r.id === "cnt_0001");
         expect(survivor).toBeDefined();
         expect(survivor!.displayName).toBe("Admisión General (fusionado)");
+      });
+    });
+
+    it("closes the confirm dialog and restores focus after merge-success + refresh-failure (OIR-183)", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      // Click the page-level Fusionar button (the trigger element for focus restore)
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      // Give the button a chance to receive focus so triggerRef can capture it
+      mergeBtn.focus();
+      fireEvent.click(mergeBtn);
+
+      // Click the dialog confirm button
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      // The confirm dialog must close even when refresh fails
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+
+      // The success toast must still be visible (merge committed before refresh attempt)
+      expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
+
+      // The warning toast confirms graceful degradation fired
+      expect(
+        await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/)
+      ).toBeInTheDocument();
+
+      // Focus must be returned to a stable element — the trigger button that opened the
+      // dialog. requestAnimationFrame is flushed by jsdom on the next microtask tick.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(mergeBtn);
       });
     });
   });
@@ -584,6 +645,172 @@ describe("DeduplicatePage", () => {
       expect(screen.queryByText("Duplicado fusionado correctamente")).not.toBeInTheDocument();
     });
   });
+
+  // ── OIR-183 P1 fixes ─────────────────────────────────────────────────────────
+
+  describe("OIR-183 Fix 1 — Fusionar button uses amber/warning styling, not primary blue", () => {
+    it("Fusionar button has amber background class after selecting a record", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      expect(mergeBtn).toHaveClass("bg-amber-500");
+      expect(mergeBtn).not.toHaveClass("bg-scs-blue");
+    });
+
+    it("Fusionar button contains an aria-hidden warning icon svg", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      const mergeBtn = await screen.findByRole("button", { name: /Fusionar/ });
+      const icon = mergeBtn.querySelector('svg[aria-hidden="true"]');
+      expect(icon).not.toBeNull();
+    });
+  });
+
+  describe("OIR-183 Fix 2 — ConfirmDialog explicitly names the contact being deleted", () => {
+    it("dialog message contains 'Se eliminará el contacto' and the discard record name", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
+
+      // The dialog message must explicitly state which contact is being eliminated
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog).toHaveTextContent("Se eliminará el contacto");
+      // The discard record's displayName (recordB since we kept recordA) must appear
+      expect(dialog).toHaveTextContent("Admisión General");
+    });
+
+    it("dialog message does not use the ambiguous phrasing '¿Fusionar' alone", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: /Fusionar/ }));
+
+      const dialog = await screen.findByRole("dialog");
+      // Old ambiguous message started with "¿Fusionar" — must not be present
+      expect(dialog).not.toHaveTextContent("¿Fusionar");
+    });
+  });
+
+  describe("OIR-183 Fix 3 — Focus restore after dialog/merge", () => {
+    it("page heading has tabIndex=-1 to allow programmatic focus after merge", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const heading = screen.getByRole("heading", { name: "Duplicados detectados" });
+      expect(heading).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("'Conservar este' buttons have data-keep-btn attribute for focus targeting", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      for (const btn of keepButtons) {
+        expect(btn).toHaveAttribute("data-keep-btn");
+      }
+    });
+  });
+
+  describe("OIR-183 Fix 4 — Spinner during detectDuplicates", () => {
+    it("shows aria-busy=true on the loading section", async () => {
+      // Override detectDuplicates to never resolve so we can inspect loading state
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      const statusSection = screen.getByRole("status");
+      expect(statusSection).toHaveAttribute("aria-busy", "true");
+
+      // Cleanup: resolve the promise to avoid hanging
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+
+    it("shows the spinner svg with animate-spin class during loading", async () => {
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      const statusSection = screen.getByRole("status");
+      const spinner = statusSection.querySelector('svg.animate-spin');
+      expect(spinner).not.toBeNull();
+
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+
+    it("shows loading text 'Buscando duplicados…' while loading", async () => {
+      let resolve: (v: unknown) => void;
+      const neverResolve = new Promise((r) => { resolve = r; });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockReturnValue(neverResolve),
+          mergeContacts: mockMergeContacts
+        }
+      });
+
+      renderPage();
+
+      expect(screen.getByText("Buscando duplicados…")).toBeInTheDocument();
+
+      resolve!({ pairs: [], records: {}, checkedCount: 0, pairCount: 0 });
+    });
+  });
+
+  describe("OIR-183 Fix 5 — 'Conservar este' touch target ≥44px", () => {
+    it("'Conservar este' buttons have min-h-[44px] class for WCAG 2.5.5", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      expect(keepButtons.length).toBeGreaterThan(0);
+      for (const btn of keepButtons) {
+        expect(btn).toHaveClass("min-h-[44px]");
+      }
+    });
+
+    it("'Conservar este' buttons have min-w-[44px] class for WCAG 2.5.5", async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("button", { name: "Conservar este" });
+      for (const btn of keepButtons) {
+        expect(btn).toHaveClass("min-w-[44px]");
+      }
+    });
+  });
+
+  // ── End OIR-183 P1 fixes ────────────────────────────────────────────────────
 
   describe("merge loss preview — OIR-175", () => {
     it("does not show the preview panel before any keepId is selected", async () => {

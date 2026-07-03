@@ -9,6 +9,7 @@ import type {
   ConflictRecordSummary,
   MergePolicy
 } from "../../../shared/types/contact";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const STATUS_LABELS: Record<CsvImportPreviewRow["status"], string> = {
   accepted: "Aceptada",
