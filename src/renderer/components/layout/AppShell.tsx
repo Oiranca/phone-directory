@@ -83,6 +83,10 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
         // before and navigates immediately.
         const hasOpenForm = document.querySelector<HTMLElement>("[data-keyboard-cancel]");
         if (hasOpenForm) {
+          // Still consume the keypress: without preventDefault, Chromium/Electron
+          // keeps its native Ctrl/Cmd+N behavior (new window) available while
+          // unsaved form state is on screen.
+          event.preventDefault();
           return;
         }
 

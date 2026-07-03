@@ -138,9 +138,13 @@ describe("AppShell — default mode", () => {
       </MemoryRouter>
     );
 
-    fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+    // fireEvent returns false when preventDefault was called on the event.
+    const notPrevented = fireEvent.keyDown(window, { key: "n", ctrlKey: true });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/");
+    // The keypress must still be consumed so Electron/Chromium's native
+    // Ctrl/Cmd+N (new window) can't fire while an unsaved form is open.
+    expect(notPrevented).toBe(false);
   });
 
   it("submits the active keyboard form with modifier+s", () => {
