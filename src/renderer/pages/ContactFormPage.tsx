@@ -1,4 +1,6 @@
-import { Link } from "react-router-dom";
+import { useCallback } from "react";
+import { Link, useBlocker } from "react-router-dom";
+import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
 import { OrganizationLocationSection } from "../components/contact-form/OrganizationLocationSection";
@@ -15,6 +17,7 @@ export const ContactFormPage = () => {
     existingRecordMissing,
     formState,
     setFormState,
+    isDirtyRef,
     fieldErrors,
     isSubmitting,
     liveMessage,
@@ -35,6 +38,15 @@ export const ContactFormPage = () => {
     setPendingFocusTarget,
     handleSubmit
   } = useContactForm();
+
+  /**
+   * Block navigation (including the Cancelar links below) when the form has
+   * unsaved changes. isDirtyRef is a stable MutableRefObject — the callback
+   * reads the current value at navigation time, avoiding stale-closure
+   * issues. A clean form navigates away immediately with no extra friction.
+   */
+  const shouldBlock = useCallback(() => isDirtyRef.current, [isDirtyRef]);
+  const blocker = useBlocker(shouldBlock);
 
   if (isLoading || !hasContacts || !hasSettings) {
     return (
@@ -193,6 +205,18 @@ export const ContactFormPage = () => {
           </button>
         </div>
       </form>
+
+      {/* Unsaved-changes guard: shown when a Cancelar link (or any other router
+          navigation) is attempted while the form is dirty. */}
+      <ConfirmDialog
+        isOpen={blocker.state === "blocked"}
+        title="Cambios sin guardar"
+        message="¿Seguro que quieres salir? Los cambios no guardados se perderán."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </section>
   );
 };

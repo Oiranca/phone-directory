@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
@@ -226,6 +226,7 @@ export type UseContactFormResult = {
   // form state
   formState: ContactFormState;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
+  isDirtyRef: React.MutableRefObject<boolean>;
   fieldErrors: Record<string, string>;
   isSubmitting: boolean;
   liveMessage: string;
@@ -264,8 +265,26 @@ export const useContactForm = (): UseContactFormResult => {
     ensureBootstrapLoaded
   } = useAppStore();
   const { pushToast } = useToast();
-  const [formState, setFormState] = useState<ContactFormState>(() => createEmptyFormState());
+  const [formState, setFormStateRaw] = useState<ContactFormState>(() => createEmptyFormState());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  /**
+   * Ref-based dirty flag — updated synchronously so navigation guards (e.g.
+   * useBlocker in ContactFormPage) always read the latest value at the moment
+   * a navigation is attempted, avoiding stale-closure issues.
+   */
+  const isDirtyRef = useRef<boolean>(false);
+
+  /**
+   * User-facing state setter: marks the form as dirty whenever the user
+   * makes any change. Internal reset paths (loading a record, clearing after
+   * a successful save) use setFormStateRaw directly so they do not flag the
+   * form as dirty.
+   */
+  const setFormState = useCallback<React.Dispatch<React.SetStateAction<ContactFormState>>>((action) => {
+    isDirtyRef.current = true;
+    setFormStateRaw(action);
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const [pendingFocusTarget, setPendingFocusTarget] = useState<PendingFocusTarget | null>(null);
@@ -286,13 +305,15 @@ export const useContactForm = (): UseContactFormResult => {
 
   useEffect(() => {
     if (isEditing && existingRecord) {
-      setFormState(toFormState(existingRecord));
+      isDirtyRef.current = false;
+      setFormStateRaw(toFormState(existingRecord));
       setFieldErrors({});
       return;
     }
 
     if (!isEditing) {
-      setFormState(createEmptyFormState());
+      isDirtyRef.current = false;
+      setFormStateRaw(createEmptyFormState());
       setFieldErrors({});
     }
   }, [existingRecord, isEditing]);
@@ -522,6 +543,9 @@ export const useContactForm = (): UseContactFormResult => {
       setContacts(result.contacts);
       setSettings(result.settings);
       setSelectedRecordId(result.savedRecordId);
+      // Reset synchronously before navigating so the just-completed save
+      // never triggers the unsaved-changes navigation guard.
+      isDirtyRef.current = false;
       navigate("/");
     } catch (error) {
       pushToast({
@@ -543,6 +567,7 @@ export const useContactForm = (): UseContactFormResult => {
     existingRecordMissing: isEditing && !existingRecord && !isLoading,
     formState,
     setFormState,
+    isDirtyRef,
     fieldErrors,
     isSubmitting,
     liveMessage,

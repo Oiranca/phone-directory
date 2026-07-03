@@ -1,10 +1,54 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { ContactFormPage } from "./ContactFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
+
+// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
+// Required for ConfirmDialog (used by the unsaved-changes blocker guard).
+const originalHTMLDialogElement = globalThis.HTMLDialogElement;
+let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
+let originalShowModal: (() => void) | undefined;
+let originalClose: (() => void) | undefined;
+
+beforeAll(() => {
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
+  }
+
+  dialogPrototype =
+    typeof globalThis.HTMLDialogElement !== "undefined"
+      ? globalThis.HTMLDialogElement.prototype
+      : undefined;
+
+  originalShowModal = dialogPrototype?.showModal;
+  originalClose = dialogPrototype?.close;
+
+  if (dialogPrototype) {
+    dialogPrototype.showModal = vi.fn(function (this: HTMLElement & { open?: boolean }) {
+      this.open = true;
+    });
+    dialogPrototype.close = vi.fn(function (this: HTMLElement & { open?: boolean }) {
+      this.open = false;
+    });
+  }
+});
+
+afterAll(() => {
+  if (dialogPrototype) {
+    dialogPrototype.showModal = originalShowModal;
+    dialogPrototype.close = originalClose;
+  }
+
+  if (originalHTMLDialogElement) {
+    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
+  }
+});
 
 const resetStore = () => {
   resetBootstrapInFlight();
@@ -396,6 +440,61 @@ describe("ContactFormPage", () => {
 
       // On initial render no submit has occurred — displayName input must not hold focus
       expect(document.activeElement).not.toBe(screen.getByLabelText(/nombre visible/i));
+    });
+  });
+
+  describe("unsaved-changes guard on Cancelar links", () => {
+    it("opens the confirmation dialog instead of navigating when Cancelar is clicked on a dirty form", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      // Make the form dirty
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+
+      // Both Cancelar links must be guarded — exercise each one in turn.
+      for (const cancelName of ["Cancelar y volver al directorio", "Cancelar sin guardar los cambios"]) {
+        fireEvent.click(screen.getByRole("link", { name: cancelName }));
+
+        expect(
+          await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
+        ).toBeInTheDocument();
+        expect(router.state.location.pathname).toBe("/contacts/new");
+
+        // Dismiss so the next iteration starts from a clean dialog state
+        fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      }
+    });
+
+    it("navigates directly to / when Cancelar is clicked on a clean form", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar y volver al directorio" }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+      expect(screen.queryByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")).not.toBeInTheDocument();
+    });
+
+    it("allows navigation from a dirty form after confirming Salir sin guardar", async () => {
+      const router = renderWithRoute("/contacts/new");
+      expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+        target: { value: "Hospital Norte" }
+      });
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar sin guardar los cambios" }));
+      await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Salir sin guardar" }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
     });
   });
 });
