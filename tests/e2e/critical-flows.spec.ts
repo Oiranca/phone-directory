@@ -141,7 +141,7 @@ test.describe("OIR-22 critical MVP flows", () => {
       await page.getByRole("link", { name: "Importar/Exportar" }).click();
       await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Preparar agenda/i }).click();
+      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
       await expect(page.getByRole("heading", { name: "directory.csv" })).toBeVisible();
       await expect(page.getByText("Altas", { exact: true })).toBeVisible();

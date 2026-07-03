@@ -248,12 +248,23 @@ describe("ImportExportPage", () => {
     const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
     const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
     const importJsonBtn = screen.getByRole("button", { name: /Importar JSON/ });
-    const prepareBtn = screen.getByRole("button", { name: /Preparar agenda/ });
+    const prepareBtn = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
 
     expect(backupBtn.className).toContain("focus-ring");
     expect(exportBtn.className).toContain("focus-ring");
     expect(importJsonBtn.className).toContain("focus-ring");
     expect(prepareBtn.className).toContain("focus-ring");
+  });
+
+  it("OIR-188: shows the Import JSON card warning in plain natural Spanish (no bolted-on label)", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar."
+      )
+    ).toBeInTheDocument();
   });
 
   it("creates a backup and shows success feedback", async () => {
@@ -425,12 +436,12 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
-    expect(screen.getByText(/Tipo de archivo: exportación cruda de hoja de servicios/)).toBeInTheDocument();
-    // OIR-182: confidence note is now merged into the primary toast (no second toast)
+    expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
+    // OIR-188: confidence note is shown in the preview panel (not in the toast)
     expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
@@ -504,7 +515,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Conflictos (1)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
 
@@ -578,7 +589,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
@@ -643,7 +654,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
@@ -695,7 +706,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(await screen.findByText("Algunas filas tienen errores. Corrígelas en la agenda original y vuelve a intentarlo.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
@@ -744,10 +755,10 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
@@ -767,7 +778,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(
       await screen.findByText(
@@ -781,7 +792,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
@@ -834,7 +845,7 @@ describe("ImportExportPage", () => {
     expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Preparar agenda/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Importar CSV\/ODS/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
 
     resolveRestore?.({
@@ -919,7 +930,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // useLayoutEffect fires synchronously after the DOM update — no timer involved
     await waitFor(() => {
@@ -933,7 +944,7 @@ describe("ImportExportPage", () => {
 
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
 
-    const triggerButton = screen.getByRole("button", { name: /Preparar agenda/ });
+    const triggerButton = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
     fireEvent.click(triggerButton);
     await screen.findByText("Vista previa importación");
 
@@ -941,7 +952,7 @@ describe("ImportExportPage", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(
-        screen.getByRole("button", { name: /Preparar agenda/ })
+        screen.getByRole("button", { name: /Importar CSV\/ODS/ })
       );
     });
   });
@@ -1003,7 +1014,7 @@ describe("ImportExportPage", () => {
     renderPage();
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // Spinner must appear while promise is in flight
     expect(await screen.findByText(/Analizando el archivo/)).toBeInTheDocument();
@@ -1062,7 +1073,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // Wait for the preview panel to load
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
@@ -1074,24 +1085,25 @@ describe("ImportExportPage", () => {
     expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
   });
 
-  it("OIR-182 item 9: emits only one toast (confidence note merged) when detectionConfidence is not 'high'", async () => {
+  it("OIR-182 item 9 / OIR-188: confidence note shown in panel, not in toast, when detectionConfidence is not 'high'", async () => {
     // Default mock already has detectionConfidence="medium" and conflictCount=0.
-    // After OIR-182 there must be exactly ONE toast element: the merged warning toast.
+    // OIR-188: confidence note moved from toast to panel.
     renderPage();
     expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Preparar agenda/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // Wait for panel to appear (preview received)
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    // The merged toast must contain both "Todo listo" and "Confianza media" in one element.
-    // This would NOT find a match if they were in two separate toast elements.
-    expect(screen.getByText(/Todo listo.+Confianza media/)).toBeInTheDocument();
+    // OIR-188: confidence note appears in the panel (amber paragraph).
+    expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)
+    ).toBeInTheDocument();
 
-    // Warning toasts use role="alert". There must be exactly 1 alert mentioning confidence.
+    // The toast must NOT include the confidence note — it covers status/count only.
+    // Warning toasts use role="alert". No alert element must mention confidence.
     const alerts = screen
       .getAllByRole("alert")
       .filter((el) => el.textContent?.includes("Confianza media"));
-    expect(alerts).toHaveLength(1);
+    expect(alerts).toHaveLength(0);
   });
 });

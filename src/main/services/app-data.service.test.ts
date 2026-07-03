@@ -134,6 +134,27 @@ describe("AppDataService", () => {
     ).rejects.toThrow(/No se permiten enlaces simbólicos/);
   });
 
+  it("rejects a custom data path that already has a file at that location", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    const existingDataFilePath = path.join(customDataDirectory, "already-here.json");
+    await fs.writeFile(existingDataFilePath, "{}", "utf-8");
+
+    await expect(
+      service.saveSettings(
+        buildEditableSettings({
+          dataFilePath: existingDataFilePath
+        })
+      )
+    ).rejects.toThrow(
+      "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
+    );
+  });
+
   it("rejects relative custom data paths", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

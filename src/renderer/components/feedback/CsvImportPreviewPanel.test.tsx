@@ -2088,6 +2088,10 @@ describe("CsvImportPreviewPanel", () => {
       expect(onClose).toHaveBeenCalledOnce();
     });
 
+    // Finding B (PR111): resolving every conflict does NOT persist anything by
+    // itself — selectedPolicy choices only take effect once "Confirmar
+    // importación" (onConfirm) is clicked. So closing at 100% resolved but
+    // pre-confirm must still warn, or all resolution work is silently lost.
     it("shows the ConfirmDialog even when all conflicts are resolved (work would still be lost)", () => {
       const { onClose } = renderPanel({
         ...oneConflictPreview,
