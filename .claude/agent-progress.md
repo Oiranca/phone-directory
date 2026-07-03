@@ -168,6 +168,11 @@ NOTE: Rechecked after removing untracked OIR-59 files (from different branch):
 
 #### [OIR-181] software-engineer — copy jargon fix
 - [15:44] Task started: checked out existing branch fix/oir-181-copy-errores in worktree; making 2 targeted copy fixes (app-data.service.ts "filas inválidas" phrasing + csv-import.service.ts "plantilla MVP" jargon)
+- [15:46] app-data.service.ts:471 reworded to "El archivo contiene filas con datos no válidos. Corrige el origen antes de importarlo."; test assertion updated at app-data.service.test.ts:2837
+- [15:46] csv-import.service.ts:133 reworded to drop "MVP" — "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: ${unsupportedColumns.join(", ")}. Corrige el archivo antes de importarlo."; updated assertions in csv-import.service.test.ts:63, app-data.service.test.ts:2910, ImportExportPage.test.tsx:756+767
+- [15:46] npm run build: PASS (vite + tsc electron clean)
+- [15:47] vitest (app-data.service.test.ts + csv-import.service.test.ts + ImportExportPage.test.tsx): 153 passed, 0 failed
+- [15:47] ✅ Complete — committed f213060, pushed to origin/fix/oir-181-copy-errores (PR #105 stays open, targeting main, no merge performed)
 
 #### [OIR-186] pr-comment-responder — Codex review fixes (PR #99)
 - [19:45] Task start: responding to 2 Codex inline comments on fix/oir-186-buscas-settings-p1
