@@ -223,7 +223,7 @@ describe("AppShell — recovery mode", () => {
     renderShell({ isRecoveryMode: true });
     expect(
       screen.getByText(
-        "El directorio está bloqueado hasta importar una copia JSON válida o restablecer un dataset vacío."
+        "El directorio está bloqueado hasta importar una copia JSON válida o restablecer un listado vacío."
       )
     ).toBeInTheDocument();
   });
