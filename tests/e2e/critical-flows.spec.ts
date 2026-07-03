@@ -100,8 +100,8 @@ test.describe("OIR-22 critical MVP flows", () => {
       await expect(page.getByText("Exportación completada.")).toBeVisible();
       await expect(fs.access(exportPath)).resolves.toBeUndefined();
 
-      await page.getByRole("button", { name: /Crear backup/i }).click();
-      await expect(page.getByText("Backup creado.")).toBeVisible();
+      await page.getByRole("button", { name: /Crear copia de seguridad/i }).click();
+      await expect(page.getByText("Copia de seguridad creada.")).toBeVisible();
       await expect(listBackupFiles(workspace.userDataPath)).resolves.toHaveLength(1);
 
       await page.getByRole("button", { name: /Importar JSON/i }).click();
