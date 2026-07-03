@@ -90,11 +90,11 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("main")).toHaveClass("focus-ring");
   });
 
-  it("focuses directory search with slash when focus is not in text entry", () => {
+  it("focuses data-page-search input with slash when focus is not in text entry", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-page-search aria-label="Buscar contactos" />
         </AppShell>
       </MemoryRouter>
     );
@@ -126,7 +126,7 @@ describe("AppShell — default mode", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>
-          <input id="directory-search" aria-label="Buscar contactos" />
+          <input data-page-search aria-label="Buscar contactos" />
           <input aria-label="Campo activo" />
         </AppShell>
       </MemoryRouter>

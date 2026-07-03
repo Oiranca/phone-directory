@@ -602,7 +602,13 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   <div className="mb-3 flex items-start gap-3">
                     <input
                       type="checkbox"
-                      aria-label={`Seleccionar ${conflict.importedRecord.displayName ?? "conflicto"} (fila ${conflict.recordIndex + 1})`}
+                      // Always append the 1-based conflict index so the accessible name stays
+                      // unique even when two imported rows share the same displayName.
+                      aria-label={
+                        conflict.importedRecord.displayName
+                          ? `Seleccionar ${conflict.importedRecord.displayName} (conflicto ${conflict.recordIndex + 1})`
+                          : `Seleccionar conflicto ${conflict.recordIndex + 1}`
+                      }
                       checked={isSelected}
                       disabled={isMutating}
                       onChange={() => handleToggleOne(conflict.recordIndex)}
