@@ -36,7 +36,6 @@ import {
   normalizeAscii,
   isExcludedLabel,
   parseSiNoFlag,
-  inferAreaFromLabel,
 } from "./spreadsheet-normalize.js";
 import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
@@ -658,6 +657,68 @@ export const normalizeServiceSheet = (
 // ---------------------------------------------------------------------------
 
 /**
+ * OIR-224 — Categoría -> RecordType mapping for the Agenda tabular import
+ * path.
+ *
+ * Distinct "Categoría" values extracted directly from the hospital's real
+ * Agenda ODS export (23 values, verified against the source file). Keys are
+ * normalized with normalizeDisplayNameForMerge (trim + lowercase +
+ * diacritic-strip + collapse whitespace) so accidental case variants in the
+ * source data (e.g. "Jefe/a De Estudio" vs "Jefe/a de estudio") resolve to
+ * the same entry.
+ *
+ * THIS MAPPING IS A PROPOSED DEFAULT, NOT A FINAL PRODUCT DECISION — it is
+ * intentionally a reasonable best-guess mapping to unblock the Agenda import
+ * path, but it requires explicit user sign-off before being considered
+ * settled (see OIR-224 task notes). Roles denoting a specific individual's
+ * job function (nurse, doctor, secretary, technician, etc.) map to "person";
+ * roles denoting a leadership/oversight function (chief, supervisor,
+ * director, ward-study lead, etc.) map to "supervision", consistent with the
+ * existing displayName-keyword heuristic already mapping the substring
+ * "supervisi" to "supervision" (see classifyType above).
+ */
+export const AGENDA_CATEGORIA_TYPE_MAP: Record<string, string> = {
+  "enfermero/a": "person",
+  "doctora/or": "person",
+  "secretario/a": "person",
+  "jefe/a": "supervision",
+  "administrativo/a": "person",
+  "supervisor/a": "supervision",
+  "tecnico/a": "person",
+  "fotografo/a": "person",
+  "informatica/o": "person",
+  "ilustrador/a": "person",
+  dietista: "person",
+  "auxiliar administrativo/a": "person",
+  "directora/or": "supervision",
+  "jefe/a de estudio": "supervision",
+  "encargado/a": "supervision",
+  "fisico/a": "person",
+  "subdirectora/or": "supervision",
+  "gobernante/a": "supervision",
+  auxiliar: "person",
+  "ingeniera/o": "person",
+  periodista: "person",
+  "axuliar tecnico sanitario/a": "person"
+};
+
+/**
+ * Resolves a NormalizedImportRow `type` for an Agenda-tabular row (OIR-224).
+ *
+ * Primary mechanism: look up the row's "Categoría" value (normalized) in
+ * AGENDA_CATEGORIA_TYPE_MAP. Falls back to the existing displayName-keyword
+ * heuristic (classifyType) only when Categoría is blank or has no mapped
+ * entry, so unmapped/blank rows keep the previously-established behavior
+ * instead of silently defaulting to something incorrect.
+ */
+const classifyAgendaType = (categoria: string, displayName: string, canonicalSlug: string): string => {
+  const key = normalizeDisplayNameForMerge(categoria);
+  const mapped = key ? AGENDA_CATEGORIA_TYPE_MAP[key] : undefined;
+
+  return mapped ?? classifyType(displayName, canonicalSlug);
+};
+
+/**
  * Canonical 17-column header for the hospital's real "Agenda" ODS export:
  * Nombre, Categoría, Servicio, Número 1..7, Horario, Confidencial, Edificio,
  * Planta, Sector, Sección, Comentarios. Compared against a sheet's first row
@@ -813,9 +874,18 @@ export const normalizeTabularAgendaSheet = (
     const record = blankRecord();
 
     record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([String(rowIndex), displayName, servicio])}`;
-    record.type = classifyType(displayName, profile.canonicalSlug);
+    // OIR-224: Categoría is now the PRIMARY type-inference mechanism for the
+    // Agenda path (see classifyAgendaType/AGENDA_CATEGORIA_TYPE_MAP above);
+    // the displayName-keyword heuristic (classifyType) is kept only as a
+    // fallback for rows with a blank or unmapped Categoría value.
+    record.type = classifyAgendaType(categoria, displayName, profile.canonicalSlug);
     record.displayName = displayName;
-    record.area = inferAreaFromLabel(servicio || displayName) ?? "";
+    // OIR-224: the real Agenda ODS has no genuine Área column — inferring one
+    // from Servicio/displayName produced wrong slug-like guesses (e.g.
+    // "gestion-administracion" guessed from an unrelated label). Agenda-
+    // imported records get a blank área instead; área remains an optional
+    // field elsewhere in the schema/UI.
+    record.area = "";
     record.service = servicio;
     record.role = categoria;
     record.schedule = horario;
@@ -860,13 +930,61 @@ export const normalizeTabularAgendaSheet = (
 // ---------------------------------------------------------------------------
 
 /**
- * Merges service-sheet NormalizedImportRows that share the same normalized
- * displayName (trim + lowercase + strip diacritics) into a single row.
+ * Builds the composite identity key used by mergeRecordsByDisplayName (OIR-224).
  *
- * Merge rules (confirmed with operator):
- * - Identity key: exact normalized displayName equality only (no fuzzy match).
+ * Root cause fixed here: the Agenda tabular parser falls back to the
+ * "Servicio" column value for displayName whenever "Nombre" is blank (the
+ * common case for most rows). Two GENUINELY DISTINCT rows — e.g. "Bioquímica"
+ * (general line) and "Bioquímica" (Despacho/office line, confidential) — can
+ * therefore share the exact same displayName purely because they share the
+ * same Servicio value, even though they are different desks/entities with
+ * different phones and a different confidentiality status. Merging them by
+ * displayName alone silently bleeds a confidential flag from one onto the
+ * other (over- or under-flagging depending on dedup order).
+ *
+ * Fix: identity now requires displayName equality AND a location/service
+ * discriminator (organization.service + building/floor/sector/section) to
+ * also match. Rows that share only an inherited/Servicio-derived name but
+ * differ on the discriminator are treated as separate entities and never
+ * merged. All discriminator components are run through the same
+ * normalizeDisplayNameForMerge fold (trim + lowercase + diacritic-strip) as
+ * displayName itself, so trivial accent/case differences between sheets (see
+ * the "accent-normalizes displayName" cross-sheet golden test) do not cause
+ * spurious over-splitting of genuinely-same-entity rows.
+ */
+const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
+  const displayNameKey = normalizeDisplayNameForMerge(record.displayName);
+
+  if (!displayNameKey) {
+    return "";
+  }
+
+  const serviceKey = normalizeDisplayNameForMerge(record.service ?? "");
+  const buildingKey = normalizeDisplayNameForMerge(record.building ?? "");
+  const floorKey = normalizeDisplayNameForMerge(record.floor ?? "");
+  const sectorKey = normalizeDisplayNameForMerge(record.sector ?? "");
+  const sectionKey = normalizeDisplayNameForMerge(record.section ?? "");
+
+  return [displayNameKey, serviceKey, buildingKey, floorKey, sectorKey, sectionKey].join("::");
+};
+
+/**
+ * Merges service-sheet NormalizedImportRows that share the same normalized
+ * displayName (trim + lowercase + strip diacritics) AND the same
+ * service/location discriminator (OIR-224 — see buildMergeIdentityKey) into
+ * a single row.
+ *
+ * Merge rules (confirmed with operator; refined OIR-224):
+ * - Identity key: normalized displayName equality AND normalized
+ *   service+building+floor+sector+location equality (no fuzzy match).
+ *   Rows with the same displayName but a different discriminator remain
+ *   separate records — see buildMergeIdentityKey for why this matters.
  * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
- *   digit string; keep first occurrence. Each phone retains the source sheet
+ *   digit string; keep first occurrence's position, but OR the
+ *   confidential/noPatientSharing flags across every duplicate occurrence of
+ *   the same number (OIR-224 — a confidential duplicate must never be
+ *   silently dropped just because a non-confidential duplicate of the same
+ *   number was processed first or last). Each phone retains the source sheet
  *   label it was tagged with in normalizeServiceSheet.
  * - externalId: the FIRST record's externalId is kept (deterministic, stable
  *   across re-imports of the same file PROVIDED sheet order in the workbook is
@@ -884,7 +1002,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       continue;
     }
 
-    const key = normalizeDisplayNameForMerge(record.displayName);
+    const key = buildMergeIdentityKey(record);
 
     if (!key) {
       continue;
@@ -910,7 +1028,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       continue;
     }
 
-    const key = normalizeDisplayNameForMerge(record.displayName);
+    const key = buildMergeIdentityKey(record);
 
     if (!key) {
       result.push(record);
@@ -938,7 +1056,12 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       noPatientSharing: boolean;
       notes?: string;
     }> = [];
-    const seenNormalized = new Set<string>();
+    // OIR-224: maps a normalized digit string to its index in combinedPhones,
+    // so that when the SAME number appears more than once in the group being
+    // merged, we can OR its confidential/noPatientSharing flags into the
+    // already-kept entry instead of silently discarding a later (or earlier)
+    // duplicate's flags. A confidential duplicate must always win.
+    const seenNormalized = new Map<string, number>();
 
     for (const groupRecord of group) {
       let entries: Array<{
@@ -963,10 +1086,28 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       for (const entry of entries) {
         const normalized = normalizeNumberForDedup(entry.number);
 
-        if (normalized && !seenNormalized.has(normalized)) {
-          seenNormalized.add(normalized);
-          combinedPhones.push(entry);
+        if (!normalized) {
+          continue;
         }
+
+        const existingIndex = seenNormalized.get(normalized);
+
+        if (existingIndex === undefined) {
+          seenNormalized.set(normalized, combinedPhones.length);
+          combinedPhones.push(entry);
+          continue;
+        }
+
+        // Duplicate occurrence of a number already kept: OR the privacy
+        // flags in rather than discarding this occurrence's flags (OIR-224
+        // defense-in-depth — never let a confidential duplicate get dropped
+        // because a public duplicate of the same number was kept first).
+        const existing = combinedPhones[existingIndex]!;
+        combinedPhones[existingIndex] = {
+          ...existing,
+          confidential: existing.confidential || entry.confidential,
+          noPatientSharing: existing.noPatientSharing || entry.noPatientSharing
+        };
       }
     }
 

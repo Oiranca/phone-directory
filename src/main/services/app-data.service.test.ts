@@ -4238,7 +4238,23 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        const result = await service.importCsvDataset(realOdsPath!);
+        // OIR-224 (merge-discriminator fix): correctly splitting rows that used to
+        // wrongly collapse by displayName alone (see spreadsheet-parsers.ts
+        // mergeRecordsByDisplayName) surfaces a small number of genuine intra-batch
+        // duplicate-phone matches even on a FRESH import (e.g. two real rows for the
+        // same person "Malena" under two different Servicio headings, both with the
+        // same extension) — AppDataService's own conflict-detection layer
+        // (buildStableMergeKeys / detectConflicts) treats those as resolvable
+        // conflicts requiring an explicit policy, same as it always has for any
+        // duplicate phone number. Resolve them all with "merge-fields" (the least
+        // lossy policy) so this test can assert on the unrelated Admisión Central
+        // rows below.
+        const preview = await service.previewCsvImport(realOdsPath!);
+        const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const result = await service.importCsvDataset(realOdsPath!, policySelections);
 
         const notConfidential = result.contacts.records.find(
           (record) => record.displayName.trim() === "Admisión Central"
@@ -4264,7 +4280,15 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        const first = await service.importCsvDataset(realOdsPath!);
+        // OIR-224 (merge-discriminator fix): see the "fresh import" test above for
+        // why the initial import also needs its (now correctly-surfaced) intra-batch
+        // duplicate-phone conflicts resolved before it can proceed.
+        const firstPreview = await service.previewCsvImport(realOdsPath!);
+        const firstPolicySelections = (firstPreview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const first = await service.importCsvDataset(realOdsPath!, firstPolicySelections);
 
         // Simulate stale/legacy data: flip both flags so they are WRONG relative
         // to the real source — mirrors a record imported before OIR-222's

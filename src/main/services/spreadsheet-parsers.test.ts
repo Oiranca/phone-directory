@@ -650,4 +650,82 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records).toHaveLength(2);
     expect(records[0]!.externalId).not.toBe(records[1]!.externalId);
   });
+
+  // -------------------------------------------------------------------------
+  // OIR-224 — Categoría -> type mapping (primary, with heuristic fallback)
+  // -------------------------------------------------------------------------
+
+  it("maps a known Categoría value ('Enfermero/a') to type 'person' (OIR-224 primary mechanism)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Alergia", categoria: "Enfermero/a", numero1: "79198" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("person");
+  });
+
+  it("maps a known leadership Categoría value ('Jefe/a') to type 'supervision' (OIR-224 primary mechanism)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Almacén", categoria: "Jefe/a", numero1: "70263" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("supervision");
+  });
+
+  it("matches a Categoría value case-insensitively (real-file case variant 'Jefe/a de estudio' vs 'Jefe/a De Estudio')", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Test", categoria: "jefe/a de estudio", numero1: "11111" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("supervision");
+  });
+
+  it("falls back to the displayName-keyword heuristic (classifyType) when Categoría is blank", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Supervisión de Enfermería", numero1: "22222" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    // No Categoría mapping applies (blank) — falls back to classifyType,
+    // which maps the "supervisi" substring in displayName to "supervision".
+    expect(records[0]!.type).toBe("supervision");
+  });
+
+  it("falls back to the displayName-keyword heuristic (classifyType) when Categoría has no mapped entry", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Sala De Espera", categoria: "Un Valor Sin Mapear", numero1: "33333" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    // Unmapped Categoría — falls back to classifyType, which maps the "sala"
+    // prefix in displayName to "room".
+    expect(records[0]!.type).toBe("room");
+  });
+
+  it("still populates role from Categoría even when Categoría also drives type (OIR-222 behavior preserved)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Enfermedades Emergentes (Despacho)", categoria: "Auxiliar Administrativo/a", numero1: "75340" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.role).toBe("Auxiliar Administrativo/a");
+    expect(records[0]!.type).toBe("person");
+  });
+
+  // -------------------------------------------------------------------------
+  // OIR-224 — área is left blank for Agenda-imported records
+  // -------------------------------------------------------------------------
+
+  it("leaves área blank instead of guessing one from Servicio/displayName (no genuine Área column in the real file)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      // "Admisión" would previously have driven inferAreaFromLabel to guess
+      // "gestion-administracion" — that guess must no longer happen.
+      agendaRow({ servicio: "Admisión Central", numero1: "79649" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.area).toBe("");
+  });
 });

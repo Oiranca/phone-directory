@@ -641,6 +641,95 @@ describe("golden: cross-sheet merge by displayName", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. OIR-224 — merge discriminator fix (confidential-flag bleed regression)
+// ---------------------------------------------------------------------------
+//
+// Root cause (confirmed against the hospital's real Agenda ODS file): the
+// tabular Agenda parser falls back to the "Servicio" column for displayName
+// whenever "Nombre" is blank. Two rows for the SAME Servicio value but
+// DIFFERENT sub-desks (e.g. the real file's "Bioquímica" general line vs its
+// "Bioquímica" Despacho/office line, which IS marked Confidencial="Si") used
+// to collapse into a single merged card via mergeRecordsByDisplayName,
+// letting the confidential flag from one sub-desk bleed onto the other.
+describe("golden: OIR-224 merge discriminator (service+location) fix", () => {
+  it("does NOT merge two Agenda rows that share displayName/Servicio but differ on Sección (confidential must not bleed across genuinely distinct desks)", () => {
+    // Real-file shape: "Bioquímica" (general, non-confidential, ext. 79502)
+    // vs "Bioquímica" (Despacho, Confidencial=Si, ext. 79951).
+    const filePath = writeWorkbook(testRoot, "agenda-bioquimica.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Bioquímica", "79502", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "Doctora/or", "Bioquímica", "79951", "", "", "", "", "", "", "", "Si", "", "", "", "Despacho", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const bioquimica = result.rows.filter((r) => r.displayName === "Bioquímica");
+
+    // Must remain TWO separate records — not merged into one.
+    expect(bioquimica).toHaveLength(2);
+
+    const general = bioquimica.find((r) => r.phone1Number === "79502")!;
+    const despacho = bioquimica.find((r) => r.phone1Number === "79951")!;
+
+    expect(general).toBeDefined();
+    expect(despacho).toBeDefined();
+    // The general line must NOT inherit the Despacho line's confidential flag.
+    expect(general.phone1Confidential).toBe("false");
+    expect(despacho.phone1Confidential).toBe("true");
+  });
+
+  it("still merges two Agenda rows that share displayName/Servicio AND the same location discriminator (legitimate multi-extension merge)", () => {
+    // Real-file shape: "Endoscopia" — two rows, same Servicio, no
+    // building/floor/sector/section on either — genuinely the same desk
+    // with two extensions, must still combine into one record.
+    const filePath = writeWorkbook(testRoot, "agenda-endoscopia.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Endoscopia", "11111", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "Endoscopia", "22222", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const endoscopia = result.rows.filter((r) => r.displayName === "Endoscopia");
+    expect(endoscopia).toHaveLength(1);
+
+    const phones = JSON.parse(endoscopia[0]!.phones!) as SerializedPhoneEntry[];
+    expect(phones.map((p) => p.number)).toEqual(expect.arrayContaining(["11111", "22222"]));
+  });
+
+  it("ORs the confidential flag across duplicate phone numbers within a legitimate merge instead of dropping it (defense in depth)", () => {
+    // Same displayName/Servicio/location (legitimate merge), same phone number
+    // repeated with mismatched Confidencial markers across the two rows — the
+    // merged entry must end up confidential=true regardless of row order.
+    const filePath = writeWorkbook(testRoot, "agenda-dup-phone-confidential.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Farmacia Interna", "33333", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "Farmacia Interna", "33333", "", "", "", "", "", "", "", "Si", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const farmacia = result.rows.filter((r) => r.displayName === "Farmacia Interna");
+    expect(farmacia).toHaveLength(1);
+    expect(farmacia[0]!.phone1Confidential).toBe("true");
+  });
+
+  it("ORs the confidential flag when the confidential duplicate is processed FIRST (order-independence)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-dup-phone-confidential-reversed.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Farmacia Interna", "44444", "", "", "", "", "", "", "", "Si", "", "", "", "", ""],
+        ["", "", "Farmacia Interna", "44444", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const farmacia = result.rows.filter((r) => r.displayName === "Farmacia Interna");
+    expect(farmacia).toHaveLength(1);
+    expect(farmacia[0]!.phone1Confidential).toBe("true");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Error paths and boundary conditions
 // ---------------------------------------------------------------------------
 
