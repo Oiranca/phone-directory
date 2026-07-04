@@ -619,17 +619,20 @@ export const DirectoryPage = () => {
       <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
         
         {/* Left Column: Results List */}
-        <div className="flex flex-col gap-3">
-          {/* OIR-218: bounded to the available viewport height so a full page of
-              results never forces page-level scroll — pagination below handles
-              the rest. Only scrolls internally on the rare viewport where even
-              one page of results doesn't fit. */}
+        {/* OIR-218 (fix): the height budget is bounded on THIS column, not just the
+            <ul>, so the pagination nav below is always part of the same bounded
+            box and never pushed below the fold. The <ul> is a flex child
+            (flex-1 min-h-0) that only shrinks and scrolls internally for the
+            leftover space once the (always-visible) pagination nav is accounted
+            for — previously the nav sat outside the bounded area entirely, so it
+            was only reachable via page-level scroll that the internal list's own
+            scrollbar silently absorbed. */}
+        <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 flex-col gap-3">
           <ul
             ref={listRef}
             onKeyDown={handleListKeyDown}
             aria-label="Resultados del directorio"
-            style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
-            className="flex flex-col gap-3 overflow-y-auto pr-1"
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1"
           >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
@@ -683,17 +686,17 @@ export const DirectoryPage = () => {
           })}
           </ul>
           {visibleRecords.length === 0 && contacts.records.length === 0 && (
-            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               La agenda está vacía. Añade el primer contacto para empezar.
             </div>
           )}
           {visibleRecords.length === 0 && contacts.records.length > 0 && (
-            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               No se han encontrado resultados para esta búsqueda.
             </div>
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
-            <nav aria-label="Paginación de resultados" className="rounded-2xl border border-slate-200 bg-white p-2">
+            <nav aria-label="Paginación de resultados" className="shrink-0 rounded-2xl border border-slate-200 bg-white p-2">
               <div className="flex flex-wrap items-center justify-center gap-1.5">
                 <button
                   type="button"

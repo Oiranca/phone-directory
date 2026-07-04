@@ -255,7 +255,14 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       <main
         id="main-content"
         tabIndex={-1}
-        className="focus-ring mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+        // OIR-218 fix: `<main>` receives programmatic focus on every route change
+        // (T1, above) purely so assistive tech announces the new page — it must
+        // NOT show the shared `focus-ring` visual treatment. Since OIR-218 bounds
+        // this element's height to (almost exactly) the viewport, that ring's
+        // left/right edges rendered as two full-viewport-height vertical blue
+        // lines flanking the page on every load. `focus:outline-none` alone still
+        // suppresses the native focus outline without introducing a visible ring.
+        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
       >
         {children}
       </main>

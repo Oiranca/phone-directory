@@ -123,7 +123,12 @@ describe("AppShell — default mode", () => {
     renderShell();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(screen.getByRole("main")).toHaveAttribute("tabIndex", "-1");
-    expect(screen.getByRole("main")).toHaveClass("focus-ring");
+    // OIR-218 fix: main must suppress the native outline (still true) but must NOT
+    // use the shared `focus-ring` utility — with the bounded-height layout, that
+    // ring rendered as full-viewport-height vertical blue lines on every route
+    // change (main.focus() below always sets focus-visible for this container).
+    expect(screen.getByRole("main")).toHaveClass("focus:outline-none");
+    expect(screen.getByRole("main")).not.toHaveClass("focus-ring");
   });
 
   it("focuses data-page-search input with slash when focus is not in text entry", () => {

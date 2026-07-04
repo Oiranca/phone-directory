@@ -1573,6 +1573,90 @@ describe("AppDataService", () => {
     expect(restoreResult.settings.lastImportedAt).toBeUndefined();
   });
 
+  it("backfills lastImportedAt from a historical bulk-import audit entry on bootstrap", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const historicalTimestamp = "2026-01-05T10:00:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: historicalTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 12 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(historicalTimestamp);
+    const persistedSettings = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+    ) as { lastImportedAt?: string };
+    expect(persistedSettings.lastImportedAt).toBe(historicalTimestamp);
+  });
+
+  it("backfills lastImportedAt from the most recent of several dataset-replace/bulk-import audit entries", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const olderTimestamp = "2025-11-01T08:00:00.000Z";
+    const newerTimestamp = "2026-02-20T16:30:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: olderTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 5 },
+        { timestamp: newerTimestamp, editor: "Samuel", action: "dataset-replace", recordsAffected: 40 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(newerTimestamp);
+  });
+
+  it("leaves lastImportedAt unset when the audit log has no historical import entry", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBeUndefined();
+  });
+
+  it("does not overwrite an existing lastImportedAt with an audit-log backfill", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+    const importResult = await service.importDataset(sourceFilePath);
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: "2020-01-01T00:00:00.000Z", editor: "Samuel", action: "dataset-replace", recordsAffected: 1 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+  });
+
   it("restores a selected backup and creates a safety backup first", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

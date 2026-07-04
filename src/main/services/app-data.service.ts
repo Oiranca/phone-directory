@@ -110,7 +110,7 @@ export class AppDataService {
 
   async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
-    const settings = await this.readSettings(true);
+    const settings = await this.backfillLastImportedAtFromAuditLog(await this.readSettings(true));
     const contactsFilePath = settings.dataFilePath;
 
     try {
@@ -787,6 +787,48 @@ export class AppDataService {
     const nextSettings: AppSettings = { ...settings, lastImportedAt: timestamp };
     await writeJsonFile(getSettingsFilePath(), nextSettings);
     return nextSettings;
+  }
+
+  /**
+   * OIR-218 (item 4): one-time backfill for datasets that were imported before
+   * lastImportedAt existed. If the current settings have no lastImportedAt,
+   * check the audit log for a historical "bulk-import" or "dataset-replace"
+   * entry (both are written by importCsvDataset / importDataset respectively)
+   * and, if one exists, persist the most recent such timestamp as
+   * lastImportedAt so the header watermark can show it going forward.
+   *
+   * If the audit log has no such entry (e.g. the dataset predates audit
+   * logging, or the log was reset), lastImportedAt is intentionally left
+   * unset — we never fabricate a timestamp. The user only sees the watermark
+   * after their next real import.
+   *
+   * Best-effort: any audit-log read failure (including a quarantined/corrupt
+   * log) must not block bootstrap, so failures here are swallowed.
+   */
+  private async backfillLastImportedAtFromAuditLog(settings: AppSettings): Promise<AppSettings> {
+    if (settings.lastImportedAt) {
+      return settings;
+    }
+
+    try {
+      const [bulkImportResult, datasetReplaceResult] = await Promise.all([
+        this.auditFacade.getAuditLog({ action: "bulk-import" }),
+        this.auditFacade.getAuditLog({ action: "dataset-replace" })
+      ]);
+
+      const candidateTimestamps = [bulkImportResult.entries[0]?.timestamp, datasetReplaceResult.entries[0]?.timestamp]
+        .filter((timestamp): timestamp is string => Boolean(timestamp))
+        .sort();
+      const latestTimestamp = candidateTimestamps[candidateTimestamps.length - 1];
+
+      if (!latestTimestamp) {
+        return settings;
+      }
+
+      return await this.recordLastImportedAt(settings, latestTimestamp);
+    } catch {
+      return settings;
+    }
   }
 
   private async readContacts(settings: AppSettings) {
