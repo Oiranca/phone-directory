@@ -1,4 +1,4 @@
-import { BrowserWindow, app, session } from "electron";
+import { BrowserWindow, app, nativeImage, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
@@ -115,6 +115,16 @@ const bootstrap = async () => {
 };
 
 app.whenReady().then(() => {
+  // BrowserWindow's `icon` option does not affect the macOS Dock icon, and
+  // `pnpm run dev` runs the stock Electron binary rather than a packaged
+  // .app with an embedded icon, so the Dock falls back to the Electron
+  // logo. Set it explicitly here for a better dev-mode experience; the
+  // packaged build already gets the correct icon from electron-builder's
+  // "build.mac.icon" config, so this must stay dev-only.
+  if (process.platform === "darwin" && !app.isPackaged) {
+    app.dock?.setIcon(nativeImage.createFromPath(APP_ICON_PATH));
+  }
+
   void bootstrap().catch((error) => {
     console.error(error);
     app.quit();
