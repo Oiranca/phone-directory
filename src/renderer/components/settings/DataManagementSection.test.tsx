@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultContacts } from "../../shared/fixtures/defaultContacts";
-import { ToastProvider } from "../components/feedback/ToastRegion";
-import { ImportExportPage } from "./ImportExportPage";
-import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
+import { defaultContacts } from "../../../shared/fixtures/defaultContacts";
+import { ToastProvider } from "../feedback/ToastRegion";
+import { DataManagementSection } from "./DataManagementSection";
+import { useAppStore, resetBootstrapInFlight } from "../../store/useAppStore";
 
 const originalHTMLDialogElement = globalThis.HTMLDialogElement;
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
@@ -88,12 +88,12 @@ const renderPage = () =>
   render(
     <ToastProvider>
       <MemoryRouter>
-        <ImportExportPage />
+        <DataManagementSection />
       </MemoryRouter>
     </ToastProvider>
   );
 
-describe("ImportExportPage", () => {
+describe("DataManagementSection (OIR-219 — Configuración data section)", () => {
   beforeEach(() => {
     resetStore();
     Object.defineProperty(window, "hospitalDirectory", {
@@ -232,7 +232,7 @@ describe("ImportExportPage", () => {
   it("loads backup inventory and current dataset summary", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     // PathDisplay renders the basename twice: once in the heading <p> and once in the
     // PathDisplay component itself — both showing "contacts-1.json".
     expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
@@ -243,7 +243,7 @@ describe("ImportExportPage", () => {
   it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
     const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
     const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
@@ -259,7 +259,7 @@ describe("ImportExportPage", () => {
   it("OIR-188: shows the Import JSON card warning in plain natural Spanish (no bolted-on label)", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar."
@@ -270,7 +270,7 @@ describe("ImportExportPage", () => {
   it("creates a backup and shows success feedback", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     await waitFor(() => {
@@ -286,7 +286,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Crear copia de seguridad/ }));
 
     expect(
@@ -297,7 +297,7 @@ describe("ImportExportPage", () => {
   it("exports the dataset and shows completion feedback", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
 
     await waitFor(() => {
@@ -313,7 +313,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
 
     expect(
@@ -324,7 +324,7 @@ describe("ImportExportPage", () => {
   it("imports a dataset after confirmation and refreshes the store", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.",
@@ -361,13 +361,13 @@ describe("ImportExportPage", () => {
       settings: editableSettings
     });
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
   });
 
   it("calls ensureBootstrapLoaded on mount then loads backups (direct route entry)", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
@@ -385,7 +385,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
   });
@@ -407,7 +407,7 @@ describe("ImportExportPage", () => {
   it("shows a backup refresh error instead of throwing on rejection", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     window.hospitalDirectory.listBackups = vi.fn().mockRejectedValue(new Error("broken refresh"));
 
     fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
@@ -435,7 +435,7 @@ describe("ImportExportPage", () => {
   it("previews a spreadsheet file and imports it after confirmation", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
@@ -514,7 +514,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Conflictos (1)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
@@ -588,7 +588,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -653,7 +653,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
@@ -733,7 +733,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(
@@ -794,7 +794,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(
@@ -845,7 +845,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
@@ -868,7 +868,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     expect(
@@ -882,7 +882,7 @@ describe("ImportExportPage", () => {
   it("restores a listed backup after dialog confirmation", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
@@ -906,7 +906,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
@@ -926,7 +926,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
 
@@ -963,7 +963,7 @@ describe("ImportExportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
 
     const confirmButton = await screen.findByRole("button", { name: "Restaurar copia de seguridad" });
@@ -1013,14 +1013,14 @@ describe("ImportExportPage", () => {
     // Ensure the happy path: both contacts and settings non-null → listBackups fires.
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
   });
 
   it("moves focus to the panel heading when the CSV import preview panel opens", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // useLayoutEffect fires synchronously after the DOM update — no timer involved
@@ -1033,7 +1033,7 @@ describe("ImportExportPage", () => {
   it("returns focus to the trigger button when the CSV preview panel closes", async () => {
     renderPage();
 
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
     const triggerButton = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
     fireEvent.click(triggerButton);
@@ -1056,7 +1056,7 @@ describe("ImportExportPage", () => {
     renderPage();
 
     // Wait for initial load to complete
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
 
     // Simulate a contacts mutation (e.g. post-import store update)
@@ -1103,7 +1103,7 @@ describe("ImportExportPage", () => {
     window.hospitalDirectory.previewCsvImport = vi.fn().mockReturnValue(pendingPreview);
 
     renderPage();
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
@@ -1163,7 +1163,7 @@ describe("ImportExportPage", () => {
     });
 
     renderPage();
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // Wait for the preview panel to load
@@ -1180,7 +1180,7 @@ describe("ImportExportPage", () => {
     // Default mock already has detectionConfidence="medium" and conflictCount=0.
     // OIR-188: confidence note moved from toast to panel.
     renderPage();
-    expect(await screen.findByText("Importar y exportar datos")).toBeInTheDocument();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
 
     // Wait for panel to appear (preview received)

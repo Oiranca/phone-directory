@@ -48,8 +48,8 @@ const conflictCsv = (displayName: string, phone: string) =>
  * and wait for the preview panel to appear.
  */
 const openPreview = async (page: import("@playwright/test").Page) => {
-  await page.getByRole("link", { name: "Importar/Exportar" }).click();
-  await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
+  await page.getByRole("link", { name: "Configuración" }).click();
+  await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
   await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
   await expect(page.getByText("Vista previa importación")).toBeVisible();
 };
@@ -319,8 +319,8 @@ test.describe("OIR-103 CSV import conflict-resolution flows", () => {
 
     try {
       await waitForDirectory(page);
-      await page.getByRole("link", { name: "Importar/Exportar" }).click();
-      await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
+      await page.getByRole("link", { name: "Configuración" }).click();
+      await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
       // Invoke importCsvDataset with a bogus token — the IPC handler should
       // reject because no pending import exists for that token.

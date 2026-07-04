@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { PathDisplay } from "../components/feedback/PathDisplay";
 import { useToast } from "../components/feedback/ToastRegion";
+import { DataManagementSection } from "../components/settings/DataManagementSection";
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
 
@@ -550,6 +551,8 @@ export const SettingsPage = () => {
           </div>
         </aside>
       </div>
+
+      <DataManagementSection />
     </section>
   );
 };

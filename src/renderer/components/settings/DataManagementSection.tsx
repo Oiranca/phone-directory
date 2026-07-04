@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../shared/types/contact";
-import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
-import { CsvImportPreviewPanel } from "../components/feedback/CsvImportPreviewPanel";
-import { PathDisplay } from "../components/feedback/PathDisplay";
-import { useToast } from "../components/feedback/ToastRegion";
-import { useAppStore } from "../store/useAppStore";
-import { toCompactToastMessage } from "../utils/toastMessage";
+import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
+import { ConfirmDialog } from "../feedback/ConfirmDialog";
+import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
+import { PathDisplay } from "../feedback/PathDisplay";
+import { useToast } from "../feedback/ToastRegion";
+import { useAppStore } from "../../store/useAppStore";
+import { toCompactToastMessage } from "../../utils/toastMessage";
 
 const formatTimestamp = (value: string) => {
   const date = new Date(value);
@@ -37,7 +37,24 @@ type PendingConfirmation =
   | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
   | { kind: "restore-backup"; backup: BackupListItem };
 
-export const ImportExportPage = () => {
+/**
+ * OIR-219 — "Datos e importación" section of the Configuración page.
+ *
+ * This used to be the standalone "Importar/Exportar" page (see the removed
+ * `ImportExportPage`). It now lives as a section inside Configuración.
+ *
+ * Card consolidation:
+ * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
+ *   "Exportar JSON" actions into a single card (primary + secondary action).
+ * - "Importar" groups the JSON full-replace entry point and the CSV/ODS/XLS/XLSX
+ *   normalize/validate/preview entry point under a single card. Note: this is
+ *   still two explicit actions inside the card, not a single extension-based
+ *   dispatcher — see OIR-219 handoff notes for why a true single unified file
+ *   picker was not implemented in this pass (it would require changing the
+ *   IPC contract shape of importDataset/previewCsvImport, which was flagged
+ *   for a team-lead decision instead of being resolved unilaterally here).
+ */
+export const DataManagementSection = () => {
   const { contacts, settings, initialize, isLoading: storeIsLoading, bootstrapStatus, bootstrapError, ensureBootstrapLoaded } = useAppStore();
   const { pushToast } = useToast();
   const [backups, setBackups] = useState<BackupListItem[]>([]);
@@ -471,7 +488,12 @@ export const ImportExportPage = () => {
 
   return (
     <section className="space-y-6">
-      <h2 className="text-2xl font-semibold text-scs-blueDark">Importar y exportar datos</h2>
+      <div>
+        <h3 className="text-xl font-semibold text-scs-blueDark">Datos e importación</h3>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
+          Copias de seguridad, exportación e importación del directorio, y recuperación desde copias locales.
+        </p>
+      </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -490,66 +512,81 @@ export const ImportExportPage = () => {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => void handleCreateBackup()}
-            disabled={isMutating}
-            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
-          >
-            <p className="text-lg font-semibold text-scs-blueDark">Crear copia de seguridad</p>
+          {/* OIR-219: "Copia de seguridad" consolidates the former "Crear copia de
+              seguridad" and "Exportar JSON" cards into one, with the local backup
+              as the primary action and export-to-a-chosen-destination as the
+              secondary action. */}
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <p className="text-lg font-semibold text-scs-blueDark">Copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
-              Genera una copia inmediata del archivo de directorio actual en la carpeta local de copias de seguridad.
+              Genera una copia inmediata en la carpeta local de copias de seguridad, o exporta un JSON a un destino distinto.
             </p>
-            <p className="mt-4 text-sm font-semibold text-scs-blue">
-              {isCreatingBackup ? "Creando…" : "Crear ahora"}
-            </p>
-          </button>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void handleCreateBackup()}
+                disabled={isMutating}
+                className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {isCreatingBackup ? "Creando…" : "Crear copia de seguridad"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={isMutating}
+                className="focus-ring rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+              >
+                {isExporting ? "Exportando…" : "Exportar JSON"}
+              </button>
+            </div>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => void handleExport()}
-            disabled={isMutating}
-            className="focus-ring rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-scs-blue hover:bg-white disabled:opacity-60"
-          >
-            <p className="text-lg font-semibold text-scs-blueDark">Exportar JSON</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Guarda una copia del directorio listo para compartir o archivar fuera de la aplicación.
-            </p>
-            <p className="mt-4 text-sm font-semibold text-scs-blue">
-              {isExporting ? "Exportando…" : "Elegir destino"}
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPendingConfirmation({ kind: "import-json" })}
-            disabled={isMutating}
-            className="focus-ring rounded-3xl border border-amber-200 bg-amber-50 p-5 text-left transition hover:border-amber-400 hover:bg-amber-50/80 disabled:opacity-60"
-          >
-            <p className="text-lg font-semibold text-amber-900">Importar JSON</p>
+          {/* OIR-219: "Importar" groups the two existing entry points under one
+              card. A single extension-based dispatcher (one dropzone picking
+              .json/.csv/.ods/.xls/.xlsx and routing automatically) was scoped
+              for this card but requires changing the IPC contract shape of
+              importDataset()/previewCsvImport() (both are zero-argument calls
+              that always open their own native dialog) — flagged for a
+              team-lead decision rather than implemented unilaterally. See the
+              OIR-219 handoff notes. */}
+          <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
+            <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.
+              Elige el tipo de archivo a importar. JSON reemplaza todo el directorio; CSV/ODS/XLS/XLSX normaliza, valida y muestra una vista previa antes de aplicar cambios.
             </p>
-            <p className="mt-4 text-sm font-semibold text-amber-900">
-              {isImporting ? "Importando…" : "Seleccionar archivo"}
-            </p>
-          </button>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setPendingConfirmation({ kind: "import-json" })}
+                disabled={isMutating}
+                className="focus-ring rounded-2xl border border-amber-300 bg-white p-4 text-left transition hover:border-amber-400 disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold text-amber-900">Importar JSON</p>
+                <p className="mt-1 text-xs text-amber-900/70">
+                  Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.
+                </p>
+                <p className="mt-2 text-xs font-semibold text-amber-900">
+                  {isImporting ? "Importando…" : "Seleccionar archivo"}
+                </p>
+              </button>
 
-          <button
-            ref={triggerButtonRef}
-            type="button"
-            onClick={() => void handlePreviewCsvImport()}
-            disabled={isMutating}
-            className="focus-ring rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/80 disabled:opacity-60"
-          >
-            <p className="text-lg font-semibold text-emerald-900">Importar CSV/ODS</p>
-            <p className="mt-2 text-sm text-emerald-900/80">
-              Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
-            </p>
-            <p className="mt-4 text-sm font-semibold text-emerald-900">
-              {isPreparingCsvPreview ? "Analizando…" : "Seleccionar archivo"}
-            </p>
-          </button>
+              <button
+                ref={triggerButtonRef}
+                type="button"
+                onClick={() => void handlePreviewCsvImport()}
+                disabled={isMutating}
+                className="focus-ring rounded-2xl border border-emerald-300 bg-white p-4 text-left transition hover:border-emerald-400 disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold text-emerald-900">Importar CSV/ODS</p>
+                <p className="mt-1 text-xs text-emerald-900/70">
+                  Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
+                </p>
+                <p className="mt-2 text-xs font-semibold text-emerald-900">
+                  {isPreparingCsvPreview ? "Analizando…" : "Seleccionar archivo"}
+                </p>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* OIR-182 item 1: visible spinner while the file is being analysed */}

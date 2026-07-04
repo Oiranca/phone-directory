@@ -1,10 +1,9 @@
-import { createHashRouter } from "react-router-dom";
+import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { BuscasPage } from "../pages/BuscasPage";
 import { ContactFormPage } from "../pages/ContactFormPage";
 import { DeduplicatePage } from "../pages/DeduplicatePage";
 import { DirectoryPage } from "../pages/DirectoryPage";
-import { ImportExportPage } from "../pages/ImportExportPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { SettingsPage } from "../pages/SettingsPage";
 
@@ -26,8 +25,10 @@ export const router = createHashRouter([
         element: <ContactFormPage />
       },
       {
+        // OIR-219: Importar/Exportar was folded into Configuración as a
+        // section. Keep a redirect so old bookmarks/deep links still resolve.
         path: "import-export",
-        element: <ImportExportPage />
+        element: <Navigate to="/settings" replace />
       },
       {
         path: "settings",

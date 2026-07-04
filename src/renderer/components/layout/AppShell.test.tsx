@@ -29,21 +29,21 @@ afterEach(() => {
 });
 
 describe("AppShell — default mode", () => {
-  it("renders nav with all 4 links", () => {
+  it("renders nav with all 5 links", () => {
     renderShell();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Importar/Exportar" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
+    // OIR-219: "Importar/Exportar" was folded into Configuración; the tab no longer exists.
+    expect(screen.queryByRole("link", { name: "Importar/Exportar" })).not.toBeInTheDocument();
   });
 
   it("nav links have correct hrefs", () => {
     renderShell();
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
-    expect(screen.getByRole("link", { name: "Importar/Exportar" })).toHaveAttribute("href", "/import-export");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
@@ -51,10 +51,9 @@ describe("AppShell — default mode", () => {
     renderShell();
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("title", "Directorio — Alt+1");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
-    expect(screen.getByRole("link", { name: "Importar/Exportar" })).toHaveAttribute("title", "Importar/Exportar — Alt+3");
-    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+4");
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+5");
-    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("title", "Duplicados — Alt+6");
+    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
+    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
+    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("title", "Duplicados — Alt+5");
   });
 
   it("nav links keep the shared focus visibility class", () => {
@@ -239,7 +238,7 @@ describe("AppShell — default mode", () => {
       </MemoryRouter>
     );
 
-    fireEvent.keyDown(window, { code: "Digit4", key: "¡", altKey: true });
+    fireEvent.keyDown(window, { code: "Digit3", key: "¡", altKey: true });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/settings");
   });

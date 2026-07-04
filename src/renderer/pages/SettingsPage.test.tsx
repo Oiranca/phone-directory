@@ -81,7 +81,9 @@ describe("SettingsPage", () => {
         createBackup: vi.fn(),
         createRecord: vi.fn(),
         updateRecord: vi.fn(),
-        listBackups: vi.fn(),
+        // OIR-219: DataManagementSection (formerly the standalone Importar/Exportar
+        // page) now renders inside SettingsPage and calls listBackups() on mount.
+        listBackups: vi.fn().mockResolvedValue([]),
         exportDataset: vi.fn(),
         importDataset: vi.fn(),
         previewCsvImport: vi.fn(),

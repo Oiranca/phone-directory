@@ -39,10 +39,9 @@ const formatLastImportedAt = (value: string | undefined): string | null => {
 const navItems = [
   { to: "/", label: "Directorio", title: "Directorio — Alt+1" },
   { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2" },
-  { to: "/import-export", label: "Importar/Exportar", title: "Importar/Exportar — Alt+3" },
-  { to: "/settings", label: "Configuración", title: "Configuración — Alt+4" },
-  { to: "/buscas", label: "Buscas", title: "Buscas — Alt+5" },
-  { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+6" }
+  { to: "/settings", label: "Configuración", title: "Configuración — Alt+3" },
+  { to: "/buscas", label: "Buscas", title: "Buscas — Alt+4" },
+  { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+5" }
 ];
 
 const shortcutRoutes: Record<string, string> = {
@@ -50,14 +49,12 @@ const shortcutRoutes: Record<string, string> = {
   Numpad1: "/",
   Digit2: "/contacts/new",
   Numpad2: "/contacts/new",
-  Digit3: "/import-export",
-  Numpad3: "/import-export",
-  Digit4: "/settings",
-  Numpad4: "/settings",
-  Digit5: "/buscas",
-  Numpad5: "/buscas",
-  Digit6: "/deduplicate",
-  Numpad6: "/deduplicate"
+  Digit3: "/settings",
+  Numpad3: "/settings",
+  Digit4: "/buscas",
+  Numpad4: "/buscas",
+  Digit5: "/deduplicate",
+  Numpad5: "/deduplicate"
 };
 
 const isTextEntryElement = (target: EventTarget | null) => {
