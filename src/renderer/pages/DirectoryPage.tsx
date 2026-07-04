@@ -14,6 +14,11 @@ import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 // available viewport height instead of a hardcoded per-breakpoint guess.
 const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
 
+// The offset at which the sticky filter bar itself should stick — right below
+// the sticky app header. Must NOT include the filter bar's own height, or the
+// bar would push itself further down by that amount every time it renders.
+const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
+
 // The offset at which the results list / detail panel should start (right
 // below the sticky app header + sticky filter bar), and the vertical breathing
 // room (page padding + inter-section gaps) to subtract from 100vh when
@@ -452,7 +457,7 @@ export const DirectoryPage = () => {
           the results list/detail panel scroll. */}
       <div
         ref={filterBarRef}
-        style={{ top: STICKY_CONTENT_TOP }}
+        style={{ top: FILTER_BAR_STICKY_TOP }}
         className="sticky z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5"
       >
         <div className="flex flex-col gap-4">
