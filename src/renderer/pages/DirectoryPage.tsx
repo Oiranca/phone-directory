@@ -670,7 +670,25 @@ export const DirectoryPage = () => {
             // gives the 1px ring room to render fully on both sides; `-mx-1` cancels
             // that padding back out at the box level so the cards stay visually flush
             // with the pagination nav and other siblings below (same rendered width).
-            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 -mx-1"
+            //
+            // OIR-218 (follow-up): the same clipping happens on the TOP/BOTTOM edges
+            // — the scroll container's padding-box boundary (where scrolling starts
+            // and ends) clips the ring's box-shadow there too, most visibly on the
+            // first/last card. `py-1 -my-1` mirrors the horizontal fix vertically.
+            // This <ul> is `flex-1` with `flex-basis: 0%` inside a `min-h-0` flex
+            // column, so its rendered (margin-box) height is whatever main-axis space
+            // is left over after the sibling empty-state/pagination nav and `gap-3`
+            // are accounted for — that leftover amount is fixed by the flex layout,
+            // not by this element's own padding/margin. Pulling in `-my-1` frees up
+            // 4px top+bottom from the margin box, which flex-grow then hands straight
+            // back to this item's border-box height (net height unchanged), and
+            // `py-1` claims that same 4px as padding so the ring has room to render.
+            // The <ul>'s outer edges — and therefore the overall bounded column's
+            // height budget from BOUNDED_CONTENT_MAX_HEIGHT — are unaffected, so this
+            // cannot reintroduce the page-level scroll fixed by the max-height/
+            // min-h-0/overflow-y-auto pattern above (verified by the zero-page-scroll
+            // e2e assertion).
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-1 -mx-1 -my-1"
           >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
