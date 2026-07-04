@@ -165,4 +165,48 @@ test.describe("OIR-22 critical MVP flows", () => {
       await removeWorkspace(workspace);
     }
   });
+
+  test("OIR-218: Directory page has zero page-level vertical scroll at common viewport sizes", async () => {
+    // Regression guard for OIR-218's "sticky filter bar + bounded/paginated
+    // results list + bounded detail panel" layout: only the list/detail
+    // panel's own internal overflow-y-auto may scroll — the document itself
+    // must always fit exactly within the viewport, at any window size.
+    const workspace = await createWorkspace("zero-page-scroll");
+    const { electronApp, page } = await launchElectronApp({
+      userDataPath: workspace.userDataPath
+    });
+
+    try {
+      await waitForDirectory(page);
+
+      const viewportsToCheck = [
+        { width: 1440, height: 768 },
+        { width: 1440, height: 900 },
+        { width: 1920, height: 1080 }
+      ];
+
+      for (const viewport of viewportsToCheck) {
+        await page.setViewportSize(viewport);
+        // Let the ResizeObserver-driven --app-header-height /
+        // --directory-filterbar-height CSS custom properties settle after
+        // the resize before measuring.
+        await page.waitForTimeout(150);
+
+        const measurement = await page.evaluate(() => ({
+          scrollHeight: document.documentElement.scrollHeight,
+          innerHeight: window.innerHeight
+        }));
+
+        // 1px epsilon for sub-pixel rounding across browser engines.
+        expect(
+          measurement.scrollHeight,
+          `Directory page produced page-level scroll at ${viewport.width}x${viewport.height}: ` +
+            `scrollHeight=${measurement.scrollHeight} innerHeight=${measurement.innerHeight}`
+        ).toBeLessThanOrEqual(measurement.innerHeight + 1);
+      }
+    } finally {
+      await closeElectronApp(electronApp);
+      await removeWorkspace(workspace);
+    }
+  });
 });

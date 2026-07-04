@@ -14,6 +14,21 @@ import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 // available viewport height instead of a hardcoded per-breakpoint guess.
 const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
 
+// OIR-218 (residual page-scroll fix): the vertical "chrome" left over once the
+// header and filter bar heights are subtracted from 100vh — i.e. <main>'s own
+// top+bottom padding (py-5/sm:py-6/lg:py-8 in AppShell) plus the gap-5 this
+// page's root <section> puts between the filter bar and the list/detail row.
+// This MUST track those exact Tailwind breakpoints or the bounded columns'
+// max-height calc silently under-subtracts and the page grows taller than the
+// viewport (the previous flat 3.5rem constant undershot the real lg-breakpoint
+// total of 5.25rem by 1.75rem, which is exactly the page-level scroll that
+// showed up at typical desktop widths, since lg: applies from 1024px width
+// regardless of window height). Defined as a real CSS custom property (via
+// Tailwind's responsive arbitrary-property syntax on the root <section> below)
+// so it resolves with plain CSS media queries — same breakpoints as <main>'s
+// padding — instead of a JS media-query guess that could fall out of sync.
+const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
+
 // The offset at which the sticky filter bar itself should stick — right below
 // the sticky app header. Must NOT include the filter bar's own height, or the
 // bar would push itself further down by that amount every time it renders.
@@ -24,7 +39,7 @@ const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
 // room (page padding + inter-section gaps) to subtract from 100vh when
 // bounding their max-height.
 const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
-const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - 3.5rem)`;
+const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - var(${PAGE_CHROME_CSS_VAR}, 3.75rem))`;
 
 const typeLabels = {
   all: "Todos los tipos",
@@ -452,7 +467,15 @@ export const DirectoryPage = () => {
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
-    <section aria-labelledby="directory-page-title" className="flex flex-col gap-5">
+    <section
+      aria-labelledby="directory-page-title"
+      // OIR-218: --directory-page-chrome mirrors AppShell's <main> vertical
+      // padding (py-5 / sm:py-6 / lg:py-8) plus this section's own gap-5,
+      // breakpoint-for-breakpoint, so BOUNDED_CONTENT_MAX_HEIGHT's 100vh
+      // subtraction always matches the real rendered chrome — see the
+      // PAGE_CHROME_CSS_VAR comment above for the exact math.
+      className="flex flex-col gap-5 [--directory-page-chrome:3.75rem] sm:[--directory-page-chrome:4.25rem] lg:[--directory-page-chrome:5.25rem]"
+    >
       {/* Search Header — sticky (OIR-218): stays visible below the app header while
           the results list/detail panel scroll. */}
       <div
