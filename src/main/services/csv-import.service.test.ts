@@ -233,4 +233,41 @@ describe("buildCsvImportPreview", () => {
     expect(preview.rowIssues).toHaveLength(0);
     expect(dataset.records).toHaveLength(0);
   });
+
+  // OIR-222: role/schedule/sector/section CSV columns (mirrors ODS Categoría/
+  // Horario/Sector/Sección) map to organization.role/schedule and
+  // location.sector/section.
+  it("maps role/schedule/sector/section columns to organization/location fields", async () => {
+    const filePath = await writeFile(
+      "oir222-fields.csv",
+      [
+        "type,displayName,phone1Number,role,schedule,building,floor,sector,section",
+        "service,Alergia,79196,Doctora/or,8:00-22:00,Hospital Polivalente,4,Enfermería,Consulta"
+      ].join("\n") + "\n"
+    );
+
+    const { dataset } = await buildCsvImportPreview(filePath, "TestEditor");
+
+    expect(dataset.records).toHaveLength(1);
+    const record = dataset.records[0]!;
+    expect(record.organization.role).toBe("Doctora/or");
+    expect(record.organization.schedule).toBe("8:00-22:00");
+    expect(record.location?.building).toBe("Hospital Polivalente");
+    expect(record.location?.floor).toBe("4");
+    expect(record.location?.sector).toBe("Enfermería");
+    expect(record.location?.section).toBe("Consulta");
+  });
+
+  it("accepts a CSV without role/schedule/sector/section columns (backward compatible)", async () => {
+    const filePath = await writeFile(
+      "backward-compat.csv",
+      ["type,displayName,phone1Number", "service,Mostrador,55555"].join("\n") + "\n"
+    );
+
+    const { preview, dataset } = await buildCsvImportPreview(filePath, "TestEditor");
+
+    expect(preview.validRowCount).toBe(1);
+    expect(dataset.records[0]?.organization.role).toBeUndefined();
+    expect(dataset.records[0]?.organization.schedule).toBeUndefined();
+  });
 });

@@ -13,6 +13,66 @@ Reference template files:
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
 - [csv/contacts-import-template.csv](../csv/contacts-import-template.csv)
 
+## 0. OIR-222 Update — Tabular "Agenda" Sheet (Real Hospital Export)
+
+The hospital's real ODS export contains a sheet literally named **"Agenda"**
+that is a flat, structured 17-column table — a genuinely different shape from
+the "visual directory workbook" described in the rest of this document
+(sections 1-11 below, which predate this format and remain accurate for other
+sheet families that still use the older layout).
+
+### 0.1 Header (exact column order)
+
+```
+Nombre, Categoría, Servicio, Número 1, Número 2, Número 3, Número 4, Número 5,
+Número 6, Número 7, Horario, Confidencial, Edificio, Planta, Sector, Sección,
+Comentarios
+```
+
+The importer detects this exact header (accent/case-insensitive) on a sheet
+named "Agenda" and routes it to a dedicated column-position-based parser
+(`normalizeTabularAgendaSheet` in `src/main/services/spreadsheet-parsers.ts`),
+**not** the generic label+phone heuristics used for the older sheet families.
+
+### 0.2 Column mapping
+
+| ODS column      | Maps to                                   | Notes |
+|------------------|--------------------------------------------|-------|
+| `Nombre`         | `record.displayName`                       | Falls back to `Servicio` when empty (many rows have no named holder). |
+| `Categoría`      | `organization.role` **(new field)**        | Job title/role (e.g. "Enfermero/a", "Jefe/a", "Doctora/or"). No existing field represented this. |
+| `Servicio`       | `organization.service`                     | Existing field. |
+| `Número 1`–`Número 7` | `contactMethods.phones[]`              | One phone entry per non-empty cell (a cell may expand to more than one number via the existing compact-range/suffix rules). |
+| `Horario`        | `organization.schedule` **(new field)**    | Operating hours (e.g. "8:00-22:00"). No existing field represented this. Also excluded from phone-number extraction (previously misparsed as a fake phone digit string). |
+| `Confidencial`   | `contactMethods.phones[*].confidential`    | Row-level "Si"/"Sí" (case/accent-insensitive) is applied to **every** phone built from that row's `Número 1`–`Número 7` columns, not just the first — reuses the existing `confidential` phone field (OIR-105/OIR-218), no new field. |
+| `Edificio`       | `location.building`                        | Existing field. |
+| `Planta`         | `location.floor`                           | Existing field. A leading "Planta " word is stripped (e.g. "Planta 4" → "4") because the location-summary display already re-adds the "Planta " prefix. |
+| `Sector`         | `location.sector` **(new field)**          | Distinct from `department`/`service`/`area` (e.g. "Laboratorio", "Enfermería"). |
+| `Sección`        | `location.section` **(new field)**         | Distinct sub-unit label (e.g. "Despacho", "Control", "Consulta", "Citas", "Secretaría"). |
+| `Comentarios`    | `record.notes`                             | Existing field, same as the "comments column → notes" rule in section 6/7 below. Also scanned for the existing privacy markers (§6) for defense in depth. |
+
+### 0.3 Excluded rows
+
+- The header row itself.
+- "Section divider" rows with exactly one non-empty cell, in column `Nombre`
+  (e.g. `Letra A`, `Hospital Polivalente`) — these are visual section markers
+  in the source sheet, not contacts.
+- Rows with no `Nombre` and no `Servicio` (nothing to build a `displayName`
+  from).
+
+### 0.4 Duplicate/out-of-scope sheets sharing the same header
+
+The real workbook also contains `Agenda_3` (a byte-identical duplicate of
+`Agenda`) and `Departamentos` (a separate, much smaller, mostly-blank table)
+which both happen to share the exact same 17-column header. Only the sheet
+literally named `Agenda` is routed to the tabular parser; any other sheet with
+this header is skipped entirely (not merely deprioritized) so the legacy
+heuristics never run against a structured column layout they weren't designed
+for — running them would misparse `Horario` values as fake phone numbers and,
+via cross-sheet merge-by-displayName, contaminate the real `Agenda` rows.
+
+This was confirmed against the real source file: parsing "Agenda" alone
+(pre-merge, per source row) yields exactly 670 rows / 23 confidential rows.
+
 ## 1. Key Finding About the Source File
 
 The source `.ods` is not a single clean table. It is a visual directory workbook with multiple sheet families:

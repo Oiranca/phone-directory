@@ -427,6 +427,110 @@ describe("golden: flat-sheet format (low-confidence service path)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. Tabular Agenda-sheet format (OIR-222) — end-to-end via detectSheetProfile
+// ---------------------------------------------------------------------------
+
+/** The hospital's real 17-column Agenda header (OIR-222). */
+const AGENDA_HEADER = [
+  "Nombre", "Categoría", "Servicio",
+  "Número 1", "Número 2", "Número 3", "Número 4", "Número 5", "Número 6", "Número 7",
+  "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios",
+];
+
+const makeAgendaSheet = (
+  sheetName: string,
+  rows: string[][]
+): { name: string; data: string[][] } => ({
+  name: sheetName,
+  data: [AGENDA_HEADER, ...rows],
+});
+
+describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
+  it("is routed to the tabular parser only for a sheet literally named 'Agenda'", () => {
+    const filePath = writeWorkbook(testRoot, "agenda.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Admisión Central", "79649", "79650", "", "", "", "", "", "8:00-22:00", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.detectedFormat).toBe("exportación cruda de agenda tabular");
+    expect(result.rows).toHaveLength(1);
+    const row = result.rows[0]!;
+    expect(row.displayName).toBe("Admisión Central");
+    expect(row.schedule).toBe("8:00-22:00");
+    // Horario ("8:00-22:00") must NOT leak into the phones list as a fake number.
+    const phones = JSON.parse(row.phones ?? "[]") as Array<{ number: string }>;
+    expect(phones.map((p) => p.number)).toEqual(["79649", "79650"]);
+  });
+
+  it("excludes a section-divider row (e.g. 'Letra A') from the parsed rows", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-divider.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["Letra A", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "Aislados", "70761", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.displayName).toBe("Aislados");
+  });
+
+  it("applies row-level Confidencial 'Si' to every phone built from that row (Número 1-7)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-confidential.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Anatómico Forense (Medicina Legal) – Médico Forense", "56884", "677980175", "", "", "", "", "", "", "Si", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    const phones = JSON.parse(result.rows[0]!.phones ?? "[]") as Array<{ confidential: boolean }>;
+    expect(phones).toHaveLength(2);
+    expect(phones.every((p) => p.confidential)).toBe(true);
+  });
+
+  it("maps Edificio/Planta/Sector/Sección/Categoría to their schema fields", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-fields.xlsx", [
+      makeAgendaSheet("Agenda", [
+        [
+          "", "Auxiliar Administrativo/a", "Enfermedades Emergentes (Despacho)",
+          "75340", "", "", "", "", "", "",
+          "", "Si", "Hospital Polivalente", "", "", "Despacho", "",
+        ],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    const row = result.rows[0]!;
+    expect(row.role).toBe("Auxiliar Administrativo/a");
+    expect(row.building).toBe("Hospital Polivalente");
+    expect(row.section).toBe("Despacho");
+  });
+
+  it("does NOT route a same-header sheet with a different name (e.g. a duplicate 'Agenda_3') to the tabular parser, and does not let it contaminate merged 'Agenda' records via a shared displayName", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-duplicate.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Admisión Central", "79649", "79650", "", "", "", "", "", "8:00-22:00", "", "", "", "", "", ""],
+      ]),
+      // Exact duplicate under a different sheet name — must be skipped entirely,
+      // not routed through the legacy heuristic parser (which would misparse
+      // "8:00-22:00" as a fake phone number and merge it into the same record).
+      makeAgendaSheet("Agenda_3", [
+        ["", "", "Admisión Central", "79649", "79650", "", "", "", "", "", "8:00-22:00", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    const phones = JSON.parse(result.rows[0]!.phones ?? "[]") as Array<{ number: string }>;
+    expect(phones.map((p) => p.number)).toEqual(["79649", "79650"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. Cross-sheet merge (mergeRecordsByDisplayName)
 // ---------------------------------------------------------------------------
 

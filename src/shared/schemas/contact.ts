@@ -99,13 +99,27 @@ export const contactRecordSchema = z.object({
     department: z.string().optional(),
     service: z.string().optional(),
     area: z.enum(AREAS).optional(),
-    specialty: z.string().optional()
+    specialty: z.string().optional(),
+    // OIR-222: role/job title (ODS "Categoría" column, e.g. "Enfermero/a", "Jefe/a",
+    // "Doctora/or"). No existing field represented this — added as a new optional
+    // string field following the same pattern as the other organization fields.
+    role: z.string().optional(),
+    // OIR-222: operating hours/schedule (ODS "Horario" column, e.g. "8:00-22:00").
+    // No existing field represented this — added as a new optional string field.
+    schedule: z.string().optional()
   }),
   location: z.object({
     building: z.string().optional(),
     floor: z.string().optional(),
     room: z.string().optional(),
-    text: z.string().optional()
+    text: z.string().optional(),
+    // OIR-222: ODS "Sector" column (e.g. "Enfermería", "Laboratorio"). Distinct
+    // from department/service/area — added as a new optional string field
+    // following the same pattern as building/floor/room.
+    sector: z.string().optional(),
+    // OIR-222: ODS "Sección" column (e.g. "Despacho", "Control", "Consulta",
+    // "Citas", "Secretaría"). Added as a new optional string field.
+    section: z.string().optional()
   }).optional(),
   contactMethods: z.object({
     phones: z.array(phoneContactSchema),
@@ -265,13 +279,21 @@ export const editableContactRecordSchema = z.object({
     department: optionalTextField(),
     service: optionalTextField(),
     area: z.enum(AREAS).optional(),
-    specialty: optionalTextField()
+    specialty: optionalTextField(),
+    // OIR-222: see contactRecordSchema.organization.role for rationale.
+    role: optionalTextField(),
+    // OIR-222: see contactRecordSchema.organization.schedule for rationale.
+    schedule: optionalTextField()
   }),
   location: z.object({
     building: optionalTextField(),
     floor: optionalTextField(),
     room: optionalTextField(),
-    text: optionalTextField()
+    text: optionalTextField(),
+    // OIR-222: see contactRecordSchema.location.sector for rationale.
+    sector: optionalTextField(),
+    // OIR-222: see contactRecordSchema.location.section for rationale.
+    section: optionalTextField()
   }).optional(),
   contactMethods: z.object({
     phones: z.array(editablePhoneContactSchema),

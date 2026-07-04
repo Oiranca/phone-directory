@@ -22,6 +22,8 @@ import {
 import {
   normalizeServiceSheet,
   normalizeCentersSheet,
+  normalizeTabularAgendaSheet,
+  isAgendaTabularHeader,
   resolveServiceRowLabel,
   mergeRecordsByDisplayName,
 } from "./spreadsheet-parsers.js";
@@ -49,10 +51,16 @@ const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "department",
   "service",
   "specialty",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  "role",
+  "schedule",
   "building",
   "floor",
   "room",
   "locationText",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  "sector",
+  "section",
   "phone1Label",
   "phone1Number",
   "phone1Extension",
@@ -128,7 +136,7 @@ export type SpreadsheetImportNormalizationResult = {
 };
 
 type SheetProfile = {
-  parser: "centers" | "service";
+  parser: "centers" | "service" | "tabular";
   canonicalSlug: string;
   department: string;
   area?: string;
@@ -341,6 +349,20 @@ const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => 
   return count;
 };
 
+/**
+ * OIR-222: the hospital's real ODS export names the canonical, complete
+ * directory sheet "Agenda" (slug "agenda"). The same workbook also contains
+ * "Agenda_3" (a byte-identical duplicate/backup copy) and "Departamentos" (a
+ * separate, much smaller, mostly-blank department-index sheet) which both
+ * happen to share the exact same 17-column header. Restricting the tabular
+ * parser to slug === "agenda" — the same explicit slug-allowlisting pattern
+ * already used by isNavigationSheet/isDeferredFeatureSheet below — is what
+ * reproduces the confirmed real-file counts (670 rows / 23 confidential)
+ * from a dry run against the actual source file. Any other same-header sheet
+ * is intentionally left to the generic detectors below.
+ */
+const AGENDA_TABULAR_SHEET_SLUG = "agenda";
+
 const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   if (sheet.rows.length === 0) {
     return null;
@@ -349,6 +371,38 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   // Fix: skip navigation / TOC sheets by slug before any further analysis.
   if (isNavigationSheet(sheet.slug)) {
     return null;
+  }
+
+  // OIR-222: a sheet whose header exactly matches the 17-column Agenda tabular
+  // format. The canonical directory sheet (slug "agenda") is routed to the
+  // dedicated tabular parser. Any OTHER sheet with this same header — the real
+  // file has "Agenda_3" (a byte-identical duplicate) and "Departamentos" (a
+  // separate, much smaller, out-of-scope table) — is SKIPPED ENTIRELY rather
+  // than falling through to the generic centers/service heuristics below.
+  //
+  // This matters: the legacy heuristics extract phone-like digit runs from
+  // ANY cell, so a structured column like Horario ("8:00-22:00") gets
+  // misparsed as a fake phone number ("8002200"). Falling through would let
+  // that garbage leak into the final dataset via mergeRecordsByDisplayName,
+  // which combines phones across sheets whenever two records share the same
+  // normalized displayName (e.g. "Agenda_3" duplicating every "Agenda" row).
+  // Verified against the real file: parsing "agenda" alone yields exactly the
+  // confirmed 670 rows / 23 confidential rows; routing "Agenda_3" through the
+  // legacy path re-introduces spurious phone numbers into those same records.
+  if (isAgendaTabularHeader(sheet.rows[0] ?? [])) {
+    if (sheet.slug !== AGENDA_TABULAR_SHEET_SLUG) {
+      return null;
+    }
+
+    return {
+      parser: "tabular",
+      canonicalSlug: AGENDA_TABULAR_SHEET_SLUG,
+      department: "",
+      area: undefined,
+      rowsToSkip: 1,
+      detectedFormat: "exportación cruda de agenda tabular",
+      detectionConfidence: "high"
+    };
   }
 
   // INTERIM (OIR-102): Skip Buscas (pager/localizador) sheets.
@@ -620,6 +674,11 @@ export const normalizeWorkbookRowsFromFile = (
 
     if (profile.parser === "centers") {
       records.push(...normalizeCentersSheet(sheet, profile));
+      continue;
+    }
+
+    if (profile.parser === "tabular") {
+      records.push(...normalizeTabularAgendaSheet(sheet, profile));
       continue;
     }
 

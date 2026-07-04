@@ -35,7 +35,10 @@ import {
   normalizeMarker,
   normalizeAscii,
   isExcludedLabel,
+  parseSiNoFlag,
+  inferAreaFromLabel,
 } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
 // ---------------------------------------------------------------------------
 // Record construction helpers (moved here from spreadsheet-normalize.ts to
@@ -53,10 +56,16 @@ export const blankRecord = (): NormalizedImportRow => ({
   department: "",
   service: "",
   specialty: "",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  role: "",
+  schedule: "",
   building: "",
   floor: "",
   room: "",
   locationText: "",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  sector: "",
+  section: "",
   phone1Label: "",
   phone1Number: "",
   phone1Extension: "",
@@ -119,7 +128,7 @@ export type SheetData = {
 export type DetectionConfidence = "high" | "medium" | "low";
 
 export type SheetProfile = {
-  parser: "centers" | "service";
+  parser: "centers" | "service" | "tabular";
   canonicalSlug: string;
   department: string;
   area?: string;
@@ -642,6 +651,208 @@ export const normalizeServiceSheet = (
   });
 
   return { records, socialSkippedRows };
+};
+
+// ---------------------------------------------------------------------------
+// Tabular Agenda-sheet parser (OIR-222)
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical 17-column header for the hospital's real "Agenda" ODS export:
+ * Nombre, Categoría, Servicio, Número 1..7, Horario, Confidencial, Edificio,
+ * Planta, Sector, Sección, Comentarios. Compared against a sheet's first row
+ * via normalizeMarker (diacritic-stripped, uppercase, whitespace-stripped) so
+ * accent/case/spacing differences in the source file don't break detection.
+ */
+export const AGENDA_TABULAR_HEADER_MARKERS = [
+  "NOMBRE",
+  "CATEGORIA",
+  "SERVICIO",
+  "NUMERO1",
+  "NUMERO2",
+  "NUMERO3",
+  "NUMERO4",
+  "NUMERO5",
+  "NUMERO6",
+  "NUMERO7",
+  "HORARIO",
+  "CONFIDENCIAL",
+  "EDIFICIO",
+  "PLANTA",
+  "SECTOR",
+  "SECCION",
+  "COMENTARIOS"
+] as const;
+
+/**
+ * Column indices within a tabular Agenda-sheet data row, matching
+ * AGENDA_TABULAR_HEADER_MARKERS above 1:1 by position.
+ */
+const AGENDA_COLUMN = {
+  nombre: 0,
+  categoria: 1,
+  servicio: 2,
+  numeroStart: 3,
+  numeroEnd: 9, // inclusive — Número 1..7
+  horario: 10,
+  confidencial: 11,
+  edificio: 12,
+  planta: 13,
+  sector: 14,
+  seccion: 15,
+  comentarios: 16
+} as const;
+
+/**
+ * Returns true when `headerRow` matches the canonical Agenda tabular header
+ * (see AGENDA_TABULAR_HEADER_MARKERS), cell-by-cell.
+ */
+export const isAgendaTabularHeader = (headerRow: string[]): boolean =>
+  AGENDA_TABULAR_HEADER_MARKERS.every((marker, index) => normalizeMarker(headerRow[index] ?? "") === marker);
+
+/**
+ * Strips a leading "Planta " (case/diacritic-insensitive) word from a Planta
+ * column value (e.g. "Planta 4" -> "4", "Planta Baja" -> "Baja") so it can be
+ * stored in location.floor without duplicating the "Planta " prefix that
+ * AppDataService's location-summary builder already re-adds at display time
+ * (see app-data.service.ts: `if (loc?.floor) locationParts.push(\`Planta ${loc.floor}\`)`).
+ */
+export const stripPlantaPrefix = (value: string): string => {
+  const trimmed = clean(value);
+  const match = /^planta\s+(.+)$/i.exec(trimmed);
+  return match ? clean(match[1]!) : trimmed;
+};
+
+/**
+ * Parses a tabular Agenda-format sheet (OIR-222): a flat table with an exact
+ * 17-column header (Nombre, Categoría, Servicio, Número 1..7, Horario,
+ * Confidencial, Edificio, Planta, Sector, Sección, Comentarios), one contact
+ * per data row. Unlike normalizeServiceSheet, columns are read by FIXED INDEX
+ * (not inferred from cell content) because the header guarantees positional
+ * meaning.
+ *
+ * Row exclusions (see OIR-222 investigation, confirmed against the real file):
+ *   - the header row itself (handled by profile.rowsToSkip)
+ *   - "section divider" rows with exactly one non-empty cell, in column 0
+ *     (e.g. "Letra A", "Hospital Polivalente")
+ *   - rows with no Nombre AND no Servicio (nothing to build a displayName from)
+ *
+ * Row-level Confidencial ("Si"/"Sí") is applied to EVERY phone built from that
+ * row's Número 1..7 columns (OIR-222 Step 3), not just the first phone.
+ */
+export const normalizeTabularAgendaSheet = (
+  sheet: SheetData,
+  profile: SheetProfile
+): NormalizedImportRow[] => {
+  const data = sheet.rows.slice(profile.rowsToSkip);
+  const records: NormalizedImportRow[] = [];
+
+  data.forEach((row, rowIndex) => {
+    const cells = row.map((value) => clean(value));
+    const nonEmptyIndexes = cells
+      .map((value, index) => (value ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (nonEmptyIndexes.length === 0) {
+      return;
+    }
+
+    // Section divider row (e.g. "Letra A", "Hospital Polivalente"): exactly one
+    // non-empty cell, in column 0 (Nombre).
+    if (nonEmptyIndexes.length === 1 && nonEmptyIndexes[0] === 0) {
+      return;
+    }
+
+    const nombre = cells[AGENDA_COLUMN.nombre] ?? "";
+    const categoria = cells[AGENDA_COLUMN.categoria] ?? "";
+    const servicio = cells[AGENDA_COLUMN.servicio] ?? "";
+    const horario = cells[AGENDA_COLUMN.horario] ?? "";
+    const confidencialRaw = cells[AGENDA_COLUMN.confidencial] ?? "";
+    const edificio = cells[AGENDA_COLUMN.edificio] ?? "";
+    const planta = cells[AGENDA_COLUMN.planta] ?? "";
+    const sector = cells[AGENDA_COLUMN.sector] ?? "";
+    const seccion = cells[AGENDA_COLUMN.seccion] ?? "";
+    const comentarios = cells[AGENDA_COLUMN.comentarios] ?? "";
+
+    const displayName = nombre || servicio;
+
+    if (!displayName) {
+      return;
+    }
+
+    // Row-level Confidencial ("Si"/"Sí") applies to every phone on this row
+    // (OIR-222 Step 3) — OR'd with the existing free-text privacy-marker
+    // detection over Comentarios for defense in depth (same markers used by
+    // the legacy service-sheet parser).
+    const rowConfidential = parseSiNoFlag(confidencialRaw);
+    const privacy = detectPrivacy(comentarios);
+    const confidential = rowConfidential || privacy.confidential;
+
+    const phoneEntries: SerializedPhoneEntry[] = [];
+
+    for (let column = AGENDA_COLUMN.numeroStart; column <= AGENDA_COLUMN.numeroEnd; column += 1) {
+      const cellValue = cells[column] ?? "";
+
+      if (!cellValue) {
+        continue;
+      }
+
+      extractNumbers(cellValue).forEach((number) => {
+        phoneEntries.push({
+          number,
+          label: `Número ${column - AGENDA_COLUMN.numeroStart + 1}`,
+          kind: "internal",
+          isPrimary: phoneEntries.length === 0,
+          confidential,
+          noPatientSharing: privacy.noPatientSharing,
+          notes: comentarios || undefined
+        });
+      });
+    }
+
+    const record = blankRecord();
+
+    record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([String(rowIndex), displayName, servicio])}`;
+    record.type = classifyType(displayName, profile.canonicalSlug);
+    record.displayName = displayName;
+    record.area = inferAreaFromLabel(servicio || displayName) ?? "";
+    record.service = servicio;
+    record.role = categoria;
+    record.schedule = horario;
+    record.building = edificio;
+    record.floor = planta ? stripPlantaPrefix(planta) : "";
+    record.sector = sector;
+    record.section = seccion;
+    record.aliases = aliasesFromLabel(displayName);
+    record.notes = cleanNoteFragments([comentarios]).join(" | ");
+    record.status = "active";
+    record.phones = JSON.stringify(phoneEntries);
+
+    const first = phoneEntries[0];
+    const second = phoneEntries[1];
+
+    record.phone1Label = first ? first.label : "";
+    record.phone1Number = first?.number ?? "";
+    record.phone1Kind = first ? "internal" : "";
+    record.phone1IsPrimary = first ? "true" : "false";
+    record.phone1Confidential = first?.confidential ? "true" : "false";
+    record.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
+    record.phone1Notes = first?.notes ?? "";
+
+    if (second) {
+      record.phone2Label = second.label;
+      record.phone2Number = second.number;
+      record.phone2Kind = "internal";
+      record.phone2IsPrimary = "false";
+      record.phone2Confidential = second.confidential ? "true" : "false";
+      record.phone2NoPatientSharing = second.noPatientSharing ? "true" : "false";
+      record.phone2Notes = second.notes ?? "";
+    }
+
+    records.push(record);
+  });
+
+  return records;
 };
 
 // ---------------------------------------------------------------------------

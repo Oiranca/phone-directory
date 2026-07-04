@@ -253,6 +253,15 @@ export const detectPrivacy = (notes: string): { confidential: boolean; noPatient
   };
 };
 
+/**
+ * Parses a row-level "Si"/"Sí" (case- and accent-insensitive) boolean cell value,
+ * as used by the ODS "Confidencial" column in the tabular Agenda sheet format
+ * (OIR-222). Reuses normalizeMarker (NFKD strip diacritics + uppercase + strip
+ * whitespace) so "Si", "sí", " SÍ " all resolve the same way. Any other value
+ * (including empty string) is treated as false.
+ */
+export const parseSiNoFlag = (value: string): boolean => normalizeMarker(value) === "SI";
+
 // ---------------------------------------------------------------------------
 // Label and note helpers
 // ---------------------------------------------------------------------------

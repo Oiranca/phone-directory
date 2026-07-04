@@ -117,12 +117,20 @@ export interface EditableContactRecord {
     service?: string;
     area?: AreaType;
     specialty?: string;
+    /** OIR-222: role/job title (ODS "Categoría" column). */
+    role?: string;
+    /** OIR-222: operating hours/schedule (ODS "Horario" column). */
+    schedule?: string;
   };
   location?: {
     building?: string;
     floor?: string;
     room?: string;
     text?: string;
+    /** OIR-222: ODS "Sector" column. */
+    sector?: string;
+    /** OIR-222: ODS "Sección" column. */
+    section?: string;
   };
   contactMethods: {
     phones: EditablePhoneContact[];

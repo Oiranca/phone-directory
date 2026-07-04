@@ -38,10 +38,16 @@ const SUPPORTED_COLUMNS = [
   "department",
   "service",
   "specialty",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  "role",
+  "schedule",
   "building",
   "floor",
   "room",
   "locationText",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  "sector",
+  "section",
   "phone1Label",
   "phone1Number",
   "phone1Extension",
@@ -549,7 +555,10 @@ export const buildImportPreviewFromRows = async (
       building: maybe(row.building),
       floor: maybe(row.floor),
       room: maybe(row.room),
-      text: maybe(row.locationText)
+      text: maybe(row.locationText),
+      // OIR-222: ODS "Sector"/"Sección" columns.
+      sector: maybe(row.sector),
+      section: maybe(row.section)
     });
 
     // (OIR-131): socials count as a valid contact method — a social-only row is accepted.
@@ -601,7 +610,10 @@ export const buildImportPreviewFromRows = async (
           department: maybe(row.department),
           service: maybe(row.service),
           area,
-          specialty: maybe(row.specialty)
+          specialty: maybe(row.specialty),
+          // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario").
+          role: maybe(row.role),
+          schedule: maybe(row.schedule)
         }),
         location: Object.keys(location).length > 0 ? location : undefined,
         contactMethods: {
