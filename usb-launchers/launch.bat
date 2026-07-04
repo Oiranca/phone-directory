@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "USB_ROOT=%~dp0"
-set "APP=%USB_ROOT%win-unpacked\Phone Directory.exe"
+set "APP=%USB_ROOT%win-unpacked\HospiAgenda.exe"
 if not exist "%APP%" (
     echo ERROR: Cannot find %APP%
     echo Make sure the win-unpacked folder is present at the USB root.

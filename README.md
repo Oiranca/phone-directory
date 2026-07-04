@@ -1,6 +1,6 @@
-# Hospital Directory MVP
+# HospiAgenda
 
-Local-first desktop MVP for managing a hospital contact directory.
+Local-first desktop application for managing a hospital contact directory.
 
 The project is designed for administrative staff and prioritizes:
 

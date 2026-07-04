@@ -20,6 +20,10 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = env.rendererUrl ?? "http://localhost:5173";
+// Only available in the source tree (build-resources/ is not bundled into the
+// packaged app); packaged builds get their icon from electron-builder's
+// win/mac/linux "icon" config instead, so this is a dev-only convenience.
+const APP_ICON_PATH = path.join(__dirname, "../../build-resources/icon.png");
 
 const portableUserDataPath = resolvePortableUserDataPath({
   execPath: process.execPath,
@@ -42,6 +46,7 @@ const createWindow = () => {
     minWidth: 1080,
     minHeight: 720,
     backgroundColor: "#f8fafc",
+    ...(isDev ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       ...WINDOW_WEB_PREFERENCES

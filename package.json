@@ -1,5 +1,5 @@
 {
-  "name": "hospital-directory-mvp",
+  "name": "hospiagenda",
   "version": "0.1.0",
   "engines": {
     "node": ">=20"
@@ -65,7 +65,7 @@
   },
   "build": {
     "appId": "com.oiranca.phone-directory",
-    "productName": "Phone Directory",
+    "productName": "HospiAgenda",
     "copyright": "Copyright © 2026 Oiranca",
     "directories": {
       "output": "dist-portable",
@@ -83,6 +83,7 @@
       "build": null
     },
     "win": {
+      "icon": "build-resources/icon.ico",
       "target": [
         {
           "target": "dir",
@@ -93,6 +94,7 @@
       ]
     },
     "mac": {
+      "icon": "build-resources/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build-resources/entitlements.mac.plist",
@@ -108,6 +110,7 @@
       ]
     },
     "linux": {
+      "icon": "build-resources/icon.png",
       "target": [
         {
           "target": "dir",

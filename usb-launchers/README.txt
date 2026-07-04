@@ -1,7 +1,7 @@
-Phone Directory -- USB Launcher Instructions
+HospiAgenda -- USB Launcher Instructions
 ============================================
 
-This USB drive contains a portable build of Phone Directory.
+This USB drive contains a portable build of HospiAgenda.
 Your contacts, settings, and backups are stored in a "portable-data" folder
 on this drive alongside the launcher files.
 
@@ -36,8 +36,8 @@ Open a terminal, navigate to the USB drive, and run:
 The USB drive is usually mounted at /media/<YourUser>/<DriveName> or
 /run/media/<YourUser>/<DriveName>. Run "lsblk" or "df -h" to find the exact path.
 
-The launcher tries "linux-unpacked/phone-directory" first. If that is not
-present it falls back to "Phone Directory.AppImage" at the USB root.
+The launcher tries "linux-unpacked/hospiagenda" first. If that is not
+present it falls back to "HospiAgenda.AppImage" at the USB root.
 The AppImage launcher uses --appimage-extract-and-run, which extracts to /tmp
 and runs without requiring libfuse2 (needed on Ubuntu 22.04+, Fedora 37+).
 
