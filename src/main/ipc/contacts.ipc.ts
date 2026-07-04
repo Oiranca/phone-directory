@@ -24,7 +24,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       sourceFilePath: string;
       senderId: number;
       sender: WebContents;
-      navListener: () => void;
+      navListener: (details?: { isSameDocument?: boolean }) => void;
       timeout: NodeJS.Timeout;
       wrongSenderAttempts: number;
     }
@@ -138,7 +138,24 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     // Invalidate the token when the sender navigates away — a navigation means the
     // import preview UI is gone and any pending confirmation would be from a stale tab.
-    const navListener = () => {
+    //
+    // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+    // navigations — reference-fragment (hash) navigations, pushState/replaceState,
+    // and same-page history navigation (see Electron's `isSameDocument` docs). This
+    // app uses createHashRouter for all in-app routing, so those are routine and do
+    // NOT mean the import preview UI is gone — the renderer document (and the
+    // DataManagementSection component holding the preview state) is still mounted.
+    // A same-document navigation can be triggered by something as innocuous as a
+    // macOS trackpad two-finger swipe (Chromium's overscroll history navigation)
+    // while the operator scrolls the (currently non-virtualized, horizontally
+    // overflowing per OIR-223 priority 3) preview table — which would silently
+    // invalidate an otherwise-still-valid, still-visible pending import and only
+    // surface as an opaque error on the LATER confirm click. Only invalidate on a
+    // real cross-document navigation (the tab actually left the app UI).
+    const navListener = (details: { isSameDocument?: boolean } | undefined) => {
+      if (details && details.isSameDocument) {
+        return;
+      }
       clearPendingCsvImport(importToken);
     };
 

@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
+import { RECORD_TYPE_LABELS } from "../../../shared/constants/catalogs";
+import type { RecordType } from "../../../shared/constants/catalogs";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type {
   CsvImportPreviewWithConflicts,
@@ -9,6 +11,15 @@ import type {
   ConflictRecordSummary,
   MergePolicy
 } from "../../../shared/types/contact";
+
+// OIR-223 priority 2: the preview's stored/internal value stays the raw
+// RecordType enum string (typeCounts keys) — only the DISPLAYED label is
+// translated, reusing the exact same Spanish mapping already used by the
+// Directory page's type filter (RECORD_TYPE_LABELS). Any type value that
+// isn't a recognized RecordType (defensive — should not happen in practice)
+// falls back to showing the raw value rather than crashing.
+const formatDetectedTypeLabel = (type: string): string =>
+  RECORD_TYPE_LABELS[type as RecordType] ?? type;
 
 const STATUS_LABELS: Record<CsvImportPreviewRow["status"], string> = {
   accepted: "Aceptada",
@@ -759,7 +770,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             ) : (
               Object.entries(preview.typeCounts).map(([type, count]) => (
                 <span key={type} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900">
-                  {type}: {count}
+                  {formatDetectedTypeLabel(type)}: {count}
                 </span>
               ))
             )}
@@ -792,7 +803,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
               </span>
             )}
           </p>
-          <div className="mt-3 overflow-x-auto rounded-2xl border border-emerald-200">
+          {/* OIR-223 priority 3: the table scrolls horizontally INSIDE its own
+              container (overflow-x-auto below) rather than forcing page-level
+              scroll — but a native scrollbar alone is easy to miss (e.g. macOS
+              auto-hides scrollbars by default), which is what made a fully
+              valid, non-truncated column look "cut off" to a real operator.
+              This caption makes the scroll affordance explicit. */}
+          <p className="mt-1 text-xs text-emerald-700">
+            Desliza la tabla hacia la derecha para ver todas las columnas.
+          </p>
+          <div className="mt-2 overflow-x-auto rounded-2xl border border-emerald-200">
             <table className="w-full border-collapse text-sm" aria-label="Filas de importación">
               <thead>
                 <tr className="border-b border-emerald-200 bg-emerald-100/60">
@@ -855,7 +875,11 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                     <td className="px-3 py-2 text-slate-600">
                       {row.department ?? "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">
+                    {/* OIR-223 priority 3: area slugs (e.g. "gestion-administracion") can be
+                        long — allow wrapping instead of whitespace-nowrap so the value is
+                        never cut off; the table's own overflow-x-auto wrapper (below) still
+                        covers any residual overflow without affecting the page layout. */}
+                    <td className="min-w-[10rem] px-3 py-2 text-slate-600">
                       {row.area ?? "—"}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-600">

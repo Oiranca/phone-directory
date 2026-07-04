@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
+import { RECORD_TYPE_LABELS } from "../../shared/constants/catalogs";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { SelectField } from "../components/inputs/SelectField";
@@ -43,15 +44,8 @@ const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR
 
 const typeLabels = {
   all: "Todos los tipos",
-  person: "Persona",
-  service: "Servicio",
-  department: "Departamento",
-  control: "Control",
-  supervision: "Supervisión",
-  room: "Sala",
-  "external-center": "Centro externo",
-  other: "Otro"
-} as const satisfies Record<RecordType | "all", string>;
+  ...RECORD_TYPE_LABELS
+} satisfies Record<RecordType | "all", string>;
 
 const areaLabels = {
   all: "Todas las áreas",

@@ -245,15 +245,17 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 // ---------------------------------------------------------------------------
 
 // Helper: build a minimal EventEmitter-style webContents stub
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic listener args (e.g. did-start-navigation's details object)
+type Listener = (...args: any[]) => void;
 function makeWebContentsSender(id: number): {
   id: number;
-  listeners: Map<string, Array<() => void>>;
-  on: (event: string, fn: () => void) => void;
-  once: (event: string, fn: () => void) => void;
-  removeListener: (event: string, fn: () => void) => void;
-  emit: (event: string) => void;
+  listeners: Map<string, Array<Listener>>;
+  on: (event: string, fn: Listener) => void;
+  once: (event: string, fn: Listener) => void;
+  removeListener: (event: string, fn: Listener) => void;
+  emit: (event: string, ...args: unknown[]) => void;
 } {
-  const listeners = new Map<string, Array<() => void>>();
+  const listeners = new Map<string, Array<Listener>>();
 
   return {
     id,
@@ -264,8 +266,8 @@ function makeWebContentsSender(id: number): {
       listeners.set(event, bucket);
     },
     once(event, fn) {
-      const wrapped = () => {
-        fn();
+      const wrapped: Listener = (...args) => {
+        fn(...args);
         this.removeListener(event, wrapped);
       };
       this.on(event, wrapped);
@@ -274,10 +276,10 @@ function makeWebContentsSender(id: number): {
       const bucket = listeners.get(event) ?? [];
       listeners.set(event, bucket.filter((f) => f !== fn));
     },
-    emit(event) {
+    emit(event, ...args) {
       const bucket = listeners.get(event) ?? [];
       // Copy the bucket before iterating in case listeners mutate it (e.g. once wrappers)
-      [...bucket].forEach((f) => f());
+      [...bucket].forEach((f) => f(...args));
     }
   };
 }
@@ -455,8 +457,50 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     const sender = makeWebContentsSender(10);
     const importToken = await runPreview(sender);
 
-    // Simulate the renderer navigating away
+    // Simulate the renderer navigating away (real cross-document navigation —
+    // no event-details object, matching Electron's legacy call signature).
     sender.emit("did-start-navigation");
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    await expect(
+      handler({ sender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+  // navigations (hash/fragment changes, pushState/replaceState, same-page history
+  // navigation — see Electron's `isSameDocument` event field). This app routes
+  // entirely via createHashRouter, so an in-app hash change — or even a macOS
+  // trackpad swipe-navigation gesture while scrolling the preview table — must
+  // NOT invalidate an otherwise-still-valid pending import, since the renderer
+  // document (and the preview UI holding the token) never actually unloaded.
+  it("same-document navigation (hash change / isSameDocument) does NOT invalidate the token", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+
+    // Simulate a same-document navigation event — the modern Electron handler
+    // signature passes a single details object with isSameDocument: true.
+    sender.emit("did-start-navigation", { isSameDocument: true });
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    const result = await handler({ sender } as unknown, importToken, []);
+
+    expect(result).toBeDefined();
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("same-document navigation followed by a REAL cross-document navigation still invalidates the token", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+
+    sender.emit("did-start-navigation", { isSameDocument: true });
+    sender.emit("did-start-navigation", { isSameDocument: false });
 
     const handler = handlers.get("contacts:import-csv-dataset");
     if (!handler) throw new Error("import handler not registered");

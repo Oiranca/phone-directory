@@ -251,9 +251,9 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    // PathDisplay renders the basename twice: once in the heading <p> and once in the
-    // PathDisplay component itself — both showing "contacts-1.json".
-    expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
+    // OIR-223: the fetched backup inventory now only drives the single
+    // "Última copia de seguridad" date indicator — no per-backup list.
+    expect(await screen.findByText(/Última copia de seguridad:/)).toBeInTheDocument();
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
     expect(screen.getByText("Última actualización del directorio")).toBeInTheDocument();
   });
@@ -264,7 +264,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
     const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
-    const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
+    const exportBtn = screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ });
     const importBtn = screen.getByRole("button", { name: "Importar" });
 
     expect(backupBtn.className).toContain("focus-ring");
@@ -272,15 +272,16 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("OIR-219: shows the unified Import card copy describing both possible outcomes", async () => {
+  it("OIR-223: shows the unified Import card copy describing both possible outcomes in plain backup language (no 'JSON' wording)", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Selecciona un archivo para importar. Si es JSON, reemplaza el directorio completo (se crea una copia de seguridad automática antes de continuar). Si es CSV, ODS, XLS o XLSX, se valida y se muestra una vista previa antes de aplicar los cambios."
+        "Selecciona un archivo para importar. Si es una copia de seguridad completa, reemplaza los datos actuales del directorio (se crea una copia de seguridad automática antes de continuar). Si es una hoja de cálculo (CSV, ODS, XLS o XLSX), se valida y se muestra una vista previa antes de aplicar los cambios."
       )
     ).toBeInTheDocument();
+    expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
   });
 
   it("creates a backup and shows success feedback", async () => {
@@ -314,7 +315,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.exportDataset).toHaveBeenCalledTimes(1);
@@ -330,7 +331,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Exportar JSON/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ }));
 
     expect(
       await screen.findByText("No se pudo exportar el directorio al destino seleccionado.")
@@ -394,7 +395,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     await openImportPicker();
 
     expect(
-      await screen.findByText("Tipo de archivo no admitido (.exe). Elige un archivo JSON, CSV, ODS, XLS o XLSX.")
+      await screen.findByText("Tipo de archivo no admitido (.exe). Elige una copia de seguridad o una hoja de cálculo (CSV, ODS, XLS o XLSX).")
     ).toBeInTheDocument();
   });
 
@@ -446,7 +447,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByText("contacts-1.json").length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText(/Última copia de seguridad:/)).toBeInTheDocument();
   });
 
   it("does not reload bootstrap when store already has data (route transition), only loads backups", async () => {
@@ -951,108 +952,12 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
   });
 
-  it("restores a listed backup after dialog confirmation", async () => {
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    await openImportPicker();
-    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
-
-    await waitFor(() => {
-      expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledWith("/tmp/backups/contacts-1.json");
-    });
-    expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio restaurado");
-    expect(await screen.findByText("Copia de seguridad restaurada.")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
-    });
-  });
-
-  it("shows the restore service error message when backup restore fails", async () => {
-    window.hospitalDirectory.restoreBackup = vi
-      .fn()
-      .mockRejectedValue(new Error("No se pudo restaurar la copia de seguridad seleccionada. Ruta afectada: /tmp/backups/contacts-1.json."));
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
-
-    expect(
-      await screen.findByText("No se pudo restaurar la copia de seguridad seleccionada.")
-    ).toBeInTheDocument();
-  });
-
-  it("disables competing actions while a backup restore is running", async () => {
-    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
-    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveRestore = resolve;
-        })
-    );
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Restaurar copia de seguridad" }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Actualizar" })).toBeDisabled();
-    });
-    expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Importar" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
-
-    resolveRestore?.({
-      contacts: defaultContacts,
-      settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-before-restore.json",
-      importedFilePath: "/tmp/backups/contacts-1.json",
-      recordCount: defaultContacts.records.length
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Actualizar" })).not.toBeDisabled();
-    });
-  });
-
-  it("submits restore confirmation only once on rapid double click", async () => {
-    let resolveRestore: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.restoreBackup>>) => void) | null = null;
-    window.hospitalDirectory.restoreBackup = vi.fn().mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveRestore = resolve;
-        })
-    );
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
-
-    const confirmButton = await screen.findByRole("button", { name: "Restaurar copia de seguridad" });
-    fireEvent.click(confirmButton);
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => {
-      expect(window.hospitalDirectory.restoreBackup).toHaveBeenCalledTimes(1);
-    });
-
-    resolveRestore?.({
-      contacts: defaultContacts,
-      settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-before-restore.json",
-      importedFilePath: "/tmp/backups/contacts-1.json",
-      recordCount: defaultContacts.records.length
-    });
-  });
+  // OIR-223 priority 5: the dedicated "Restaurar esta copia de seguridad"
+  // button/list and its restoreBackup() IPC call site were removed from this
+  // component — restoring an old backup is now done via the unified
+  // "Importar" picker (a .json pick already performs a full replace, which
+  // functionally IS a restore; see the "imports a JSON dataset..." test
+  // above). The restoreBackup IPC channel itself is unchanged/untouched.
 
   it("does NOT call listBackups in recovery mode (contacts null, settings present)", async () => {
     // FIX 2 regression lock: loadBackups must only fire when BOTH contacts AND
@@ -1271,7 +1176,11 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-221 — compact backups list bounded by the configured retention count
+  // OIR-223 priority 5 — the backups list (with OIR-221's "Mostrar más"
+  // bounded-list toggle) is REMOVED. It is replaced with a single "Última
+  // copia de seguridad: <fecha>" indicator derived client-side from the same
+  // listBackups() data. No per-backup filename/size/restore row is rendered
+  // anymore, and restoring an old backup is done via "Importar" instead.
   // ---------------------------------------------------------------------------
 
   const buildBackupList = (count: number) =>
@@ -1282,53 +1191,48 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
       sizeBytes: 1024 * (index + 1)
     }));
 
-  it("OIR-221: shows a tight single row per backup — filename, date, size, restore action, no path-reveal controls", async () => {
+  it("OIR-223: shows a single 'Última copia de seguridad' date indicator, no per-backup list rows", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    expect(await screen.findByText("contacts-1.json")).toBeInTheDocument();
+    expect(await screen.findByText(/Última copia de seguridad:/)).toBeInTheDocument();
 
-    // Compact row: no PathDisplay "reveal"/"copy" controls cluttering each row.
-    expect(screen.queryByRole("button", { name: "Mostrar ruta completa" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copiar ruta completa" })).not.toBeInTheDocument();
-  });
-
-  it("OIR-221: caps the visible backups list to the configured auto-backup retention count by default", async () => {
-    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(7));
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    // editableSettings.ui.autoBackup.retentionCount === 5 — only the 5 most recent are shown.
-    expect(await screen.findByText("contacts-7.json")).toBeInTheDocument();
-    expect(screen.getByText("contacts-3.json")).toBeInTheDocument();
-    expect(screen.queryByText("contacts-2.json")).not.toBeInTheDocument();
+    // No backup filename/size rows, and no restore-list UI, are rendered.
     expect(screen.queryByText("contacts-1.json")).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: "Mostrar 2 más" })).toBeInTheDocument();
-  });
-
-  it("OIR-221: 'Mostrar más' reveals the remaining backups and toggles back to 'Mostrar menos'", async () => {
-    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(7));
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    const showMoreButton = await screen.findByRole("button", { name: "Mostrar 2 más" });
-    fireEvent.click(showMoreButton);
-
-    expect(await screen.findByText("contacts-1.json")).toBeInTheDocument();
-    expect(screen.getByText("contacts-2.json")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mostrar menos" })).toBeInTheDocument();
-  });
-
-  it("OIR-221: does not show the 'Mostrar más' affordance when backups are within the retention count", async () => {
-    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(3));
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    expect(await screen.findByText("contacts-3.json")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restaurar esta copia de seguridad" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mostrar \d+ más/ })).not.toBeInTheDocument();
+  });
+
+  it("OIR-223: the date shown is the MOST RECENT backup's createdAt, regardless of list order", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue([
+      { fileName: "contacts-old.json", filePath: "/tmp/backups/contacts-old.json", createdAt: "2026-01-01T00:00:00.000Z", sizeBytes: 100 },
+      { fileName: "contacts-newest.json", filePath: "/tmp/backups/contacts-newest.json", createdAt: "2026-06-01T00:00:00.000Z", sizeBytes: 100 },
+      { fileName: "contacts-middle.json", filePath: "/tmp/backups/contacts-middle.json", createdAt: "2026-03-01T00:00:00.000Z", sizeBytes: 100 }
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    const indicator = await screen.findByText(/Última copia de seguridad:/);
+    expect(indicator.textContent).toContain("jun");
+  });
+
+  it("OIR-223: shows an empty-state message when there are no backups yet", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(0));
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no se ha creado ninguna copia de seguridad.")).toBeInTheDocument();
+    expect(screen.queryByText(/Última copia de seguridad:/)).not.toBeInTheDocument();
+  });
+
+  it("OIR-223: mentions the Importar picker as the way to restore an old backup", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Ábrela desde el botón «Importar» de arriba/)
+    ).toBeInTheDocument();
   });
 });

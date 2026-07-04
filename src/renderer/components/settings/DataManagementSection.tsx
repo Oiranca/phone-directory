@@ -19,22 +19,9 @@ const formatTimestamp = (value: string) => {
   }).format(date);
 };
 
-const formatSize = (sizeBytes: number) => {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 type PendingConfirmation =
   | { kind: "pick-import" }
-  | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
-  | { kind: "restore-backup"; backup: BackupListItem };
+  | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts };
 
 /**
  * OIR-219 — "Datos e importación" section of the Configuración page.
@@ -44,7 +31,11 @@ type PendingConfirmation =
  *
  * Card consolidation:
  * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
- *   "Exportar JSON" actions into a single card (primary + secondary action).
+ *   "Exportar JSON" actions into a single card. OIR-223 further simplified
+ *   this: a single primary button ("Crear copia de seguridad") plus a
+ *   de-emphasized secondary link for saving to a different folder — from an
+ *   operator's perspective, a backup and a JSON export are the same action,
+ *   so the UI now only exposes one clear action, with no "JSON" wording.
  * - "Importar" is now a single unified entry point: one button opens exactly
  *   one native file dialog (filtered to .json/.csv/.ods/.xls/.xlsx) via
  *   window.hospitalDirectory.pickAndImportDataset(). The main process
@@ -62,6 +53,17 @@ type PendingConfirmation =
  *   spreadsheet goes through its own additional preview/confirm step below,
  *   unchanged). This preserves the original destructive-replace confirmation
  *   semantics while still allowing one unified button/dialog.
+ *
+ * OIR-223 priority 5 — the "Recuperación / Copias de seguridad locales" list
+ * (with its OIR-221 "Mostrar más" bounded-list toggle) is REMOVED entirely,
+ * per updated product direction: an operator only needs to know WHEN the
+ * last backup happened, not browse a list. It is replaced with a single
+ * "Última copia de seguridad: <fecha>" indicator, derived client-side from
+ * the same listBackups() data already fetched here (no new IPC). Restoring
+ * an OLD backup file is no longer a dedicated button — importing a JSON
+ * backup via the unified "Importar" picker above already performs a full
+ * replace, which functionally IS a restore, so that capability is preserved
+ * without a separate UI entry point.
  */
 export const DataManagementSection = () => {
   const { contacts, settings, initialize, isLoading: storeIsLoading, bootstrapStatus, bootstrapError, ensureBootstrapLoaded } = useAppStore();
@@ -77,30 +79,23 @@ export const DataManagementSection = () => {
   // "processing" status region below.
   const [isImporting, setIsImporting] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
-  const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
-  // OIR-221: the backups list is kept visually bounded — only the most recent
-  // N (N = the configured auto-backup retention count, default 5) are shown by
-  // default. Manual/import/reset backups are never auto-pruned from disk, so
-  // more files can theoretically exist beyond that count; "Mostrar más" reveals
-  // them on demand instead of always rendering an unbounded list.
-  const [showAllBackups, setShowAllBackups] = useState(false);
   const confirmationInFlightRef = useRef(false);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const isPanelOpen = csvPreview !== null;
   // Tracks whether the initial backup list load has been requested so the
   // backups effect never issues more than one listBackups IPC call, even when
-  // contacts or settings references change after the initial load.
+  // contacts or settings references change after the initial load. The list
+  // itself is no longer rendered (OIR-223 priority 5) — this data is fetched
+  // only to derive the "Última copia de seguridad" date below.
   const backupsRequestedRef = useRef(false);
-  const isRestoreInProgress = restoringBackupPath !== "";
   const isMutating =
     isCreatingBackup ||
     isExporting ||
     isImporting ||
-    isImportingCsv ||
-    isRestoreInProgress;
+    isImportingCsv;
 
   const loadBackups = async () => {
     try {
@@ -197,31 +192,6 @@ export const DataManagementSection = () => {
     }
   };
 
-  const handleRestoreBackup = async (backup: BackupListItem) => {
-    try {
-      setRestoringBackupPath(backup.filePath);
-      const result = await window.hospitalDirectory.restoreBackup(backup.filePath);
-
-      initialize({
-        contacts: result.contacts,
-        settings: result.settings
-      });
-      setCsvPreview(null);
-      await refreshBackups();
-      pushToast({
-        type: "success",
-        message: "Copia de seguridad restaurada."
-      });
-    } catch (error) {
-      pushToast({
-        type: "error",
-        message: toCompactToastMessage(error, "No se pudo restaurar la copia de seguridad seleccionada.")
-      });
-    } finally {
-      setRestoringBackupPath("");
-    }
-  };
-
   // OIR-219: single unified "Importar" entry point. Opens exactly one native
   // dialog (via pickAndImportDataset) and renders whichever existing flow
   // matches the returned `kind` — the JSON full-replace result handling
@@ -244,7 +214,7 @@ export const DataManagementSection = () => {
       if (response.kind === "unsupported-extension") {
         pushToast({
           type: "error",
-          message: `Tipo de archivo no admitido${response.extension ? ` (.${response.extension})` : ""}. Elige un archivo JSON, CSV, ODS, XLS o XLSX.`
+          message: `Tipo de archivo no admitido${response.extension ? ` (.${response.extension})` : ""}. Elige una copia de seguridad o una hoja de cálculo (CSV, ODS, XLS o XLSX).`
         });
         return;
       }
@@ -433,12 +403,7 @@ export const DataManagementSection = () => {
         return;
       }
 
-      if (confirmation.kind === "import-csv") {
-        await handleImportCsv(confirmation.preview);
-        return;
-      }
-
-      await handleRestoreBackup(confirmation.backup);
+      await handleImportCsv(confirmation.preview);
     } finally {
       confirmationInFlightRef.current = false;
     }
@@ -453,12 +418,12 @@ export const DataManagementSection = () => {
       return {
         title: "Seleccionar archivo para importar",
         message:
-          "Vas a elegir un archivo para importar. Si eliges un JSON, se reemplazará todo el directorio actual y se creará automáticamente una copia de seguridad antes de continuar. Si eliges CSV, ODS, XLS o XLSX, primero verás una vista previa para revisar y confirmar los cambios. ¿Deseas continuar y elegir un archivo?",
+          "Vas a elegir un archivo para importar. Si eliges una copia de seguridad completa, se reemplazarán los datos actuales del directorio (se creará una copia de seguridad automática antes de continuar). Si eliges una hoja de cálculo (CSV, ODS, XLS o XLSX), primero verás una vista previa para revisar y confirmar los cambios. ¿Deseas continuar y elegir un archivo?",
         confirmLabel: "Elegir archivo"
       };
     }
 
-    if (pendingConfirmation.kind === "import-csv") {
+    {
       const preview = pendingConfirmation.preview;
 
       // OIR-182 item 8: show the applied conflict policies in the dialog so the
@@ -488,12 +453,6 @@ export const DataManagementSection = () => {
         confirmLabel: "Confirmar importación"
       };
     }
-
-    return {
-      title: "Restaurar copia de seguridad",
-      message: `Se restaurará ${pendingConfirmation.backup.fileName} como directorio activo y antes se creará una copia de seguridad automática del estado actual. ¿Quieres continuar?`,
-      confirmLabel: "Restaurar copia de seguridad"
-    };
   })();
 
   if (bootstrapStatus === "error") {
@@ -504,12 +463,16 @@ export const DataManagementSection = () => {
     return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y copias de seguridad…</section>;
   }
 
-  // OIR-221: reuse the actual configured auto-backup retention count (not a
-  // hardcoded number) as the default visible-list cap — this keeps the list
-  // bounded in line with what retention is actually configured to keep.
-  const backupDisplayLimit = settings.ui.autoBackup.retentionCount;
-  const visibleBackups = showAllBackups ? backups : backups.slice(0, backupDisplayLimit);
-  const hiddenBackupCount = Math.max(0, backups.length - backupDisplayLimit);
+  // OIR-223 priority 5: derive the most recent backup's date client-side from
+  // the same listBackups() data already fetched above — no new IPC, and no
+  // list is rendered. `backups` is not guaranteed to be sorted, so take the
+  // max createdAt explicitly rather than assuming index 0 is the newest.
+  const lastBackupAt = backups.reduce<string | null>((latest, backup) => {
+    if (!latest) {
+      return backup.createdAt;
+    }
+    return new Date(backup.createdAt).getTime() > new Date(latest).getTime() ? backup.createdAt : latest;
+  }, null);
 
   return (
     <section className="space-y-6">
@@ -537,16 +500,20 @@ export const DataManagementSection = () => {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {/* OIR-219: "Copia de seguridad" consolidates the former "Crear copia de
-              seguridad" and "Exportar JSON" cards into one, with the local backup
-              as the primary action and export-to-a-chosen-destination as the
-              secondary action. */}
+          {/* OIR-219/OIR-223: "Copia de seguridad" — a single primary action
+              (save to the local backups folder). Saving to a different
+              location is folded in as a secondary, de-emphasized option on
+              the same card rather than a separate parallel button — a
+              switchboard operator should see ONE clear action, not a choice
+              between "backup" and "export" (the same underlying operation
+              to them). The mechanism (exportDataset()/createBackup() IPC)
+              is unchanged — this is copy/UX consolidation only. */}
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-lg font-semibold text-scs-blueDark">Copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
-              Genera una copia inmediata en la carpeta local de copias de seguridad, o exporta un JSON a un destino distinto.
+              Genera una copia de seguridad del directorio en la carpeta local de copias de seguridad.
             </p>
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4">
               <button
                 type="button"
                 onClick={() => void handleCreateBackup()}
@@ -555,15 +522,15 @@ export const DataManagementSection = () => {
               >
                 {isCreatingBackup ? "Creando…" : "Crear copia de seguridad"}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleExport()}
-                disabled={isMutating}
-                className="focus-ring rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
-              >
-                {isExporting ? "Exportando…" : "Exportar JSON"}
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              disabled={isMutating}
+              className="focus-ring mt-3 text-sm font-medium text-slate-600 underline-offset-2 hover:underline disabled:opacity-60"
+            >
+              {isExporting ? "Guardando…" : "Guardar la copia en otra carpeta…"}
+            </button>
           </div>
 
           {/* OIR-219: "Importar" is a single unified entry point. One button
@@ -574,7 +541,7 @@ export const DataManagementSection = () => {
           <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Selecciona un archivo para importar. Si es JSON, reemplaza el directorio completo (se crea una copia de seguridad automática antes de continuar). Si es CSV, ODS, XLS o XLSX, se valida y se muestra una vista previa antes de aplicar los cambios.
+              Selecciona un archivo para importar. Si es una copia de seguridad completa, reemplaza los datos actuales del directorio (se crea una copia de seguridad automática antes de continuar). Si es una hoja de cálculo (CSV, ODS, XLS o XLSX), se valida y se muestra una vista previa antes de aplicar los cambios.
             </p>
             <div className="mt-4">
               <button
@@ -626,11 +593,17 @@ export const DataManagementSection = () => {
         )}
         </article>
 
+        {/* OIR-223 priority 5: replaces the former backups list (with its
+            OIR-221 "Mostrar más" bounded-list toggle) with a single,
+            simple date indicator — an operator only needs to know WHEN
+            the last backup happened, not browse a list. Restoring an old
+            backup file is done via the unified "Importar" picker above
+            (importing a .json backup already performs a full replace). */}
         <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
-            <h3 className="mt-2 text-2xl font-semibold text-scs-blueDark">Copias de seguridad locales</h3>
+            <h3 className="mt-2 text-2xl font-semibold text-scs-blueDark">Última copia de seguridad</h3>
           </div>
           <button
             type="button"
@@ -642,47 +615,19 @@ export const DataManagementSection = () => {
           </button>
         </div>
 
-        <div className="mt-6 space-y-2">
-          {backups.length === 0 ? (
+        <div className="mt-6">
+          {lastBackupAt === null ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-              Aún no hay copias de seguridad locales disponibles.
+              Aún no se ha creado ninguna copia de seguridad.
             </div>
           ) : (
-            visibleBackups.map((backup) => (
-              <article
-                key={backup.filePath}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                    <span>{formatTimestamp(backup.createdAt)}</span>
-                    <span>{formatSize(backup.sizeBytes)}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPendingConfirmation({ kind: "restore-backup", backup })}
-                  disabled={isMutating}
-                  className="focus-ring shrink-0 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
-                >
-                  {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar esta copia de seguridad"}
-                </button>
-              </article>
-            ))
+            <p className="text-sm font-medium text-slate-700">
+              Última copia de seguridad: <span>{formatTimestamp(lastBackupAt)}</span>
+            </p>
           )}
-
-          {hiddenBackupCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setShowAllBackups((current) => !current)}
-              className="focus-ring w-full rounded-xl border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              {showAllBackups
-                ? "Mostrar menos"
-                : `Mostrar ${hiddenBackupCount} más`}
-            </button>
-          ) : null}
+          <p className="mt-3 text-xs text-slate-500">
+            ¿Necesitas recuperar una copia de seguridad anterior? Ábrela desde el botón «Importar» de arriba: seleccionar un archivo de copia de seguridad reemplaza el directorio actual con ese contenido.
+          </p>
         </div>
         </aside>
       </div>

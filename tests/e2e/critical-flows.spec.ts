@@ -82,7 +82,7 @@ test.describe("OIR-22 critical MVP flows", () => {
     }
   });
 
-  test("exports JSON, re-imports it, and creates a backup on disk", async () => {
+  test("saves a backup to another folder, re-imports it, and creates a local backup on disk", async () => {
     const workspace = await createWorkspace("export-import-backup");
     const exportPath = path.join(workspace.exportsDir, "contacts-export.json");
     const { electronApp, page } = await launchElectronApp({
@@ -96,7 +96,10 @@ test.describe("OIR-22 critical MVP flows", () => {
       await page.getByRole("link", { name: "Configuración" }).click();
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Exportar JSON/i }).click();
+      // OIR-223: "Exportar JSON" was removed as a distinct action — saving to
+      // another folder is now a de-emphasized secondary option on the single
+      // "Copia de seguridad" card, with no "JSON" wording.
+      await page.getByRole("button", { name: /Guardar la copia en otra carpeta/i }).click();
       await expect(page.getByText("Exportación completada.")).toBeVisible();
       await expect(fs.access(exportPath)).resolves.toBeUndefined();
 
