@@ -6,7 +6,7 @@ This mapping guide is based on the current hospital directory workbook used duri
 
 ## Goal
 
-The purpose of this document is to convert the current `.ods` hospital directory into the normalized CSV template used by the MVP importer.
+The purpose of this document is to convert the current `.ods` hospital directory into the normalized CSV template used by the importer.
 
 Reference template files:
 
@@ -31,7 +31,7 @@ Use a two-step normalization approach:
 1. Extract data from selected `.ods` sheets into working CSV files
 2. Normalize those working files into the project import template
 
-For the MVP, do **not** attempt a universal automatic import of all sheets at once. Instead, process the workbook by sheet family.
+For the current migration approach, do **not** attempt a universal automatic import of all sheets at once. Instead, process the workbook by sheet family.
 
 ## 3. Sheet Families and Recommended Mapping
 
@@ -128,7 +128,7 @@ Recommended mapping:
 
 Important rule:
 
-If the source text mixes role and person name, keep `displayName` intact for the MVP.
+If the source text mixes role and person name, keep `displayName` intact for now.
 
 Example:
 
@@ -154,9 +154,9 @@ Recommended mapping:
 - if the numbers are internal search/pager codes rather than phones, keep them in:
   - `notes`
   - or `aliases`
-  - or a later custom field if added after MVP
+  - or a later custom field if added afterward
 
-MVP recommendation:
+Recommendation:
 
 - do not force all `busca` values into phone fields
 - if a value is clearly a usable internal contact number, map it as `phoneXNumber`
@@ -196,7 +196,7 @@ Recommended displayName pattern:
 
 ## 4. Recommended Initial Area Inference
 
-For the MVP migration, use the following initial area heuristics:
+For the current migration, use the following initial area heuristics:
 
 - `gestion-administracion`
   - admissions
@@ -313,7 +313,7 @@ To reduce risk, normalize in this order:
 8. alphabetic sheets `A-Z`
 9. `Buscas_*` sheets last
 
-This order gives a useful MVP dataset early and postpones the noisiest sources.
+This order gives a useful initial dataset early and postpones the noisiest sources.
 
 ## 10. Suggested Intermediate Workflow
 
@@ -328,7 +328,7 @@ Recommended workflow:
 
 ## 11. Suggested First Migration Scope
 
-For the first usable MVP dataset, prioritize these sheets:
+For the first usable dataset, prioritize these sheets:
 
 - `Admisión_Central`
 - `Urgencias`

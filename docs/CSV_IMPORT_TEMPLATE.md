@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the MVP CSV contract for importing hospital directory data into the application.
+This document defines the current CSV contract for importing hospital directory data into the application.
 
 The importer is designed for a **normalized CSV template**, not for arbitrary raw spreadsheet exports. If the original `.ods` file is visually structured or inconsistent, it should be cleaned into this template before import.
 
@@ -113,7 +113,7 @@ Allowed values:
 
 ### `area`
 
-Recommended MVP values:
+Recommended values:
 
 - `sanitaria-asistencial`
 - `gestion-administracion`
