@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
+import { useAppStore } from "../../store/useAppStore";
 
 const future = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
@@ -22,6 +23,9 @@ const LocationProbe = () => {
 
 afterEach(() => {
   cleanup();
+  // OIR-218: reset settings so the last-import watermark test's setState()
+  // doesn't leak into subsequent tests in this file.
+  useAppStore.setState({ settings: null });
 });
 
 describe("AppShell — default mode", () => {
@@ -59,16 +63,48 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
-  it("shows Local badge", () => {
+  // OIR-218: the "Local" badge and the big serif "Agenda" heading were removed —
+  // only the "AGENDA HOSPITALARIA" eyebrow remains, plus a last-import
+  // watermark shown in the badge's place once an import has happened.
+  it("does not show a 'Local' badge", () => {
     renderShell();
-    expect(screen.getByText("Local")).toBeInTheDocument();
+    expect(screen.queryByText("Local")).not.toBeInTheDocument();
   });
 
-  it("header shows the plain 'Agenda' heading and never mentions 'MVP'", () => {
+  it("header shows the 'AGENDA HOSPITALARIA' eyebrow, no 'Agenda' heading, and never mentions 'MVP'", () => {
     renderShell();
     const header = screen.getByRole("banner");
-    expect(screen.getByRole("heading", { level: 1, name: "Agenda" })).toBeInTheDocument();
+    expect(screen.getByText("Agenda Hospitalaria")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
     expect(header.textContent).not.toMatch(/MVP/i);
+  });
+
+  it("hides the last-import watermark when no import has ever happened", () => {
+    renderShell();
+    expect(screen.queryByText(/Última actualización/)).not.toBeInTheDocument();
+  });
+
+  it("shows the last-import watermark as DD-MM-YYYY HH:mm once an import has happened", () => {
+    useAppStore.setState({
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false },
+        lastImportedAt: "2026-06-15T09:05:00.000Z"
+      } as never
+    });
+
+    renderShell();
+
+    // Locale-independent: build the expected label from the same Date the
+    // component parses, so this test is stable regardless of the CI runner's
+    // timezone.
+    const date = new Date("2026-06-15T09:05:00.000Z");
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expected = `Última actualización: ${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
   });
 
   it("does not show recovery banner", () => {

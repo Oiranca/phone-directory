@@ -166,14 +166,20 @@ export const appSettingsSchema = z.object({
       editCountThreshold: z.number().int().min(1).max(1000),
       retentionCount: z.number().int().min(1).max(100)
     }).default(autoBackupDefaults)
-  })
+  }),
+  // OIR-218: timestamp of the last time the dataset was replaced/merged from an
+  // external file import (JSON dataset-replace or CSV/spreadsheet bulk-import).
+  // Not user-editable — written only by AppDataService.importDataset /
+  // importCsvDataset. Absent until the first import ever happens.
+  lastImportedAt: isoDateTimeString.optional()
 });
 
 export const editableAppSettingsSchema = appSettingsSchema.pick({
   editorName: true,
   dataFilePath: true,
   backupDirectoryPath: true,
-  ui: true
+  ui: true,
+  lastImportedAt: true
 });
 
 const optionalTextField = () =>

@@ -627,6 +627,35 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("Registro extra 9")).not.toBeInTheDocument();
   });
 
+  // OIR-218: layout/scroll polish — filter bar stays visible while scrolling
+  // (sticky), and the results list / detail panel are bounded to the viewport
+  // (overflow-y-auto) instead of growing the page indefinitely.
+  it("keeps the filter bar sticky and bounds the results list/detail panel height", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    const searchInput = screen.getByLabelText("Buscar contactos");
+    const filterBar = searchInput.closest("div.sticky");
+    expect(filterBar).toHaveClass("sticky");
+
+    const resultsList = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(resultsList).toHaveClass("overflow-y-auto");
+
+    const detailPanel = screen.getByRole("heading", { name: "Detalle del registro" }).closest("div.overflow-y-auto");
+    expect(detailPanel).not.toBeNull();
+  });
+
   it("announces the empty result state as a status update", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,

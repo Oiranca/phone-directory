@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
@@ -6,6 +6,20 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { SelectField } from "../components/inputs/SelectField";
+import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+
+// OIR-218: CSS custom property tracking the rendered height of the sticky
+// search/filter bar below, kept in sync via ResizeObserver. Used together with
+// APP_HEADER_HEIGHT_CSS_VAR to bound the list/detail columns to the actually
+// available viewport height instead of a hardcoded per-breakpoint guess.
+const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
+
+// The offset at which the results list / detail panel should start (right
+// below the sticky app header + sticky filter bar), and the vertical breathing
+// room (page padding + inter-section gaps) to subtract from 100vh when
+// bounding their max-height.
+const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
+const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - 3.5rem)`;
 
 const typeLabels = {
   all: "Todos los tipos",
@@ -255,6 +269,27 @@ export const DirectoryPage = () => {
 
   const listRef = useRef<HTMLUListElement>(null);
   const detailRef = useRef<HTMLElement>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+
+  // OIR-218: keep --directory-filterbar-height in sync with the sticky filter
+  // bar's real rendered height (it grows when active-filter chips appear).
+  // Guarded for environments without ResizeObserver (e.g. jsdom in tests).
+  useLayoutEffect(() => {
+    const filterBarEl = filterBarRef.current;
+    if (!filterBarEl || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const applyHeight = () => {
+      document.documentElement.style.setProperty(FILTER_BAR_HEIGHT_CSS_VAR, `${filterBarEl.getBoundingClientRect().height}px`);
+    };
+
+    applyHeight();
+    const observer = new ResizeObserver(applyHeight);
+    observer.observe(filterBarEl);
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
     if (currentPageRecords.length === 0) {
@@ -413,8 +448,13 @@ export const DirectoryPage = () => {
 
   return (
     <section aria-labelledby="directory-page-title" className="flex flex-col gap-5">
-      {/* Search Header */}
-      <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+      {/* Search Header — sticky (OIR-218): stays visible below the app header while
+          the results list/detail panel scroll. */}
+      <div
+        ref={filterBarRef}
+        style={{ top: STICKY_CONTENT_TOP }}
+        className="sticky z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5"
+      >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
@@ -575,7 +615,17 @@ export const DirectoryPage = () => {
         
         {/* Left Column: Results List */}
         <div className="flex flex-col gap-3">
-          <ul ref={listRef} onKeyDown={handleListKeyDown} aria-label="Resultados del directorio" className="flex flex-col gap-3">
+          {/* OIR-218: bounded to the available viewport height so a full page of
+              results never forces page-level scroll — pagination below handles
+              the rest. Only scrolls internally on the rare viewport where even
+              one page of results doesn't fit. */}
+          <ul
+            ref={listRef}
+            onKeyDown={handleListKeyDown}
+            aria-label="Resultados del directorio"
+            style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
+            className="flex flex-col gap-3 overflow-y-auto pr-1"
+          >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
@@ -697,8 +747,21 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <section ref={detailRef} aria-label="Detalle del registro seleccionado" onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
-          <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
+        <section
+          ref={detailRef}
+          aria-label="Detalle del registro seleccionado"
+          onKeyDown={handleDetailKeyDown}
+          style={{ top: STICKY_CONTENT_TOP }}
+          className="lg:sticky"
+        >
+          {/* OIR-218: bounded to the available viewport height with overflow-y-auto
+              — no scrollbar appears while content fits; it only scrolls internally
+              (never growing the page) when a record has enough phones/emails/socials
+              to genuinely overflow. */}
+          <div
+            style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
+            className="overflow-y-auto rounded-3xl bg-white p-6 shadow-panel sm:p-8"
+          >
             <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
             {selectedRecord ? (
               <div className="space-y-6">
@@ -725,7 +788,7 @@ export const DirectoryPage = () => {
                           </span>
                         ))}
                       </div>
-                      <h4 className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
+                      <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
                         {selectedRecord.displayName}
                       </h4>
                     </div>

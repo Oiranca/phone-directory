@@ -312,9 +312,11 @@ export class AppDataService {
       importSource: path.basename(sourceFilePath)
     });
 
+    const updatedSettings = await this.recordLastImportedAt(settings, now);
+
     return {
       contacts: importedContacts,
-      settings: this.toEditableSettings(settings),
+      settings: this.toEditableSettings(updatedSettings),
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: importedContacts.records.length
@@ -517,9 +519,11 @@ export class AppDataService {
       }
     }
 
+    const updatedSettings = await this.recordLastImportedAt(settings, now);
+
     return {
       contacts: merged.contacts,
-      settings: this.toEditableSettings(settings),
+      settings: this.toEditableSettings(updatedSettings),
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: merged.contacts.records.length,
@@ -767,8 +771,22 @@ export class AppDataService {
       editorName: settings.editorName,
       dataFilePath: settings.dataFilePath,
       backupDirectoryPath: settings.backupDirectoryPath,
-      ui: settings.ui
+      ui: settings.ui,
+      lastImportedAt: settings.lastImportedAt
     };
+  }
+
+  /**
+   * OIR-218: persists the "last import" watermark shown in the app header.
+   * Only called from importDataset / importCsvDataset — restoring an internal
+   * backup or editing a single record does not count as "importing a file".
+   * Reuses the standard atomic writeJsonFile path (dual-fsync); no parallel
+   * write mechanism is introduced.
+   */
+  private async recordLastImportedAt(settings: AppSettings, timestamp: string): Promise<AppSettings> {
+    const nextSettings: AppSettings = { ...settings, lastImportedAt: timestamp };
+    await writeJsonFile(getSettingsFilePath(), nextSettings);
+    return nextSettings;
   }
 
   private async readContacts(settings: AppSettings) {

@@ -1532,6 +1532,47 @@ describe("AppDataService", () => {
     expect(persisted.records[0]?.displayName).toBe("Importado");
   });
 
+  // OIR-218: last-import watermark shown in the app header.
+  it("records lastImportedAt on the returned and persisted settings after a JSON dataset import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const beforeImport = await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8");
+    expect(JSON.parse(beforeImport).lastImportedAt).toBeUndefined();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const before = Date.now();
+    const importResult = await service.importDataset(sourceFilePath);
+    const after = Date.now();
+
+    expect(importResult.settings.lastImportedAt).toBeDefined();
+    const importedAtMs = new Date(importResult.settings.lastImportedAt!).getTime();
+    expect(importedAtMs).toBeGreaterThanOrEqual(before);
+    expect(importedAtMs).toBeLessThanOrEqual(after);
+
+    const persistedSettings = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+    ) as { lastImportedAt?: string };
+    expect(persistedSettings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+  });
+
+  it("does not set lastImportedAt when restoring a backup (only file imports count)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const backupPath = await service.createBackup();
+
+    const restoreResult = await service.restoreBackup(backupPath);
+
+    expect(restoreResult.settings.lastImportedAt).toBeUndefined();
+  });
+
   it("restores a selected backup and creates a safety backup first", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -2150,6 +2191,37 @@ describe("AppDataService", () => {
         record.contactMethods.phones.some((phone) => phone.noPatientSharing)
       )
     ).toBe(true);
+  });
+
+  // OIR-218: last-import watermark shown in the app header — CSV/spreadsheet
+  // bulk-import path.
+  it("records lastImportedAt after a spreadsheet (CSV/ODS) bulk import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Servicio", "Número", "Notas"],
+      ["Urgencias", "", ""],
+      ["Mostrador", "55555", ""]
+    ]);
+    XLSX.utils.book_append_sheet(workbook, sheet, "Urgencias");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const before = Date.now();
+    const result = await service.importCsvDataset(sourceFilePath);
+    const after = Date.now();
+
+    expect(result.settings.lastImportedAt).toBeDefined();
+    const importedAtMs = new Date(result.settings.lastImportedAt!).getTime();
+    expect(importedAtMs).toBeGreaterThanOrEqual(before);
+    expect(importedAtMs).toBeLessThanOrEqual(after);
   });
 
   it("updates an existing external center when row order changes but phone and service stay the same", async () => {
