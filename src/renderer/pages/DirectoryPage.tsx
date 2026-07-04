@@ -811,9 +811,7 @@ export const DirectoryPage = () => {
                         {selectedRecordPrivacyFlags.map((flag) => (
                           <span
                             key={flag}
-                            className={flag === "Confidencial"
-                              ? "rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
-                              : "rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"}
+                            className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
                           >
                             {flag}
                           </span>
@@ -904,11 +902,6 @@ export const DirectoryPage = () => {
                           {phone.confidential && (
                             <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
                               Confidencial
-                            </span>
-                          )}
-                          {phone.noPatientSharing && (
-                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                              No pacientes
                             </span>
                           )}
                         </div>

@@ -527,7 +527,8 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getAllByText("Confidencial").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No facilitar a pacientes")).not.toBeInTheDocument();
+    expect(screen.queryByText("No pacientes")).not.toBeInTheDocument();
     expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
     expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
   });

@@ -342,23 +342,21 @@ describe("getPhonePrivacyFlags", () => {
     expect(flags).not.toContain("No facilitar a pacientes");
   });
 
-  it("returns No facilitar a pacientes when a phone has noPatientSharing", () => {
+  it("does not return No facilitar a pacientes when a phone only has noPatientSharing", () => {
     const record = structuredClone(records[0]) as ContactRecord;
     record.contactMethods.phones = [
       { id: "ph1", number: "11111", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: true }
     ];
     const flags = getPhonePrivacyFlags(record);
-    expect(flags).toContain("No facilitar a pacientes");
-    expect(flags).not.toContain("Confidencial");
+    expect(flags).toEqual([]);
   });
 
-  it("returns both flags when applicable", () => {
+  it("returns only Confidencial when a phone has both flags", () => {
     const record = structuredClone(records[0]) as ContactRecord;
     record.contactMethods.phones = [
       { id: "ph1", number: "11111", kind: "internal", isPrimary: true, confidential: true, noPatientSharing: true }
     ];
     const flags = getPhonePrivacyFlags(record);
-    expect(flags).toContain("Confidencial");
-    expect(flags).toContain("No facilitar a pacientes");
+    expect(flags).toEqual(["Confidencial"]);
   });
 });
