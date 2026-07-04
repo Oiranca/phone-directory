@@ -104,10 +104,13 @@ test.describe("OIR-22 critical MVP flows", () => {
       await expect(page.getByText("Copia de seguridad creada.")).toBeVisible();
       await expect(listBackupFiles(workspace.userDataPath)).resolves.toHaveLength(1);
 
-      await page.getByRole("button", { name: /Importar JSON/i }).click();
-      const importJsonDialog = page.getByRole("dialog", { name: "Confirmar importación JSON" });
-      await expect(importJsonDialog).toBeVisible();
-      await importJsonDialog.getByRole("button", { name: "Importar JSON" }).click();
+      // OIR-219: single unified "Importar" entry point — one button, one native
+      // dialog (json/csv/ods/xls/xlsx filter), gated by a pre-selection safety
+      // confirmation covering both possible outcomes.
+      await page.getByRole("button", { name: "Importar" }).click();
+      const pickImportDialog = page.getByRole("dialog", { name: "Seleccionar archivo para importar" });
+      await expect(pickImportDialog).toBeVisible();
+      await pickImportDialog.getByRole("button", { name: "Elegir archivo" }).click();
       await expect(page.getByText("Importación completada.")).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
@@ -141,7 +144,9 @@ test.describe("OIR-22 critical MVP flows", () => {
       await page.getByRole("link", { name: "Configuración" }).click();
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      // OIR-219: single unified "Importar" entry point.
+      await page.getByRole("button", { name: "Importar" }).click();
+      await page.getByRole("button", { name: "Elegir archivo" }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
       await expect(page.getByRole("heading", { name: "directory.csv" })).toBeVisible();
       await expect(page.getByText("Altas", { exact: true })).toBeVisible();

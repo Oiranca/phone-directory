@@ -9,6 +9,16 @@ import {
   waitForDirectory
 } from "./helpers/electron";
 
+/**
+ * OIR-219: the "Importar" card is now a single unified entry point — one
+ * button opens exactly one native dialog after a pre-selection safety
+ * confirmation. Drives that two-click sequence for the tests below.
+ */
+const openImportPicker = async (page: import("@playwright/test").Page) => {
+  await page.getByRole("button", { name: "Importar" }).click();
+  await page.getByRole("button", { name: "Elegir archivo" }).click();
+};
+
 test.describe("OIR-57 bulk import preview UI", () => {
   test("preview shows row table with accepted status for all-valid rows", async () => {
     const workspace = await createWorkspace("preview-all-valid");
@@ -35,7 +45,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await page.getByRole("link", { name: "Configuración" }).click();
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
 
       // Preview panel appears
       await expect(page.getByText("Vista previa importación")).toBeVisible();
@@ -92,7 +102,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await page.getByRole("link", { name: "Configuración" }).click();
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
 
       // Preview panel appears
       await expect(page.getByText("Vista previa importación")).toBeVisible();
@@ -142,7 +152,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Configuración" }).click();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -193,7 +203,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Configuración" }).click();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       const table = page.getByRole("table", { name: "Filas de importación" });
@@ -239,7 +249,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
       // Step 1: open preview
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       // Row table shows the new record
@@ -289,7 +299,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       await waitForDirectory(page);
       await page.getByRole("link", { name: "Configuración" }).click();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      await openImportPicker(page);
       await expect(page.getByText("Vista previa importación")).toBeVisible();
 
       await page.getByRole("button", { name: "Cerrar vista previa" }).click();

@@ -24,6 +24,11 @@ export const CONTACTS_CHANNELS = {
   importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
   importCsvDataset: "contacts:import-csv-dataset",
+  // OIR-219: single unified "Importar" entry point. Opens ONE native dialog
+  // (json/csv/ods/xls/xlsx filter) and dispatches internally by extension to
+  // the existing importDataset()/previewCsvImport() pipelines. The old two
+  // channels above are kept — this is additive, not a replacement.
+  pickAndImportDataset: "contacts:pick-and-import-dataset",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
 } as const;

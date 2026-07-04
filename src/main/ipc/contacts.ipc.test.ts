@@ -613,3 +613,180 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect((err4 as Error).message).toBe(expectedError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// OIR-219 — pickAndImportDataset: single unified "Importar" entry point
+//
+// Verifies the extension-based dispatch: main owns the one dialog, and routes
+// to the same underlying pipelines used by the existing importDataset /
+// previewCsvImport channels, without ever accepting a renderer-supplied path.
+// ---------------------------------------------------------------------------
+
+describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let serviceMock: {
+    importDataset: ReturnType<typeof vi.fn>;
+    previewCsvImport: ReturnType<typeof vi.fn>;
+    [key: string]: unknown;
+  };
+  let showOpenDialogMock: ReturnType<typeof vi.fn>;
+
+  const jsonImportResult = {
+    contacts: { records: [], exportedAt: "2026-07-04T00:00:00.000Z", metadata: {}, catalogs: {} },
+    settings: {},
+    backupPath: "/tmp/backups/auto.json",
+    importedFilePath: "/tmp/incoming/replacement.json",
+    recordCount: 0
+  };
+
+  const csvPreviewStub = {
+    sourceFilePath: "/tmp/incoming/directory.csv",
+    fileName: "directory.csv",
+    totalRowCount: 1,
+    validRowCount: 1,
+    invalidRowCount: 0,
+    warningCount: 0,
+    recordCount: 1,
+    mergedRecordCount: 1,
+    createdCount: 1,
+    updatedCount: 0,
+    buscasSkippedRowCount: 0,
+    socialHandleSkippedRowCount: 0,
+    parsedBuscasCellCount: 0,
+    typeCounts: {},
+    areaCounts: {},
+    rowIssues: [],
+    warnings: [],
+    previewRows: [],
+    conflictCount: 0,
+    conflictedRecords: [],
+    policiesResolved: true
+  };
+
+  beforeEach(async () => {
+    vi.resetModules();
+
+    handlers = new Map();
+    showOpenDialogMock = vi.fn();
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: showOpenDialogMock,
+        showSaveDialog: vi.fn()
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    serviceMock = {
+      importDataset: vi.fn().mockResolvedValue(jsonImportResult),
+      previewCsvImport: vi.fn().mockResolvedValue({ ...csvPreviewStub }),
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn(),
+      resetDataset: vi.fn(),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn(),
+      restoreBackup: vi.fn(),
+      exportDataset: vi.fn(),
+      importCsvDataset: vi.fn(),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    };
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  const getHandler = () => {
+    const handler = handlers.get("contacts:pick-and-import-dataset");
+    if (!handler) throw new Error("pickAndImportDataset handler not registered");
+    return handler;
+  };
+
+  it("dispatches to service.importDataset() (unchanged full-replace pipeline) for a .json pick", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
+    const sender = makeWebContentsSender(1);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(serviceMock.importDataset).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+    expect(response).toEqual({ kind: "json-import", result: jsonImportResult });
+  });
+
+  it("dispatches to the same normalize/validate/preview pipeline as previewCsvImport for a .csv pick", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/directory.csv"] });
+    const sender = makeWebContentsSender(2);
+
+    const response = await getHandler()({ sender } as unknown) as {
+      kind: string;
+      preview: { importToken: string; sourceFilePath?: string; fileName: string };
+    };
+
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(response.kind).toBe("csv-preview");
+    // OIR-115 parity — the absolute source path must never reach the renderer here either.
+    expect(Object.prototype.hasOwnProperty.call(response.preview, "sourceFilePath")).toBe(false);
+    expect(typeof response.preview.importToken).toBe("string");
+    expect(response.preview.fileName).toBe("directory.csv");
+  });
+
+  it.each(["ods", "xls", "xlsx"])("also dispatches .%s picks to the CSV-like pipeline", async (extension) => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [`/tmp/incoming/directory.${extension}`] });
+    const sender = makeWebContentsSender(3);
+
+    const response = await getHandler()({ sender } as unknown) as { kind: string };
+
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(`/tmp/incoming/directory.${extension}`);
+    expect(response.kind).toBe("csv-preview");
+  });
+
+  it("returns { kind: 'cancelled' } when the dialog is dismissed without a selection", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+    const sender = makeWebContentsSender(4);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(response).toEqual({ kind: "cancelled" });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+  });
+
+  it("returns { kind: 'unsupported-extension' } and touches neither pipeline for an unexpected extension", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/malware.exe"] });
+    const sender = makeWebContentsSender(5);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(response).toEqual({ kind: "unsupported-extension", extension: "exe" });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+  });
+
+  it("opens exactly one native dialog filtered to json/csv/ods/xls/xlsx", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+    const sender = makeWebContentsSender(6);
+
+    await getHandler()({ sender } as unknown);
+
+    expect(showOpenDialogMock).toHaveBeenCalledTimes(1);
+    const [options] = showOpenDialogMock.mock.calls[0] as [{ filters: Array<{ extensions: string[] }> }];
+    expect(options.filters[0]?.extensions.sort()).toEqual(["csv", "json", "ods", "xls", "xlsx"]);
+  });
+});

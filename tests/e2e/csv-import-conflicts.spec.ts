@@ -44,13 +44,15 @@ const conflictCsv = (displayName: string, phone: string) =>
   ].join("\n") + "\n";
 
 /**
- * Navigate to Import/Export, trigger CSV preview for the given file path,
- * and wait for the preview panel to appear.
+ * Navigate to Configuración, drive the unified "Importar" entry point
+ * (OIR-219: one button, one native dialog, one pre-selection confirmation)
+ * for the given file path, and wait for the CSV preview panel to appear.
  */
 const openPreview = async (page: import("@playwright/test").Page) => {
   await page.getByRole("link", { name: "Configuración" }).click();
   await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
-  await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+  await page.getByRole("button", { name: "Importar" }).click();
+  await page.getByRole("button", { name: "Elegir archivo" }).click();
   await expect(page.getByText("Vista previa importación")).toBeVisible();
 };
 

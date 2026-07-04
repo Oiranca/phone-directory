@@ -37,7 +37,8 @@ export const CONTACTS_CHANNELS = {
   previewCsvImport: "contacts:preview-csv-import",
   importCsvDataset: "contacts:import-csv-dataset",
   detectDuplicates: "contacts:detect-duplicates",
-  mergeDuplicates:  "contacts:merge-duplicates"
+  mergeDuplicates:  "contacts:merge-duplicates",
+  pickAndImportDataset: "contacts:pick-and-import-dataset"
 } as const satisfies typeof _CanonicalContacts;
 
 export const SETTINGS_CHANNELS = {
@@ -81,6 +82,8 @@ export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
     previewCsvImport: () => ipcRenderer.invoke(CONTACTS_CHANNELS.previewCsvImport) as ReturnType<HospitalDirectoryApi["previewCsvImport"]>,
     importCsvDataset: (importToken, policies = []) =>
       ipcRenderer.invoke(CONTACTS_CHANNELS.importCsvDataset, importToken, policies) as ReturnType<HospitalDirectoryApi["importCsvDataset"]>,
+    pickAndImportDataset: () =>
+      ipcRenderer.invoke(CONTACTS_CHANNELS.pickAndImportDataset) as ReturnType<HospitalDirectoryApi["pickAndImportDataset"]>,
     browseForPath: (type) =>
       ipcRenderer.invoke(SETTINGS_CHANNELS.browsePath, type) as ReturnType<HospitalDirectoryApi["browseForPath"]>,
     listBuscas: () => ipcRenderer.invoke(BUSCAS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBuscas"]>,

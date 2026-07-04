@@ -339,6 +339,24 @@ export interface CsvImportResult extends ImportContactsResult {
   rowIssues: CsvImportIssue[];
 }
 
+/**
+ * OIR-219 — discriminated-union response for pickAndImportDataset, the single
+ * unified "Importar" entry point. Lets the renderer route to whichever
+ * existing UI matches the flow that main actually dispatched to, without ever
+ * receiving a file path back:
+ *   - "json-import"           → reuse the existing JSON full-replace result handling
+ *   - "csv-preview"           → reuse the existing CsvImportPreviewPanel/confirm flow
+ *   - "unsupported-extension" → the OS dialog filter was somehow bypassed
+ *   - "cancelled"             → the user closed the dialog without picking a file
+ *
+ * See src/shared/schemas/pick-and-import.schema.ts for the runtime envelope schema.
+ */
+export type PickAndImportDatasetResult =
+  | { kind: "json-import"; result: ImportContactsResult }
+  | { kind: "csv-preview"; preview: CsvImportPreviewWithConflicts }
+  | { kind: "unsupported-extension"; extension: string }
+  | { kind: "cancelled" };
+
 export interface AuditLogResult {
   entries: AuditLogEntry[];
   totalCount: number;

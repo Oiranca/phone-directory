@@ -93,6 +93,82 @@ const renderPage = () =>
     </ToastProvider>
   );
 
+// OIR-219: the "Importar" card is now a single button. Clicking it opens the
+// pre-selection safety confirmation (generic — covers both the JSON
+// full-replace and the CSV preview outcomes) before pickAndImportDataset()
+// is actually invoked. Tests drive that two-click sequence through this helper.
+const openImportPicker = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Importar" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Elegir archivo" }));
+};
+
+const defaultCsvPreview = {
+  importToken: "csv-token-1",
+  fileName: "directory.csv",
+  detectedFormat: "exportación cruda de hoja de servicios",
+  detectionConfidence: "medium",
+  totalRowCount: 2,
+  validRowCount: 2,
+  invalidRowCount: 0,
+  warningCount: 1,
+  recordCount: 2,
+  mergedRecordCount: defaultContacts.records.length + 1,
+  createdCount: 1,
+  updatedCount: 1,
+  typeCounts: {
+    person: 1,
+    service: 1
+  },
+  areaCounts: {
+    otros: 1
+  },
+  rowIssues: [],
+  warnings: [
+    {
+      rowNumber: 3,
+      displayName: "Urgencias",
+      message: "El área \"urgencias\" no está soportada y se omitirá."
+    }
+  ],
+  previewRows: [
+    {
+      rowNumber: 2,
+      status: "accepted",
+      displayName: "Admisión General",
+      type: "service",
+      department: "Admisión",
+      area: "gestion-administracion",
+      phone1Number: "12345"
+    },
+    {
+      rowNumber: 3,
+      status: "warning",
+      displayName: "Urgencias",
+      type: "service",
+      department: "Urgencias",
+      phone1Number: "99999",
+      warningMessages: ["El área \"urgencias\" no está soportada y se omitirá."]
+    }
+  ]
+};
+
+const defaultJsonImportResult = {
+  contacts: {
+    ...defaultContacts,
+    records: [
+      {
+        ...defaultContacts.records[0]!,
+        id: "cnt_replaced",
+        displayName: "Directorio importado"
+      }
+    ]
+  },
+  settings: editableSettings,
+  backupPath: "/tmp/backups/contacts-auto.json",
+  importedFilePath: "/tmp/incoming/replacement.json",
+  recordCount: 1
+};
+
 describe("DataManagementSection (OIR-219 — Configuración data section)", () => {
   beforeEach(() => {
     resetStore();
@@ -136,54 +212,12 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
           exportedAt: defaultContacts.exportedAt,
           recordCount: defaultContacts.records.length
         }),
-        previewCsvImport: vi.fn().mockResolvedValue({
-          importToken: "csv-token-1",
-          fileName: "directory.csv",
-          detectedFormat: "exportación cruda de hoja de servicios",
-          detectionConfidence: "medium",
-          totalRowCount: 2,
-          validRowCount: 2,
-          invalidRowCount: 0,
-          warningCount: 1,
-          recordCount: 2,
-          mergedRecordCount: defaultContacts.records.length + 1,
-          createdCount: 1,
-          updatedCount: 1,
-          typeCounts: {
-            person: 1,
-            service: 1
-          },
-          areaCounts: {
-            otros: 1
-          },
-          rowIssues: [],
-          warnings: [
-            {
-              rowNumber: 3,
-              displayName: "Urgencias",
-              message: "El área \"urgencias\" no está soportada y se omitirá."
-            }
-          ],
-          previewRows: [
-            {
-              rowNumber: 2,
-              status: "accepted",
-              displayName: "Admisión General",
-              type: "service",
-              department: "Admisión",
-              area: "gestion-administracion",
-              phone1Number: "12345"
-            },
-            {
-              rowNumber: 3,
-              status: "warning",
-              displayName: "Urgencias",
-              type: "service",
-              department: "Urgencias",
-              phone1Number: "99999",
-              warningMessages: ["El área \"urgencias\" no está soportada y se omitirá."]
-            }
-          ]
+        // OIR-219: the component only calls pickAndImportDataset() — default to
+        // the CSV-preview flow since most tests exercise it. Tests that need the
+        // JSON full-replace flow override this per-test with a "json-import" kind.
+        pickAndImportDataset: vi.fn().mockResolvedValue({
+          kind: "csv-preview",
+          preview: { ...defaultCsvPreview }
         }),
         importCsvDataset: vi.fn().mockResolvedValue({
           contacts: {
@@ -204,22 +238,6 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
           invalidRowCount: 0,
           createdCount: 1,
           updatedCount: 1
-        }),
-        importDataset: vi.fn().mockResolvedValue({
-          contacts: {
-            ...defaultContacts,
-            records: [
-              {
-                ...defaultContacts.records[0]!,
-                id: "cnt_replaced",
-                displayName: "Directorio importado"
-              }
-            ]
-          },
-          settings: editableSettings,
-          backupPath: "/tmp/backups/contacts-auto.json",
-          importedFilePath: "/tmp/incoming/replacement.json",
-          recordCount: 1
         })
       }
     });
@@ -247,22 +265,20 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
 
     const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
     const exportBtn = screen.getByRole("button", { name: /Exportar JSON/ });
-    const importJsonBtn = screen.getByRole("button", { name: /Importar JSON/ });
-    const prepareBtn = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
+    const importBtn = screen.getByRole("button", { name: "Importar" });
 
     expect(backupBtn.className).toContain("focus-ring");
     expect(exportBtn.className).toContain("focus-ring");
-    expect(importJsonBtn.className).toContain("focus-ring");
-    expect(prepareBtn.className).toContain("focus-ring");
+    expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("OIR-188: shows the Import JSON card warning in plain natural Spanish (no bolted-on label)", async () => {
+  it("OIR-219: shows the unified Import card copy describing both possible outcomes", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar."
+        "Selecciona un archivo para importar. Si es JSON, reemplaza el directorio completo (se crea una copia de seguridad automática antes de continuar). Si es CSV, ODS, XLS o XLSX, se valida y se muestra una vista previa antes de aplicar los cambios."
       )
     ).toBeInTheDocument();
   });
@@ -321,23 +337,83 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     ).toBeInTheDocument();
   });
 
-  it("imports a dataset after confirmation and refreshes the store", async () => {
+  it("shows the pre-selection confirmation dialog before opening the file picker", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.",
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar JSON/ }));
-    fireEvent.click((await screen.findAllByRole("button", { name: "Importar JSON" })).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "Importar" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Seleccionar archivo para importar" });
+    expect(dialog).toBeVisible();
+    expect(window.hospitalDirectory.pickAndImportDataset).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Elegir archivo" }));
+    await waitFor(() => {
+      expect(window.hospitalDirectory.pickAndImportDataset).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("imports a JSON dataset after confirmation and refreshes the store", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "json-import",
+      result: defaultJsonImportResult
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.importDataset).toHaveBeenCalledTimes(1);
+      expect(window.hospitalDirectory.pickAndImportDataset).toHaveBeenCalledTimes(1);
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
+  });
+
+  it("shows a cancellation toast when the file dialog is dismissed", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({ kind: "cancelled" });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+
+    expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
+  });
+
+  it("shows an error toast for an unsupported file extension", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "unsupported-extension",
+      extension: "exe"
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+
+    expect(
+      await screen.findByText("Tipo de archivo no admitido (.exe). Elige un archivo JSON, CSV, ODS, XLS o XLSX.")
+    ).toBeInTheDocument();
+  });
+
+  it("shows the import error when the picker/dispatch call fails", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi
+      .fn()
+      .mockRejectedValue(new Error("La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."));
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+
+    expect(
+      await screen.findByText(
+        "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
   });
 
   it("exposes a busy status while bootstrap data is still loading", async () => {
@@ -436,7 +512,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
@@ -456,66 +532,69 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-token-conflict",
-      fileName: "conflicts.csv",
-      totalRowCount: 1,
-      validRowCount: 1,
-      invalidRowCount: 0,
-      warningCount: 0,
-      recordCount: 1,
-      mergedRecordCount: defaultContacts.records.length,
-      createdCount: 0,
-      updatedCount: 1,
-      typeCounts: { service: 1 },
-      areaCounts: {},
-      rowIssues: [],
-      warnings: [],
-      previewRows: [
-        {
-          rowNumber: 2,
-          status: "accepted",
-          displayName: "Mostrador importado",
-          type: "service"
-        }
-      ],
-      conflictCount: 1,
-      policiesResolved: false,
-      conflictedRecords: [
-        {
-          recordIndex: 0,
-          importedRecord: {
-            id: "import-1",
-            type: "service",
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-token-conflict",
+        fileName: "conflicts.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        invalidRowCount: 0,
+        warningCount: 0,
+        recordCount: 1,
+        mergedRecordCount: defaultContacts.records.length,
+        createdCount: 0,
+        updatedCount: 1,
+        typeCounts: { service: 1 },
+        areaCounts: {},
+        rowIssues: [],
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "accepted",
             displayName: "Mostrador importado",
-            department: "Admisión",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecord: {
-            id: "existing-1",
-            type: "service",
-            displayName: "Mostrador actual",
-            department: "Admisión",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecordIndex: 0,
-          matchingRecordSource: "existing",
-          conflictType: "external-id-match",
-          conflictReasonKey: "conflict_reason.external_id"
-        }
-      ]
+            type: "service"
+          }
+        ],
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-1",
+              type: "service",
+              displayName: "Mostrador importado",
+              department: "Admisión",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-1",
+              type: "service",
+              displayName: "Mostrador actual",
+              department: "Admisión",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      }
     });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
     expect(await screen.findByText("Conflictos (1)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
 
@@ -532,64 +611,67 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("updates confirmation counts when a conflict is skipped", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-token-skip-conflict",
-      fileName: "skip-conflicts.csv",
-      totalRowCount: 1,
-      validRowCount: 1,
-      invalidRowCount: 0,
-      warningCount: 0,
-      recordCount: 1,
-      mergedRecordCount: defaultContacts.records.length,
-      createdCount: 0,
-      updatedCount: 1,
-      typeCounts: { service: 1 },
-      areaCounts: {},
-      rowIssues: [],
-      warnings: [],
-      previewRows: [
-        {
-          rowNumber: 2,
-          status: "accepted",
-          displayName: "Mostrador importado",
-          type: "service"
-        }
-      ],
-      conflictCount: 1,
-      policiesResolved: false,
-      conflictedRecords: [
-        {
-          recordIndex: 0,
-          importedRecord: {
-            id: "import-1",
-            type: "service",
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-token-skip-conflict",
+        fileName: "skip-conflicts.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        invalidRowCount: 0,
+        warningCount: 0,
+        recordCount: 1,
+        mergedRecordCount: defaultContacts.records.length,
+        createdCount: 0,
+        updatedCount: 1,
+        typeCounts: { service: 1 },
+        areaCounts: {},
+        rowIssues: [],
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "accepted",
             displayName: "Mostrador importado",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecord: {
-            id: "existing-1",
-            type: "service",
-            displayName: "Mostrador actual",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecordIndex: 0,
-          matchingRecordSource: "existing",
-          conflictType: "external-id-match",
-          conflictReasonKey: "conflict_reason.external_id"
-        }
-      ]
+            type: "service"
+          }
+        ],
+        conflictCount: 1,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-1",
+              type: "service",
+              displayName: "Mostrador importado",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-1",
+              type: "service",
+              displayName: "Mostrador actual",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      }
     });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
     fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
@@ -597,64 +679,67 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("blocks stale resolved previews when a conflict is missing its selected policy", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-token-stale-conflict",
-      fileName: "stale-conflicts.csv",
-      totalRowCount: 1,
-      validRowCount: 1,
-      invalidRowCount: 0,
-      warningCount: 0,
-      recordCount: 1,
-      mergedRecordCount: defaultContacts.records.length,
-      createdCount: 0,
-      updatedCount: 1,
-      typeCounts: { service: 1 },
-      areaCounts: {},
-      rowIssues: [],
-      warnings: [],
-      previewRows: [
-        {
-          rowNumber: 2,
-          status: "accepted",
-          displayName: "Mostrador importado",
-          type: "service"
-        }
-      ],
-      conflictCount: 1,
-      policiesResolved: true,
-      conflictedRecords: [
-        {
-          recordIndex: 0,
-          importedRecord: {
-            id: "import-1",
-            type: "service",
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-token-stale-conflict",
+        fileName: "stale-conflicts.csv",
+        totalRowCount: 1,
+        validRowCount: 1,
+        invalidRowCount: 0,
+        warningCount: 0,
+        recordCount: 1,
+        mergedRecordCount: defaultContacts.records.length,
+        createdCount: 0,
+        updatedCount: 1,
+        typeCounts: { service: 1 },
+        areaCounts: {},
+        rowIssues: [],
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "accepted",
             displayName: "Mostrador importado",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecord: {
-            id: "existing-1",
-            type: "service",
-            displayName: "Mostrador actual",
-            status: "active",
-            phones: [],
-            emails: [],
-            socials: []
-          },
-          matchingRecordIndex: 0,
-          matchingRecordSource: "existing",
-          conflictType: "external-id-match",
-          conflictReasonKey: "conflict_reason.external_id"
-        }
-      ]
+            type: "service"
+          }
+        ],
+        conflictCount: 1,
+        policiesResolved: true,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: {
+              id: "import-1",
+              type: "service",
+              displayName: "Mostrador importado",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecord: {
+              id: "existing-1",
+              type: "service",
+              displayName: "Mostrador actual",
+              status: "active",
+              phones: [],
+              emails: [],
+              socials: []
+            },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      }
     });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
@@ -663,44 +748,47 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("OIR-200: allows a partial import when the preview contains some invalid rows alongside valid rows", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-token-invalid",
-      fileName: "broken.csv",
-      totalRowCount: 2,
-      validRowCount: 1,
-      invalidRowCount: 1,
-      warningCount: 0,
-      recordCount: 1,
-      mergedRecordCount: defaultContacts.records.length,
-      createdCount: 0,
-      updatedCount: 1,
-      typeCounts: {
-        person: 1
-      },
-      areaCounts: {},
-      rowIssues: [
-        {
-          rowNumber: 3,
-          displayName: "Fila rota",
-          messages: ["El tipo es obligatorio."]
-        }
-      ],
-      warnings: [],
-      previewRows: [
-        {
-          rowNumber: 2,
-          status: "accepted",
-          displayName: "Registro válido",
-          type: "person",
-          phone1Number: "11111"
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-token-invalid",
+        fileName: "broken.csv",
+        totalRowCount: 2,
+        validRowCount: 1,
+        invalidRowCount: 1,
+        warningCount: 0,
+        recordCount: 1,
+        mergedRecordCount: defaultContacts.records.length,
+        createdCount: 0,
+        updatedCount: 1,
+        typeCounts: {
+          person: 1
         },
-        {
-          rowNumber: 3,
-          status: "rejected",
-          displayName: "Fila rota",
-          errorMessages: ["El tipo es obligatorio."]
-        }
-      ]
+        areaCounts: {},
+        rowIssues: [
+          {
+            rowNumber: 3,
+            displayName: "Fila rota",
+            messages: ["El tipo es obligatorio."]
+          }
+        ],
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "accepted",
+            displayName: "Registro válido",
+            type: "person",
+            phone1Number: "11111"
+          },
+          {
+            rowNumber: 3,
+            status: "rejected",
+            displayName: "Fila rota",
+            errorMessages: ["El tipo es obligatorio."]
+          }
+        ]
+      }
     });
     window.hospitalDirectory.importCsvDataset = vi.fn().mockResolvedValue({
       contacts: {
@@ -734,7 +822,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     expect(
       await screen.findByText("1 fila será omitida al importar. 0 altas y 1 actualizaciones previstas para las filas válidas.")
@@ -760,42 +848,45 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("OIR-200: still blocks import confirmation when the preview has zero valid rows", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-token-all-invalid",
-      fileName: "all-broken.csv",
-      totalRowCount: 1,
-      validRowCount: 0,
-      invalidRowCount: 1,
-      warningCount: 0,
-      recordCount: 0,
-      mergedRecordCount: defaultContacts.records.length,
-      createdCount: 0,
-      updatedCount: 0,
-      parsedBuscasCellCount: 0,
-      typeCounts: {},
-      areaCounts: {},
-      rowIssues: [
-        {
-          rowNumber: 2,
-          displayName: "Fila rota",
-          messages: ["El tipo es obligatorio."]
-        }
-      ],
-      warnings: [],
-      previewRows: [
-        {
-          rowNumber: 2,
-          status: "rejected",
-          displayName: "Fila rota",
-          errorMessages: ["El tipo es obligatorio."]
-        }
-      ]
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-token-all-invalid",
+        fileName: "all-broken.csv",
+        totalRowCount: 1,
+        validRowCount: 0,
+        invalidRowCount: 1,
+        warningCount: 0,
+        recordCount: 0,
+        mergedRecordCount: defaultContacts.records.length,
+        createdCount: 0,
+        updatedCount: 0,
+        parsedBuscasCellCount: 0,
+        typeCounts: {},
+        areaCounts: {},
+        rowIssues: [
+          {
+            rowNumber: 2,
+            displayName: "Fila rota",
+            messages: ["El tipo es obligatorio."]
+          }
+        ],
+        warnings: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            status: "rejected",
+            displayName: "Fila rota",
+            errorMessages: ["El tipo es obligatorio."]
+          }
+        ]
+      }
     });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     expect(
       await screen.findByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")
@@ -805,51 +896,54 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   it("clears the previous CSV preview when a new selection is canceled", async () => {
-    window.hospitalDirectory.previewCsvImport = vi
+    window.hospitalDirectory.pickAndImportDataset = vi
       .fn()
       .mockResolvedValueOnce({
-        importToken: "csv-token-first",
-        fileName: "directory.csv",
-        totalRowCount: 2,
-        validRowCount: 2,
-        invalidRowCount: 0,
-        warningCount: 0,
-        recordCount: 2,
-        mergedRecordCount: defaultContacts.records.length + 2,
-        createdCount: 2,
-        updatedCount: 0,
-        typeCounts: {
-          person: 2
-        },
-        areaCounts: {},
-        rowIssues: [],
-        warnings: [],
-        previewRows: [
-          {
-            rowNumber: 2,
-            status: "accepted",
-            displayName: "Registro A",
-            type: "person",
-            phone1Number: "11111"
+        kind: "csv-preview",
+        preview: {
+          importToken: "csv-token-first",
+          fileName: "directory.csv",
+          totalRowCount: 2,
+          validRowCount: 2,
+          invalidRowCount: 0,
+          warningCount: 0,
+          recordCount: 2,
+          mergedRecordCount: defaultContacts.records.length + 2,
+          createdCount: 2,
+          updatedCount: 0,
+          typeCounts: {
+            person: 2
           },
-          {
-            rowNumber: 3,
-            status: "accepted",
-            displayName: "Registro B",
-            type: "person",
-            phone1Number: "22222"
-          }
-        ]
+          areaCounts: {},
+          rowIssues: [],
+          warnings: [],
+          previewRows: [
+            {
+              rowNumber: 2,
+              status: "accepted",
+              displayName: "Registro A",
+              type: "person",
+              phone1Number: "11111"
+            },
+            {
+              rowNumber: 3,
+              status: "accepted",
+              displayName: "Registro B",
+              type: "person",
+              phone1Number: "22222"
+            }
+          ]
+        }
       })
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce({ kind: "cancelled" });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
@@ -857,33 +951,11 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
   });
 
-  it("shows the import error when preview preparation fails before row parsing", async () => {
-    window.hospitalDirectory.previewCsvImport = vi
-      .fn()
-      .mockRejectedValue(
-        new Error(
-          "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
-        )
-      );
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
-
-    expect(
-      await screen.findByText(
-        "La cabecera del CSV contiene columnas que no pertenecen a la plantilla oficial: legacyDesk. Corrige el archivo antes de importarlo."
-      )
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
-  });
-
   it("restores a listed backup after dialog confirmation", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Restaurar esta copia de seguridad" }));
@@ -935,8 +1007,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     });
     expect(screen.getByRole("button", { name: /Crear copia de seguridad/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Exportar JSON/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Importar JSON/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Importar CSV\/ODS/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Importar" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restaurando…" })).toBeDisabled();
 
     resolveRestore?.({
@@ -1021,7 +1092,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     // useLayoutEffect fires synchronously after the DOM update — no timer involved
     await waitFor(() => {
@@ -1035,16 +1106,14 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
-    const triggerButton = screen.getByRole("button", { name: /Importar CSV\/ODS/ });
-    fireEvent.click(triggerButton);
+    const triggerButton = screen.getByRole("button", { name: "Importar" });
+    await openImportPicker();
     await screen.findByText("Vista previa importación");
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar vista previa" }));
 
     await waitFor(() => {
-      expect(document.activeElement).toBe(
-        screen.getByRole("button", { name: /Importar CSV\/ODS/ })
-      );
+      expect(document.activeElement).toBe(triggerButton);
     });
   });
 
@@ -1096,75 +1165,78 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   // OIR-182 — import P1 UX fixes
   // ---------------------------------------------------------------------------
 
-  it("OIR-182 item 1: shows analysis spinner while previewCsvImport is pending", async () => {
-    // Intercept with a never-resolving promise so isPreparingCsvPreview stays true
-    let resolvePreview!: (value: unknown) => void;
-    const pendingPreview = new Promise((resolve) => { resolvePreview = resolve; });
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockReturnValue(pendingPreview);
+  it("OIR-182 item 1 / OIR-219: shows analysis spinner while pickAndImportDataset is pending", async () => {
+    // Intercept with a never-resolving promise so the "processing" status region stays visible
+    let resolvePick!: (value: unknown) => void;
+    const pendingPick = new Promise((resolve) => { resolvePick = resolve; });
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockReturnValue(pendingPick);
 
     renderPage();
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     // Spinner must appear while promise is in flight
-    expect(await screen.findByText(/Analizando el archivo/)).toBeInTheDocument();
+    expect(await screen.findByText(/Seleccionando y analizando el archivo/)).toBeInTheDocument();
     const spinnerStatus = screen.getByRole("status");
     expect(spinnerStatus).toBeInTheDocument();
 
     // Resolve to avoid state-update-after-unmount warning
-    resolvePreview(null);
+    resolvePick({ kind: "cancelled" });
   });
 
   it("OIR-182 item 10: shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
-    window.hospitalDirectory.previewCsvImport = vi.fn().mockResolvedValue({
-      importToken: "csv-conflict-toast",
-      fileName: "conflicts.csv",
-      detectedFormat: "exportación cruda",
-      detectionConfidence: "high",
-      totalRowCount: 2,
-      validRowCount: 2,
-      invalidRowCount: 0,
-      warningCount: 0,
-      recordCount: 2,
-      mergedRecordCount: 2,
-      createdCount: 0,
-      updatedCount: 2,
-      typeCounts: {},
-      areaCounts: {},
-      rowIssues: [],
-      warnings: [],
-      previewRows: [],
-      buscasSkippedRowCount: 0,
-      socialHandleSkippedRowCount: 0,
-      parsedBuscasCellCount: 0,
-      conflictCount: 2,
-      policiesResolved: false,
-      conflictedRecords: [
-        {
-          recordIndex: 0,
-          importedRecord: { id: "ci-0", displayName: "Contacto A", phones: [], emails: [], socials: [] },
-          matchingRecord: { id: "ce-0", displayName: "Existente A", phones: [], emails: [], socials: [] },
-          matchingRecordIndex: 0,
-          matchingRecordSource: "existing",
-          conflictType: "external-id-match",
-          conflictReasonKey: "conflict_reason.external_id"
-        },
-        {
-          recordIndex: 1,
-          importedRecord: { id: "ci-1", displayName: "Contacto B", phones: [], emails: [], socials: [] },
-          matchingRecord: { id: "ce-1", displayName: "Existente B", phones: [], emails: [], socials: [] },
-          matchingRecordIndex: 1,
-          matchingRecordSource: "existing",
-          conflictType: "external-id-match",
-          conflictReasonKey: "conflict_reason.external_id"
-        }
-      ]
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "csv-conflict-toast",
+        fileName: "conflicts.csv",
+        detectedFormat: "exportación cruda",
+        detectionConfidence: "high",
+        totalRowCount: 2,
+        validRowCount: 2,
+        invalidRowCount: 0,
+        warningCount: 0,
+        recordCount: 2,
+        mergedRecordCount: 2,
+        createdCount: 0,
+        updatedCount: 2,
+        typeCounts: {},
+        areaCounts: {},
+        rowIssues: [],
+        warnings: [],
+        previewRows: [],
+        buscasSkippedRowCount: 0,
+        socialHandleSkippedRowCount: 0,
+        parsedBuscasCellCount: 0,
+        conflictCount: 2,
+        policiesResolved: false,
+        conflictedRecords: [
+          {
+            recordIndex: 0,
+            importedRecord: { id: "ci-0", displayName: "Contacto A", phones: [], emails: [], socials: [] },
+            matchingRecord: { id: "ce-0", displayName: "Existente A", phones: [], emails: [], socials: [] },
+            matchingRecordIndex: 0,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          },
+          {
+            recordIndex: 1,
+            importedRecord: { id: "ci-1", displayName: "Contacto B", phones: [], emails: [], socials: [] },
+            matchingRecord: { id: "ce-1", displayName: "Existente B", phones: [], emails: [], socials: [] },
+            matchingRecordIndex: 1,
+            matchingRecordSource: "existing",
+            conflictType: "external-id-match",
+            conflictReasonKey: "conflict_reason.external_id"
+          }
+        ]
+      }
     });
 
     renderPage();
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     // Wait for the preview panel to load
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
@@ -1181,7 +1253,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     // OIR-188: confidence note moved from toast to panel.
     renderPage();
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Importar CSV\/ODS/ }));
+    await openImportPicker();
 
     // Wait for panel to appear (preview received)
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();

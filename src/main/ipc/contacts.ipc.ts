@@ -12,6 +12,8 @@ import { env } from "../config/env.js";
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
+// OIR-219: extensions accepted by the unified pickAndImportDataset dialog filter.
+const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
 
 export const registerContactsIpc = (service: AppDataService) => {
   // sourceFilePath and senderId identify the import; sender/navListener are held so
@@ -114,32 +116,11 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return service.importDataset(filePaths[0]!);
   });
-  ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
-    const e2eFilePath = consumeE2eOpenDialogPath();
-    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset (OIR-219) —
+  // both dispatch to the same normalize/validate/preview pipeline and the same
+  // importToken bookkeeping once a source file path has been resolved.
+  const runCsvImportPreview = async (event: Electron.IpcMainInvokeEvent, sourceFilePath: string) => {
     const senderId = event.sender.id;
-    const openOptions = {
-      title: "Preparar importación de agenda",
-      filters: [{ name: "Hojas de cálculo", extensions: ["csv", "ods", "xlsx", "xls"] }],
-      properties: ["openFile"]
-    } satisfies Electron.OpenDialogOptions;
-    const sourceFilePath = e2eFilePath
-      ? e2eFilePath
-      : await (async () => {
-        const { canceled, filePaths } = browserWindow
-          ? await dialog.showOpenDialog(browserWindow, openOptions)
-          : await dialog.showOpenDialog(openOptions);
-
-        if (canceled || filePaths.length === 0) {
-          return null;
-        }
-
-        return filePaths[0]!;
-      })();
-
-    if (!sourceFilePath) {
-      return null;
-    }
     // previewCsvImport declares { sourceFilePath: string } in its return type so
     // TypeScript proves the field exists here; we destructure it out before the
     // renderer payload is assembled (OIR-115 — no cast needed).
@@ -194,6 +175,87 @@ export const registerContactsIpc = (service: AppDataService) => {
       ...safePreview,
       importToken
     };
+  };
+
+  ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
+    const e2eFilePath = consumeE2eOpenDialogPath();
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const openOptions = {
+      title: "Preparar importación de agenda",
+      filters: [{ name: "Hojas de cálculo", extensions: ["csv", "ods", "xlsx", "xls"] }],
+      properties: ["openFile"]
+    } satisfies Electron.OpenDialogOptions;
+    const sourceFilePath = e2eFilePath
+      ? e2eFilePath
+      : await (async () => {
+        const { canceled, filePaths } = browserWindow
+          ? await dialog.showOpenDialog(browserWindow, openOptions)
+          : await dialog.showOpenDialog(openOptions);
+
+        if (canceled || filePaths.length === 0) {
+          return null;
+        }
+
+        return filePaths[0]!;
+      })();
+
+    if (!sourceFilePath) {
+      return null;
+    }
+
+    return runCsvImportPreview(event, sourceFilePath);
+  });
+
+  // OIR-219 — single unified "Importar" entry point. Opens ONE native dialog
+  // filtered to .json/.csv/.ods/.xls/.xlsx and internally dispatches, by the
+  // extension of whatever file the user picked, to the EXISTING pipelines:
+  //   .json                → service.importDataset() (full-replace, unchanged)
+  //   .csv/.ods/.xls/.xlsx → runCsvImportPreview() (normalize/validate/preview, unchanged)
+  // The picked file path never crosses back to the renderer — main owns the
+  // dialog, main reads the file, and only the discriminated-union result
+  // (or the CSV importToken, per the existing previewCsvImport contract) is
+  // returned. No renderer-supplied path is ever accepted here.
+  ipcMain.handle(CHANNELS.pickAndImportDataset, async (event) => {
+    const e2eFilePath = consumeE2eOpenDialogPath();
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const openOptions = {
+      title: "Importar directorio",
+      filters: [{ name: "Archivos importables", extensions: ["json", "csv", "ods", "xls", "xlsx"] }],
+      properties: ["openFile"]
+    } satisfies Electron.OpenDialogOptions;
+    const sourceFilePath = e2eFilePath
+      ? e2eFilePath
+      : await (async () => {
+        const { canceled, filePaths } = browserWindow
+          ? await dialog.showOpenDialog(browserWindow, openOptions)
+          : await dialog.showOpenDialog(openOptions);
+
+        if (canceled || filePaths.length === 0) {
+          return null;
+        }
+
+        return filePaths[0]!;
+      })();
+
+    if (!sourceFilePath) {
+      return { kind: "cancelled" } as const;
+    }
+
+    const extension = path.extname(sourceFilePath).toLowerCase().replace(/^\./, "");
+
+    if (extension === "json") {
+      const result = await service.importDataset(sourceFilePath);
+      return { kind: "json-import", result } as const;
+    }
+
+    if (CSV_LIKE_EXTENSIONS.has(extension)) {
+      const preview = await runCsvImportPreview(event, sourceFilePath);
+      return { kind: "csv-preview", preview } as const;
+    }
+
+    // Defensive fallback — the dialog filter above should prevent this, but some
+    // platforms/window managers allow bypassing open-dialog filters.
+    return { kind: "unsupported-extension", extension } as const;
   });
   ipcMain.handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
     // Atomically take the token before any await — a second concurrent confirmation

@@ -33,7 +33,7 @@ const formatSize = (sizeBytes: number) => {
 };
 
 type PendingConfirmation =
-  | { kind: "import-json" }
+  | { kind: "pick-import" }
   | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
   | { kind: "restore-backup"; backup: BackupListItem };
 
@@ -46,13 +46,23 @@ type PendingConfirmation =
  * Card consolidation:
  * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
  *   "Exportar JSON" actions into a single card (primary + secondary action).
- * - "Importar" groups the JSON full-replace entry point and the CSV/ODS/XLS/XLSX
- *   normalize/validate/preview entry point under a single card. Note: this is
- *   still two explicit actions inside the card, not a single extension-based
- *   dispatcher — see OIR-219 handoff notes for why a true single unified file
- *   picker was not implemented in this pass (it would require changing the
- *   IPC contract shape of importDataset/previewCsvImport, which was flagged
- *   for a team-lead decision instead of being resolved unilaterally here).
+ * - "Importar" is now a single unified entry point: one button opens exactly
+ *   one native file dialog (filtered to .json/.csv/.ods/.xls/.xlsx) via
+ *   window.hospitalDirectory.pickAndImportDataset(). The main process
+ *   determines the picked file's extension and dispatches internally to the
+ *   existing importDataset() (JSON full-replace) or previewCsvImport()
+ *   (CSV/ODS/XLS/XLSX normalize/validate/preview) pipelines — this component
+ *   only renders whichever existing result/preview UI matches the returned
+ *   `kind`.
+ *
+ *   Because the destructive JSON full-replace path can only be identified
+ *   *after* the file is picked (main dispatches by extension, not before),
+ *   the safety confirmation for that path is shown *before* the native
+ *   dialog opens: a single generic warning covering both possible outcomes
+ *   (picking a JSON replaces everything with an automatic backup; picking a
+ *   spreadsheet goes through its own additional preview/confirm step below,
+ *   unchanged). This preserves the original destructive-replace confirmation
+ *   semantics while still allowing one unified button/dialog.
  */
 export const DataManagementSection = () => {
   const { contacts, settings, initialize, isLoading: storeIsLoading, bootstrapStatus, bootstrapError, ensureBootstrapLoaded } = useAppStore();
@@ -61,8 +71,12 @@ export const DataManagementSection = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // Covers the whole pickAndImportDataset() round-trip — the native dialog is
+  // open and, once a file is picked, either the JSON full-replace or the CSV
+  // preview generation is still running. We only find out which one after the
+  // call resolves, so this single flag drives both the button label and the
+  // "processing" status region below.
   const [isImporting, setIsImporting] = useState(false);
-  const [isPreparingCsvPreview, setIsPreparingCsvPreview] = useState(false);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
@@ -80,7 +94,6 @@ export const DataManagementSection = () => {
     isCreatingBackup ||
     isExporting ||
     isImporting ||
-    isPreparingCsvPreview ||
     isImportingCsv ||
     isRestoreInProgress;
 
@@ -179,38 +192,6 @@ export const DataManagementSection = () => {
     }
   };
 
-  const handleImport = async () => {
-    try {
-      setIsImporting(true);
-      const result = await window.hospitalDirectory.importDataset();
-
-      if (!result) {
-        pushToast({
-          type: "warning",
-          message: "Importación cancelada."
-        });
-        return;
-      }
-
-      initialize({
-        contacts: result.contacts,
-        settings: result.settings
-      });
-      await refreshBackups();
-      pushToast({
-        type: "success",
-        message: "Importación completada."
-      });
-    } catch (error) {
-      pushToast({
-        type: "error",
-        message: toCompactToastMessage(error, "No se pudo importar el archivo JSON.")
-      });
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const handleRestoreBackup = async (backup: BackupListItem) => {
     try {
       setRestoringBackupPath(backup.filePath);
@@ -236,19 +217,51 @@ export const DataManagementSection = () => {
     }
   };
 
-  const handlePreviewCsvImport = async () => {
+  // OIR-219: single unified "Importar" entry point. Opens exactly one native
+  // dialog (via pickAndImportDataset) and renders whichever existing flow
+  // matches the returned `kind` — the JSON full-replace result handling
+  // (previously handleImport) or the CSV preview handling (previously
+  // handlePreviewCsvImport), both reused verbatim below.
+  const handlePickAndImport = async () => {
     try {
-      setIsPreparingCsvPreview(true);
+      setIsImporting(true);
       setCsvPreview(null);
-      const preview = await window.hospitalDirectory.previewCsvImport();
+      const response = await window.hospitalDirectory.pickAndImportDataset();
 
-      if (!preview) {
+      if (response.kind === "cancelled") {
         pushToast({
           type: "warning",
           message: "Selección cancelada."
         });
         return;
       }
+
+      if (response.kind === "unsupported-extension") {
+        pushToast({
+          type: "error",
+          message: `Tipo de archivo no admitido${response.extension ? ` (.${response.extension})` : ""}. Elige un archivo JSON, CSV, ODS, XLS o XLSX.`
+        });
+        return;
+      }
+
+      if (response.kind === "json-import") {
+        const result = response.result;
+
+        initialize({
+          contacts: result.contacts,
+          settings: result.settings
+        });
+        await refreshBackups();
+        pushToast({
+          type: "success",
+          message: "Importación completada."
+        });
+        return;
+      }
+
+      // response.kind === "csv-preview" — identical post-processing to the
+      // former handlePreviewCsvImport.
+      const preview = response.preview;
 
       setCsvPreview(preview);
 
@@ -297,10 +310,10 @@ export const DataManagementSection = () => {
       setCsvPreview(null);
       pushToast({
         type: "error",
-        message: toCompactToastMessage(error, "No se pudo preparar la vista previa del archivo.")
+        message: toCompactToastMessage(error, "No se pudo completar la importación del archivo seleccionado.")
       });
     } finally {
-      setIsPreparingCsvPreview(false);
+      setIsImporting(false);
     }
   };
 
@@ -410,8 +423,8 @@ export const DataManagementSection = () => {
     setPendingConfirmation(null);
 
     try {
-      if (confirmation.kind === "import-json") {
-        await handleImport();
+      if (confirmation.kind === "pick-import") {
+        await handlePickAndImport();
         return;
       }
 
@@ -431,12 +444,12 @@ export const DataManagementSection = () => {
       return null;
     }
 
-    if (pendingConfirmation.kind === "import-json") {
+    if (pendingConfirmation.kind === "pick-import") {
       return {
-        title: "Confirmar importación JSON",
+        title: "Seleccionar archivo para importar",
         message:
-          "La importación reemplaza todo el directorio actual y crea una copia de seguridad automática antes de continuar. ¿Deseas continuar?",
-        confirmLabel: "Importar JSON"
+          "Vas a elegir un archivo para importar. Si eliges un JSON, se reemplazará todo el directorio actual y se creará automáticamente una copia de seguridad antes de continuar. Si eliges CSV, ODS, XLS o XLSX, primero verás una vista previa para revisar y confirmar los cambios. ¿Deseas continuar y elegir un archivo?",
+        confirmLabel: "Elegir archivo"
       };
     }
 
@@ -541,56 +554,32 @@ export const DataManagementSection = () => {
             </div>
           </div>
 
-          {/* OIR-219: "Importar" groups the two existing entry points under one
-              card. A single extension-based dispatcher (one dropzone picking
-              .json/.csv/.ods/.xls/.xlsx and routing automatically) was scoped
-              for this card but requires changing the IPC contract shape of
-              importDataset()/previewCsvImport() (both are zero-argument calls
-              that always open their own native dialog) — flagged for a
-              team-lead decision rather than implemented unilaterally. See the
-              OIR-219 handoff notes. */}
+          {/* OIR-219: "Importar" is a single unified entry point. One button
+              opens exactly one native dialog (json/csv/ods/xls/xlsx filter)
+              via pickAndImportDataset(); main dispatches by extension to the
+              existing JSON full-replace or CSV preview pipelines and this
+              component renders whichever existing UI matches the result. */}
           <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Elige el tipo de archivo a importar. JSON reemplaza todo el directorio; CSV/ODS/XLS/XLSX normaliza, valida y muestra una vista previa antes de aplicar cambios.
+              Selecciona un archivo para importar. Si es JSON, reemplaza el directorio completo (se crea una copia de seguridad automática antes de continuar). Si es CSV, ODS, XLS o XLSX, se valida y se muestra una vista previa antes de aplicar los cambios.
             </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setPendingConfirmation({ kind: "import-json" })}
-                disabled={isMutating}
-                className="focus-ring rounded-2xl border border-amber-300 bg-white p-4 text-left transition hover:border-amber-400 disabled:opacity-60"
-              >
-                <p className="text-sm font-semibold text-amber-900">Importar JSON</p>
-                <p className="mt-1 text-xs text-amber-900/70">
-                  Reemplaza el directorio completo por un archivo válido. Se crea una copia de seguridad antes de continuar.
-                </p>
-                <p className="mt-2 text-xs font-semibold text-amber-900">
-                  {isImporting ? "Importando…" : "Seleccionar archivo"}
-                </p>
-              </button>
-
+            <div className="mt-4">
               <button
                 ref={triggerButtonRef}
                 type="button"
-                onClick={() => void handlePreviewCsvImport()}
+                onClick={() => setPendingConfirmation({ kind: "pick-import" })}
                 disabled={isMutating}
-                className="focus-ring rounded-2xl border border-emerald-300 bg-white p-4 text-left transition hover:border-emerald-400 disabled:opacity-60"
+                className="focus-ring rounded-2xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:border-amber-400 disabled:opacity-60"
               >
-                <p className="text-sm font-semibold text-emerald-900">Importar CSV/ODS</p>
-                <p className="mt-1 text-xs text-emerald-900/70">
-                  Abre CSV, ODS, XLS o XLSX. La app normaliza al template, valida filas y prepara altas o actualizaciones.
-                </p>
-                <p className="mt-2 text-xs font-semibold text-emerald-900">
-                  {isPreparingCsvPreview ? "Analizando…" : "Seleccionar archivo"}
-                </p>
+                {isImporting ? "Importando…" : "Importar"}
               </button>
             </div>
           </div>
         </div>
 
-        {/* OIR-182 item 1: visible spinner while the file is being analysed */}
-        {isPreparingCsvPreview && (
+        {/* OIR-182 item 1 / OIR-219: visible spinner while the file is picked and processed */}
+        {isImporting && (
           <div
             role="status"
             aria-live="polite"
@@ -605,7 +594,7 @@ export const DataManagementSection = () => {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span>Analizando el archivo, por favor espera…</span>
+            <span>Seleccionando y analizando el archivo, por favor espera…</span>
           </div>
         )}
 
