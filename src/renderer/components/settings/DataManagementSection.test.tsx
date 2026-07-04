@@ -1269,4 +1269,66 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
       .filter((el) => el.textContent?.includes("Confianza media"));
     expect(alerts).toHaveLength(0);
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-221 — compact backups list bounded by the configured retention count
+  // ---------------------------------------------------------------------------
+
+  const buildBackupList = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      fileName: `contacts-${count - index}.json`,
+      filePath: `/tmp/backups/contacts-${count - index}.json`,
+      createdAt: new Date(2026, 0, count - index).toISOString(),
+      sizeBytes: 1024 * (index + 1)
+    }));
+
+  it("OIR-221: shows a tight single row per backup — filename, date, size, restore action, no path-reveal controls", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(await screen.findByText("contacts-1.json")).toBeInTheDocument();
+
+    // Compact row: no PathDisplay "reveal"/"copy" controls cluttering each row.
+    expect(screen.queryByRole("button", { name: "Mostrar ruta completa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copiar ruta completa" })).not.toBeInTheDocument();
+  });
+
+  it("OIR-221: caps the visible backups list to the configured auto-backup retention count by default", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(7));
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    // editableSettings.ui.autoBackup.retentionCount === 5 — only the 5 most recent are shown.
+    expect(await screen.findByText("contacts-7.json")).toBeInTheDocument();
+    expect(screen.getByText("contacts-3.json")).toBeInTheDocument();
+    expect(screen.queryByText("contacts-2.json")).not.toBeInTheDocument();
+    expect(screen.queryByText("contacts-1.json")).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Mostrar 2 más" })).toBeInTheDocument();
+  });
+
+  it("OIR-221: 'Mostrar más' reveals the remaining backups and toggles back to 'Mostrar menos'", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(7));
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    const showMoreButton = await screen.findByRole("button", { name: "Mostrar 2 más" });
+    fireEvent.click(showMoreButton);
+
+    expect(await screen.findByText("contacts-1.json")).toBeInTheDocument();
+    expect(screen.getByText("contacts-2.json")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mostrar menos" })).toBeInTheDocument();
+  });
+
+  it("OIR-221: does not show the 'Mostrar más' affordance when backups are within the retention count", async () => {
+    window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(3));
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(await screen.findByText("contacts-3.json")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mostrar \d+ más/ })).not.toBeInTheDocument();
+  });
 });

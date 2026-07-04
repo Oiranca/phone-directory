@@ -1,5 +1,4 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { PathDisplay } from "../components/feedback/PathDisplay";
 import { useToast } from "../components/feedback/ToastRegion";
 import { DataManagementSection } from "../components/settings/DataManagementSection";
 import { useAppStore } from "../store/useAppStore";
@@ -260,15 +259,14 @@ export const SettingsPage = () => {
   return (
     <section className="space-y-6">
       <h2 className="sr-only">Configuración</h2>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-        <section className="rounded-3xl bg-white p-6 shadow-panel">
+      <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
           <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
             Define quién firma los cambios locales y cómo debe arrancar el directorio cuando se vuelva a abrir.
           </p>
 
-          <div className="mt-6 space-y-5">
+          <div className="mt-6 space-y-4">
             <div>
               <label htmlFor="settings-editor-name" className="block text-sm font-semibold text-slate-700">Nombre del editor</label>
               <input
@@ -282,62 +280,6 @@ export const SettingsPage = () => {
               />
               <p id="settings-editor-name-hint" className="mt-2 text-xs text-slate-500">
                 Se usa en auditoría, importaciones CSV y futuras exportaciones.
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="settings-data-file-path" className="block text-sm font-semibold text-slate-700">Ruta del archivo de datos</label>
-              <div className="mt-2 flex gap-2">
-                <input
-                  id="settings-data-file-path"
-                  type="text"
-                  value={dataFilePath}
-                  onChange={handleDataFilePathChange}
-                  placeholder="/ruta/al/directorio/contacts.json"
-                  aria-describedby="settings-data-file-path-hint"
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleBrowseDataFile()}
-                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
-                  aria-label={isBrowsingDataFile ? "Examinando archivos…" : "Seleccionar archivo de datos"}
-                  aria-busy={isBrowsingDataFile}
-                  className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isBrowsingDataFile ? "Examinando…" : "Examinar"}
-                </button>
-              </div>
-              <p id="settings-data-file-path-hint" className="mt-2 text-xs text-slate-500">
-                Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura.
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="settings-backup-directory-path" className="block text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</label>
-              <div className="mt-2 flex gap-2">
-                <input
-                  id="settings-backup-directory-path"
-                  type="text"
-                  value={backupDirectoryPath}
-                  onChange={handleBackupDirectoryPathChange}
-                  placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
-                  aria-describedby="settings-backup-directory-path-hint"
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleBrowseBackupDir()}
-                  disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
-                  aria-label="Seleccionar carpeta de copias de seguridad"
-                  aria-busy={isBrowsingBackupDir}
-                  className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isBrowsingBackupDir ? "…" : "Examinar"}
-                </button>
-              </div>
-              <p id="settings-backup-directory-path-hint" className="mt-2 text-xs text-slate-500">
-                Debe ser una ruta absoluta. La carpeta debe existir y permitir lectura y escritura para crear copias de seguridad.
               </p>
             </div>
 
@@ -358,6 +300,9 @@ export const SettingsPage = () => {
               </div>
             </div>
 
+            {/* OIR-221: "Copia de seguridad automática" compacted into a single tight
+                row-group — the toggle, schedule and retention all share one row on
+                wider screens instead of being spread across separate stacked blocks. */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start gap-3">
                 <input
@@ -376,9 +321,9 @@ export const SettingsPage = () => {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label htmlFor="settings-autobackup-trigger" className="block text-sm font-semibold text-slate-700">Cuándo crear la copia de seguridad automática</label>
+                  <label htmlFor="settings-autobackup-trigger" className="block text-xs font-semibold text-slate-700">Cuándo crear la copia de seguridad automática</label>
                   <select
                     id="settings-autobackup-trigger"
                     value={autoBackupTrigger}
@@ -387,7 +332,7 @@ export const SettingsPage = () => {
                       setSaveError("");
                     }}
                     disabled={!autoBackupEnabled}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   >
                     <option value="launch">Al abrir la app</option>
                     <option value="intervalHours">Cada N horas</option>
@@ -395,8 +340,46 @@ export const SettingsPage = () => {
                   </select>
                 </div>
 
+                {autoBackupEnabled && autoBackupTrigger === "intervalHours" ? (
+                  <div>
+                    <label htmlFor="settings-autobackup-interval-hours" className="block text-xs font-semibold text-slate-700">Horas entre copias de seguridad automáticas</label>
+                    <input
+                      id="settings-autobackup-interval-hours"
+                      type="number"
+                      min={1}
+                      max={168}
+                      step={1}
+                      value={autoBackupIntervalHours}
+                      onChange={(event) => {
+                        setAutoBackupIntervalHours(event.target.value);
+                        setSaveError("");
+                      }}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                  </div>
+                ) : null}
+
+                {autoBackupEnabled && autoBackupTrigger === "editCount" ? (
+                  <div>
+                    <label htmlFor="settings-autobackup-edit-count" className="block text-xs font-semibold text-slate-700">Ediciones entre copias de seguridad automáticas</label>
+                    <input
+                      id="settings-autobackup-edit-count"
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      value={autoBackupEditCountThreshold}
+                      onChange={(event) => {
+                        setAutoBackupEditCountThreshold(event.target.value);
+                        setSaveError("");
+                      }}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                  </div>
+                ) : null}
+
                 <div>
-                  <label htmlFor="settings-autobackup-retention" className="block text-sm font-semibold text-slate-700">Retención de copias de seguridad automáticas</label>
+                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Retención de copias de seguridad automáticas</label>
                   <input
                     id="settings-autobackup-retention"
                     type="number"
@@ -409,49 +392,79 @@ export const SettingsPage = () => {
                       setSaveError("");
                     }}
                     disabled={!autoBackupEnabled}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   />
                 </div>
               </div>
-
-              {autoBackupEnabled && autoBackupTrigger === "intervalHours" ? (
-                <div className="mt-4">
-                  <label htmlFor="settings-autobackup-interval-hours" className="block text-sm font-semibold text-slate-700">Horas entre copias de seguridad automáticas</label>
-                  <input
-                    id="settings-autobackup-interval-hours"
-                    type="number"
-                    min={1}
-                    max={168}
-                    step={1}
-                    value={autoBackupIntervalHours}
-                    onChange={(event) => {
-                      setAutoBackupIntervalHours(event.target.value);
-                      setSaveError("");
-                    }}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
-                  />
-                </div>
-              ) : null}
-
-              {autoBackupEnabled && autoBackupTrigger === "editCount" ? (
-                <div className="mt-4">
-                  <label htmlFor="settings-autobackup-edit-count" className="block text-sm font-semibold text-slate-700">Ediciones entre copias de seguridad automáticas</label>
-                  <input
-                    id="settings-autobackup-edit-count"
-                    type="number"
-                    min={1}
-                    max={1000}
-                    step={1}
-                    value={autoBackupEditCountThreshold}
-                    onChange={(event) => {
-                      setAutoBackupEditCountThreshold(event.target.value);
-                      setSaveError("");
-                    }}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
-                  />
-                </div>
-              ) : null}
             </div>
+
+            {/* OIR-221: the raw data-file/backup-folder path fields are technical
+                and almost never touched day-to-day on this shared workstation, so
+                they are folded away behind a collapsed "Avanzado" disclosure rather
+                than shown prominently. The underlying settings values are untouched
+                — this only hides the editing UI, it never resets or clears them. */}
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="focus-ring cursor-pointer select-none rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700">
+                Avanzado
+              </summary>
+              <div className="space-y-5 border-t border-slate-200 p-4">
+                <div>
+                  <label htmlFor="settings-data-file-path" className="block text-sm font-semibold text-slate-700">Ruta del archivo de datos</label>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      id="settings-data-file-path"
+                      type="text"
+                      value={dataFilePath}
+                      onChange={handleDataFilePathChange}
+                      placeholder="/ruta/al/directorio/contacts.json"
+                      aria-describedby="settings-data-file-path-hint"
+                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleBrowseDataFile()}
+                      disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
+                      aria-label={isBrowsingDataFile ? "Examinando archivos…" : "Seleccionar archivo de datos"}
+                      aria-busy={isBrowsingDataFile}
+                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isBrowsingDataFile ? "Examinando…" : "Examinar"}
+                    </button>
+                  </div>
+                  <p id="settings-data-file-path-hint" className="mt-2 text-xs text-slate-500">
+                    Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="settings-backup-directory-path" className="block text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</label>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      id="settings-backup-directory-path"
+                      type="text"
+                      value={backupDirectoryPath}
+                      onChange={handleBackupDirectoryPathChange}
+                      placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
+                      aria-describedby="settings-backup-directory-path-hint"
+                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleBrowseBackupDir()}
+                      disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
+                      aria-label="Seleccionar carpeta de copias de seguridad"
+                      aria-busy={isBrowsingBackupDir}
+                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isBrowsingBackupDir ? "…" : "Examinar"}
+                    </button>
+                  </div>
+                  <p id="settings-backup-directory-path-hint" className="mt-2 text-xs text-slate-500">
+                    Debe ser una ruta absoluta. La carpeta debe existir y permitir lectura y escritura para crear copias de seguridad.
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
 
           {saveError ? (
@@ -490,67 +503,7 @@ export const SettingsPage = () => {
             </button>
           </div>
         </div>
-        </section>
-
-        <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-500">Estado actual</p>
-              {isDirty && (
-                <p className="text-xs font-medium text-amber-700">Cambios sin guardar</p>
-              )}
-            </div>
-            <dl className="mt-3 space-y-3 text-sm text-slate-700">
-              <div>
-                <dt className="font-medium text-slate-500">Editor activo</dt>
-                <dd className="mt-1">{settings.editorName || "Sin configurar"}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-500">Archivo de datos</dt>
-                <dd className="mt-1">
-                  <PathDisplay path={settings.dataFilePath} />
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-500">Carpeta de copias de seguridad</dt>
-                <dd className="mt-1">
-                  <PathDisplay path={settings.backupDirectoryPath} />
-                </dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-500">Inactivos al iniciar</dt>
-                <dd className="mt-1">{settings.ui.showInactiveByDefault ? "Sí" : "No"}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-500">Copia de seguridad automática</dt>
-                <dd className="mt-1">
-                  {settings.ui.autoBackup.enabled
-                    ? `Sí · ${settings.ui.autoBackup.trigger === "launch"
-                      ? "al abrir"
-                      : settings.ui.autoBackup.trigger === "intervalHours"
-                        ? `cada ${settings.ui.autoBackup.intervalHours} h`
-                        : `cada ${settings.ui.autoBackup.editCountThreshold} ediciones`}`
-                    : "No"}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <hr className="border-slate-200" />
-
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-            <h3 className="text-sm font-semibold text-scs-blueDark">Qué cambia al guardar</h3>
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li>El nombre del editor se aplicará a nuevas altas y futuras importaciones.</li>
-              <li>La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual.</li>
-              <li>La carpeta de copias de seguridad debe existir y ser accesible antes de guardarla aquí.</li>
-              <li>La preferencia de inactivos se usará como comportamiento inicial del directorio.</li>
-              <li>Las copias de seguridad automáticas usan el prefijo <code>auto-backup-</code> y rotan según la retención indicada.</li>
-              <li>Si una ruta falla, puedes cargar las rutas gestionadas y guardarlas cuando lo revises.</li>
-            </ul>
-          </div>
-        </aside>
-      </div>
+      </section>
 
       <DataManagementSection />
     </section>

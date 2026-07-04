@@ -525,56 +525,48 @@ describe("SettingsPage", () => {
     expect(resetBtn.className).toContain("focus-ring");
   });
 
-  it("sidebar aside renders status block, hr separator, and help heading in order — no decorative card wrappers", async () => {
+  // OIR-221: the "Estado actual" sidebar and "Qué cambia al guardar" explainer
+  // panel were removed as noise for a non-technical operator — everything they
+  // showed either duplicated the editable fields already on the page or the
+  // OIR-218 header watermark. See the "Avanzado" disclosure tests below for the
+  // coverage that replaced the old path-field assertions.
+
+  it("OIR-221: data-path help copy uses plain 'directorio' wording, not 'dataset' jargon (OIR-193)", async () => {
     renderPage();
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
-    // Status block is present
-    const statusLabel = screen.getByText("Estado actual");
-    expect(statusLabel).toBeInTheDocument();
+    // Native <summary>/<details> disclosure — not exposed as an ARIA "button"
+    // role by jsdom's aria-query mapping, so it is located by its text/DOM node.
+    fireEvent.click(screen.getByText("Avanzado"));
 
-    // The <hr> separator is present (role="separator")
-    const separator = screen.getByRole("separator");
-    expect(separator).toBeInTheDocument();
-
-    // Help block heading is present
-    const helpHeading = screen.getByRole("heading", { name: "Qué cambia al guardar" });
-    expect(helpHeading).toBeInTheDocument();
-
-    // Data path help copy uses plain-language wording, not "dataset" jargon
-    expect(
-      screen.getByText(
-        "La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual.",
-      ),
-    ).toBeInTheDocument();
-
-    // DOM order: status label -> separator -> help heading
-    const bodyHTML = document.body.innerHTML;
-    const statusPos = bodyHTML.indexOf("Estado actual");
-    const separatorPos = bodyHTML.indexOf("<hr");
-    const helpPos = bodyHTML.indexOf("Qué cambia al guardar");
-    expect(statusPos).toBeLessThan(separatorPos);
-    expect(separatorPos).toBeLessThan(helpPos);
-
-    // The aside must NOT carry the old outer decorative card classes
-    const aside = statusLabel.closest("aside");
-    expect(aside).not.toBeNull();
-    expect(aside!.className).not.toContain("rounded-3xl");
-    expect(aside!.className).not.toContain("bg-slate-50");
-
-    // The status block container must NOT carry the old inner card class
-    const statusContainer = statusLabel.parentElement;
-    expect(statusContainer).not.toBeNull();
-    expect(statusContainer!.className).not.toContain("shadow-sm");
-  });
-
-  it("data-path help copy uses plain 'directorio' wording, not 'dataset' jargon (OIR-193)", async () => {
-    renderPage();
     expect(
       await screen.findByText(
-        "La ruta de datos debe ser absoluta y apuntar a un archivo JSON nuevo para copiar el directorio actual."
+        "Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura."
       )
     ).toBeInTheDocument();
     expect(document.body.innerHTML).not.toContain("dataset");
+  });
+
+  it("OIR-221: path fields are folded away behind a collapsed 'Avanzado' disclosure by default", async () => {
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    const disclosureToggle = screen.getByText("Avanzado");
+    const details = disclosureToggle.closest("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+
+    fireEvent.click(disclosureToggle);
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
+    expect(screen.getByLabelText("Ruta de la carpeta de copias de seguridad")).toHaveValue("/tmp/backups");
+  });
+
+  it("OIR-221: removed noise (Estado actual sidebar, Qué cambia al guardar explainer) is gone", async () => {
+    renderPage();
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    expect(screen.queryByText("Estado actual")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Qué cambia al guardar" })).not.toBeInTheDocument();
   });
 });

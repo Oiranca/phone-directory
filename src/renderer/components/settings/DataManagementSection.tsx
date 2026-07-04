@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
-import { PathDisplay } from "../feedback/PathDisplay";
 import { useToast } from "../feedback/ToastRegion";
 import { useAppStore } from "../../store/useAppStore";
 import { toCompactToastMessage } from "../../utils/toastMessage";
@@ -81,6 +80,12 @@ export const DataManagementSection = () => {
   const [restoringBackupPath, setRestoringBackupPath] = useState("");
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  // OIR-221: the backups list is kept visually bounded — only the most recent
+  // N (N = the configured auto-backup retention count, default 5) are shown by
+  // default. Manual/import/reset backups are never auto-pruned from disk, so
+  // more files can theoretically exist beyond that count; "Mostrar más" reveals
+  // them on demand instead of always rendering an unbounded list.
+  const [showAllBackups, setShowAllBackups] = useState(false);
   const confirmationInFlightRef = useRef(false);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -499,6 +504,13 @@ export const DataManagementSection = () => {
     return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y copias de seguridad…</section>;
   }
 
+  // OIR-221: reuse the actual configured auto-backup retention count (not a
+  // hardcoded number) as the default visible-list cap — this keeps the list
+  // bounded in line with what retention is actually configured to keep.
+  const backupDisplayLimit = settings.ui.autoBackup.retentionCount;
+  const visibleBackups = showAllBackups ? backups : backups.slice(0, backupDisplayLimit);
+  const hiddenBackupCount = Math.max(0, backups.length - backupDisplayLimit);
+
   return (
     <section className="space-y-6">
       <div>
@@ -630,31 +642,47 @@ export const DataManagementSection = () => {
           </button>
         </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-6 space-y-2">
           {backups.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
               Aún no hay copias de seguridad locales disponibles.
             </div>
           ) : (
-            backups.map((backup) => (
-              <article key={backup.filePath} className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
-                <PathDisplay path={backup.filePath} className="mt-1 text-slate-500" textClassName="text-xs" />
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-                  <span className="rounded-full bg-slate-100 px-3 py-1">{formatTimestamp(backup.createdAt)}</span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1">{formatSize(backup.sizeBytes)}</span>
+            visibleBackups.map((backup) => (
+              <article
+                key={backup.filePath}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-scs-blueDark">{backup.fileName}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span>{formatTimestamp(backup.createdAt)}</span>
+                    <span>{formatSize(backup.sizeBytes)}</span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setPendingConfirmation({ kind: "restore-backup", backup })}
                   disabled={isMutating}
-                  className="focus-ring mt-4 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
+                  className="focus-ring shrink-0 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
                 >
                   {restoringBackupPath === backup.filePath ? "Restaurando…" : "Restaurar esta copia de seguridad"}
                 </button>
               </article>
             ))
           )}
+
+          {hiddenBackupCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllBackups((current) => !current)}
+              className="focus-ring w-full rounded-xl border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              {showAllBackups
+                ? "Mostrar menos"
+                : `Mostrar ${hiddenBackupCount} más`}
+            </button>
+          ) : null}
         </div>
         </aside>
       </div>
