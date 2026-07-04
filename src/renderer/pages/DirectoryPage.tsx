@@ -156,18 +156,25 @@ const getSafeSocialUrl = (social: SocialContact): string | null => {
   return null;
 };
 
-const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
-  if (!phone) {
-    return [];
-  }
-
+// OIR-218 (fix): the list-card "Privacidad sensible" badge must reflect ANY
+// sensitive phone on the record, not just the single "preferred" phone whose
+// number is shown (getPreferredResultPhone intentionally favors a non-sensitive
+// number for display, so a record's ONLY sensitive phone can be a secondary one
+// that never becomes "preferred"). Scoping this check to the preferred phone
+// alone made the badge silently miss records where the just-edited phone
+// wasn't the one being displayed — looking stale until something else (e.g. a
+// different phone becoming preferred, or a full reload re-deriving state)
+// happened to surface it. Checking every phone on the record keeps the number
+// shown privacy-conscious while making the aggregate warning badge accurate
+// and immediate.
+const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
   const flags: PrivacyFlag[] = [];
 
-  if (phone.confidential) {
+  if (phones.some((phone) => phone.confidential)) {
     flags.push("Confidencial");
   }
 
-  if (phone.noPatientSharing) {
+  if (phones.some((phone) => phone.noPatientSharing)) {
     flags.push("No facilitar a pacientes");
   }
 
@@ -655,12 +662,20 @@ export const DirectoryPage = () => {
             ref={listRef}
             onKeyDown={handleListKeyDown}
             aria-label="Resultados del directorio"
-            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1"
+            // OIR-218 (fix): overflow-y-auto turns this into a scroll container, which
+            // also computes overflow-x to "auto" per spec and clips any ink outside the
+            // padding box — including the selected card's `ring-1 ring-scs-blue` box
+            // shadow, which was getting cut off on the left/right edges since the list
+            // previously had 0 left padding and only 4px (pr-1) on the right. `px-1`
+            // gives the 1px ring room to render fully on both sides; `-mx-1` cancels
+            // that padding back out at the box level so the cards stay visually flush
+            // with the pagination nav and other siblings below (same rendered width).
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 -mx-1"
           >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
-            const privacyFlags = getPhoneInlinePrivacyFlags(primaryPhone);
+            const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
 
             return (
               <li key={record.id}>

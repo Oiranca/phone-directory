@@ -1081,4 +1081,69 @@ describe("DirectoryPage", () => {
     expect(screen.getAllByText("Principal").length).toBeGreaterThan(0);
     expect(screen.getByText(/nota-super-larga/)).toHaveClass("break-words");
   });
+
+  it("shows the 'Privacidad sensible' list-card badge immediately after marking a non-preferred phone confidential (OIR-218)", async () => {
+    // Regression test: the badge previously only checked the single "preferred"
+    // (non-sensitive) phone returned by getPreferredResultPhone, so a record
+    // whose ONLY confidential phone is a secondary/non-preferred one never
+    // showed the badge — it looked stale even though the underlying record was
+    // already fully up to date (mirroring the real edit-and-save flow, where
+    // useContactForm calls setContacts(result.contacts) with a freshly built
+    // dataset, no remount or reload involved).
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones = [
+      {
+        id: "primary-safe",
+        label: "Principal",
+        number: "70005",
+        kind: "internal",
+        isPrimary: true,
+        confidential: false,
+        noPatientSharing: false
+      },
+      {
+        id: "secondary-not-yet-confidential",
+        label: "Interno",
+        number: "70006",
+        kind: "internal",
+        isPrimary: false,
+        confidential: false,
+        noPatientSharing: false
+      }
+    ];
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.queryByText("Privacidad sensible")).not.toBeInTheDocument();
+
+    // Simulate the save flow's store update (useContactForm's submit handler
+    // calls setContacts(result.contacts) with the freshly saved dataset — no
+    // page reload, no remount). The edited phone is the SECONDARY (non-preferred)
+    // one, which getPreferredResultPhone would never surface as the displayed
+    // number — the badge must still reflect it.
+    const savedContacts = structuredClone(contacts);
+    savedContacts.records[0]!.contactMethods.phones[1]!.confidential = true;
+    useAppStore.getState().setContacts(savedContacts);
+
+    await waitFor(() => {
+      expect(screen.getByText("Privacidad sensible")).toBeInTheDocument();
+    });
+
+    // The displayed number stays the safe/preferred one — only the aggregate
+    // warning badge should reflect the newly-confidential secondary phone.
+    expect(screen.getAllByText("70005").length).toBeGreaterThan(0);
+  });
 });
