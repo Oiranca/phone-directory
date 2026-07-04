@@ -1550,13 +1550,50 @@ export class AppDataService {
     exportedAt: string,
     editorName: string
   ): ContactRecord {
-    const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => normalizePhoneForDedup(phone.number)));
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
     const socialMergeKey = (s: { platform: string; handle?: string; url?: string }): string =>
       `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
     const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
+
+    // OIR-224: index imported phones by normalized number so phones that
+    // already exist on the current record can have their PRIVACY MARKERS
+    // (confidential / noPatientSharing) refreshed from the freshly re-imported
+    // source row, instead of silently keeping whatever stale value the current
+    // record happened to have. Before this fix, re-importing the same source
+    // file with the "merge-fields" ("Combinar") conflict policy would append
+    // only genuinely NEW phone numbers and leave existing ones completely
+    // untouched — so a phone number that was previously imported with the
+    // wrong confidential flag (e.g. from data predating OIR-222's row-level
+    // Confidencial mapping, or a manual mistake) would keep showing the wrong
+    // flag forever, no matter how many times the (now-correct) source file was
+    // re-imported. The source ODS/CSV row is the authoritative statement of
+    // whether a number is confidential, so it must win on every re-import.
+    const importedPhoneByKey = new Map<string, (typeof importedRecord.contactMethods.phones)[number]>();
+    for (const phone of importedRecord.contactMethods.phones) {
+      const key = normalizePhoneForDedup(phone.number);
+      if (key && !importedPhoneByKey.has(key)) {
+        importedPhoneByKey.set(key, phone);
+      }
+    }
+
+    const refreshedCurrentPhones = currentRecord.contactMethods.phones.map((phone) => {
+      const key = normalizePhoneForDedup(phone.number);
+      const importedMatch = key ? importedPhoneByKey.get(key) : undefined;
+
+      if (!importedMatch) {
+        return phone;
+      }
+
+      return {
+        ...phone,
+        confidential: importedMatch.confidential,
+        noPatientSharing: importedMatch.noPatientSharing
+      };
+    });
+
+    const hasPhone = new Set(refreshedCurrentPhones.map((phone) => normalizePhoneForDedup(phone.number)));
     const nextPhones = [
-      ...currentRecord.contactMethods.phones,
+      ...refreshedCurrentPhones,
       ...importedRecord.contactMethods.phones.filter((phone) => {
         const key = normalizePhoneForDedup(phone.number);
         return key && !hasPhone.has(key);

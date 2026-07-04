@@ -264,24 +264,29 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
 
     const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
-    const exportBtn = screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ });
     const importBtn = screen.getByRole("button", { name: "Importar" });
 
     expect(backupBtn.className).toContain("focus-ring");
-    expect(exportBtn.className).toContain("focus-ring");
     expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("OIR-223: shows the unified Import card copy describing both possible outcomes in plain backup language (no 'JSON' wording)", async () => {
+  it("OIR-224: shows the shortened Import card copy (no 'JSON' wording, no full outcome explainer)", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Selecciona un archivo para importar. Si es una copia de seguridad completa, reemplaza los datos actuales del directorio (se crea una copia de seguridad automática antes de continuar). Si es una hoja de cálculo (CSV, ODS, XLS o XLSX), se valida y se muestra una vista previa antes de aplicar los cambios."
-      )
+      screen.getByText("Selecciona un archivo para importar. Se generará una copia de seguridad automática.")
     ).toBeInTheDocument();
+    expect(screen.getByText("Formatos admitidos: CSV, ODS, XLS, XLSX")).toBeInTheDocument();
     expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reemplaza los datos/)).not.toBeInTheDocument();
+  });
+
+  it("OIR-224: removes the 'Guardar la copia en otra carpeta' secondary link from the backup card", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Guardar la copia en otra carpeta/ })).not.toBeInTheDocument();
   });
 
   it("creates a backup and shows success feedback", async () => {
@@ -308,33 +313,6 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
 
     expect(
       await screen.findByText("No se pudo crear la copia de seguridad del directorio.")
-    ).toBeInTheDocument();
-  });
-
-  it("exports the dataset and shows completion feedback", async () => {
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ }));
-
-    await waitFor(() => {
-      expect(window.hospitalDirectory.exportDataset).toHaveBeenCalledTimes(1);
-    });
-    expect(await screen.findByText("Exportación completada.")).toBeInTheDocument();
-  });
-
-  it("shows the export service error message when the target path is not writable", async () => {
-    window.hospitalDirectory.exportDataset = vi
-      .fn()
-      .mockRejectedValue(new Error("No se pudo exportar el directorio al destino seleccionado. Ruta afectada: /tmp/exports/share.json."));
-
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Guardar la copia en otra carpeta/ }));
-
-    expect(
-      await screen.findByText("No se pudo exportar el directorio al destino seleccionado.")
     ).toBeInTheDocument();
   });
 

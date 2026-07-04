@@ -4198,4 +4198,110 @@ describe("AppDataService", () => {
     expect(message).toContain("archivo de datos");
     expect(message).toContain("Ya existe un archivo en esa ruta");
   });
+
+  // OIR-224: real-file regression test for the "Confidencial" flag misassignment
+  // bug reported by the operator (a non-confidential row like "Admisión Central"
+  // showed the privacy badge after import, while a genuinely confidential row lost
+  // it). Root cause: `mergeImportedRecordFields` (the "Combinar" / merge-fields
+  // conflict policy, used when re-importing a file whose rows already exist)
+  // appended only genuinely NEW phone numbers and left EXISTING phone numbers
+  // completely untouched — so a phone's confidential/noPatientSharing markers,
+  // once wrong (e.g. from data imported before OIR-222's tabular Agenda parser
+  // existed, or a manual slip), could never be corrected by re-importing the
+  // (now-correct) source file. The row-level parser itself (spreadsheet-parsers.ts
+  // normalizeTabularAgendaSheet) was already verified correct against this same
+  // real file — see the "fresh import" assertions below — so the merge-policy
+  // layer was the actual defect.
+  //
+  // Runs against the REAL hospital ODS export (not a synthetic fixture) per the
+  // investigation mandate: synthetic data could accidentally avoid the exact
+  // mechanism that reproduced this bug. Skipped automatically when the file is
+  // not present on the current machine (it is operator-provided data, never
+  // committed to the repo).
+  describe("OIR-224: Confidencial flag correctness against the real Agenda ODS", () => {
+    const REAL_ODS_CANDIDATE_PATHS = [
+      "/Users/samuelromeroarbelo/Documents/Telefonista/Buscas y Agenda normalizados/Agenda Normalizada.ods",
+      "/private/tmp/claude-501/-Users-samuelromeroarbelo-Projects-phone-directory/282c1726-23ec-42ee-8849-5ae5acc7508e/scratchpad/ods_inspect/agenda.ods"
+    ];
+
+    const findRealOdsPath = (): string | undefined =>
+      REAL_ODS_CANDIDATE_PATHS.find((candidate) => nodeFs.existsSync(candidate));
+
+    const realOdsPath = findRealOdsPath();
+
+    it.skipIf(!realOdsPath)(
+      "fresh import: 'Admisión Central' is NOT confidential and 'Admisión Central (Interno)' IS, matching the real source rows",
+      async () => {
+        const { AppDataService } = await import("./app-data.service.js");
+
+        const service = new AppDataService();
+        await service.ensureInitialFiles();
+        await service.saveSettings(buildEditableSettings());
+
+        const result = await service.importCsvDataset(realOdsPath!);
+
+        const notConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        );
+        const confidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        );
+
+        expect(notConfidential).toBeDefined();
+        expect(notConfidential!.contactMethods.phones.some((phone) => phone.confidential)).toBe(false);
+
+        expect(confidential).toBeDefined();
+        expect(confidential!.contactMethods.phones.every((phone) => phone.confidential)).toBe(true);
+      }
+    );
+
+    it.skipIf(!realOdsPath)(
+      "re-import with the 'Combinar' (merge-fields) conflict policy CORRECTS stale confidential flags to match the real source rows",
+      async () => {
+        const { AppDataService } = await import("./app-data.service.js");
+
+        const service = new AppDataService();
+        await service.ensureInitialFiles();
+        await service.saveSettings(buildEditableSettings());
+
+        const first = await service.importCsvDataset(realOdsPath!);
+
+        // Simulate stale/legacy data: flip both flags so they are WRONG relative
+        // to the real source — mirrors a record imported before OIR-222's
+        // row-level Confidencial mapping existed, or a manual mistake.
+        const staleNotConfidential = first.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        )!;
+        const staleConfidential = first.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        )!;
+        staleNotConfidential.contactMethods.phones[0]!.confidential = true; // WRONG: source says false
+        staleConfidential.contactMethods.phones[0]!.confidential = false; // WRONG: source says true
+        await fs.writeFile(
+          path.join(testRoot, "data", "contacts.json"),
+          JSON.stringify(first.contacts, null, 2)
+        );
+
+        const preview = await service.previewCsvImport(realOdsPath!);
+        const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const result = await service.importCsvDataset(realOdsPath!, policySelections);
+
+        const correctedNotConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        );
+        const correctedConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        );
+
+        expect(correctedNotConfidential).toBeDefined();
+        expect(correctedNotConfidential!.contactMethods.phones.some((phone) => phone.confidential)).toBe(false);
+
+        expect(correctedConfidential).toBeDefined();
+        expect(correctedConfidential!.contactMethods.phones.every((phone) => phone.confidential)).toBe(true);
+      }
+    );
+  });
 });

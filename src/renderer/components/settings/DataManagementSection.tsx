@@ -31,11 +31,14 @@ type PendingConfirmation =
  *
  * Card consolidation:
  * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
- *   "Exportar JSON" actions into a single card. OIR-223 further simplified
- *   this: a single primary button ("Crear copia de seguridad") plus a
- *   de-emphasized secondary link for saving to a different folder — from an
- *   operator's perspective, a backup and a JSON export are the same action,
- *   so the UI now only exposes one clear action, with no "JSON" wording.
+ *   "Exportar JSON" actions into a single card. OIR-223 reduced this to a
+ *   single primary button plus a de-emphasized secondary link for saving to
+ *   a different folder; OIR-224 removed that secondary link entirely (the
+ *   operator confirmed choosing another destination folder is never
+ *   needed) — the card is now just a title, one description line and the
+ *   single "Crear copia de seguridad" button. The underlying
+ *   exportDataset() IPC mechanism is untouched; only this UI entry point
+ *   into it was removed.
  * - "Importar" is now a single unified entry point: one button opens exactly
  *   one native file dialog (filtered to .json/.csv/.ods/.xls/.xlsx) via
  *   window.hospitalDirectory.pickAndImportDataset(). The main process
@@ -71,7 +74,6 @@ export const DataManagementSection = () => {
   const [backups, setBackups] = useState<BackupListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   // Covers the whole pickAndImportDataset() round-trip — the native dialog is
   // open and, once a file is picked, either the JSON full-replace or the CSV
   // preview generation is still running. We only find out which one after the
@@ -93,7 +95,6 @@ export const DataManagementSection = () => {
   const backupsRequestedRef = useRef(false);
   const isMutating =
     isCreatingBackup ||
-    isExporting ||
     isImporting ||
     isImportingCsv;
 
@@ -162,33 +163,6 @@ export const DataManagementSection = () => {
       });
     } finally {
       setIsCreatingBackup(false);
-    }
-  };
-
-  const handleExport = async () => {
-    try {
-      setIsExporting(true);
-      const result = await window.hospitalDirectory.exportDataset();
-
-      if (!result) {
-        pushToast({
-          type: "warning",
-          message: "Exportación cancelada."
-        });
-        return;
-      }
-
-      pushToast({
-        type: "success",
-        message: "Exportación completada."
-      });
-    } catch (error) {
-      pushToast({
-        type: "error",
-        message: toCompactToastMessage(error, "No se pudo exportar el directorio.")
-      });
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -482,7 +456,13 @@ export const DataManagementSection = () => {
           Copias de seguridad, exportación e importación del directorio, y recuperación desde copias locales.
         </p>
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+      {/* OIR-224 priority 3: single-column vertical stack — the import/backup
+          area previously shared a two-column grid with the "Última copia de
+          seguridad" indicator as a sticky sidebar, which squeezed its
+          available width (and, with it, the "Filas del archivo" preview
+          table below). The indicator now renders BELOW this article, at full
+          width, never beside it. */}
+      <div className="space-y-6">
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -500,14 +480,13 @@ export const DataManagementSection = () => {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {/* OIR-219/OIR-223: "Copia de seguridad" — a single primary action
-              (save to the local backups folder). Saving to a different
-              location is folded in as a secondary, de-emphasized option on
-              the same card rather than a separate parallel button — a
-              switchboard operator should see ONE clear action, not a choice
-              between "backup" and "export" (the same underlying operation
-              to them). The mechanism (exportDataset()/createBackup() IPC)
-              is unchanged — this is copy/UX consolidation only. */}
+          {/* OIR-219/OIR-223/OIR-224: "Copia de seguridad" — a single primary
+              action (save to the local backups folder). The former secondary
+              "Guardar la copia en otra carpeta…" link was removed entirely
+              (OIR-224): the operator confirmed choosing another destination
+              folder is never needed, so this card is now just a title, one
+              description line and the single button. The underlying
+              exportDataset()/createBackup() IPC mechanism is unchanged. */}
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-lg font-semibold text-scs-blueDark">Copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
@@ -523,25 +502,22 @@ export const DataManagementSection = () => {
                 {isCreatingBackup ? "Creando…" : "Crear copia de seguridad"}
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleExport()}
-              disabled={isMutating}
-              className="focus-ring mt-3 text-sm font-medium text-slate-600 underline-offset-2 hover:underline disabled:opacity-60"
-            >
-              {isExporting ? "Guardando…" : "Guardar la copia en otra carpeta…"}
-            </button>
           </div>
 
-          {/* OIR-219: "Importar" is a single unified entry point. One button
-              opens exactly one native dialog (json/csv/ods/xls/xlsx filter)
-              via pickAndImportDataset(); main dispatches by extension to the
-              existing JSON full-replace or CSV preview pipelines and this
-              component renders whichever existing UI matches the result. */}
+          {/* OIR-219/OIR-224: "Importar" is a single unified entry point. One
+              button opens exactly one native dialog (json/csv/ods/xls/xlsx
+              filter) via pickAndImportDataset(); main dispatches by extension
+              to the existing JSON full-replace or CSV preview pipelines and
+              this component renders whichever existing UI matches the
+              result. OIR-224 shortened the card copy to two short lines (no
+              "JSON" wording, no full outcome explainer). */}
           <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Selecciona un archivo para importar. Si es una copia de seguridad completa, reemplaza los datos actuales del directorio (se crea una copia de seguridad automática antes de continuar). Si es una hoja de cálculo (CSV, ODS, XLS o XLSX), se valida y se muestra una vista previa antes de aplicar los cambios.
+              Selecciona un archivo para importar. Se generará una copia de seguridad automática.
+            </p>
+            <p className="mt-1 text-xs text-amber-900/60">
+              Formatos admitidos: CSV, ODS, XLS, XLSX
             </p>
             <div className="mt-4">
               <button
@@ -598,8 +574,11 @@ export const DataManagementSection = () => {
             simple date indicator — an operator only needs to know WHEN
             the last backup happened, not browse a list. Restoring an old
             backup file is done via the unified "Importar" picker above
-            (importing a .json backup already performs a full replace). */}
-        <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel xl:sticky xl:top-6 xl:self-start">
+            (importing a .json backup already performs a full replace).
+            OIR-224 priority 3: renders BELOW the import/backup article in
+            the single-column stack (no longer a sticky sidebar beside it),
+            so it never steals width from the article above. */}
+        <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
