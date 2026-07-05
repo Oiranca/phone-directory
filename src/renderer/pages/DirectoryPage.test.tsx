@@ -485,13 +485,15 @@ describe("DirectoryPage", () => {
       within(detail).queryByText(/Cocina Francisco Artíles - Francisco Artíles/)
     ).not.toBeInTheDocument();
     expect(within(detail).getByText("Cocina Francisco Artíles")).toBeInTheDocument();
-    // OIR-240: service already contains the full name — Nombre y Apellidos is
-    // NOT a genuinely distinct name here (same serviceContainsDisplayName check
-    // that gates the title), so the card must show the empty-state placeholder
-    // instead of repeating "Francisco Artíles" a second time.
+    // OIR-241: service merely CONTAINS the full name as a substring (a
+    // data-entry convention for this row), it does not EXACTLY equal it —
+    // "Francisco Artíles" is still a genuine, distinct name and must be shown
+    // in its own card, not hidden behind the empty-state placeholder. Only an
+    // exact displayName/service match (see the Sindicato Médico test below)
+    // represents the "blank Nombre column fell back to service" case.
     expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
-    expect(within(detail).queryByText("Francisco Artíles")).not.toBeInTheDocument();
-    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
+    expect(within(detail).getByText("Francisco Artíles")).toBeInTheDocument();
+    expect(within(detail).queryByText("Sin nombre y apellidos registrado")).not.toBeInTheDocument();
   });
 
   it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view (OIR-234)", async () => {

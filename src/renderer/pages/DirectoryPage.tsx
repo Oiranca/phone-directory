@@ -752,16 +752,24 @@ export const DirectoryPage = () => {
                     unconditionally, which duplicates the Servicio value whenever
                     displayName is not a genuinely distinct name (e.g. a blank ODS
                     "Nombre" column falls back to the service label itself — see
-                    normalizeServiceSheet). Reuses the SAME serviceContainsDisplayName
-                    check that gates title composition (buildDisplayTitle) — do not
-                    invent a separate comparison — so "Nombre y Apellidos" never repeats
-                    a value already shown as Servicio; it shows an empty-state
-                    placeholder instead, matching the Ubicación card's convention. */}
+                    normalizeServiceSheet).
+
+                    OIR-241 correction: OIR-240 gated this on serviceContainsDisplayName
+                    (the broader substring check meant only for title-composition
+                    dedup in buildDisplayTitle), which wrongly hid genuine names whose
+                    service happens to contain them as a substring for unrelated
+                    data-entry reasons (e.g. displayName="Francisco Artíles" /
+                    service="Cocina Francisco Artíles" — a real, distinct name, not a
+                    fallback copy). The "blank Nombre column falls back to service
+                    verbatim" case always produces an EXACT match, never a partial
+                    one, so the correct check here is isDuplicateOfDisplayName
+                    (OIR-233's exact-equality helper), not serviceContainsDisplayName.
+                    buildDisplayTitle's use of serviceContainsDisplayName for title
+                    composition is a separate concern and is unaffected. */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
                   <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                    {selectedRecord.organization.service &&
-                    serviceContainsDisplayName(selectedRecord.organization.service, selectedRecord.displayName)
+                    {isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName)
                       ? "Sin nombre y apellidos registrado"
                       : selectedRecord.displayName}
                   </p>
