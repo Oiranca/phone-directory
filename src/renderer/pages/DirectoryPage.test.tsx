@@ -254,8 +254,76 @@ describe("DirectoryPage", () => {
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const heading = within(list).getByText("Admisión General");
     const card = heading.closest("div.min-w-0");
-    // Only the type/department subtitle <p> renders — no extra role line.
-    expect(card?.querySelectorAll("p")).toHaveLength(1);
+    // OIR-233: the Tipo/Unidad subtitle line was removed entirely, so with no
+    // role set the title's wrapper div renders no <p> at all.
+    expect(card?.querySelectorAll("p")).toHaveLength(0);
+  });
+
+  it("does not render the Tipo/Unidad subtitle line in list cards (OIR-233)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).queryByText(/Sin unidad/)).not.toBeInTheDocument();
+    // Old "Tipo · Unidad" line for record[0] (type "service", department "Admisión").
+    expect(within(list).queryByText("Servicio · Admisión")).not.toBeInTheDocument();
+  });
+
+  it("does not render the service line in a list card when it duplicates the displayName (OIR-233)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Helipuerto (Secretaría)";
+    contacts.records[0]!.organization.service = "Helipuerto (Secretaría)";
+    contacts.records[0]!.organization.area = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    // The name renders once (the title) — the duplicate service line is skipped.
+    expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
+  });
+
+  it("still renders the service line in a list card when it genuinely differs from the displayName (OIR-233)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    // defaultContacts.records[0].organization.service === "Información", distinct
+    // from displayName "Admisión General" — it must still render. (Both fixture
+    // records happen to share this service value, so scope to record[0]'s card.)
+    const heading = within(list).getByText("Admisión General");
+    const card = heading.closest("button");
+    expect(within(card as HTMLElement).getByText("Información")).toBeInTheDocument();
   });
 
   it("shows organization.role in the detail view when present (OIR-229)", async () => {
@@ -303,6 +371,48 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("No pacientes")).not.toBeInTheDocument();
     expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
     expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
+  });
+
+  it("does not render the type pill in the detail view header (OIR-233)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    // records[0].type is "service" -> label "Servicio" — the pill must be gone.
+    expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
+  });
+
+  it("still renders privacy-flag pills in the detail header once the type pill is removed (OIR-233)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    // "Confidencial" renders both as the header privacy pill and the phone-level badge.
+    expect(within(detail).getAllByText("Confidencial").length).toBeGreaterThan(0);
+    expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
   });
 
   it("no longer renders the Unidad/Servicio/Área card in the contact detail view", async () => {

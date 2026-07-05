@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
-import { RECORD_TYPE_LABELS } from "../../shared/constants/catalogs";
-import type { AreaType, RecordType } from "../../shared/constants/catalogs";
+import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 
@@ -29,6 +28,38 @@ const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
 // padding — instead of a JS media-query guess that could fall out of sync.
 const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
 
+// OIR-233: a service/area value is only worth its own line when it adds
+// information beyond the displayName already shown above it — several real
+// records (e.g. "Helipuerto (Secretaría)") have a `service` value that is a
+// verbatim duplicate of displayName, which otherwise renders as a redundant
+// repeated line right under the title. Case/whitespace-insensitive equality
+// is enough here — no fuzzy matching needed, this is only meant to catch
+// literal duplicates, not near-misses.
+const isDuplicateOfDisplayName = (value: string | null | undefined, displayName: string): boolean =>
+  typeof value === "string" && value.trim().toLowerCase() === displayName.trim().toLowerCase();
+
+// OIR-233: derives the list card's secondary "service" line, skipping it
+// entirely when it would just repeat the displayName shown in the title.
+const getListServiceLine = (
+  organization: { service?: string; area?: AreaType },
+  displayName: string
+): string | null => {
+  const { service, area } = organization;
+
+  if (service) {
+    if (!isDuplicateOfDisplayName(service, displayName)) {
+      return service;
+    }
+    // Service duplicates the title — only fall back to the area label when
+    // an area is actually set and its label isn't itself a duplicate.
+    return area && !isDuplicateOfDisplayName(areaLabels[area], displayName) ? areaLabels[area] : null;
+  }
+
+  // No service value at all — preserve the original area-label fallback,
+  // including the "Sin área" placeholder when no area is set.
+  return areaLabels[area ?? "none"];
+};
+
 // The offset at which the sticky filter bar itself should stick — right below
 // the sticky app header. Must NOT include the filter bar's own height, or the
 // bar would push itself further down by that amount every time it renders.
@@ -40,11 +71,6 @@ const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
 // bounding their max-height.
 const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
 const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - var(${PAGE_CHROME_CSS_VAR}, 3.75rem))`;
-
-const typeLabels = {
-  all: "Todos los tipos",
-  ...RECORD_TYPE_LABELS
-} satisfies Record<RecordType | "all", string>;
 
 const areaLabels = {
   all: "Todas las áreas",
@@ -471,6 +497,7 @@ export const DirectoryPage = () => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
+            const serviceLine = getListServiceLine(record.organization, record.displayName);
 
             return (
               <li key={record.id}>
@@ -488,19 +515,16 @@ export const DirectoryPage = () => {
                 >
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
-                    <p className="truncate text-xs text-slate-500">
-                      {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
-                    </p>
                     {/* OIR-229: role/job title (ODS "Categoría") is the only thing that
                         distinguishes same-department contacts in the list — shown on its
-                        own line so it never gets truncated away by the line above. */}
+                        own line directly under the title. */}
                     {record.organization.role ? (
                       <p className="truncate text-xs font-medium text-slate-600">{record.organization.role}</p>
                     ) : null}
                   </div>
-                  <p className="mt-2 truncate text-sm text-slate-600">
-                    {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
-                  </p>
+                  {/* OIR-233: skip this line entirely when the service value is just a
+                      duplicate of the displayName above (see getListServiceLine). */}
+                  {serviceLine ? <p className="mt-2 truncate text-sm text-slate-600">{serviceLine}</p> : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
                     {privacyFlags.length > 0 && (
@@ -606,19 +630,21 @@ export const DirectoryPage = () => {
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-scs-blue ring-1 ring-slate-200">
-                          {typeLabels[selectedRecord.type]}
-                        </span>
-                        {selectedRecordPrivacyFlags.map((flag) => (
-                          <span
-                            key={flag}
-                            className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
-                          >
-                            {flag}
-                          </span>
-                        ))}
-                      </div>
+                      {/* OIR-233: the type pill (e.g. "SERVICIO") was removed as noise —
+                          only render this row (and its top margin to the title below)
+                          when there's an actual privacy-flag pill to show. */}
+                      {selectedRecordPrivacyFlags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {selectedRecordPrivacyFlags.map((flag) => (
+                            <span
+                              key={flag}
+                              className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                            >
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
                         {selectedRecord.displayName}
                       </h4>
