@@ -189,7 +189,9 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
+    // OIR-234: this record inherits organization.service ("Información") from
+    // the spread fixture record, so the title is composed with that prefix.
+    expect((await screen.findAllByText(/control de noche/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText("Inactivo")).not.toBeInTheDocument();
   });
 
@@ -252,7 +254,9 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
-    const heading = within(list).getByText("Admisión General");
+    // OIR-234: the title is composed as "{service} - {displayName}" when the
+    // service adds context, so match with a regex instead of the exact name.
+    const heading = within(list).getByText(/admisión general/i);
     const card = heading.closest("div.min-w-0");
     // OIR-233: the Tipo/Unidad subtitle line was removed entirely, so with no
     // role set the title's wrapper div renders no <p> at all.
@@ -321,9 +325,11 @@ describe("DirectoryPage", () => {
     // defaultContacts.records[0].organization.service === "Información", distinct
     // from displayName "Admisión General" — it must still render. (Both fixture
     // records happen to share this service value, so scope to record[0]'s card.)
-    const heading = within(list).getByText("Admisión General");
+    // OIR-234: the title itself is now composed as "Información - Admisión
+    // General" for this same reason, so match with a regex.
+    const heading = within(list).getByText(/admisión general/i);
     const card = heading.closest("button");
-    expect(within(card as HTMLElement).getByText("Información")).toBeInTheDocument();
+    expect(within(card as HTMLElement).getAllByText("Información").length).toBeGreaterThan(0);
   });
 
   it("shows organization.role in the detail view when present (OIR-229)", async () => {
@@ -413,6 +419,84 @@ describe("DirectoryPage", () => {
     // "Confidencial" renders both as the header privacy pill and the phone-level badge.
     expect(within(detail).getAllByText("Confidencial").length).toBeGreaterThan(0);
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
+  });
+
+  it("composes the title as '{service} - {displayName}' in the list card and detail view when the service adds context (OIR-234)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Nereida";
+    contacts.records[0]!.organization.service = "Alergia";
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).getByText("Alergia - Nereida")).toBeInTheDocument();
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByText("Alergia - Nereida")).toBeInTheDocument();
+  });
+
+  it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view (OIR-234)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Helipuerto (Secretaría)";
+    contacts.records[0]!.organization.service = "Helipuerto (Secretaría)";
+    contacts.records[0]!.organization.area = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
+    expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
+    expect(within(detail).getByText("Helipuerto (Secretaría)")).toBeInTheDocument();
+  });
+
+  it("leaves the title unchanged when organization.service is absent (OIR-234)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Recepción Central";
+    contacts.records[0]!.organization.service = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).getByText("Recepción Central")).toBeInTheDocument();
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByText("Recepción Central")).toBeInTheDocument();
   });
 
   it("no longer renders the Unidad/Servicio/Área card in the contact detail view", async () => {

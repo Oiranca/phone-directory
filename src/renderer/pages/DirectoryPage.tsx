@@ -60,6 +60,19 @@ const getListServiceLine = (
   return areaLabels[area ?? "none"];
 };
 
+// OIR-234: the service alone (e.g. "Alergia") is often the detail that makes
+// a contact identifiable at a glance, but it was buried inside the card body
+// instead of the title. Compose "{service} - {displayName}" when the service
+// adds real context, reusing the same duplicate-detection rule OIR-233 uses
+// to decide whether to show the service line at all — so a record like
+// "Helipuerto (Secretaría)" (whose service duplicates displayName) keeps its
+// title unchanged instead of rendering "Helipuerto (Secretaría) - Helipuerto
+// (Secretaría)".
+const buildDisplayTitle = (displayName: string, organization: { service?: string }): string => {
+  const { service } = organization;
+  return service && !isDuplicateOfDisplayName(service, displayName) ? `${service} - ${displayName}` : displayName;
+};
+
 // The offset at which the sticky filter bar itself should stick — right below
 // the sticky app header. Must NOT include the filter bar's own height, or the
 // bar would push itself further down by that amount every time it renders.
@@ -514,7 +527,11 @@ export const DirectoryPage = () => {
                   ].join(" ")}
                 >
                   <div className="min-w-0">
-                    <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
+                    {/* OIR-234: prefix the title with the service when it adds context
+                        beyond displayName (see buildDisplayTitle). */}
+                    <h3 className="truncate font-semibold text-scs-blueDark">
+                      {buildDisplayTitle(record.displayName, record.organization)}
+                    </h3>
                     {/* OIR-229: role/job title (ODS "Categoría") is the only thing that
                         distinguishes same-department contacts in the list — shown on its
                         own line directly under the title. */}
@@ -645,8 +662,10 @@ export const DirectoryPage = () => {
                           ))}
                         </div>
                       )}
+                      {/* OIR-234: prefix the title with the service when it adds context
+                          beyond displayName (see buildDisplayTitle). */}
                       <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                        {selectedRecord.displayName}
+                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization)}
                       </h4>
                       {/* OIR-229: role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
