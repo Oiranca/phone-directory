@@ -1669,9 +1669,13 @@ export class AppDataService {
       },
       location: currentRecord.location ?? importedRecord.location,
       contactMethods: {
-        phones: normalizePrimaryEntries(nextPhones),
-        emails: normalizePrimaryEntries(nextEmails),
-        socials: normalizePrimaryEntries(nextSocials)
+        // OIR-227 (residual gap #3): normalizePrimaryEntries invents a primary
+        // when none is marked, which reintroduces the auto-assigned "Principal"
+        // bug for any record touched by a merge-fields conflict resolution.
+        // Only reconcile a genuine conflict (more than one explicitly marked).
+        phones: this.reconcileMergedPrimaryEntries(nextPhones),
+        emails: this.reconcileMergedPrimaryEntries(nextEmails),
+        socials: this.reconcileMergedPrimaryEntries(nextSocials)
       },
       aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
       tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
@@ -1682,6 +1686,25 @@ export class AppDataService {
         updatedBy: editorName
       }
     });
+  }
+
+  /**
+   * Like normalizePrimaryEntries, but never invents a primary when none is
+   * marked — "Principal" must stay a manual, user-editable choice (OIR-227).
+   */
+  private reconcileMergedPrimaryEntries<T extends { isPrimary: boolean }>(entries: T[]): T[] {
+    const primaryIndexes = entries
+      .map((entry, index) => (entry.isPrimary ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (primaryIndexes.length <= 1) {
+      return entries;
+    }
+
+    const keepIndex = primaryIndexes[0]!;
+    return entries.map((entry, index) =>
+      entry.isPrimary && index !== keepIndex ? { ...entry, isPrimary: false } : entry
+    );
   }
 
   private buildStableMergeKeys(record: ContactRecord): string[] {

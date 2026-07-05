@@ -1885,6 +1885,47 @@ describe("AppDataService", () => {
     expect(updated.tags).toContain("nuevo");
   });
 
+  it("does not invent a primary phone when merge-fields merges a record where none is marked primary (OIR-227 residual gap)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const createSourceFilePath = path.join(testRoot, "incoming", "no-primary-create.csv");
+    await fs.mkdir(path.dirname(createSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      createSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "no-primary-1,service,Sin Principal,Recepción,11111,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const created = await service.importCsvDataset(createSourceFilePath);
+    const createdRecord = created.contacts.records.find((record) => record.externalId === "no-primary-1")!;
+    expect(createdRecord.contactMethods.phones.every((phone) => !phone.isPrimary)).toBe(true);
+
+    const mergeSourceFilePath = path.join(testRoot, "incoming", "no-primary-merge.csv");
+    await fs.writeFile(
+      mergeSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "no-primary-1,service,Sin Principal,Recepción,22222,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const preview = await service.previewCsvImport(mergeSourceFilePath);
+    const result = await service.importCsvDataset(mergeSourceFilePath, [
+      { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+    ]);
+    const merged = result.contacts.records.find((record) => record.externalId === "no-primary-1")!;
+
+    expect(merged.contactMethods.phones.some((phone) => phone.number === "11111")).toBe(true);
+    expect(merged.contactMethods.phones.some((phone) => phone.number === "22222")).toBe(true);
+    expect(merged.contactMethods.phones.every((phone) => !phone.isPrimary)).toBe(true);
+  });
+
   it("previews conflicts created by duplicate rows inside the same import file", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
