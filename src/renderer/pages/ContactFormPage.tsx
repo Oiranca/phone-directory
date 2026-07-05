@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { Link, useBlocker } from "react-router-dom";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { CustomFieldsSection } from "../components/contact-form/CustomFieldsSection";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
 import { OrganizationLocationSection } from "../components/contact-form/OrganizationLocationSection";
@@ -23,11 +24,14 @@ export const ContactFormPage = () => {
     liveMessage,
     setLiveMessage,
     availableAreas,
+    existingCustomFieldKeys,
     displayNameInputRef,
     addPhoneButtonRef,
     addEmailButtonRef,
+    addCustomFieldButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
+    customFieldKeyInputRefs,
     clearFieldError,
     setCommaSeparatedField,
     updatePhone,
@@ -36,6 +40,8 @@ export const ContactFormPage = () => {
     removeEmail,
     updateSocial,
     removeSocial,
+    updateCustomField,
+    removeCustomField,
     setPendingFocusTarget,
     handleSubmit
   } = useContactForm();
@@ -167,6 +173,20 @@ export const ContactFormPage = () => {
           setLiveMessage={setLiveMessage}
           updateSocial={updateSocial}
           removeSocial={removeSocial}
+        />
+
+        <CustomFieldsSection
+          customFields={formState.customFields}
+          existingCustomFieldKeys={existingCustomFieldKeys}
+          fieldErrors={fieldErrors}
+          addCustomFieldButtonRef={addCustomFieldButtonRef}
+          customFieldKeyInputRefs={customFieldKeyInputRefs}
+          setFormState={setFormState}
+          setLiveMessage={setLiveMessage}
+          setPendingFocusTarget={setPendingFocusTarget}
+          updateCustomField={updateCustomField}
+          removeCustomField={removeCustomField}
+          clearFieldError={clearFieldError}
         />
 
         <div className="grid gap-6 xl:grid-cols-2">

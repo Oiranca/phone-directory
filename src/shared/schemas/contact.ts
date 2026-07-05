@@ -86,6 +86,20 @@ export const socialContactSchema = z.object({
   { message: "La URL de la red social debe usar http o https.", path: ["url"] }
 );
 
+/**
+ * Persisted custom key-value field (OIR-232). Lets a user record ad-hoc
+ * information the fixed form doesn't cover (e.g. "Número extranjero" for one
+ * contact) without a schema change per new field. `id` is a stable entry
+ * identifier only (mirrors the phones/emails/socials pattern for list
+ * identity) — it is not shown to the user; `key`/`value` are the visible
+ * label and content.
+ */
+export const customFieldSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  value: z.string()
+});
+
 export const contactRecordSchema = z.object({
   id: z.string(),
   externalId: z.string().optional(),
@@ -131,6 +145,10 @@ export const contactRecordSchema = z.object({
   aliases: z.array(z.string()),
   tags: z.array(z.string()),
   notes: z.string().optional(),
+  // OIR-232: user-defined key/value pairs for information the fixed form
+  // doesn't cover. Optional — absent on records that don't use it, including
+  // all existing persisted records.
+  customFields: z.array(customFieldSchema).optional(),
   status: z.enum(["active", "inactive"]),
   source: z.object({
     externalId: z.string().optional(),
@@ -240,6 +258,18 @@ export const editableSocialContactSchema = z.object({
   { message: "La URL de la red social debe usar http o https.", path: ["url"] }
 );
 
+/**
+ * Editable custom key-value field entry (OIR-232). Mirrors the
+ * EditablePhoneContact pattern: trim transforms applied, both key and value
+ * required (an incomplete entry blocks save rather than being silently
+ * dropped, same as a phone with no number).
+ */
+export const editableCustomFieldSchema = z.object({
+  id: z.string().min(1),
+  key: z.string().trim().min(1, "El nombre del campo es obligatorio."),
+  value: z.string().trim().min(1, "El valor del campo es obligatorio.")
+});
+
 export const auditActionSchema = z.enum(["create", "update", "delete", "bulk-import", "dataset-replace", "restore-from-backup", "reset"]);
 
 export const auditLogEntrySchema = z.object({
@@ -303,6 +333,8 @@ export const editableContactRecordSchema = z.object({
   aliases: z.array(z.string().trim().min(1)).default([]),
   tags: z.array(z.string().trim().min(1)).default([]),
   notes: optionalTextField(),
+  // OIR-232: see contactRecordSchema.customFields for rationale.
+  customFields: z.array(editableCustomFieldSchema).optional(),
   status: z.enum(["active", "inactive"], {
     errorMap: () => ({ message: "Selecciona un estado válido." })
   })
@@ -319,6 +351,9 @@ export type PhoneContact = z.infer<typeof phoneContactSchema>;
 
 /** Persisted email entry — derived from the persistence schema. */
 export type EmailContact = z.infer<typeof emailContactSchema>;
+
+/** Persisted custom key-value field entry — derived from the persistence schema (OIR-232). */
+export type CustomField = z.infer<typeof customFieldSchema>;
 
 /** Social-media platform enum — derived from the persistence schema (OIR-131). */
 export type SocialPlatform = z.infer<typeof socialPlatformSchema>;

@@ -3,12 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
-import type { EditableContactRecord, EditableEmailContact, EditablePhoneContact, EditableSocialContact, SocialPlatform } from "../../shared/types/contact";
+import type { EditableContactRecord, EditableCustomField, EditableEmailContact, EditablePhoneContact, EditableSocialContact, SocialPlatform } from "../../shared/types/contact";
 import { normalizePrimaryEntries } from "../../shared/utils/contacts";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
-export type ContactFormState = Omit<EditableContactRecord, "person" | "location"> & {
+export type ContactFormState = Omit<EditableContactRecord, "person" | "location" | "customFields"> & {
   person: {
     firstName: string;
     lastName: string;
@@ -19,6 +19,7 @@ export type ContactFormState = Omit<EditableContactRecord, "person" | "location"
     room: string;
     text: string;
   };
+  customFields: EditableCustomField[];
 };
 
 export type PendingFocusTarget =
@@ -34,6 +35,11 @@ export type PendingFocusTarget =
     kind: "email";
     id?: string;
     fallback: "add-email";
+  }
+  | {
+    kind: "customField";
+    id?: string;
+    fallback: "add-custom-field";
   };
 
 export const recordTypeOptions: Array<{ value: RecordType; label: string }> = [
@@ -104,6 +110,12 @@ export const createSocialDraft = (): EditableSocialContact => ({
   isPrimary: true
 });
 
+export const createCustomFieldDraft = (): EditableCustomField => ({
+  id: createId("cf"),
+  key: "",
+  value: ""
+});
+
 const createEmptyFormState = (): ContactFormState => ({
   type: "person",
   displayName: "",
@@ -132,6 +144,7 @@ const createEmptyFormState = (): ContactFormState => ({
   aliases: [],
   tags: [],
   notes: "",
+  customFields: [],
   status: "active"
 });
 
@@ -161,7 +174,8 @@ const toFormState = (record: EditableContactRecord): ContactFormState => ({
   },
   aliases: record.aliases,
   tags: record.tags,
-  notes: record.notes ?? ""
+  notes: record.notes ?? "",
+  customFields: record.customFields ?? []
 });
 
 const buildPayload = (state: ContactFormState): EditableContactRecord => ({
@@ -176,6 +190,7 @@ const buildPayload = (state: ContactFormState): EditableContactRecord => ({
   aliases: state.aliases,
   tags: state.tags,
   notes: state.notes,
+  customFields: state.customFields,
   status: state.status
 });
 
@@ -232,12 +247,16 @@ export type UseContactFormResult = {
   setLiveMessage: React.Dispatch<React.SetStateAction<string>>;
   // derived
   availableAreas: AreaType[];
+  /** Key names already used in customFields across all currently-loaded contacts (deduped, sorted), for the key-name autocomplete. */
+  existingCustomFieldKeys: string[];
   // refs
   displayNameInputRef: React.RefObject<HTMLInputElement>;
   addPhoneButtonRef: React.RefObject<HTMLButtonElement>;
   addEmailButtonRef: React.RefObject<HTMLButtonElement>;
+  addCustomFieldButtonRef: React.RefObject<HTMLButtonElement>;
   phoneNumberInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   emailAddressInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
+  customFieldKeyInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   /** Tracks whether the user has made unsaved changes. Reset on load and after successful save. */
   isDirtyRef: React.MutableRefObject<boolean>;
   // mutation callbacks
@@ -249,6 +268,8 @@ export type UseContactFormResult = {
   removeEmail: (emailId: string) => void;
   updateSocial: (socialId: string, patch: Partial<EditableSocialContact>) => void;
   removeSocial: (socialId: string) => void;
+  updateCustomField: (fieldId: string, patch: Partial<EditableCustomField>) => void;
+  removeCustomField: (fieldId: string) => void;
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   handleSubmit: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -303,8 +324,10 @@ export const useContactForm = (): UseContactFormResult => {
   const displayNameInputRef = useRef<HTMLInputElement>(null);
   const addPhoneButtonRef = useRef<HTMLButtonElement>(null);
   const addEmailButtonRef = useRef<HTMLButtonElement>(null);
+  const addCustomFieldButtonRef = useRef<HTMLButtonElement>(null);
   const phoneNumberInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const emailAddressInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const customFieldKeyInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const existingRecord = useMemo(
     () => contacts?.records.find((record) => record.id === id),
@@ -359,17 +382,51 @@ export const useContactForm = (): UseContactFormResult => {
       }
     }
 
+    if (pendingFocusTarget.kind === "customField" && pendingFocusTarget.id) {
+      const input = customFieldKeyInputRefs.current[pendingFocusTarget.id];
+      if (input) {
+        input.focus();
+        setPendingFocusTarget(null);
+        return;
+      }
+    }
+
     if (pendingFocusTarget.fallback === "add-phone") {
       addPhoneButtonRef.current?.focus();
       setPendingFocusTarget(null);
       return;
     }
 
-    addEmailButtonRef.current?.focus();
+    if (pendingFocusTarget.fallback === "add-email") {
+      addEmailButtonRef.current?.focus();
+      setPendingFocusTarget(null);
+      return;
+    }
+
+    addCustomFieldButtonRef.current?.focus();
     setPendingFocusTarget(null);
-  }, [formState.contactMethods.emails, formState.contactMethods.phones, pendingFocusTarget]);
+  }, [formState.contactMethods.emails, formState.contactMethods.phones, formState.customFields, pendingFocusTarget]);
 
   const availableAreas = contacts?.catalogs.areas ?? [];
+
+  /**
+   * Key names already used in customFields across every currently-loaded
+   * contact (not just the one being edited) — surfaced as autocomplete
+   * suggestions so a new custom field reuses an existing name (e.g.
+   * "Número extranjero") instead of creating a near-duplicate
+   * ("Numero Extranjero", "Núm. Extranjero", …).
+   */
+  const existingCustomFieldKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const record of contacts?.records ?? []) {
+      for (const field of record.customFields ?? []) {
+        if (field.key.trim()) {
+          keys.add(field.key.trim());
+        }
+      }
+    }
+    return Array.from(keys).sort((a, b) => a.localeCompare(b, "es"));
+  }, [contacts]);
 
   const setCommaSeparatedField = (key: "aliases" | "tags", rawValue: string) => {
     setFormState((current) => ({
@@ -496,6 +553,25 @@ export const useContactForm = (): UseContactFormResult => {
     setLiveMessage(`Red social ${removedIndex + 1} eliminada.`);
   };
 
+  const updateCustomField = (fieldId: string, patch: Partial<EditableCustomField>) => {
+    setFormState((current) => ({
+      ...current,
+      customFields: current.customFields.map((field) =>
+        field.id === fieldId ? { ...field, ...patch } : field
+      )
+    }));
+  };
+
+  const removeCustomField = (fieldId: string) => {
+    const removedIndex = formState.customFields.findIndex((field) => field.id === fieldId);
+    setFormState((current) => ({
+      ...current,
+      customFields: current.customFields.filter((field) => field.id !== fieldId)
+    }));
+    setLiveMessage(`Campo personalizado ${removedIndex + 1} eliminado.`);
+    setPendingFocusTarget({ kind: "customField", fallback: "add-custom-field" });
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -534,6 +610,17 @@ export const useContactForm = (): UseContactFormResult => {
               id: formState.contactMethods.emails[firstEmailIdx]!.id,
               fallback: "add-email"
             });
+          } else {
+            const firstCustomFieldIdx = formState.customFields.findIndex((_, idx) =>
+              Object.keys(errorMap).some((k) => k.startsWith(`customFields.${idx}.`))
+            );
+            if (firstCustomFieldIdx >= 0) {
+              setPendingFocusTarget({
+                kind: "customField",
+                id: formState.customFields[firstCustomFieldIdx]!.id,
+                fallback: "add-custom-field"
+              });
+            }
           }
         }
       }
@@ -585,11 +672,14 @@ export const useContactForm = (): UseContactFormResult => {
     liveMessage,
     setLiveMessage,
     availableAreas,
+    existingCustomFieldKeys,
     displayNameInputRef,
     addPhoneButtonRef,
     addEmailButtonRef,
+    addCustomFieldButtonRef,
     phoneNumberInputRefs,
     emailAddressInputRefs,
+    customFieldKeyInputRefs,
     clearFieldError,
     setCommaSeparatedField,
     updatePhone,
@@ -598,6 +688,8 @@ export const useContactForm = (): UseContactFormResult => {
     removeEmail,
     updateSocial,
     removeSocial,
+    updateCustomField,
+    removeCustomField,
     setPendingFocusTarget,
     handleSubmit
   };

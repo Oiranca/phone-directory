@@ -7,6 +7,7 @@ export type {
   EmailContact,
   SocialPlatform,
   SocialContact,
+  CustomField,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -103,6 +104,18 @@ export interface EditableSocialContact {
   isPrimary: boolean;
 }
 
+/**
+ * Editable custom key-value field entry (OIR-232). Lets a user record ad-hoc
+ * information the fixed form doesn't cover (e.g. "Número extranjero" for one
+ * contact). Mirrors the EditablePhoneContact pattern: `id` is a stable entry
+ * identifier used for form list identity only.
+ */
+export interface EditableCustomField {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface EditableContactRecord {
   id?: string;
   externalId?: string;
@@ -140,6 +153,8 @@ export interface EditableContactRecord {
   aliases: string[];
   tags: string[];
   notes?: string;
+  /** OIR-232: user-defined key/value pairs for information the fixed form doesn't cover. */
+  customFields?: EditableCustomField[];
   status: "active" | "inactive";
 }
 
