@@ -628,7 +628,12 @@ export const normalizeServiceSheet = (
       isPrimary: false,
       confidential: privacy.confidential,
       noPatientSharing: privacy.noPatientSharing,
-      notes: finalNotes || undefined
+      // OIR-227 (residual gap): Comentarios/notes belong to the contact, not
+      // to an individual phone — they are already stored at record.notes
+      // above. Duplicating them here caused the note text to render directly
+      // under the phone number instead of only in the contact's dedicated
+      // "Notas" section.
+      notes: undefined
     }));
     record.phones = JSON.stringify(phoneEntries);
 
@@ -1125,9 +1130,16 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       }
     }
 
-    const reassertedPhones = combinedPhones.map((phone, index) => ({
+    // OIR-227 (residual gap): "Principal" is a manual, user-editable choice
+    // (see PhonesSection.tsx) — it must never be re-derived from a phone's
+    // position in the merged array. Preserve whatever isPrimary each phone
+    // already carried coming in (the parsers upstream never auto-assign
+    // isPrimary=true on import, so in practice this stays false; genuine
+    // multi-primary conflicts, if any, are reconciled downstream by
+    // ensureSinglePrimary in csv-import.service.ts).
+    const reassertedPhones = combinedPhones.map((phone) => ({
       ...phone,
-      isPrimary: index === 0
+      isPrimary: phone.isPrimary
     }));
 
     const base = { ...group[0]! };
@@ -1160,7 +1172,10 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     base.phone1Label = first ? "Principal" : "";
     base.phone1Number = first?.number ?? "";
     base.phone1Kind = first ? "internal" : "";
-    base.phone1IsPrimary = first ? "true" : "false";
+    // OIR-227 (residual gap): reflect the phone's actual isPrimary value
+    // instead of assuming "true" whenever a first phone exists — keeps this
+    // flat mirror field consistent with the reasserted `phones` JSON above.
+    base.phone1IsPrimary = first?.isPrimary ? "true" : "false";
     base.phone1Confidential = first?.confidential ? "true" : "false";
     base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
     base.phone1Notes = first?.notes ?? "";

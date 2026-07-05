@@ -378,6 +378,26 @@ describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", ()
 });
 
 // ---------------------------------------------------------------------------
+// normalizeServiceSheet — OIR-227 residual gap (Comentarios must not
+// duplicate onto phone-level notes)
+// ---------------------------------------------------------------------------
+
+describe("normalizeServiceSheet — OIR-227 residual fix (notes duplication)", () => {
+  it("does NOT duplicate note text onto phone-level notes (record.notes stays the source of truth)", () => {
+    const sheet = makeSheet("Guardia", [
+      ["Guardia", "928123456", "Turno de tarde"],
+    ]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("Guardia"));
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ notes?: string }>;
+
+    // Record-level notes still carries the note text.
+    expect(records[0]!.notes).toBe("Turno de tarde");
+    // Phone-level notes must be absent, not a copy of the record-level notes.
+    expect(phones[0]!.notes).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // normalizeTabularAgendaSheet / isAgendaTabularHeader / stripPlantaPrefix (OIR-222)
 // ---------------------------------------------------------------------------
 

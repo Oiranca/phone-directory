@@ -602,7 +602,7 @@ describe("golden: cross-sheet merge by displayName", () => {
     expect(uci.externalId).toMatch(/^urgencias-/);
   });
 
-  it("re-asserts primary flag after merge (first combined phone = primary)", () => {
+  it("does not assign a primary phone after cross-sheet merge (OIR-227 residual fix — 'Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "merge-primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Guardia", numbers: ["60001", "60002"] },
@@ -616,8 +616,8 @@ describe("golden: cross-sheet merge by displayName", () => {
     const guardia = result.rows.find((r) => r.displayName === "Guardia")!;
     const phones = JSON.parse(guardia.phones!) as SerializedPhoneEntry[];
 
-    expect(phones[0]!.isPrimary).toBe(true);
-    phones.slice(1).forEach((p) => expect(p.isPrimary).toBe(false));
+    expect(phones.every((p) => p.isPrimary === false)).toBe(true);
+    expect(guardia.phone1IsPrimary).toBe("false");
   });
 
   it("accent-normalizes displayName for cross-sheet identity matching", () => {
@@ -919,7 +919,20 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(merged.map((p) => p.number)).toContain("22222");
   });
 
-  it("re-asserts primary: first merged phone is primary", () => {
+  it("does not invent a primary phone when none of the merged phones were marked primary (OIR-227 residual fix)", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", isPrimary: false })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", isPrimary: false })]);
+    const r1 = makeRow({ displayName: "UCI", phones: phones1 });
+    const r2 = makeRow({ displayName: "UCI", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+    const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
+    expect(merged[0]!.isPrimary).toBe(false);
+    expect(merged[1]!.isPrimary).toBe(false);
+    expect(result[0]!.phone1IsPrimary).toBe("false");
+  });
+
+  it("does not re-derive isPrimary from array position after merge — preserves each phone's own value (OIR-227 residual fix)", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", isPrimary: true })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", isPrimary: true })]);
     const r1 = makeRow({ displayName: "UCI", phones: phones1 });
@@ -927,8 +940,13 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
 
     const result = mergeRecordsByDisplayName([r1, r2]);
     const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
+    // Both entries keep whatever isPrimary they already had going in — the
+    // merge step must never force the first phone to primary just because of
+    // its position in the combined array. (Downstream buildPhones/
+    // ensureSinglePrimary in csv-import.service.ts reconciles genuine
+    // multi-primary conflicts like this one at import-apply time.)
     expect(merged[0]!.isPrimary).toBe(true);
-    expect(merged[1]!.isPrimary).toBe(false);
+    expect(merged[1]!.isPrimary).toBe(true);
   });
 
   it("deduplicates by normalized phone number (strips non-digits)", () => {
