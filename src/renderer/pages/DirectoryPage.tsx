@@ -858,45 +858,18 @@ export const DirectoryPage = () => {
                   </div>
                 </div>
 
-                <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <dl className="grid gap-4 sm:grid-cols-3">
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</dt>
-                        <dd className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.department ?? "Sin unidad"}
-                        </dd>
-                      </div>
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</dt>
-                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.service ?? "Sin servicio"}
-                        </dd>
-                      </div>
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</dt>
-                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
-                          {areaLabels[selectedRecord.organization.area ?? "none"]}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  {selectedRecord.location && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
-                      <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                        {[
-                          selectedRecord.location.building,
-                          selectedRecord.location.floor,
-                          selectedRecord.location.room,
-                          selectedRecord.location.text
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "Sin ubicación detallada"}
-                      </p>
-                    </div>
-                  )}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
+                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                    {[
+                      selectedRecord.location?.building,
+                      selectedRecord.location?.floor,
+                      selectedRecord.location?.room,
+                      selectedRecord.location?.text
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "Sin ubicación detallada"}
+                  </p>
                 </div>
 
                 <div className="space-y-3">

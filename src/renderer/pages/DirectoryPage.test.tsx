@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectoryPage } from "./DirectoryPage";
@@ -531,6 +531,91 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("No pacientes")).not.toBeInTheDocument();
     expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
     expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
+  });
+
+  it("no longer renders the Unidad/Servicio/Área card in the contact detail view", async () => {
+    const contacts = structuredClone(defaultContacts);
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      },
+      selectedRecordId: contacts.records[1]!.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).queryByText("Unidad")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("Área")).not.toBeInTheDocument();
+  });
+
+  it("shows the Ubicación card with location data when present", async () => {
+    const contacts = structuredClone(defaultContacts);
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      },
+      selectedRecordId: contacts.records[1]!.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).getByText("Ubicación")).toBeInTheDocument();
+    expect(within(detail).getByText("Avenida de ejemplo, 10")).toBeInTheDocument();
+  });
+
+  it("shows the Ubicación card with a placeholder when no location data is present", async () => {
+    const contacts = structuredClone(defaultContacts);
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      },
+      selectedRecordId: contacts.records[0]!.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).getByText("Ubicación")).toBeInTheDocument();
+    expect(within(detail).getByText("Sin ubicación detallada")).toBeInTheDocument();
   });
 
   it("limits result-card risk text to the visible phone while keeping detail warnings", async () => {
