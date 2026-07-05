@@ -1204,4 +1204,73 @@ describe("DirectoryPage", () => {
     // warning badge should reflect the newly-confidential secondary phone.
     expect(screen.getAllByText("70005").length).toBeGreaterThan(0);
   });
+
+  // OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets.
+  it("clicking a book shortcut sets the search query and filters to matching department records", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[0]),
+      id: "sindicatos-record",
+      displayName: "Delegado Sindical",
+      organization: { ...defaultContacts.records[0]!.organization, department: "Sindicatos" }
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("3 resultados");
+
+    const sindicatosButton = screen.getByRole("button", { name: "Sindicatos" });
+    fireEvent.click(sindicatosButton);
+
+    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("Sindicatos");
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+    expect(screen.getByText("Delegado Sindical")).toBeInTheDocument();
+    expect(screen.queryByText("Admisión General")).not.toBeInTheDocument();
+    expect(sindicatosButton).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("clicking an active book shortcut again clears the query back to an unfiltered view", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[0]),
+      id: "umi-record",
+      displayName: "Coordinación UMI",
+      organization: { ...defaultContacts.records[0]!.organization, department: "UMI" }
+    });
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+
+    const umiButton = screen.getByRole("button", { name: "UMI" });
+    fireEvent.click(umiButton);
+    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("UMI");
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+
+    fireEvent.click(umiButton);
+    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("");
+    expect(umiButton).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("status")).toHaveTextContent("3 resultados");
+  });
 });

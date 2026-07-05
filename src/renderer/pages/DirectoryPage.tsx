@@ -99,6 +99,22 @@ const privacyInlineRiskText = {
   "No facilitar a pacientes": "No compartir con pacientes."
 } as const;
 
+// OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets that
+// OIR-230 already tags via `organization.department` (an indexed, weight-5
+// Fuse.js search key — see search.service.ts). These are plain shortcuts
+// that set the SAME `query` state the free-text search input controls; no
+// new filter mechanism is introduced. Order matches the source ODS sheets.
+const BOOK_SHORTCUTS = [
+  "Sindicatos",
+  "UMI",
+  "Rehabilitación",
+  "Quirófanos",
+  "Corporativos",
+  "Telecomunicaciones",
+  "Almacenes",
+  "Juan Carlos 1º"
+] as const;
+
 const RESULTS_PER_PAGE = 10;
 const PAGINATION_WINDOW = 3;
 
@@ -429,10 +445,7 @@ export const DirectoryPage = () => {
       >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
-          {/* OIR-231: filters removed — only the free-text search remains.
-              NOTE: a future task adds category-shortcut buttons (Sindicatos,
-              UMI, etc.) near this search bar — keep this row layout free of
-              anything that would obviously conflict with that addition. */}
+          {/* OIR-231: filters removed — only the free-text search remains. */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -449,6 +462,32 @@ export const DirectoryPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
+          </div>
+          {/* OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets.
+              Clicking a chip sets `query` (the same state the search input above
+              controls) to the exact department name, reusing the existing
+              free-text search — no new filter mechanism. Clicking the active
+              chip again clears the query back to an unfiltered view. */}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Accesos rápidos por libro">
+            {BOOK_SHORTCUTS.map((book) => {
+              const isActive = query === book;
+              return (
+                <button
+                  key={book}
+                  type="button"
+                  onClick={() => setQuery(isActive ? "" : book)}
+                  aria-pressed={isActive}
+                  className={[
+                    "focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    isActive
+                      ? "border-scs-blue bg-scs-blue text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  ].join(" ")}
+                >
+                  {book}
+                </button>
+              );
+            })}
           </div>
           <p
             role="status"
