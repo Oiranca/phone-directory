@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildCsvImportPreview } from "./csv-import.service.js";
+import { buildCsvImportPreview, buildImportPreviewFromRows } from "./csv-import.service.js";
 
 describe("buildCsvImportPreview", () => {
   let testRoot: string;
@@ -269,5 +269,87 @@ describe("buildCsvImportPreview", () => {
     expect(preview.validRowCount).toBe(1);
     expect(dataset.records[0]?.organization.role).toBeUndefined();
     expect(dataset.records[0]?.organization.schedule).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-227 — "Principal" must never be auto-assigned to the first phone
+// ---------------------------------------------------------------------------
+//
+// buildPhones() has two branches: the `phones` JSON branch (used by the
+// spreadsheet/Agenda import path) and the flat phone1/phone2 branch (used by
+// the plain CSV template). Both funnel through ensureSinglePrimary(), which
+// used to force index 0 to isPrimary=true whenever nothing was explicitly
+// marked primary. These tests lock in that neither branch invents a primary
+// phone anymore.
+describe("buildImportPreviewFromRows — isPrimary is never auto-assigned (OIR-227)", () => {
+  let isPrimaryTestRoot: string;
+
+  beforeEach(async () => {
+    isPrimaryTestRoot = await fs.mkdtemp(path.join(os.tmpdir(), "csv-import-isprimary-test-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(isPrimaryTestRoot, { recursive: true, force: true });
+  });
+
+  const writeIsPrimaryTestFile = async (name: string, content: string) => {
+    const filePath = path.join(isPrimaryTestRoot, name);
+    await fs.writeFile(filePath, content, "utf-8");
+    return filePath;
+  };
+
+  it("respects isPrimary=false on every entry in the `phones` JSON branch (Agenda/spreadsheet path)", async () => {
+    const row = {
+      type: "service",
+      displayName: "Admisión Central",
+      phones: JSON.stringify([
+        { number: "79649", label: "Número 1", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false },
+        { number: "79650", label: "Número 2", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+      ])
+    };
+
+    const { dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    const phones = dataset.records[0]!.contactMethods.phones;
+    expect(phones).toHaveLength(2);
+    expect(phones.every((p) => p.isPrimary === false)).toBe(true);
+  });
+
+  it("does not force phone1 to be primary on the flat CSV column path when phone1IsPrimary is absent", async () => {
+    const filePath = await writeIsPrimaryTestFile(
+      "no-isprimary-column.csv",
+      ["type,displayName,phone1Number", "service,Mostrador,55555"].join("\n") + "\n"
+    );
+
+    const { dataset } = await buildCsvImportPreview(filePath, "TestEditor");
+
+    expect(dataset.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
+  });
+
+  it("collapses to a single primary when the `phones` JSON branch has more than one marked primary", async () => {
+    const row = {
+      type: "service",
+      displayName: "Conflicto",
+      phones: JSON.stringify([
+        { number: "10001", label: "Número 1", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false },
+        { number: "10002", label: "Número 2", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+      ])
+    };
+
+    const { dataset, preview } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    const phones = dataset.records[0]!.contactMethods.phones;
+    expect(phones[0]!.isPrimary).toBe(true);
+    expect(phones[1]!.isPrimary).toBe(false);
+    expect(preview.warningCount).toBeGreaterThan(0);
   });
 });

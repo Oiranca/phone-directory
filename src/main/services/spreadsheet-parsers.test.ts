@@ -567,6 +567,50 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records[0]!.notes).toBe("Personal de la casa");
   });
 
+  // ---------------------------------------------------------------------------
+  // OIR-227 — Comentarios must not duplicate onto phone-level notes
+  // ---------------------------------------------------------------------------
+
+  it("does NOT duplicate Comentarios onto phone-level notes (record.notes stays the source of truth)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Donaciones",
+        numero1: "79454",
+        comentarios: "Dónde donar: 8:30-14:30 sala de donantes",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ notes?: string }>;
+
+    // Record-level notes still carries the Comentarios text.
+    expect(records[0]!.notes).toBe("Dónde donar: 8:30-14:30 sala de donantes");
+    expect(records[0]!.phone1Notes).toBe("");
+    // Phone-level notes must be absent, not a copy of Comentarios.
+    expect(phones[0]!.notes).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-227 — "Principal" must never be auto-assigned on import
+  // ---------------------------------------------------------------------------
+
+  it("does not mark any imported phone as isPrimary by default, even the first one", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Admisión Central",
+        numero1: "79649",
+        numero2: "79650",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ isPrimary: boolean }>;
+
+    expect(phones.every((p) => p.isPrimary === false)).toBe(true);
+    expect(records[0]!.phone1IsPrimary).toBe("false");
+    expect(records[0]!.phone2IsPrimary).toBe("false");
+  });
+
   it("extracts a phone from every populated Número 1-7 column (up to 7)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,

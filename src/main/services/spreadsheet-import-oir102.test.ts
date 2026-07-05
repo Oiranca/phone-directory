@@ -117,7 +117,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     expect(phones.map((p) => p.number)).toEqual(["10001", "10002", "10003"]);
   });
 
-  it("marks only the first phone as primary", () => {
+  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["55555", "66666", "77777"] }
@@ -127,7 +127,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     const phones = JSON.parse(result.rows[0]!.phones!) as Array<{ number: string; isPrimary: boolean }>;
 
-    expect(phones[0]!.isPrimary).toBe(true);
+    expect(phones[0]!.isPrimary).toBe(false);
     expect(phones[1]!.isPrimary).toBe(false);
     expect(phones[2]!.isPrimary).toBe(false);
   });

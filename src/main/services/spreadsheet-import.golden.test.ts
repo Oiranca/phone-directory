@@ -131,7 +131,8 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(row.area).toBe("sanitaria-asistencial");
     expect(row.status).toBe("active");
     expect(row.phone1Number).toBe("12345");
-    expect(row.phone1IsPrimary).toBe("true");
+    // OIR-227: "Principal" is never auto-assigned on import.
+    expect(row.phone1IsPrimary).toBe("false");
     expect(row.phone1Kind).toBe("internal");
     expect(row.phone1Confidential).toBe("false");
     expect(row.phone1NoPatientSharing).toBe("false");
@@ -151,7 +152,8 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     const phones = JSON.parse(row.phones!) as SerializedPhoneEntry[];
     expect(phones).toHaveLength(2);
     expect(phones[0]!.number).toBe("11111");
-    expect(phones[0]!.isPrimary).toBe(true);
+    // OIR-227: "Principal" is never auto-assigned on import.
+    expect(phones[0]!.isPrimary).toBe(false);
     expect(phones[0]!.kind).toBe("internal");
     expect(phones[1]!.number).toBe("22222");
     expect(phones[1]!.isPrimary).toBe(false);
@@ -206,7 +208,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(phones.map((p) => p.number)).toEqual(["55555", "66666"]);
   });
 
-  it("marks first phone as primary and rest as non-primary in JSON", () => {
+  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["10001", "10002", "10003"] },
@@ -215,7 +217,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
 
     const result = normalizeWorkbookRowsFromFile(filePath);
     const phones = JSON.parse(result.rows[0]!.phones!) as SerializedPhoneEntry[];
-    expect(phones[0]!.isPrimary).toBe(true);
+    expect(phones[0]!.isPrimary).toBe(false);
     expect(phones[1]!.isPrimary).toBe(false);
     expect(phones[2]!.isPrimary).toBe(false);
   });

@@ -617,11 +617,15 @@ export const normalizeServiceSheet = (
     record.notes = finalNotes;
     record.status = "active";
 
-    const phoneEntries = dedupedPhoneNumbers.map((number, index) => ({
+    const phoneEntries = dedupedPhoneNumbers.map((number) => ({
       number,
       label: sheet.name,
       kind: "internal",
-      isPrimary: index === 0,
+      // OIR-227: "Principal" is a manual, user-editable choice made on the
+      // contact's edit form (see PhonesSection.tsx) — it has no equivalent
+      // column in the source sheet, so it must never be auto-assigned to
+      // the first imported phone.
+      isPrimary: false,
       confidential: privacy.confidential,
       noPatientSharing: privacy.noPatientSharing,
       notes: finalNotes || undefined
@@ -631,7 +635,8 @@ export const normalizeServiceSheet = (
     record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
     record.phone1Number = dedupedPhoneNumbers[0] ?? "";
     record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
-    record.phone1IsPrimary = dedupedPhoneNumbers.length > 0 ? "true" : "false";
+    // OIR-227: do not auto-assign "Principal" on import (see comment above).
+    record.phone1IsPrimary = "false";
     record.phone1Confidential = privacy.confidential ? "true" : "false";
     record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
     record.phone1Notes = finalNotes;
@@ -863,10 +868,18 @@ export const normalizeTabularAgendaSheet = (
           number,
           label: `Número ${column - AGENDA_COLUMN.numeroStart + 1}`,
           kind: "internal",
-          isPrimary: phoneEntries.length === 0,
+          // OIR-227: "Principal" is a manual, user-editable choice made on
+          // the contact's edit form — the Agenda sheet has no such column,
+          // so it must never be auto-assigned to the first imported phone.
+          isPrimary: false,
           confidential,
           noPatientSharing: privacy.noPatientSharing,
-          notes: comentarios || undefined
+          // OIR-227: Comentarios belongs to the contact, not to an individual
+          // phone — it is already stored at record.notes below. Duplicating
+          // it here caused the Comentarios text to render directly under the
+          // phone number instead of in the contact's dedicated "Notas"
+          // section.
+          notes: undefined
         });
       });
     }
@@ -904,7 +917,8 @@ export const normalizeTabularAgendaSheet = (
     record.phone1Label = first ? first.label : "";
     record.phone1Number = first?.number ?? "";
     record.phone1Kind = first ? "internal" : "";
-    record.phone1IsPrimary = first ? "true" : "false";
+    // OIR-227: do not auto-assign "Principal" on import (see comment above).
+    record.phone1IsPrimary = "false";
     record.phone1Confidential = first?.confidential ? "true" : "false";
     record.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
     record.phone1Notes = first?.notes ?? "";
