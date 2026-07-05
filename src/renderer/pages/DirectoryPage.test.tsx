@@ -485,9 +485,13 @@ describe("DirectoryPage", () => {
       within(detail).queryByText(/Cocina Francisco Artíles - Francisco Artíles/)
     ).not.toBeInTheDocument();
     expect(within(detail).getByText("Cocina Francisco Artíles")).toBeInTheDocument();
-    // The "Nombre y Apellidos" card always renders the raw displayName regardless.
+    // OIR-240: service already contains the full name — Nombre y Apellidos is
+    // NOT a genuinely distinct name here (same serviceContainsDisplayName check
+    // that gates the title), so the card must show the empty-state placeholder
+    // instead of repeating "Francisco Artíles" a second time.
     expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
-    expect(within(detail).getByText("Francisco Artíles")).toBeInTheDocument();
+    expect(within(detail).queryByText("Francisco Artíles")).not.toBeInTheDocument();
+    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
   });
 
   it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view (OIR-234)", async () => {
@@ -515,13 +519,44 @@ describe("DirectoryPage", () => {
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
-    // OIR-238: "Helipuerto (Secretaría)" now appears twice in the detail view —
-    // once as the (uncomposed) title, and once in the always-visible
-    // "Nombre y Apellidos" card — so assert on both occurrences.
-    expect(within(detail).getAllByText("Helipuerto (Secretaría)").length).toBe(2);
+    // OIR-240: displayName exactly duplicates the service — "Helipuerto
+    // (Secretaría)" must now appear only ONCE in the detail view (the
+    // uncomposed title); the Nombre y Apellidos card must NOT repeat it and
+    // instead shows the empty-state placeholder.
+    expect(within(detail).getAllByText("Helipuerto (Secretaría)").length).toBe(1);
     // OIR-238: "Nombre y Apellidos" is now its own always-visible card (no longer
     // conditional on the title being composed), so it must still render here.
     expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
+    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
+  });
+
+  it("shows the empty-state placeholder in Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column (OIR-240)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Sindicato Médico";
+    contacts.records[0]!.organization.service = "Sindicato Médico";
+    contacts.records[0]!.organization.area = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    // The title correctly shows just "Sindicato Médico" (exact-match, no
+    // composition) exactly once.
+    expect(within(detail).getAllByText("Sindicato Médico").length).toBe(1);
+    // The Nombre y Apellidos card must NOT duplicate the service label as if
+    // it were a real person's name — it renders the empty-state placeholder.
+    expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
+    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
   });
 
   it("leaves the title unchanged when organization.service is absent (OIR-234)", async () => {

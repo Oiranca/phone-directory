@@ -746,11 +746,24 @@ export const DirectoryPage = () => {
                     own always-visible card, matching Ubicación below — the composed
                     title (buildDisplayTitle) can obscure or reshape the raw name, so the
                     canonical displayName should always be visible on its own, not just
-                    when the title happens to be composed. */}
+                    when the title happens to be composed.
+
+                    OIR-240 regression fix: OIR-238 rendered selectedRecord.displayName
+                    unconditionally, which duplicates the Servicio value whenever
+                    displayName is not a genuinely distinct name (e.g. a blank ODS
+                    "Nombre" column falls back to the service label itself — see
+                    normalizeServiceSheet). Reuses the SAME serviceContainsDisplayName
+                    check that gates title composition (buildDisplayTitle) — do not
+                    invent a separate comparison — so "Nombre y Apellidos" never repeats
+                    a value already shown as Servicio; it shows an empty-state
+                    placeholder instead, matching the Ubicación card's convention. */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
                   <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                    {selectedRecord.displayName}
+                    {selectedRecord.organization.service &&
+                    serviceContainsDisplayName(selectedRecord.organization.service, selectedRecord.displayName)
+                      ? "Sin nombre y apellidos registrado"
+                      : selectedRecord.displayName}
                   </p>
                 </div>
 
