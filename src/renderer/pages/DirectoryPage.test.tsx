@@ -444,6 +444,10 @@ describe("DirectoryPage", () => {
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).getByText("Alergia - Nereida")).toBeInTheDocument();
+    // OIR-236: the raw displayName ("Nereida") is otherwise hidden inside the composed
+    // title, so it must be surfaced as its own labeled field in the detail view.
+    expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
+    expect(within(detail).getByText("Nereida")).toBeInTheDocument();
   });
 
   it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view (OIR-234)", async () => {
@@ -472,6 +476,9 @@ describe("DirectoryPage", () => {
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
     expect(within(detail).getByText("Helipuerto (Secretaría)")).toBeInTheDocument();
+    // OIR-236: when the title isn't composed, displayName already equals the title,
+    // so the extra "Nombre y Apellidos" line would be a pointless duplicate — must not render.
+    expect(within(detail).queryByText("Nombre y Apellidos")).not.toBeInTheDocument();
   });
 
   it("leaves the title unchanged when organization.service is absent (OIR-234)", async () => {

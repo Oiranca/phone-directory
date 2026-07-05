@@ -672,6 +672,19 @@ export const DirectoryPage = () => {
                       {selectedRecord.organization.role ? (
                         <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
                       ) : null}
+                      {/* OIR-236: when OIR-234 composes the title as "{service} - {displayName}",
+                          the raw displayName is no longer visible anywhere on its own — surface it
+                          here as a labeled field. Only shown when the composition actually changes
+                          the title; otherwise it would be a pointless duplicate of the title above. */}
+                      {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization) !==
+                      selectedRecord.displayName ? (
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Nombre y Apellidos{" "}
+                          <span className="normal-case tracking-normal text-sm font-medium text-slate-700">
+                            {selectedRecord.displayName}
+                          </span>
+                        </p>
+                      ) : null}
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
