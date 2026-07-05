@@ -6,6 +6,7 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+import { normalizeDisplayName } from "../../shared/utils/matching";
 
 // OIR-218: CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -60,17 +61,36 @@ const getListServiceLine = (
   return areaLabels[area ?? "none"];
 };
 
+// OIR-238: exact equality (isDuplicateOfDisplayName) isn't enough to catch
+// cases like service="Cocina Francisco Artíles" / displayName="Francisco
+// Artíles" — service already contains the full name as a substring, so
+// composing "{service} - {displayName}" still renders a visible duplication
+// ("Cocina Francisco Artíles - Francisco Artíles"). Compares using the
+// shared NFKD normalizer (normalizeDisplayName) so the check is both
+// case- and accent-insensitive.
+const serviceContainsDisplayName = (service: string, displayName: string): boolean => {
+  const normalizedDisplayName = normalizeDisplayName(displayName);
+  return normalizedDisplayName.length > 0 && normalizeDisplayName(service).includes(normalizedDisplayName);
+};
+
 // OIR-234: the service alone (e.g. "Alergia") is often the detail that makes
 // a contact identifiable at a glance, but it was buried inside the card body
 // instead of the title. Compose "{service} - {displayName}" when the service
-// adds real context, reusing the same duplicate-detection rule OIR-233 uses
-// to decide whether to show the service line at all — so a record like
-// "Helipuerto (Secretaría)" (whose service duplicates displayName) keeps its
-// title unchanged instead of rendering "Helipuerto (Secretaría) - Helipuerto
-// (Secretaría)".
+// adds real context beyond what it already states.
+//
+// OIR-238: "adds real context" means service does NOT already contain
+// displayName as a substring (case/accent-insensitive) — a strict superset
+// of the OIR-233 exact-equality case, so "Helipuerto (Secretaría)" (whose
+// service exactly duplicates displayName) still keeps its title unchanged,
+// and "Cocina Francisco Artíles" (whose service merely contains displayName)
+// now renders as just "Cocina Francisco Artíles" instead of duplicating the
+// name a second time.
 const buildDisplayTitle = (displayName: string, organization: { service?: string }): string => {
   const { service } = organization;
-  return service && !isDuplicateOfDisplayName(service, displayName) ? `${service} - ${displayName}` : displayName;
+  if (!service) {
+    return displayName;
+  }
+  return serviceContainsDisplayName(service, displayName) ? service : `${service} - ${displayName}`;
 };
 
 // The offset at which the sticky filter bar itself should stick — right below
@@ -711,19 +731,6 @@ export const DirectoryPage = () => {
                       {selectedRecord.organization.role ? (
                         <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
                       ) : null}
-                      {/* OIR-236: when OIR-234 composes the title as "{service} - {displayName}",
-                          the raw displayName is no longer visible anywhere on its own — surface it
-                          here as a labeled field. Only shown when the composition actually changes
-                          the title; otherwise it would be a pointless duplicate of the title above. */}
-                      {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization) !==
-                      selectedRecord.displayName ? (
-                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                          Nombre y Apellidos{" "}
-                          <span className="normal-case tracking-normal text-sm font-medium text-slate-700">
-                            {selectedRecord.displayName}
-                          </span>
-                        </p>
-                      ) : null}
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
@@ -733,6 +740,18 @@ export const DirectoryPage = () => {
                       Editar registro
                     </Link>
                   </div>
+                </div>
+
+                {/* OIR-238: promoted from a conditional inline subtitle (OIR-236) to its
+                    own always-visible card, matching Ubicación below — the composed
+                    title (buildDisplayTitle) can obscure or reshape the raw name, so the
+                    canonical displayName should always be visible on its own, not just
+                    when the title happens to be composed. */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
+                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                    {selectedRecord.displayName}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
