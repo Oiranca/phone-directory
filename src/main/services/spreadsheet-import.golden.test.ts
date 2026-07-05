@@ -159,7 +159,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(phones[1]!.isPrimary).toBe(false);
   });
 
-  it("classifies room-type labels correctly", () => {
+  it("does not keyword-guess type from label content (OIR-230 — service sheets always default to 'other')", () => {
     const filePath = writeWorkbook(testRoot, "rooms.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Sala de espera", numbers: ["30001"] },
@@ -168,11 +168,11 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     ]);
 
     const result = normalizeWorkbookRowsFromFile(filePath);
-    expect(result.rows[0]!.type).toBe("room");
-    expect(result.rows[1]!.type).toBe("room");
+    expect(result.rows[0]!.type).toBe("other");
+    expect(result.rows[1]!.type).toBe("other");
   });
 
-  it("detects supervision type label", () => {
+  it("does not keyword-guess a supervision type from label content (OIR-230)", () => {
     const filePath = writeWorkbook(testRoot, "supervision.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Supervisión de guardia", numbers: ["40001"] },
@@ -180,7 +180,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     ]);
 
     const result = normalizeWorkbookRowsFromFile(filePath);
-    expect(result.rows[0]!.type).toBe("supervision");
+    expect(result.rows[0]!.type).toBe("other");
   });
 
   it("generates a stable externalId including slug and phone", () => {
@@ -426,6 +426,37 @@ describe("golden: flat-sheet format (low-confidence service path)", () => {
       expect(row.phone1Number).not.toBe("");
     }
   });
+
+  it("does not leak the header row's literal 'Nombre' cell into department/displayName/notes (OIR-230 regression)", () => {
+    // A sheet whose header has an Agenda-style layout ("Nombre, Categoría,
+    // Servicio, Número 1..N, ...") but does NOT match the tabular parser's
+    // exact/extra-column-tolerant shape (here: missing several trailer
+    // columns), so it falls through to the legacy service-sheet heuristics.
+    // Before the OIR-230 fix, "NUMERO1" didn't score as a phone-header alias,
+    // so the header row scored below the skip threshold and its "Nombre"
+    // cell leaked into derivedDepartment / row processing as literal text.
+    const filePath = writeWorkbook(testRoot, "header-leak.xlsx", [
+      {
+        name: "Sindicatos",
+        data: [
+          ["Nombre", "Categoría", "Servicio", "Número 1", "Número 2"],
+          ["", "", "ASACA", "79036", "79540"],
+          ["Ayose", "", "ASACA – Ayose", "607466821", ""],
+          ["Dra. Guada", "", "CC.OO", "79038", ""],
+        ],
+      },
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    for (const row of result.rows) {
+      expect(row.department).not.toBe("Nombre");
+      expect(row.displayName).not.toBe("Nombre");
+      expect(row.notes).not.toContain("Nombre");
+    }
+    // The sheet's own name is used as department (OIR-230), not header text.
+    expect(result.rows.every((row) => row.department === "Sindicatos")).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -448,7 +479,7 @@ const makeAgendaSheet = (
 });
 
 describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
-  it("is routed to the tabular parser only for a sheet literally named 'Agenda'", () => {
+  it("is routed to the tabular parser with a blank department for the sheet literally named 'Agenda'", () => {
     const filePath = writeWorkbook(testRoot, "agenda.xlsx", [
       makeAgendaSheet("Agenda", [
         ["", "", "Admisión Central", "79649", "79650", "", "", "", "", "", "8:00-22:00", "", "", "", "", "", ""],
@@ -461,9 +492,53 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
     const row = result.rows[0]!;
     expect(row.displayName).toBe("Admisión Central");
     expect(row.schedule).toBe("8:00-22:00");
+    // OIR-230: the main "Agenda" sheet itself gets a blank department (it is
+    // the general directory, not a per-department "book").
+    expect(row.department).toBe("");
     // Horario ("8:00-22:00") must NOT leak into the phones list as a fake number.
     const phones = JSON.parse(row.phones ?? "[]") as Array<{ number: string }>;
     expect(phones.map((p) => p.number)).toEqual(["79649", "79650"]);
+  });
+
+  it("routes another sheet sharing the Agenda tabular header to the tabular parser too, tagging every contact with the sheet's own name as department (OIR-230)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-department-sheet.xlsx", [
+      makeAgendaSheet("Almacenes", [
+        ["", "", "Farmacia", "79889", "79297", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    const row = result.rows[0]!;
+    expect(row.displayName).toBe("Farmacia");
+    expect(row.department).toBe("Almacenes");
+  });
+
+  it("still recognizes a sheet with an extra inserted column (e.g. a 'Fax' column, as in the real 'Sindicatos' sheet) as Agenda-tabular and tags it with the sheet name (OIR-230)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-sindicatos.xlsx", [
+      {
+        name: "Sindicatos",
+        data: [
+          [
+            "Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Número 3", "Número 4",
+            "Número 5", "Número 6", "Número 7", "Fax", "Horario", "Confidencial", "Edificio",
+            "Planta", "Sector", "Sección", "Comentarios",
+          ],
+          ["", "", "ASACA", "79036", "79540", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ],
+      },
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    const row = result.rows[0]!;
+    // Without the extra-column tolerance, "ASACA" (an ALL-CAPS Servicio value
+    // with a blank Nombre) would be silently DROPPED by the legacy
+    // service-sheet heuristics instead of imported.
+    expect(row.displayName).toBe("ASACA");
+    expect(row.department).toBe("Sindicatos");
+    const phones = JSON.parse(row.phones ?? "[]") as Array<{ number: string }>;
+    expect(phones.map((p) => p.number)).toEqual(["79036", "79540"]);
   });
 
   it("excludes a section-divider row (e.g. 'Letra A') from the parsed rows", () => {

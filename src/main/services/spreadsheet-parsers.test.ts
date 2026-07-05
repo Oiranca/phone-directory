@@ -746,26 +746,26 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records[0]!.type).toBe("supervision");
   });
 
-  it("falls back to the displayName-keyword heuristic (classifyType) when Categoría is blank", () => {
+  it("defaults to 'other' (no keyword guessing) when Categoría is blank", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Supervisión de Enfermería", numero1: "22222" }),
     ]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
-    // No Categoría mapping applies (blank) — falls back to classifyType,
-    // which maps the "supervisi" substring in displayName to "supervision".
-    expect(records[0]!.type).toBe("supervision");
+    // OIR-230: no Categoría mapping applies (blank) — type is never guessed
+    // from displayName keywords, so it defaults to the neutral "other".
+    expect(records[0]!.type).toBe("other");
   });
 
-  it("falls back to the displayName-keyword heuristic (classifyType) when Categoría has no mapped entry", () => {
+  it("defaults to 'other' (no keyword guessing) when Categoría has no mapped entry", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Sala De Espera", categoria: "Un Valor Sin Mapear", numero1: "33333" }),
     ]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
-    // Unmapped Categoría — falls back to classifyType, which maps the "sala"
-    // prefix in displayName to "room".
-    expect(records[0]!.type).toBe("room");
+    // OIR-230: unmapped Categoría — type is never guessed from displayName
+    // keywords, so it defaults to the neutral "other".
+    expect(records[0]!.type).toBe("other");
   });
 
   it("still populates role from Categoría even when Categoría also drives type (OIR-222 behavior preserved)", () => {

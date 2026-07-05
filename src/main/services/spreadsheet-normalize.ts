@@ -300,40 +300,6 @@ export const cleanNoteFragments = (values: string[]) =>
       return marker !== "INDICEAGENDA" && marker !== "INDICEAGENDAHOSPITALARIA";
     });
 
-/** Returns true when a label looks like a person's name (heuristic — person markers). */
-export const looksLikePerson = (label: string) => {
-  const lower = label.toLowerCase();
-  return ["dr.", "dra.", "laura", "juan", "lidia", "tere", "cris", "ana ", "david ", "natalia "]
-    .some((marker) => lower.includes(marker));
-};
-
-/** Infers the contact type from the label and sheet slug. */
-export const classifyType = (label: string, sheetSlug: string) => {
-  const lower = label.toLowerCase();
-
-  if (lower.includes("supervisi")) {
-    return "supervision";
-  }
-
-  if (lower.startsWith("sala") || lower.startsWith("qx ") || lower.includes("camas") || lower.includes("boxes")) {
-    return "room";
-  }
-
-  if (lower.includes("mostrador") || lower.includes("control") || lower.includes("puerta")) {
-    return "control";
-  }
-
-  if (sheetSlug === "centros-de-salud") {
-    return "external-center";
-  }
-
-  if (looksLikePerson(label)) {
-    return "person";
-  }
-
-  return "service";
-};
-
 /** Returns common aliases inferred from label content (TAC→scanner, RX→radiologia, etc.). */
 export const aliasesFromLabel = (label: string) => {
   const aliases: string[] = [];

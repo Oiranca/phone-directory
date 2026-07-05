@@ -27,7 +27,6 @@ import {
   detectPrivacy,
   cleanNoteFragments,
   dedupeKeepOrder,
-  classifyType,
   aliasesFromLabel,
   normalizeDisplayNameForMerge,
   normalizeNumberForDedup,
@@ -572,7 +571,10 @@ export const normalizeServiceSheet = (
         currentSection && currentSection !== metadata.department ? currentSection : "social",
         label
       ])}`;
-      record.type = classifyType(label, metadata.slug);
+      // OIR-230: type is never keyword-guessed from displayName/section text —
+      // service sheets have no Categoría-equivalent concept, so type defaults
+      // to the neutral "other" instead.
+      record.type = "other";
       record.displayName = label;
       record.area = metadata.area;
       record.department = metadata.department;
@@ -608,7 +610,10 @@ export const normalizeServiceSheet = (
       dedupedPhoneNumbers[0],
       dedupedPhoneNumbers[1]
     ])}`;
-    record.type = classifyType(label, metadata.slug);
+    // OIR-230: type is never keyword-guessed from displayName/section text —
+    // service sheets have no Categoría-equivalent concept, so type defaults
+    // to the neutral "other" instead.
+    record.type = "other";
     record.displayName = label;
     record.area = metadata.area;
     record.department = metadata.department;
@@ -713,19 +718,19 @@ export const AGENDA_CATEGORIA_TYPE_MAP: Record<string, string> = {
 };
 
 /**
- * Resolves a NormalizedImportRow `type` for an Agenda-tabular row (OIR-224).
+ * Resolves a NormalizedImportRow `type` for an Agenda-tabular row (OIR-224,
+ * fallback removed OIR-230).
  *
- * Primary mechanism: look up the row's "Categoría" value (normalized) in
- * AGENDA_CATEGORIA_TYPE_MAP. Falls back to the existing displayName-keyword
- * heuristic (classifyType) only when Categoría is blank or has no mapped
- * entry, so unmapped/blank rows keep the previously-established behavior
- * instead of silently defaulting to something incorrect.
+ * Sole mechanism: look up the row's "Categoría" value (normalized) in
+ * AGENDA_CATEGORIA_TYPE_MAP. The user explicitly does not want type guessed
+ * from displayName keywords, so a blank or unmapped Categoría now defaults to
+ * the neutral "other" instead of falling back to a keyword heuristic.
  */
-const classifyAgendaType = (categoria: string, displayName: string, canonicalSlug: string): string => {
+const classifyAgendaType = (categoria: string): string => {
   const key = normalizeDisplayNameForMerge(categoria);
   const mapped = key ? AGENDA_CATEGORIA_TYPE_MAP[key] : undefined;
 
-  return mapped ?? classifyType(displayName, canonicalSlug);
+  return mapped ?? "other";
 };
 
 /**
@@ -757,9 +762,26 @@ export const AGENDA_TABULAR_HEADER_MARKERS = [
 
 /**
  * Column indices within a tabular Agenda-sheet data row, matching
- * AGENDA_TABULAR_HEADER_MARKERS above 1:1 by position.
+ * AGENDA_TABULAR_HEADER_MARKERS above 1:1 by position. Kept as the fallback
+ * shape returned by resolveAgendaColumnIndices for the canonical 17-column
+ * header.
  */
-const AGENDA_COLUMN = {
+export type AgendaColumnIndices = {
+  nombre: number;
+  categoria: number;
+  servicio: number;
+  numeroStart: number;
+  numeroEnd: number; // inclusive — Número 1..7
+  horario: number;
+  confidencial: number;
+  edificio: number;
+  planta: number;
+  sector: number;
+  seccion: number;
+  comentarios: number;
+};
+
+const AGENDA_COLUMN: AgendaColumnIndices = {
   nombre: 0,
   categoria: 1,
   servicio: 2,
@@ -772,14 +794,101 @@ const AGENDA_COLUMN = {
   sector: 14,
   seccion: 15,
   comentarios: 16
-} as const;
+};
 
 /**
- * Returns true when `headerRow` matches the canonical Agenda tabular header
- * (see AGENDA_TABULAR_HEADER_MARKERS), cell-by-cell.
+ * The first 10 columns (Nombre, Categoría, Servicio, Número 1-7) MUST appear
+ * at these exact fixed positions for a sheet to be treated as Agenda-tabular
+ * at all — this positional guarantee is what lets normalizeTabularAgendaSheet
+ * read Nombre/Categoría/Servicio/Número by fixed index instead of guessing
+ * from cell content.
+ */
+const AGENDA_FIXED_PREFIX_MARKERS = [
+  "NOMBRE",
+  "CATEGORIA",
+  "SERVICIO",
+  "NUMERO1",
+  "NUMERO2",
+  "NUMERO3",
+  "NUMERO4",
+  "NUMERO5",
+  "NUMERO6",
+  "NUMERO7"
+] as const;
+
+/**
+ * Trailer columns required after the fixed prefix. OIR-230: located BY NAME
+ * anywhere after the fixed prefix (rather than assumed to be at fixed
+ * positions 10-16) so a sheet with an EXTRA inserted column — e.g. the real
+ * "Sindicatos" sheet, which has a "Fax" column between Número 7 and Horario —
+ * is still recognized as an Agenda-tabular sheet instead of silently falling
+ * through to the legacy service-sheet heuristics (which drop rows whose only
+ * meaningful cell is an ALL-CAPS Servicio value with a blank Nombre).
+ */
+const AGENDA_TRAILER_MARKERS = [
+  "HORARIO",
+  "CONFIDENCIAL",
+  "EDIFICIO",
+  "PLANTA",
+  "SECTOR",
+  "SECCION",
+  "COMENTARIOS"
+] as const;
+
+/**
+ * Resolves column indices for a tabular Agenda-format header row (OIR-222;
+ * widened OIR-230 to tolerate extra inserted columns). Returns null when the
+ * header does not match. See AGENDA_FIXED_PREFIX_MARKERS/AGENDA_TRAILER_MARKERS
+ * above for the exact matching rules.
+ */
+export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnIndices | null => {
+  const normalized = headerRow.map((cell) => normalizeMarker(cell ?? ""));
+
+  const fixedOk = AGENDA_FIXED_PREFIX_MARKERS.every((marker, index) => normalized[index] === marker);
+
+  if (!fixedOk) {
+    return null;
+  }
+
+  const trailerStart = AGENDA_FIXED_PREFIX_MARKERS.length;
+  const trailerIndexes = AGENDA_TRAILER_MARKERS.map((marker) => normalized.indexOf(marker, trailerStart));
+
+  if (trailerIndexes.some((index) => index === -1)) {
+    return null;
+  }
+
+  const [horario, confidencial, edificio, planta, sector, seccion, comentarios] = trailerIndexes as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ];
+
+  return {
+    nombre: 0,
+    categoria: 1,
+    servicio: 2,
+    numeroStart: 3,
+    numeroEnd: 9,
+    horario,
+    confidencial,
+    edificio,
+    planta,
+    sector,
+    seccion,
+    comentarios
+  };
+};
+
+/**
+ * Returns true when `headerRow` matches the Agenda tabular header shape (see
+ * resolveAgendaColumnIndices).
  */
 export const isAgendaTabularHeader = (headerRow: string[]): boolean =>
-  AGENDA_TABULAR_HEADER_MARKERS.every((marker, index) => normalizeMarker(headerRow[index] ?? "") === marker);
+  resolveAgendaColumnIndices(headerRow) !== null;
 
 /**
  * Strips a leading "Planta " (case/diacritic-insensitive) word from a Planta
@@ -815,6 +924,12 @@ export const normalizeTabularAgendaSheet = (
   sheet: SheetData,
   profile: SheetProfile
 ): NormalizedImportRow[] => {
+  // OIR-230: resolve column positions from THIS sheet's own header row rather
+  // than assuming the canonical fixed layout — tolerates sheets with an extra
+  // inserted column (e.g. "Sindicatos"' Fax column). Falls back to the
+  // canonical fixed layout in the (expected-never) case the header row is
+  // missing, since detectSheetProfile already validated it before routing here.
+  const columns = resolveAgendaColumnIndices(sheet.rows[0] ?? []) ?? AGENDA_COLUMN;
   const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
 
@@ -834,16 +949,16 @@ export const normalizeTabularAgendaSheet = (
       return;
     }
 
-    const nombre = cells[AGENDA_COLUMN.nombre] ?? "";
-    const categoria = cells[AGENDA_COLUMN.categoria] ?? "";
-    const servicio = cells[AGENDA_COLUMN.servicio] ?? "";
-    const horario = cells[AGENDA_COLUMN.horario] ?? "";
-    const confidencialRaw = cells[AGENDA_COLUMN.confidencial] ?? "";
-    const edificio = cells[AGENDA_COLUMN.edificio] ?? "";
-    const planta = cells[AGENDA_COLUMN.planta] ?? "";
-    const sector = cells[AGENDA_COLUMN.sector] ?? "";
-    const seccion = cells[AGENDA_COLUMN.seccion] ?? "";
-    const comentarios = cells[AGENDA_COLUMN.comentarios] ?? "";
+    const nombre = cells[columns.nombre] ?? "";
+    const categoria = cells[columns.categoria] ?? "";
+    const servicio = cells[columns.servicio] ?? "";
+    const horario = cells[columns.horario] ?? "";
+    const confidencialRaw = cells[columns.confidencial] ?? "";
+    const edificio = cells[columns.edificio] ?? "";
+    const planta = cells[columns.planta] ?? "";
+    const sector = cells[columns.sector] ?? "";
+    const seccion = cells[columns.seccion] ?? "";
+    const comentarios = cells[columns.comentarios] ?? "";
 
     const displayName = nombre || servicio;
 
@@ -861,7 +976,7 @@ export const normalizeTabularAgendaSheet = (
 
     const phoneEntries: SerializedPhoneEntry[] = [];
 
-    for (let column = AGENDA_COLUMN.numeroStart; column <= AGENDA_COLUMN.numeroEnd; column += 1) {
+    for (let column = columns.numeroStart; column <= columns.numeroEnd; column += 1) {
       const cellValue = cells[column] ?? "";
 
       if (!cellValue) {
@@ -871,7 +986,7 @@ export const normalizeTabularAgendaSheet = (
       extractNumbers(cellValue).forEach((number) => {
         phoneEntries.push({
           number,
-          label: `Número ${column - AGENDA_COLUMN.numeroStart + 1}`,
+          label: `Número ${column - columns.numeroStart + 1}`,
           kind: "internal",
           // OIR-227: "Principal" is a manual, user-editable choice made on
           // the contact's edit form — the Agenda sheet has no such column,
@@ -892,11 +1007,11 @@ export const normalizeTabularAgendaSheet = (
     const record = blankRecord();
 
     record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([String(rowIndex), displayName, servicio])}`;
-    // OIR-224: Categoría is now the PRIMARY type-inference mechanism for the
-    // Agenda path (see classifyAgendaType/AGENDA_CATEGORIA_TYPE_MAP above);
-    // the displayName-keyword heuristic (classifyType) is kept only as a
-    // fallback for rows with a blank or unmapped Categoría value.
-    record.type = classifyAgendaType(categoria, displayName, profile.canonicalSlug);
+    // OIR-224: Categoría is the SOLE type-inference mechanism for the Agenda
+    // path (see classifyAgendaType/AGENDA_CATEGORIA_TYPE_MAP above). A blank
+    // or unmapped Categoría value defaults to "other" (OIR-230 — no
+    // displayName-keyword guessing).
+    record.type = classifyAgendaType(categoria);
     record.displayName = displayName;
     // OIR-224: the real Agenda ODS has no genuine Área column — inferring one
     // from Servicio/displayName produced wrong slug-like guesses (e.g.
@@ -904,6 +1019,11 @@ export const normalizeTabularAgendaSheet = (
     // imported records get a blank área instead; área remains an optional
     // field elsewhere in the schema/UI.
     record.area = "";
+    // OIR-230: tag every contact with its source sheet's name as department
+    // (profile.department — "" for the main canonical "Agenda" sheet itself,
+    // the sheet's own name for every other per-department "book" sheet) so a
+    // future feature can filter/search by exact department value.
+    record.department = profile.department;
     record.service = servicio;
     record.role = categoria;
     record.schedule = horario;

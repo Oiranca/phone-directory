@@ -218,6 +218,20 @@ const serviceHeaderAliases = {
   phone: new Set(["NUMERO", "NUMEROLARGO", "TELEFONO", "TELEFONO", "TLF", "EXTENSION"])
 };
 
+/**
+ * OIR-230: matches a phone-header alias exactly (serviceHeaderAliases.phone)
+ * OR a numbered "Número N" column (e.g. "NUMERO1".."NUMERO7", normalized).
+ * Fixes a header-leak bug: a sheet whose header is "Nombre, Categoría,
+ * Servicio, Número 1, Número 2, ..." (the Agenda-tabular column layout, see
+ * spreadsheet-parsers.ts) previously scored only 2 (the "NOMBRE" label match)
+ * because "NUMERO1" didn't match the bare "NUMERO" alias — below the >=3
+ * threshold that triggers skipping the header row. That let the header row
+ * itself get treated as a data row by the legacy heuristics below (e.g. its
+ * "Nombre" cell leaking into a record's department/notes as literal text).
+ */
+const isServicePhoneHeaderCell = (cell: string) =>
+  serviceHeaderAliases.phone.has(cell) || /^NUMERO\d+$/.test(cell);
+
 const detectHeaderRowIndex = (
   rows: string[][],
   scorer: (row: string[]) => number
@@ -254,7 +268,7 @@ const scoreServiceHeader = (row: string[]) => {
   let score = 0;
 
   if (serviceHeaderAliases.label.has(normalized[0] ?? "")) score += 2;
-  if (normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell))) score += 2;
+  if (normalized.slice(1).some((cell) => isServicePhoneHeaderCell(cell))) score += 2;
 
   return score;
 };
@@ -262,7 +276,7 @@ const scoreServiceHeader = (row: string[]) => {
 const hasStrictServiceHeader = (row: string[]) => {
   const normalized = row.slice(0, 4).map((cell) => normalizeMarker(cell));
   return ["SERVICIO", "UNIDAD"].includes(normalized[0] ?? "") &&
-    normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell));
+    normalized.slice(1).some((cell) => isServicePhoneHeaderCell(cell));
 };
 
 const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
@@ -354,14 +368,23 @@ const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => 
  * directory sheet "Agenda" (slug "agenda"). The same workbook also contains
  * "Agenda_3" (a byte-identical duplicate/backup copy) and "Departamentos" (a
  * separate, much smaller, mostly-blank department-index sheet) which both
- * happen to share the exact same 17-column header. Restricting the tabular
- * parser to slug === "agenda" — the same explicit slug-allowlisting pattern
- * already used by isNavigationSheet/isDeferredFeatureSheet below — is what
- * reproduces the confirmed real-file counts (670 rows / 23 confidential)
- * from a dry run against the actual source file. Any other same-header sheet
- * is intentionally left to the generic detectors below.
+ * happen to share the same Agenda tabular header. Those two are excluded by
+ * slug below (AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) rather than falling
+ * through to the generic centers/service heuristics — the legacy heuristics
+ * extract phone-like digit runs from ANY cell, so a structured column like
+ * Horario ("8:00-22:00") gets misparsed as a fake phone number ("8002200").
  */
 const AGENDA_TABULAR_SHEET_SLUG = "agenda";
+
+/**
+ * OIR-230: sheets confirmed (from a prior real export of this same workbook)
+ * to share the Agenda tabular header without being a genuine per-department
+ * "book" of contacts — see AGENDA_TABULAR_SHEET_SLUG comment above. Both must
+ * keep being skipped entirely rather than imported as duplicate/junk
+ * department sheets. Matched by slug (normalizeAscii of the sheet name), so
+ * accent/case variants are also caught.
+ */
+const AGENDA_TABULAR_NON_DEPARTMENT_SLUGS = new Set(["agenda-3", "departamentos"]);
 
 const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   if (sheet.rows.length === 0) {
@@ -373,34 +396,43 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
     return null;
   }
 
-  // OIR-222: a sheet whose header exactly matches the 17-column Agenda tabular
-  // format. The canonical directory sheet (slug "agenda") is routed to the
-  // dedicated tabular parser. Any OTHER sheet with this same header — the real
-  // file has "Agenda_3" (a byte-identical duplicate) and "Departamentos" (a
-  // separate, much smaller, out-of-scope table) — is SKIPPED ENTIRELY rather
-  // than falling through to the generic centers/service heuristics below.
-  //
-  // This matters: the legacy heuristics extract phone-like digit runs from
-  // ANY cell, so a structured column like Horario ("8:00-22:00") gets
-  // misparsed as a fake phone number ("8002200"). Falling through would let
-  // that garbage leak into the final dataset via mergeRecordsByDisplayName,
-  // which combines phones across sheets whenever two records share the same
-  // normalized displayName (e.g. "Agenda_3" duplicating every "Agenda" row).
-  // Verified against the real file: parsing "agenda" alone yields exactly the
-  // confirmed 670 rows / 23 confidential rows; routing "Agenda_3" through the
-  // legacy path re-introduces spurious phone numbers into those same records.
+  // OIR-222/OIR-230: a sheet whose header matches the Agenda tabular format
+  // (see resolveAgendaColumnIndices — tolerates extra inserted columns, e.g.
+  // the real "Sindicatos" sheet's Fax column). The canonical directory sheet
+  // (slug "agenda") is routed to the dedicated tabular parser with a blank
+  // department. Two known non-department artifacts (a byte-identical
+  // duplicate and a TOC sheet — AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) are
+  // skipped entirely, exactly as before. Every OTHER sheet sharing this
+  // header is a genuine per-department "book" of contacts (e.g. the real
+  // "Almacenes", "Quirófanos", "Corporativos" sheets) — OIR-230 requires
+  // every contact imported from one of these to be tagged with the sheet's
+  // own name as department, so route it to the same tabular parser instead of
+  // silently dropping it (previous behavior) or misparsing it via the legacy
+  // heuristics.
   if (isAgendaTabularHeader(sheet.rows[0] ?? [])) {
-    if (sheet.slug !== AGENDA_TABULAR_SHEET_SLUG) {
+    if (sheet.slug === AGENDA_TABULAR_SHEET_SLUG) {
+      return {
+        parser: "tabular",
+        canonicalSlug: AGENDA_TABULAR_SHEET_SLUG,
+        department: "",
+        area: undefined,
+        rowsToSkip: 1,
+        detectedFormat: "exportación cruda de agenda tabular",
+        detectionConfidence: "high"
+      };
+    }
+
+    if (AGENDA_TABULAR_NON_DEPARTMENT_SLUGS.has(sheet.slug)) {
       return null;
     }
 
     return {
       parser: "tabular",
-      canonicalSlug: AGENDA_TABULAR_SHEET_SLUG,
-      department: "",
+      canonicalSlug: sheet.slug,
+      department: clean(sheet.name),
       area: undefined,
       rowsToSkip: 1,
-      detectedFormat: "exportación cruda de agenda tabular",
+      detectedFormat: "exportación cruda de agenda tabular (hoja de departamento)",
       detectionConfidence: "high"
     };
   }
@@ -472,6 +504,23 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   }
 
   const derivedDepartment = (() => {
+    // OIR-230: prefer the sheet's own (real, human-assigned) tab name over a
+    // guess derived from the first row's content. Guessing from content was
+    // the root cause of a header-leak bug: when the header row wasn't reliably
+    // recognized as a header (see isServicePhoneHeaderCell fix above), its
+    // first cell (e.g. literal "Nombre") could be picked up here as the
+    // "meaningful label" and become every record's department. Sheet tab
+    // names are a much more reliable department signal in general — except
+    // for spreadsheet-assigned generic defaults ("Sheet1"/"Hoja1"/"Plan1"),
+    // which carry no real information and still fall back to content-derived
+    // guessing exactly as before.
+    const cleanedSheetName = clean(sheet.name);
+    const isGenericSheetName = !cleanedSheetName || /^(sheet|hoja|plan)\d*$/.test(normalizeAscii(cleanedSheetName));
+
+    if (!isGenericSheetName) {
+      return prettifyLabel(cleanedSheetName);
+    }
+
     const firstMeaningfulLabel = sheet.rows
       .slice(serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0, 8)
       .map((row) => resolveServiceRowLabel(row.map((cell) => clean(cell))))
