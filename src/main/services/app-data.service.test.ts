@@ -1286,7 +1286,7 @@ describe("AppDataService", () => {
     expect(result.contacts.metadata.areaCounts.especialidades).toBe(1);
   });
 
-  it("promotes the first phone to primary when none is marked on save", async () => {
+  it("OIR-239: does not invent a primary phone on createRecord when none is marked", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1326,8 +1326,99 @@ describe("AppDataService", () => {
       status: "active"
     });
 
-    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(true);
+    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
     expect(result.contacts.records[0]?.contactMethods.phones[1]?.isPrimary).toBe(false);
+  });
+
+  it("OIR-239: persists a single explicit isPrimary: false phone on createRecord without re-forcing it to true", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const result = await service.createRecord({
+      type: "service",
+      displayName: "Un solo teléfono sin principal",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_single_no_primary",
+            label: "Único",
+            number: "33333",
+            kind: "internal",
+            isPrimary: false,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
+  });
+
+  it("OIR-239: persists a single explicit isPrimary: false phone on updateRecord without re-forcing it to true", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const created = await service.createRecord({
+      type: "service",
+      displayName: "Registro a actualizar",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_update_primary",
+            label: "Único",
+            number: "44444",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const savedRecordId = created.savedRecordId;
+    const existingRecord = created.contacts.records.find((record) => record.id === savedRecordId)!;
+
+    const updated = await service.updateRecord(savedRecordId, {
+      type: "service",
+      displayName: "Registro a actualizar",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            ...existingRecord.contactMethods.phones[0]!,
+            isPrimary: false
+          }
+        ],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect(updated.contacts.records.find((record) => record.id === savedRecordId)?.contactMethods.phones[0]?.isPrimary).toBe(false);
   });
 
   it("exports the current dataset and lists backups in reverse chronological order", async () => {

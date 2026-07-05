@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
 import type { EditableContactRecord, EditableCustomField, EditableEmailContact, EditablePhoneContact, EditableSocialContact, SocialPlatform } from "../../shared/types/contact";
-import { normalizePrimaryEntries } from "../../shared/utils/contacts";
+import { reconcilePrimaryEntries } from "../../shared/utils/contacts";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
 
@@ -218,7 +218,11 @@ const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   const fallbackIndex = entries.findIndex((entry) => entry.id !== excludedId);
 
   if (fallbackIndex === -1) {
-    return normalizePrimaryEntries(entries);
+    // OIR-239: single-entry case — there is no sibling to promote. Return
+    // entries unchanged instead of inventing a primary; zero primaries is a
+    // valid, user-chosen state (e.g. unchecking "Principal" on the only
+    // phone/email/social must not silently re-check it).
+    return entries;
   }
 
   return entries.map((entry, index) =>
@@ -456,8 +460,8 @@ export const useContactForm = (): UseContactFormResult => {
           });
 
           return patch.isPrimary === false
-            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextPhones, phoneId))
-            : normalizePrimaryEntries(nextPhones);
+            ? reconcilePrimaryEntries(promoteSiblingAsPrimary(nextPhones, phoneId))
+            : reconcilePrimaryEntries(nextPhones);
         })()
       }
     }));
@@ -481,8 +485,8 @@ export const useContactForm = (): UseContactFormResult => {
           });
 
           return patch.isPrimary === false
-            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextEmails, emailId))
-            : normalizePrimaryEntries(nextEmails);
+            ? reconcilePrimaryEntries(promoteSiblingAsPrimary(nextEmails, emailId))
+            : reconcilePrimaryEntries(nextEmails);
         })()
       }
     }));
@@ -496,7 +500,7 @@ export const useContactForm = (): UseContactFormResult => {
         ...current,
         contactMethods: {
           ...current.contactMethods,
-          phones: nextPhones.length > 0 ? normalizePrimaryEntries(nextPhones) : [createPhoneDraft()]
+          phones: nextPhones.length > 0 ? reconcilePrimaryEntries(nextPhones) : [createPhoneDraft()]
         }
       };
     });
@@ -510,7 +514,7 @@ export const useContactForm = (): UseContactFormResult => {
       ...current,
       contactMethods: {
         ...current.contactMethods,
-        emails: normalizePrimaryEntries(
+        emails: reconcilePrimaryEntries(
           current.contactMethods.emails.filter((email) => email.id !== emailId)
         )
       }
@@ -532,8 +536,8 @@ export const useContactForm = (): UseContactFormResult => {
             return { ...social, ...patch };
           });
           return patch.isPrimary === false
-            ? normalizePrimaryEntries(promoteSiblingAsPrimary(nextSocials, socialId))
-            : normalizePrimaryEntries(nextSocials);
+            ? reconcilePrimaryEntries(promoteSiblingAsPrimary(nextSocials, socialId))
+            : reconcilePrimaryEntries(nextSocials);
         })()
       }
     }));
@@ -545,7 +549,7 @@ export const useContactForm = (): UseContactFormResult => {
       ...current,
       contactMethods: {
         ...current.contactMethods,
-        socials: normalizePrimaryEntries(
+        socials: reconcilePrimaryEntries(
           current.contactMethods.socials.filter((s) => s.id !== socialId)
         )
       }

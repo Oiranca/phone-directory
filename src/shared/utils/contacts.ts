@@ -42,3 +42,30 @@ export const normalizePrimaryEntries = <T extends { isPrimary: boolean }>(entrie
           : entry
       );
 };
+
+/**
+ * Like `normalizePrimaryEntries`, but never invents a primary when none is
+ * marked — "Principal" must stay a manual, user-editable choice (OIR-227,
+ * OIR-239). Only reconciles a genuine conflict (more than one entry
+ * explicitly marked isPrimary); demotes every extra after the first.
+ *
+ * - Zero entries marked primary: returned unchanged (zero stays zero).
+ * - Exactly one entry marked primary: returned unchanged.
+ * - Multiple entries marked primary: only the first keeps isPrimary, the
+ *   rest are demoted to false.
+ * - Empty arrays are returned unchanged.
+ */
+export const reconcilePrimaryEntries = <T extends { isPrimary: boolean }>(entries: T[]): T[] => {
+  const primaryIndexes = entries
+    .map((entry, index) => (entry.isPrimary ? index : -1))
+    .filter((index) => index !== -1);
+
+  if (primaryIndexes.length <= 1) {
+    return entries;
+  }
+
+  const keepIndex = primaryIndexes[0]!;
+  return entries.map((entry, index) =>
+    entry.isPrimary && index !== keepIndex ? { ...entry, isPrimary: false } : entry
+  );
+};

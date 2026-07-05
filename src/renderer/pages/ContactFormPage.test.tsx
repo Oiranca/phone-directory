@@ -280,6 +280,38 @@ describe("ContactFormPage", () => {
     expect(primaryCheckboxes[1]).toBeChecked();
   });
 
+  it("OIR-239: unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+      target: { value: "Único Teléfono" }
+    });
+    fireEvent.change(screen.getByLabelText(/número/i), {
+      target: { value: "556677" }
+    });
+
+    const primaryCheckbox = screen.getByRole("checkbox", { name: "Principal" });
+    expect(primaryCheckbox).toBeChecked();
+
+    fireEvent.click(primaryCheckbox);
+
+    // Must NOT be silently re-checked — zero primaries is a valid state
+    // when there is only one entry and the user explicitly unchecked it.
+    expect(primaryCheckbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.createRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedPayload = (window.hospitalDirectory.createRecord as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0];
+    expect(submittedPayload.contactMethods.phones[0]?.isPrimary).toBe(false);
+  });
+
   it("announces and focuses the new phone row when adding a phone", async () => {
     renderWithRoute("/contacts/new");
 
