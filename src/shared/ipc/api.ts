@@ -29,6 +29,7 @@ import type {
   SaveContactResult
 } from "../types/contact.js";
 import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../schemas/busca.schema.js";
+import type { MergeContactsOverrides } from "../schemas/merge-contacts.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
 export interface HospitalDirectoryApi {
@@ -73,7 +74,11 @@ export interface HospitalDirectoryApi {
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;
-  mergeContacts: (req: { keepId: string; discardId: string }) => Promise<ContactRecord>;
+  mergeContacts: (req: {
+    keepId: string;
+    discardId: string;
+    overrides?: MergeContactsOverrides;
+  }) => Promise<ContactRecord>;
 
   // Push events from main → renderer
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;

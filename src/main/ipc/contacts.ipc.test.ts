@@ -145,6 +145,175 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// OIR-225 — field-level overrides applied on top of the keep/discard merge
+// ---------------------------------------------------------------------------
+
+describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overrides)", () => {
+  let testRoot: string;
+
+  beforeEach(async () => {
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-merge-overrides-"));
+    getPathMock.mockImplementation(() => testRoot);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
+    getPathMock.mockReset();
+  });
+
+  it("(a) behaves exactly like the no-overrides path when overrides is undefined", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: { department: "Admisión" },
+      contactMethods: {
+        phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: { phones: [], emails: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(keepRecord.savedRecordId, discardRecord.savedRecordId);
+
+    expect(merged.displayName).toBe("Admisión General");
+    expect(merged.type).toBe("service");
+  });
+
+  it("(b) applies a displayName + type override on top of the automatic merge", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: { department: "Admisión" },
+      contactMethods: { phones: [], emails: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "department",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: { phones: [], emails: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(
+      keepRecord.savedRecordId,
+      discardRecord.savedRecordId,
+      { displayName: "Admisión General (corregido)", type: "department" }
+    );
+
+    expect(merged.displayName).toBe("Admisión General (corregido)");
+    expect(merged.type).toBe("department");
+  });
+
+  it("(b) applies a contactMethods.phones override, replacing the automatically-merged phone list", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: {},
+      contactMethods: {
+        phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: {
+        phones: [{ id: "ph_d1", number: "70002", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }],
+        emails: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    // Override with a hand-edited phone list: corrected number for ph_k1,
+    // and deliberately drop the discard's phone (user chose not to keep it).
+    const merged = await service.mergeDuplicates(
+      keepRecord.savedRecordId,
+      discardRecord.savedRecordId,
+      {
+        contactMethods: {
+          phones: [
+            { id: "ph_k1", number: "70099", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+          ]
+        }
+      }
+    );
+
+    const phoneNumbers = merged.contactMethods.phones.map((p) => p.number);
+    expect(phoneNumbers).toEqual(["70099"]);
+  });
+
+  it("(c) the IPC handler rejects a malformed overrides payload before it ever reaches the service", async () => {
+    const { ipcMain } = await import("electron");
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    const mergeDuplicatesMock = vi.fn();
+    const serviceMock = { mergeDuplicates: mergeDuplicatesMock };
+
+    registerContactsIpc(serviceMock as never);
+
+    const handleMock = vi.mocked(ipcMain.handle);
+    const registeredCall = handleMock.mock.calls.find(
+      ([channel]) => channel === "contacts:merge-duplicates"
+    );
+    expect(registeredCall).toBeDefined();
+    const handler = registeredCall![1] as (...args: unknown[]) => Promise<unknown>;
+
+    await expect(
+      handler({}, {
+        keepId: "cnt_a",
+        discardId: "cnt_b",
+        overrides: { status: "inactive" } // status is not an overridable field — must be rejected
+      })
+    ).rejects.toThrow("Invalid merge request");
+
+    expect(mergeDuplicatesMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("mergeContactsSchema — keepId === discardId guard", () => {
   it("rejects a merge request where keepId === discardId (data-loss risk: would delete the only copy)", async () => {
     // SAFETY: If keepId === discardId, mergeDuplicates would delete the record that was

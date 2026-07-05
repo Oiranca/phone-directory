@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ContactRecord } from "../../shared/types/contact";
 import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
+import {
+  buildInitialMergeDraft,
+  diffMergeOverrides,
+  MergeFieldsEditor,
+  type MergeFieldsDraft
+} from "../components/deduplicate/MergeFieldsEditor";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
 
@@ -128,6 +135,11 @@ export function writeDismissedPairId(storageKey: string, id: string): void {
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const applyMergeResult = useAppStore((s) => s.applyMergeResult);
+  // OIR-225: the full ContactRecord list is already loaded into the store at
+  // bootstrap (needed for the merge-fields editor, which requires fields —
+  // e.g. `type`, full phone metadata — that the lightweight
+  // DuplicateRecordSummary payload deliberately omits for payload-size reasons).
+  const contactRecords = useAppStore((s) => s.contacts?.records ?? []);
   const dataFilePath = useAppStore((s) => s.settings?.dataFilePath ?? null);
   const storageKey = buildStorageKey(dataFilePath);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,7 +164,17 @@ export const DeduplicatePage = () => {
     pairId: string;
     keepRecord: { id: string; displayName: string };
     discardRecord: { id: string; displayName: string };
+    // OIR-225: full records (when available in the store) used to build the
+    // optional merge-fields editor. Null when not found — the fast/default
+    // keep-one-wholesale path always works regardless of these being present.
+    keepFull: ContactRecord | null;
+    discardFull: ContactRecord | null;
   } | null>(null);
+  // OIR-225: null until the user opts into editing surviving-record fields
+  // before confirming ("Editar antes de fusionar"). Stays null on the default
+  // fast path, so handleConfirmMerge sends no `overrides` — behaves exactly
+  // like the pre-existing keep/discard-only merge.
+  const [overridesDraft, setOverridesDraft] = useState<MergeFieldsDraft | null>(null);
 
   // Focus restoration refs
   // triggerRef — the "Fusionar" button that opened the confirm dialog
@@ -278,16 +300,28 @@ export const DeduplicatePage = () => {
     setConfirmState({
       pairId: pairState.pair.id,
       keepRecord: { id: keepRecord.id, displayName: keepRecord.displayName },
-      discardRecord: { id: discardRecord.id, displayName: discardRecord.displayName }
+      discardRecord: { id: discardRecord.id, displayName: discardRecord.displayName },
+      keepFull: contactRecords.find((r) => r.id === keepRecord.id) ?? null,
+      discardFull: contactRecords.find((r) => r.id === discardRecord.id) ?? null
     });
+    // Fresh dialog: no field edits carried over from a previous pair
+    setOverridesDraft(null);
   };
 
   const handleCancelDialog = () => {
     setConfirmState(null);
+    setOverridesDraft(null);
     // Restore focus to the button that triggered the dialog
     requestAnimationFrame(() => {
       triggerRef.current?.focus();
     });
+  };
+
+  // OIR-225 — lazily opens the merge-fields editor, seeded from the keep
+  // record + the same phone union the backend's automatic merge produces.
+  const handleStartEditingFields = () => {
+    if (!confirmState?.keepFull || !confirmState.discardFull) return;
+    setOverridesDraft(buildInitialMergeDraft(confirmState.keepFull, confirmState.discardFull));
   };
 
   const handleConfirmMerge = async () => {
@@ -299,13 +333,23 @@ export const DeduplicatePage = () => {
     const mergedPairId = confirmState.pairId;
     const discardId = confirmState.discardRecord.id;
 
+    // OIR-225 — only send `overrides` when the user actually opened the editor
+    // AND changed something relative to the default merge result. Otherwise
+    // this is `undefined` and the call below is byte-identical to the
+    // pre-existing keep/discard-only request.
+    const overrides =
+      overridesDraft && confirmState.keepFull && confirmState.discardFull
+        ? diffMergeOverrides(confirmState.keepFull, confirmState.discardFull, overridesDraft)
+        : undefined;
+
     try {
       setMergingId(mergedPairId);
 
       // Stage A: IPC merge + store reconciliation — if this throws, merge genuinely failed
       const survivor = await window.hospitalDirectory.mergeContacts({
         keepId: confirmState.keepRecord.id,
-        discardId
+        discardId,
+        ...(overrides ? { overrides } : {})
       });
 
       // Reconcile the central store — remove discarded, upsert survivor
@@ -319,6 +363,7 @@ export const DeduplicatePage = () => {
       pushToast({ type: "error", message });
       setMergingId(null);
       setConfirmState(null);
+      setOverridesDraft(null);
       // Restore focus to the trigger button on failure too
       requestAnimationFrame(() => {
         triggerRef.current?.focus();
@@ -357,6 +402,7 @@ export const DeduplicatePage = () => {
     } finally {
       setMergingId(null);
       setConfirmState(null);
+      setOverridesDraft(null);
     }
   };
 
@@ -620,7 +666,29 @@ export const DeduplicatePage = () => {
         onConfirm={() => void handleConfirmMerge()}
         onCancel={handleCancelDialog}
         isDestructive={true}
-      />
+      >
+        {/* OIR-225 — additive: editing is opt-in, the default merge (no fields
+            touched) behaves exactly as before. Only offered when the full
+            records are available in the store (needed to prefill the editor). */}
+        {confirmState?.keepFull && confirmState.discardFull && (
+          overridesDraft ? (
+            <MergeFieldsEditor
+              keepRecord={confirmState.keepFull}
+              discardRecord={confirmState.discardFull}
+              draft={overridesDraft}
+              onChange={setOverridesDraft}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={handleStartEditingFields}
+              className="focus-ring rounded-lg text-sm font-medium text-scs-blue hover:underline"
+            >
+              Editar campos antes de fusionar
+            </button>
+          )
+        )}
+      </ConfirmDialog>
     </section>
   );
 };

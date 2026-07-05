@@ -1303,4 +1303,195 @@ describe("DeduplicatePage", () => {
       expect(screen.queryByText("0 de 1 pares revisados")).not.toBeInTheDocument();
     });
   });
+
+  // ── OIR-225 — merge-fields editor (edit surviving record before confirming) ──
+
+  describe("OIR-225 — merge-fields editor", () => {
+    const overridesKeepFull = {
+      ...defaultContacts.records[0]!,
+      id: "cnt_0001",
+      displayName: "Admisión General",
+      type: "service" as const,
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_keep_1",
+            label: "Principal",
+            number: "70005",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: [],
+        socials: []
+      }
+    };
+
+    const overridesDiscardFull = {
+      ...defaultContacts.records[1]!,
+      id: "cnt_0002",
+      displayName: "Admisión General (duplicado)",
+      type: "department" as const,
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_discard_1",
+            label: "Secundario",
+            number: "70006",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: [],
+        socials: []
+      }
+    };
+
+    let mergeContactsMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mergeContactsMock = vi.fn().mockResolvedValue({ ...survivorRecord });
+      useAppStore.setState({
+        contacts: {
+          ...defaultContacts,
+          records: [overridesKeepFull, overridesDiscardFull]
+        },
+        selectedRecordId: "cnt_0001"
+      });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          detectDuplicates: vi.fn().mockResolvedValue({
+            pairs: [mockPair],
+            records: { cnt_0001: recordA, cnt_0002: recordB },
+            checkedCount: 2,
+            pairCount: 1
+          }),
+          mergeContacts: mergeContactsMock
+        }
+      });
+    });
+
+    // Opens the confirm dialog with recordA (cnt_0001) selected as keeper.
+    const openConfirmDialog = async () => {
+      renderPage();
+      await screen.findAllByText("Admisión General");
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+      return screen.findByRole("dialog");
+    };
+
+    const clickDialogConfirm = async () => {
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+    };
+
+    it("(a) default path — confirming without opening the editor sends no `overrides` key", async () => {
+      await openConfirmDialog();
+      await clickDialogConfirm();
+
+      await waitFor(() => expect(mergeContactsMock).toHaveBeenCalled());
+      expect(mergeContactsMock).toHaveBeenCalledWith({ keepId: "cnt_0001", discardId: "cnt_0002" });
+    });
+
+    it("shows the 'Editar campos antes de fusionar' toggle inside the confirm dialog", async () => {
+      await openConfirmDialog();
+      expect(
+        screen.getByRole("button", { name: "Editar campos antes de fusionar" })
+      ).toBeInTheDocument();
+    });
+
+    it("prefills the Nombre field with the keep record's displayName once the editor is opened", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      const nameInput = (await screen.findByLabelText("Nombre")) as HTMLInputElement;
+      expect(nameInput.value).toBe("Admisión General");
+    });
+
+    it("(b) editing the displayName sends the edited value as an override", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      const nameInput = await screen.findByLabelText("Nombre");
+      fireEvent.change(nameInput, { target: { value: "Admisión General (corregido)" } });
+
+      await clickDialogConfirm();
+
+      await waitFor(() => expect(mergeContactsMock).toHaveBeenCalled());
+      expect(mergeContactsMock).toHaveBeenCalledWith({
+        keepId: "cnt_0001",
+        discardId: "cnt_0002",
+        overrides: expect.objectContaining({ displayName: "Admisión General (corregido)" })
+      });
+    });
+
+    it("'usar de la otra ficha' copies the discard record's displayName into the field", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Usar de la otra ficha: «Admisión General (duplicado)»"
+        })
+      );
+
+      const nameInput = (await screen.findByLabelText("Nombre")) as HTMLInputElement;
+      expect(nameInput.value).toBe("Admisión General (duplicado)");
+    });
+
+    it("(b) editing the type sends the edited type as an override", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      const typeTrigger = screen.getByLabelText("Tipo");
+      fireEvent.click(typeTrigger);
+      fireEvent.click(screen.getByRole("option", { name: "Departamento" }));
+
+      await clickDialogConfirm();
+
+      await waitFor(() => expect(mergeContactsMock).toHaveBeenCalled());
+      expect(mergeContactsMock).toHaveBeenCalledWith({
+        keepId: "cnt_0001",
+        discardId: "cnt_0002",
+        overrides: expect.objectContaining({ type: "department" })
+      });
+    });
+
+    it("(b) editing a phone number sends the edited phones list as an override", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      const numberInput = await screen.findByDisplayValue("70005");
+      fireEvent.change(numberInput, { target: { value: "70099" } });
+
+      await clickDialogConfirm();
+
+      await waitFor(() => expect(mergeContactsMock).toHaveBeenCalled());
+      const callArg = mergeContactsMock.mock.calls[0]![0] as {
+        overrides?: { contactMethods?: { phones?: Array<{ number: string }> } };
+      };
+      const numbers = callArg.overrides?.contactMethods?.phones?.map((p) => p.number) ?? [];
+      expect(numbers).toContain("70099");
+      expect(numbers).not.toContain("70005");
+    });
+
+    it("opening the editor and changing nothing still sends no `overrides` key", async () => {
+      await openConfirmDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Editar campos antes de fusionar" }));
+
+      // Editor is open but untouched
+      await screen.findByLabelText("Nombre");
+
+      await clickDialogConfirm();
+
+      await waitFor(() => expect(mergeContactsMock).toHaveBeenCalled());
+      expect(mergeContactsMock).toHaveBeenCalledWith({ keepId: "cnt_0001", discardId: "cnt_0002" });
+    });
+  });
 });

@@ -351,7 +351,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       throw new Error("Invalid merge request");
     }
 
-    return service.mergeDuplicates(parsed.data.keepId, parsed.data.discardId);
+    return service.mergeDuplicates(parsed.data.keepId, parsed.data.discardId, parsed.data.overrides);
   });
 };
 

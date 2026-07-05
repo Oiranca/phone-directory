@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
+import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts.schema.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
@@ -638,7 +639,11 @@ export class AppDataService {
     });
   }
 
-  async mergeDuplicates(keepId: string, discardId: string): Promise<ContactRecord> {
+  async mergeDuplicates(
+    keepId: string,
+    discardId: string,
+    overrides?: MergeContactsOverrides
+  ): Promise<ContactRecord> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
@@ -733,9 +738,50 @@ export class AppDataService {
       }
     });
 
+    // OIR-225 — apply user-supplied field overrides on top of the automatic
+    // keep/discard merge result, AFTER the merge logic above has already run.
+    // Explicit edits win over whatever the automatic union produced. Only the
+    // top-level keys actually present in `overrides` are replaced; anything
+    // omitted keeps the value `mergedRecord` already computed above.
+    const finalRecord = overrides
+      ? contactRecordSchema.parse({
+          ...mergedRecord,
+          ...(overrides.displayName !== undefined ? { displayName: overrides.displayName } : {}),
+          ...(overrides.type !== undefined ? { type: overrides.type } : {}),
+          ...(overrides.externalId !== undefined ? { externalId: overrides.externalId } : {}),
+          ...(overrides.person !== undefined
+            ? { person: { ...mergedRecord.person, ...overrides.person } }
+            : {}),
+          ...(overrides.organization !== undefined
+            ? { organization: { ...mergedRecord.organization, ...overrides.organization } }
+            : {}),
+          ...(overrides.location !== undefined
+            ? { location: { ...mergedRecord.location, ...overrides.location } }
+            : {}),
+          ...(overrides.contactMethods !== undefined
+            ? {
+                contactMethods: {
+                  phones: normalizePrimaryEntries(
+                    overrides.contactMethods.phones ?? mergedRecord.contactMethods.phones
+                  ),
+                  emails: normalizePrimaryEntries(
+                    overrides.contactMethods.emails ?? mergedRecord.contactMethods.emails
+                  ),
+                  socials: normalizePrimaryEntries(
+                    overrides.contactMethods.socials ?? mergedRecord.contactMethods.socials
+                  )
+                }
+              }
+            : {}),
+          ...(overrides.aliases !== undefined ? { aliases: overrides.aliases } : {}),
+          ...(overrides.tags !== undefined ? { tags: overrides.tags } : {}),
+          ...(overrides.notes !== undefined ? { notes: overrides.notes } : {})
+        })
+      : mergedRecord;
+
     const nextRecords = contacts.records
       .filter((r) => r.id !== discardId)
-      .map((r) => (r.id === keepId ? mergedRecord : r));
+      .map((r) => (r.id === keepId ? finalRecord : r));
 
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
@@ -752,7 +798,7 @@ export class AppDataService {
       changes: { discardedId: { old: discardId, new: null } }
     });
 
-    return mergedRecord;
+    return finalRecord;
     });
   }
 

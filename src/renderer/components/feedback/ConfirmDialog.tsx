@@ -11,6 +11,12 @@ interface ConfirmDialogProps {
   isDestructive?: boolean;
   confirmDisabled?: boolean;
   cancelDisabled?: boolean;
+  /**
+   * OIR-225 — optional extra content rendered between the message and the
+   * action buttons (e.g. the merge-fields editor on the Deduplicate page).
+   * Purely additive: omitting it preserves the exact prior dialog layout.
+   */
+  children?: React.ReactNode;
 }
 
 export function ConfirmDialog({
@@ -23,7 +29,8 @@ export function ConfirmDialog({
   onCancel,
   isDestructive = false,
   confirmDisabled = false,
-  cancelDisabled = false
+  cancelDisabled = false,
+  children
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
@@ -95,12 +102,15 @@ export function ConfirmDialog({
         event.preventDefault();
         if (!cancelDisabled) onCancel();
       }}
-      className="backdrop:bg-slate-900/50 p-6 rounded-3xl shadow-xl max-w-md w-full border-0 focus:outline-none"
+      className={`backdrop:bg-slate-900/50 p-6 rounded-3xl shadow-xl w-full border-0 focus:outline-none ${
+        children ? 'max-w-lg' : 'max-w-md'
+      }`}
       aria-labelledby={titleId}
       aria-describedby={messageId}
     >
       <h2 id={titleId} className="text-xl font-semibold mb-4 text-scs-ink">{title}</h2>
-      <p id={messageId} className="text-slate-600 mb-8 leading-relaxed">{message}</p>
+      <p id={messageId} className={`text-slate-600 leading-relaxed ${children ? 'mb-4' : 'mb-8'}`}>{message}</p>
+      {children && <div className="mb-6">{children}</div>}
       <div className="flex justify-end gap-3">
         <button
           ref={cancelButtonRef}
