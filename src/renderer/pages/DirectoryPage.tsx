@@ -1,12 +1,11 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
-import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
+import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
 import { RECORD_TYPE_LABELS } from "../../shared/constants/catalogs";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
-import { SelectField } from "../components/inputs/SelectField";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 
 // OIR-218: CSS custom property tracking the rendered height of the sticky
@@ -55,8 +54,6 @@ const areaLabels = {
   especialidades: "Especialidades",
   otros: "Otros"
 } as const satisfies Record<AreaType | "all" | "none", string>;
-
-const tagLabelIntl = new Intl.Collator("es", { sensitivity: "base" });
 
 const privacyInlineRiskText = {
   Confidencial: "Número interno confidencial.",
@@ -181,15 +178,7 @@ export const DirectoryPage = () => {
     settings,
     query,
     selectedRecordId,
-    selectedType,
-    selectedArea,
-    selectedTags,
-    showInactive,
     setQuery,
-    setSelectedType,
-    setSelectedArea,
-    setSelectedTags,
-    setShowInactive,
     setSelectedRecordId,
     isLoading,
     ensureBootstrapLoaded
@@ -199,42 +188,18 @@ export const DirectoryPage = () => {
   useEffect(() => {
     void ensureBootstrapLoaded();
   }, []);
-  const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
-  const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
-  const availableTags = useMemo(() => {
-    if (!contacts) {
-      return [];
-    }
-
-    const tagsByNormalizedValue = new Map<string, string>();
-
-    contacts.records.forEach((record) => {
-      record.tags.forEach((tag) => {
-        const trimmedTag = tag.trim();
-
-        if (trimmedTag.length === 0) {
-          return;
-        }
-
-        const normalizedTag = normalizeTag(trimmedTag);
-
-        if (!tagsByNormalizedValue.has(normalizedTag)) {
-          tagsByNormalizedValue.set(normalizedTag, trimmedTag);
-        }
-      });
-    });
-
-    return Array.from(tagsByNormalizedValue.values()).sort((left, right) => tagLabelIntl.compare(left, right));
-  }, [contacts]);
   const deferredQuery = useDeferredValue(query);
+  // OIR-231: filters removed from the UI — only free-text search remains.
+  // `showInactive: true` keeps every record (active + inactive) visible since
+  // there is no longer any UI control to distinguish or hide by status.
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
         contacts?.records ?? [],
         deferredQuery,
-        { selectedType, selectedArea, selectedTags, showInactive }
+        { selectedType: "all", selectedArea: "all", selectedTags: [], showInactive: true }
       ),
-    [contacts, deferredQuery, selectedType, selectedArea, selectedTags, showInactive]
+    [contacts, deferredQuery]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
@@ -246,32 +211,11 @@ export const DirectoryPage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredQuery, selectedType, selectedArea, selectedTags, showInactive]);
+  }, [deferredQuery]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
-
-  useEffect(() => {
-    if (selectedTags.length === 0) {
-      return;
-    }
-
-    const normalizedToAvailableTag = new Map(
-      availableTags.map((tag) => [normalizeTag(tag), tag] as const)
-    );
-    const nextSelectedTags = selectedTags.flatMap((tag) => {
-      const matchingTag = normalizedToAvailableTag.get(normalizeTag(tag));
-      return matchingTag ? [matchingTag] : [];
-    });
-    const hasChanged =
-      nextSelectedTags.length !== selectedTags.length ||
-      nextSelectedTags.some((tag, index) => tag !== selectedTags[index]);
-
-    if (hasChanged) {
-      setSelectedTags(nextSelectedTags);
-    }
-  }, [availableTags, selectedTags, setSelectedTags]);
 
   useEffect(() => {
     if (currentPageRecords.length === 0) {
@@ -423,46 +367,6 @@ export const DirectoryPage = () => {
     return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
   }
 
-  const handleTypeChange = (value: string) => {
-    if (value === "all" || availableTypes.includes(value as RecordType)) {
-      setSelectedType(value as RecordType | "all");
-      return;
-    }
-
-    setSelectedType("all");
-  };
-
-  const handleAreaChange = (value: string) => {
-    if (value === "all" || availableAreas.includes(value as AreaType)) {
-      setSelectedArea(value as AreaType | "all");
-      return;
-    }
-
-    setSelectedArea("all");
-  };
-
-  const handleClearFilters = () => {
-    setQuery("");
-    setSelectedType("all");
-    setSelectedArea("all");
-    setSelectedTags([]);
-    setShowInactive(false);
-  };
-
-  const handleTagChange = (value: string) => {
-    if (value === "all") {
-      setSelectedTags([]);
-      return;
-    }
-
-    if (availableTags.includes(value)) {
-      setSelectedTags([value]);
-      return;
-    }
-
-    setSelectedTags([]);
-  };
-
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
@@ -486,6 +390,10 @@ export const DirectoryPage = () => {
       >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
+          {/* OIR-231: filters removed — only the free-text search remains.
+              NOTE: a future task adds category-shortcut buttons (Sindicatos,
+              UMI, etc.) near this search bar — keep this row layout free of
+              anything that would obviously conflict with that addition. */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -502,140 +410,15 @@ export const DirectoryPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            <div className="w-full md:w-48">
-              <SelectField
-                id="directory-type-filter"
-                label="Tipo"
-                value={selectedType}
-                onChange={handleTypeChange}
-                options={[
-                  { value: "all", label: typeLabels.all },
-                  ...availableTypes.map((type) => ({ value: type, label: typeLabels[type] }))
-                ]}
-              />
-            </div>
-            <div className="w-full md:w-48">
-              <SelectField
-                id="directory-area-filter"
-                label="Área"
-                value={selectedArea}
-                onChange={handleAreaChange}
-                options={[
-                  { value: "all", label: areaLabels.all },
-                  ...availableAreas.map((area) => ({ value: area, label: areaLabels[area] }))
-                ]}
-              />
-            </div>
-            {availableTags.length > 0 || selectedTags.length > 0 ? (
-              <div className="w-full md:w-48">
-                <SelectField
-                  id="directory-tag-filter"
-                  label="Etiqueta"
-                  value={selectedTags[0] ?? "all"}
-                  onChange={handleTagChange}
-                  options={[
-                    { value: "all", label: "Todas las etiquetas" },
-                    ...availableTags.map((tag) => ({ value: tag, label: tag }))
-                  ]}
-                />
-              </div>
-            ) : null}
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(event) => setShowInactive(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
-              />
-              <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
-            </label>
-            <p
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              className="text-xs font-medium text-slate-500"
-            >
-              {visibleRecords.length} resultados
-            </p>
-          </div>
-          {(query || selectedType !== "all" || selectedArea !== "all" || selectedTags.length > 0 || showInactive) && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              {query ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {query}
-                  <button
-                    type="button"
-                    aria-label="Eliminar filtro: búsqueda"
-                    onClick={() => setQuery("")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedType !== "all" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {typeLabels[selectedType]}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${typeLabels[selectedType]}`}
-                    onClick={() => setSelectedType("all")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedArea !== "all" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {areaLabels[selectedArea]}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${areaLabels[selectedArea]}`}
-                    onClick={() => setSelectedArea("all")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedTags.map((tag) => (
-                <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  #{tag}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${tag}`}
-                    onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {showInactive ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  Inactivos
-                  <button
-                    type="button"
-                    aria-label="Eliminar filtro: Inactivos"
-                    onClick={() => setShowInactive(false)}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="focus-ring rounded-full px-2 py-1 font-semibold text-scs-blue transition hover:text-scs-blueDark"
-              >
-                Limpiar
-              </button>
-            </div>
-          )}
+          <p
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="text-xs font-medium text-slate-500"
+          >
+            {visibleRecords.length} resultados
+          </p>
         </div>
       </div>
 
@@ -703,20 +486,17 @@ export const DirectoryPage = () => {
                       : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
                   ].join(" ")}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
-                      <p className="truncate text-xs text-slate-500">
-                        {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      {record.status === "inactive" ? (
-                        <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          Inactivo
-                        </span>
-                      ) : null}
-                    </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
+                    <p className="truncate text-xs text-slate-500">
+                      {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
+                    </p>
+                    {/* OIR-229: role/job title (ODS "Categoría") is the only thing that
+                        distinguishes same-department contacts in the list — shown on its
+                        own line so it never gets truncated away by the line above. */}
+                    {record.organization.role ? (
+                      <p className="truncate text-xs font-medium text-slate-600">{record.organization.role}</p>
+                    ) : null}
                   </div>
                   <p className="mt-2 truncate text-sm text-slate-600">
                     {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
@@ -830,11 +610,6 @@ export const DirectoryPage = () => {
                         <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-scs-blue ring-1 ring-slate-200">
                           {typeLabels[selectedRecord.type]}
                         </span>
-                        {selectedRecord.status === "inactive" ? (
-                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                            Inactivo
-                          </span>
-                        ) : null}
                         {selectedRecordPrivacyFlags.map((flag) => (
                           <span
                             key={flag}
@@ -847,6 +622,11 @@ export const DirectoryPage = () => {
                       <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
                         {selectedRecord.displayName}
                       </h4>
+                      {/* OIR-229: role/job title (ODS "Categoría") shown alongside the
+                          detail header so it's visible without extra clicks. */}
+                      {selectedRecord.organization.role ? (
+                        <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
+                      ) : null}
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}

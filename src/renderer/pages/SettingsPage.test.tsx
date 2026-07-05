@@ -107,15 +107,15 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 
-  it("saves editor and inactive-default preferences", async () => {
+  it("saves the editor name preference (OIR-231: no inactive-default toggle in the UI)", async () => {
     renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Mostrar inactivos al iniciar/ })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Nombre del editor"), {
       target: { value: "Guardia tarde" }
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mostrar inactivos al iniciar/ }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     await waitFor(() => {
@@ -124,22 +124,15 @@ describe("SettingsPage", () => {
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
         ui: {
-          showInactiveByDefault: true,
+          // OIR-231: showInactiveByDefault is inert dead config now — the
+          // already-persisted value is preserved rather than user-editable.
+          showInactiveByDefault: false,
           autoBackup: editableSettings.ui.autoBackup
         }
       });
     });
 
     expect(await screen.findByText(/Configuración guardada/)).toBeInTheDocument();
-    expect(useAppStore.getState().settings).toEqual({
-      editorName: "Guardia tarde",
-      dataFilePath: "/tmp/data/contacts.json",
-      backupDirectoryPath: "/tmp/backups",
-      ui: {
-        showInactiveByDefault: true,
-        autoBackup: editableSettings.ui.autoBackup
-      }
-    });
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Guardia tarde");
   });
 
@@ -151,12 +144,10 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Nombre del editor"), {
       target: { value: "Temporal" }
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Mostrar inactivos al iniciar/ }));
     fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
 
     expect(screen.getByLabelText("Nombre del editor")).toHaveValue("Samuel");
     expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
-    expect(screen.getByRole("checkbox", { name: /Mostrar inactivos al iniciar/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 

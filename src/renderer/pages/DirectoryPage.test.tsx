@@ -55,11 +55,6 @@ describe("DirectoryPage", () => {
       </MemoryRouter>
     );
 
-  const chooseOption = async (label: string, optionLabel: string) => {
-    fireEvent.click(screen.getByLabelText(label));
-    fireEvent.click(await screen.findByRole("option", { name: optionLabel }));
-  };
-
   it("shows a loading state while bootstrap is in progress", async () => {
     let resolveBootstrap: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.getBootstrapData>>) => void) | null = null;
     window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
@@ -127,7 +122,9 @@ describe("DirectoryPage", () => {
     expect(resultCount).toHaveAttribute("aria-atomic", "true");
     expect(resultCount).toHaveTextContent("3 resultados");
 
-    await chooseOption("Tipo", "Control");
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "Control de planta" }
+    });
 
     expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
   });
@@ -167,7 +164,7 @@ describe("DirectoryPage", () => {
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
-  it("filters by type and can reveal inactive records", async () => {
+  it("shows inactive records without any way to hide them (OIR-231: filters removed)", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
       ...structuredClone(defaultContacts.records[0]),
@@ -192,22 +189,36 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    expect(screen.queryByText("Control de Noche")).not.toBeInTheDocument();
-
-    await chooseOption("Tipo", "Control");
-    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
-
     expect((await screen.findAllByText("Control de Noche")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Inactivo")).not.toBeInTheDocument();
   });
 
-  it("filters by tag and shows the active tag pill", async () => {
-    const contacts = structuredClone(defaultContacts);
-    contacts.records.push({
-      ...structuredClone(defaultContacts.records[1]),
-      id: "urgencias-record",
-      displayName: "Urgencias central",
-      tags: ["urgencias"]
+  it("does not render any type/area/tag/inactive filter controls (OIR-231)", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
     });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tipo")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Área")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Etiqueta")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /mostrar inactivos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Limpiar" })).not.toBeInTheDocument();
+  });
+
+  it("shows organization.role in the list card subtitle when present (OIR-229)", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.organization.role = "Jefe/a de Servicio";
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts,
@@ -215,217 +226,41 @@ describe("DirectoryPage", () => {
         editorName: "",
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
+        ui: { showInactiveByDefault: false }
       }
     });
 
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-
-    await chooseOption("Etiqueta", "admisión");
-
-    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
-    expect(screen.getByText("#admisión")).toBeInTheDocument();
-    expect(screen.queryByText("Urgencias central")).not.toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).getByText("Jefe/a de Servicio")).toBeInTheDocument();
   });
 
-  it("filter-chip clear buttons carry the shared touch-target class for a 44px hit area", async () => {
+  it("does not render a role line in the list card when organization.role is absent (OIR-229)", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
         editorName: "",
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
+        ui: { showInactiveByDefault: false }
       }
     });
 
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
-      target: { value: "admisión" }
-    });
-
-    const clearButton = await screen.findByRole("button", { name: "Eliminar filtro: búsqueda" });
-    expect(clearButton).toHaveClass("touch-target");
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const heading = within(list).getByText("Admisión General");
+    const card = heading.closest("div.min-w-0");
+    // Only the type/department subtitle <p> renders — no extra role line.
+    expect(card?.querySelectorAll("p")).toHaveLength(1);
   });
 
-  it("clears selected tags when filter pills are reset", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: {
-        editorName: "",
-        dataFilePath: "/tmp/data/contacts.json",
-        backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
-      }
-    });
-
-    renderPage();
-
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-
-    await chooseOption("Etiqueta", "admisión");
-    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
-
-    expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
-  });
-
-  it("clears the search text when filter pills are reset", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: {
-        editorName: "",
-        dataFilePath: "/tmp/data/contacts.json",
-        backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
-      }
-    });
-
-    renderPage();
-
-    const searchInput = await screen.findByLabelText("Buscar contactos");
-    fireEvent.change(searchInput, { target: { value: "admisión" } });
-
-    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
-
-    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
-
-    expect(searchInput).toHaveValue("");
-    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
-  });
-
-  it("clears both a tag filter and search text together in a single click", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: {
-        editorName: "",
-        dataFilePath: "/tmp/data/contacts.json",
-        backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
-      }
-    });
-
-    renderPage();
-
-    const searchInput = await screen.findByLabelText("Buscar contactos");
-
-    await chooseOption("Etiqueta", "admisión");
-    fireEvent.change(searchInput, { target: { value: "admisión" } });
-
-    expect(screen.getByText("#admisión")).toBeInTheDocument();
-    expect(searchInput).toHaveValue("admisión");
-    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
-
-    fireEvent.click(screen.getByRole("button", { name: "Limpiar" }));
-
-    expect(screen.queryByText("#admisión")).not.toBeInTheDocument();
-    expect(searchInput).toHaveValue("");
-    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
-  });
-
-  it("clears only the targeted filter when each per-filter clear button is used in isolation", async () => {
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: {
-        editorName: "",
-        dataFilePath: "/tmp/data/contacts.json",
-        backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
-      }
-    });
-
-    renderPage();
-
-    const searchInput = await screen.findByLabelText("Buscar contactos");
-
-    fireEvent.change(searchInput, { target: { value: "admisión" } });
-    await chooseOption("Tipo", "Servicio");
-    await chooseOption("Área", "Gestión y administración");
-    await chooseOption("Etiqueta", "admisión");
-    fireEvent.click(screen.getByRole("checkbox", { name: /mostrar inactivos/i }));
-
-    expect(useAppStore.getState().query).toBe("admisión");
-    expect(useAppStore.getState().selectedType).toBe("service");
-    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
-    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
-    expect(useAppStore.getState().showInactive).toBe(true);
-    expect(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: búsqueda" }));
-
-    expect(searchInput).toHaveValue("");
-    expect(useAppStore.getState().query).toBe("");
-    expect(screen.queryByRole("button", { name: "Eliminar filtro: búsqueda" })).not.toBeInTheDocument();
-    expect(useAppStore.getState().selectedType).toBe("service");
-    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
-    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
-    expect(useAppStore.getState().showInactive).toBe(true);
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Servicio" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Servicio" }));
-
-    expect(useAppStore.getState().selectedType).toBe("all");
-    expect(screen.queryByRole("button", { name: "Eliminar filtro: Servicio" })).not.toBeInTheDocument();
-    expect(useAppStore.getState().selectedArea).toBe("gestion-administracion");
-    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
-    expect(useAppStore.getState().showInactive).toBe(true);
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Gestión y administración" }));
-
-    expect(useAppStore.getState().selectedArea).toBe("all");
-    expect(screen.queryByRole("button", { name: "Eliminar filtro: Gestión y administración" })).not.toBeInTheDocument();
-    expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
-    expect(useAppStore.getState().showInactive).toBe(true);
-    expect(screen.getByRole("button", { name: "Eliminar filtro: admisión" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: admisión" }));
-
-    expect(useAppStore.getState().selectedTags).toEqual([]);
-    expect(screen.queryByRole("button", { name: "Eliminar filtro: admisión" })).not.toBeInTheDocument();
-    expect(useAppStore.getState().showInactive).toBe(true);
-    expect(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar filtro: Inactivos" }));
-
-    expect(useAppStore.getState().showInactive).toBe(false);
-    expect(screen.queryByRole("button", { name: "Eliminar filtro: Inactivos" })).not.toBeInTheDocument();
-  });
-
-  it("de-duplicates tag options with the same normalized value", async () => {
+  it("shows organization.role in the detail view when present (OIR-229)", async () => {
     const contacts = structuredClone(defaultContacts);
-    contacts.records.push({
-      ...structuredClone(defaultContacts.records[1]),
-      id: "admission-uppercase",
-      displayName: "Admisión alternativa",
-      tags: ["Admisión"]
-    });
+    contacts.records[0]!.organization.role = "Enfermero/a";
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts,
@@ -433,78 +268,15 @@ describe("DirectoryPage", () => {
         editorName: "",
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
+        ui: { showInactiveByDefault: false }
       }
     });
 
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("Etiqueta"));
-
-    expect(screen.getAllByRole("option", { name: "admisión" })).toHaveLength(1);
-  });
-
-  it("clears stale selected tags when the current dataset no longer exposes them", async () => {
-    useAppStore.setState({ selectedTags: ["admisión"] });
-
-    const contacts = structuredClone(defaultContacts);
-    contacts.records = contacts.records.map((record) => ({ ...record, tags: [] }));
-
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts,
-      settings: {
-        editorName: "",
-        dataFilePath: "/tmp/data/contacts.json",
-        backupDirectoryPath: "/tmp/backups",
-        ui: {
-          showInactiveByDefault: false
-        }
-      }
-    });
-
-    renderPage();
-
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(useAppStore.getState().selectedTags).toEqual([]);
-    });
-  });
-
-  it("re-maps selected tags to the current canonical option label", async () => {
-    const contacts = structuredClone(defaultContacts);
-    contacts.records[0]!.tags = ["admisión"];
-    const settings = {
-      editorName: "",
-      dataFilePath: "/tmp/data/contacts.json",
-      backupDirectoryPath: "/tmp/backups",
-      ui: {
-        showInactiveByDefault: false
-      }
-    };
-
-    useAppStore.setState({
-      contacts,
-      settings,
-      selectedTags: ["Admisión"],
-      selectedRecordId: contacts.records[0]!.id,
-      isLoading: false,
-      bootstrapStatus: "success",
-      bootstrapError: "",
-      bootstrapHelp: ""
-    });
-
-    renderPage();
-
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(useAppStore.getState().selectedTags).toEqual(["admisión"]);
-    });
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByText("Enfermero/a")).toBeInTheDocument();
   });
 
   it("shows privacy-only pills in the detail header for sensitive phones", async () => {

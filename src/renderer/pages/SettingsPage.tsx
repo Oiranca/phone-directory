@@ -25,7 +25,6 @@ export const SettingsPage = () => {
     dataFilePath: string;
     backupDirectoryPath: string;
   }>(null);
-  const [showInactiveByDefault, setShowInactiveByDefault] = useState(false);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
   const [autoBackupTrigger, setAutoBackupTrigger] = useState<"launch" | "intervalHours" | "editCount">("launch");
   const [autoBackupIntervalHours, setAutoBackupIntervalHours] = useState("2");
@@ -50,7 +49,6 @@ export const SettingsPage = () => {
     setHasEditorDraft(false);
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
-    setShowInactiveByDefault(settings.ui.showInactiveByDefault);
     setAutoBackupEnabled(settings.ui.autoBackup.enabled);
     setAutoBackupTrigger(settings.ui.autoBackup.trigger);
     setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
@@ -94,7 +92,6 @@ export const SettingsPage = () => {
     (hasEditorDraft && editorName !== settings.editorName) ||
     dataFilePath !== settings.dataFilePath ||
     backupDirectoryPath !== settings.backupDirectoryPath ||
-    showInactiveByDefault !== settings.ui.showInactiveByDefault ||
     autoBackupEnabled !== settings.ui.autoBackup.enabled ||
     autoBackupTrigger !== settings.ui.autoBackup.trigger ||
     autoBackupIntervalHours !== String(settings.ui.autoBackup.intervalHours) ||
@@ -117,11 +114,6 @@ export const SettingsPage = () => {
     setSaveError("");
   };
 
-  const handleShowInactiveChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setShowInactiveByDefault(event.target.checked);
-    setSaveError("");
-  };
-
   const handleAutoBackupEnabledChange = (event: ChangeEvent<HTMLInputElement>) => {
     setAutoBackupEnabled(event.target.checked);
     setSaveError("");
@@ -132,7 +124,6 @@ export const SettingsPage = () => {
     setHasEditorDraft(false);
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
-    setShowInactiveByDefault(settings.ui.showInactiveByDefault);
     setAutoBackupEnabled(settings.ui.autoBackup.enabled);
     setAutoBackupTrigger(settings.ui.autoBackup.trigger);
     setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
@@ -225,7 +216,11 @@ export const SettingsPage = () => {
         dataFilePath,
         backupDirectoryPath,
         ui: {
-          showInactiveByDefault,
+          // OIR-231: the "Mostrar inactivos al iniciar" UI toggle was removed
+          // along with the Inactivo feature. showInactiveByDefault is left as
+          // inert dead config in the schema (see project decision) — preserve
+          // whatever value is already persisted rather than exposing it here.
+          showInactiveByDefault: settings.ui.showInactiveByDefault,
           autoBackup: normalizedAutoBackupSettings
         }
       });
@@ -281,23 +276,6 @@ export const SettingsPage = () => {
               <p id="settings-editor-name-hint" className="mt-2 text-xs text-slate-500">
                 Se usa en auditoría, importaciones CSV y futuras exportaciones.
               </p>
-            </div>
-
-            <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <input
-                id="settings-show-inactive"
-                type="checkbox"
-                checked={showInactiveByDefault}
-                onChange={handleShowInactiveChange}
-                aria-describedby="settings-show-inactive-desc"
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
-              />
-              <div>
-                <label htmlFor="settings-show-inactive" className="block text-sm font-semibold text-slate-700">Mostrar inactivos al iniciar</label>
-                <p id="settings-show-inactive-desc" className="mt-1 text-sm text-slate-600">
-                  Activa el filtro de registros inactivos cada vez que se cargue la aplicación.
-                </p>
-              </div>
             </div>
 
             {/* OIR-221: "Copia de seguridad automática" compacted into a single tight
