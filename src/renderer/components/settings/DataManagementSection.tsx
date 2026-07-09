@@ -517,7 +517,7 @@ export const DataManagementSection = () => {
               Selecciona un archivo para importar. Se generará una copia de seguridad automática.
             </p>
             <p className="mt-1 text-xs text-amber-900/60">
-              Formatos admitidos: CSV, ODS, XLS, XLSX
+              Formatos admitidos: JSON, CSV, ODS, XLS, XLSX
             </p>
             <div className="mt-4">
               <button

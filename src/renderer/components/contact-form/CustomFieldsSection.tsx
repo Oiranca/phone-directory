@@ -36,7 +36,7 @@ export const CustomFieldsSection = ({
       <div>
         <h3 className="text-lg font-semibold text-scs-blueDark">Campos personalizados</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Crea un campo personalizado,si necesitas más datos.
+          Crea un campo personalizado, si necesitas más datos.
         </p>
       </div>
       <button

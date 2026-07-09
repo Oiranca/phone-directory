@@ -43,6 +43,38 @@ import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import { reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
+/**
+ * Union `customFields` from both records of a duplicate-merge pair.
+ *
+ * - Every custom field on the kept record is preserved as-is.
+ * - Any custom field on the discarded record whose `key` doesn't already
+ *   exist on the kept record is appended (union, not replace).
+ * - On a `key` conflict, the kept record's value wins (OIR-245).
+ * - Returns `undefined` when neither record has any custom fields, matching
+ *   the optional shape of `contactRecordSchema.customFields`.
+ */
+const mergeCustomFields = (
+  keepFields: ContactRecord["customFields"],
+  discardFields: ContactRecord["customFields"]
+): ContactRecord["customFields"] => {
+  if (!keepFields?.length && !discardFields?.length) {
+    return undefined;
+  }
+
+  const merged = [...(keepFields ?? [])];
+  const keepKeys = new Set(merged.map((field) => field.key.trim().toLowerCase()));
+
+  for (const field of discardFields ?? []) {
+    const normalizedKey = field.key.trim().toLowerCase();
+    if (!keepKeys.has(normalizedKey)) {
+      merged.push(field);
+      keepKeys.add(normalizedKey);
+    }
+  }
+
+  return merged;
+};
+
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
   private readonly auditFacade = new AppDataAuditFacade();
@@ -714,10 +746,30 @@ export class AppDataService {
         department: keepRecord.organization.department || discardRecord.organization.department,
         service: keepRecord.organization.service || discardRecord.organization.service,
         area: keepRecord.organization.area || discardRecord.organization.area,
-        specialty: keepRecord.organization.specialty || discardRecord.organization.specialty
+        specialty: keepRecord.organization.specialty || discardRecord.organization.specialty,
+        // OIR-245: role/schedule were previously dropped entirely when the
+        // keeper lacked them — fill in from the discarded record instead.
+        role: keepRecord.organization.role || discardRecord.organization.role,
+        schedule: keepRecord.organization.schedule || discardRecord.organization.schedule
       },
-      // Copy location from discard if keeper doesn't have one
-      location: keepRecord.location || discardRecord.location,
+      // OIR-245: merge location field-by-field instead of all-or-nothing —
+      // a keeper that already has a location object but is missing a
+      // subfield (e.g. sector/section) should still inherit it from the
+      // discarded record's location.
+      location:
+        keepRecord.location || discardRecord.location
+          ? {
+              building: keepRecord.location?.building || discardRecord.location?.building,
+              floor: keepRecord.location?.floor || discardRecord.location?.floor,
+              room: keepRecord.location?.room || discardRecord.location?.room,
+              text: keepRecord.location?.text || discardRecord.location?.text,
+              sector: keepRecord.location?.sector || discardRecord.location?.sector,
+              section: keepRecord.location?.section || discardRecord.location?.section
+            }
+          : undefined,
+      // OIR-245: union customFields from both records; kept record wins on
+      // key conflicts.
+      customFields: mergeCustomFields(keepRecord.customFields, discardRecord.customFields),
       // Merge contact methods with deduplication
       contactMethods: {
         // OIR-239: never invent a primary when merging duplicates.

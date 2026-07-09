@@ -270,15 +270,17 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("OIR-224: shows the shortened Import card copy (no 'JSON' wording, no full outcome explainer)", async () => {
+  it("OIR-224/OIR-245: shows the shortened Import card copy (accurate format list including JSON, no full outcome explainer)", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText("Selecciona un archivo para importar. Se generará una copia de seguridad automática.")
     ).toBeInTheDocument();
-    expect(screen.getByText("Formatos admitidos: CSV, ODS, XLS, XLSX")).toBeInTheDocument();
-    expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
+    // OIR-245: pickAndImportDataset's native dialog filter also accepts .json
+    // (it doubles as the backup-restore entry point) — the visible format
+    // list must say so, otherwise the restore path looks unsupported.
+    expect(screen.getByText("Formatos admitidos: JSON, CSV, ODS, XLS, XLSX")).toBeInTheDocument();
     expect(screen.queryByText(/reemplaza los datos/)).not.toBeInTheDocument();
   });
 

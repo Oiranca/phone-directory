@@ -4481,4 +4481,119 @@ describe("AppDataService", () => {
       }
     );
   });
+
+  describe("OIR-245: mergeDuplicates does not drop role/schedule/location/customFields", () => {
+    it("fills role, schedule and location subfields from the discarded record, and unions customFields", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const keepRecord = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: {
+          department: "Urgencias",
+          service: "Coordinación"
+          // role/schedule intentionally absent — must be filled from discard.
+        },
+        location: {
+          building: "Hospital General"
+          // sector/section intentionally absent — must be filled from discard.
+        },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_keep_1", key: "Extensión antigua", value: "1234" }]
+      });
+
+      const discardRecord = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez (duplicado)",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: {
+          department: "Urgencias",
+          role: "Enfermera",
+          schedule: "8:00-15:00"
+        },
+        location: {
+          building: "Hospital General",
+          sector: "Enfermería",
+          section: "Consulta"
+        },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_discard_1", key: "Turno", value: "Mañana" }]
+      });
+
+      const merged = await service.mergeDuplicates(
+        keepRecord.savedRecordId,
+        discardRecord.savedRecordId
+      );
+
+      // role/schedule: absent on keeper, present on discard — must survive.
+      expect(merged.organization.role).toBe("Enfermera");
+      expect(merged.organization.schedule).toBe("8:00-15:00");
+
+      // location: keeper already has a location object (building), but is
+      // missing sector/section — those must be filled in from discard, not
+      // dropped because the keeper's location object already existed.
+      expect(merged.location?.building).toBe("Hospital General");
+      expect(merged.location?.sector).toBe("Enfermería");
+      expect(merged.location?.section).toBe("Consulta");
+
+      // customFields: union of both records, no conflicting keys here so
+      // both must be present.
+      expect(merged.customFields).toHaveLength(2);
+      expect(merged.customFields?.some((field) => field.key === "Extensión antigua" && field.value === "1234")).toBe(
+        true
+      );
+      expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
+    });
+
+    it("keeps the keeper's customFields value when both records define the same key", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const keepRecord = await service.createRecord({
+        type: "person",
+        displayName: "Luis García",
+        person: { firstName: "Luis", lastName: "García" },
+        organization: {},
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_keep_2", key: "Turno", value: "Mañana" }]
+      });
+
+      const discardRecord = await service.createRecord({
+        type: "person",
+        displayName: "Luis García (duplicado)",
+        person: { firstName: "Luis", lastName: "García" },
+        organization: {},
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_discard_2", key: "Turno", value: "Tarde" }]
+      });
+
+      const merged = await service.mergeDuplicates(
+        keepRecord.savedRecordId,
+        discardRecord.savedRecordId
+      );
+
+      expect(merged.customFields).toHaveLength(1);
+      expect(merged.customFields?.[0]?.value).toBe("Mañana");
+    });
+  });
 });
