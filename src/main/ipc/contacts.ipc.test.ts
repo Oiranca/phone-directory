@@ -50,7 +50,8 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       organization: { department: "Admisión", area: "gestion-administracion" },
       contactMethods: {
         phones: [{ id: "ph_k1", label: "Principal", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-        emails: [{ id: "em_k1", address: "admision@hospital.es", isPrimary: true }]
+        emails: [{ id: "em_k1", address: "admision@hospital.es", isPrimary: true }],
+        socials: []
       },
       aliases: [],
       tags: ["admisión"],
@@ -70,7 +71,8 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
         emails: [
           { id: "em_d1", address: "admision2@hospital.es", isPrimary: true },
           { id: "em_d2", address: "admision@hospital.es", isPrimary: false }
-        ]
+        ],
+        socials: []
       },
       aliases: [],
       tags: ["admisión", "urgencias"],
@@ -111,7 +113,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       type: "service",
       displayName: "Registro existente",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -132,7 +134,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       type: "service",
       displayName: "Registro existente",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -174,7 +176,8 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       organization: { department: "Admisión" },
       contactMethods: {
         phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -186,7 +189,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -208,7 +211,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión" },
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -219,7 +222,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       type: "department",
       displayName: "Admisión General (duplicado)",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -247,7 +250,8 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       organization: {},
       contactMethods: {
         phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -261,7 +265,8 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
       organization: {},
       contactMethods: {
         phones: [{ id: "ph_d1", number: "70002", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],

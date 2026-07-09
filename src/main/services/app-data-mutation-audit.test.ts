@@ -64,7 +64,8 @@ const makeContact = (overrides: Partial<EditableContactRecord> = {}): EditableCo
         notes: undefined
       }
     ],
-    emails: []
+    emails: [],
+    socials: []
   },
   aliases: [],
   tags: [],
@@ -353,7 +354,8 @@ describe("AppDataService — mutation audit coverage (OIR-112)", () => {
               label: "work",
               isPrimary: true
             }
-          ]
+          ],
+          socials: []
         }
       })
     );

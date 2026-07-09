@@ -592,7 +592,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: ["coordinación urgencias"],
       tags: ["urgencias"],
@@ -690,7 +691,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -757,7 +759,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -790,7 +793,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -849,7 +853,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -895,7 +900,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -955,7 +961,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1003,7 +1010,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1036,7 +1044,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1095,7 +1104,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1144,7 +1154,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1177,7 +1188,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1228,7 +1240,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1268,7 +1281,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: existing.aliases,
       tags: existing.tags,
@@ -1319,7 +1333,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1354,7 +1369,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1388,7 +1404,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1411,7 +1428,8 @@ describe("AppDataService", () => {
             isPrimary: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -3373,7 +3391,8 @@ describe("AppDataService", () => {
               noPatientSharing: false
             }
           ],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],
@@ -3544,7 +3563,7 @@ describe("AppDataService", () => {
       type: "service" as const,
       displayName: `Concurrent ${label}`,
       organization: { department: "Test" },
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [] as string[],
       tags: [] as string[],
       status: "active" as const
@@ -3753,7 +3772,8 @@ describe("AppDataService", () => {
         organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
         contactMethods: {
           phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],
@@ -3811,7 +3831,8 @@ describe("AppDataService", () => {
         organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
         contactMethods: {
           phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],

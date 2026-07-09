@@ -28,7 +28,7 @@ const makeRecord = (
   type: "service",
   displayName: "Test",
   organization: {},
-  contactMethods: { phones: [], emails: [] },
+  contactMethods: { phones: [], emails: [], socials: [] },
   aliases: [],
   tags: [],
   status: "active",

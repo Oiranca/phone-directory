@@ -248,7 +248,8 @@ describe("confidential flags are advisory — flagged records remain searchable"
               confidential: true,
               noPatientSharing: true
             }
-          ]
+          ],
+          socials: []
         }
       }
     ];
@@ -279,7 +280,8 @@ describe("confidential flags are advisory — flagged records remain searchable"
               confidential: false,
               noPatientSharing: true
             }
-          ]
+          ],
+          socials: []
         }
       }
     ];
