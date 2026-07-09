@@ -1,7 +1,7 @@
 import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { BuscasPage } from "../pages/BuscasPage";
-import { ContactFormPage } from "../pages/ContactFormPage";
+import { RecordFormPage } from "../pages/RecordFormPage";
 import { DeduplicatePage } from "../pages/DeduplicatePage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -18,11 +18,11 @@ export const router = createHashRouter([
       },
       {
         path: "contacts/new",
-        element: <ContactFormPage />
+        element: <RecordFormPage />
       },
       {
         path: "contacts/:id/edit",
-        element: <ContactFormPage />
+        element: <RecordFormPage />
       },
       {
         // OIR-219: Importar/Exportar was folded into Configuración as a

@@ -9,7 +9,7 @@ import { PhonesSection } from "../components/contact-form/PhonesSection";
 import { SocialsSection } from "../components/contact-form/SocialsSection";
 import { useContactForm } from "../hooks/useContactForm";
 
-export const ContactFormPage = () => {
+export const RecordFormPage = () => {
   const {
     isEditing,
     isLoading,
@@ -33,7 +33,6 @@ export const ContactFormPage = () => {
     emailAddressInputRefs,
     customFieldKeyInputRefs,
     clearFieldError,
-    setCommaSeparatedField,
     updatePhone,
     removePhone,
     updateEmail,
@@ -190,34 +189,6 @@ export const ContactFormPage = () => {
         />
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
-            <h3 className="text-lg font-semibold text-scs-blueDark">Clasificación</h3>
-            <div>
-              <label htmlFor="aliases" className="text-sm font-medium text-slate-700">
-                Alias
-              </label>
-              <input
-                id="aliases"
-                value={formState.aliases.join(", ")}
-                onChange={(event) => setCommaSeparatedField("aliases", event.target.value)}
-                placeholder="p. ej. mostrador admisión, centralita"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
-              />
-            </div>
-            <div>
-              <label htmlFor="tags" className="text-sm font-medium text-slate-700">
-                Etiquetas
-              </label>
-              <input
-                id="tags"
-                value={formState.tags.join(", ")}
-                onChange={(event) => setCommaSeparatedField("tags", event.target.value)}
-                placeholder="p. ej. admisión, urgencias"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
-              />
-            </div>
-          </section>
-
           <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
             <label htmlFor="notes" className="text-sm font-medium text-slate-700">
               Notas

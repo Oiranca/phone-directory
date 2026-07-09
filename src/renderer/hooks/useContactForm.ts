@@ -297,7 +297,7 @@ export const useContactForm = (): UseContactFormResult => {
 
   /**
    * Ref-based dirty flag — updated synchronously so navigation guards (e.g.
-   * useBlocker in ContactFormPage) always read the latest value at the moment
+   * useBlocker in RecordFormPage) always read the latest value at the moment
    * a navigation is attempted, avoiding stale-closure issues.
    */
   const isDirtyRef = useRef<boolean>(false);

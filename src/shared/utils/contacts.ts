@@ -5,7 +5,7 @@
  * - If no entry claims isPrimary, the first entry is promoted.
  * - Empty arrays are returned unchanged.
  *
- * Used in both the renderer (ContactFormPage draft state) and the main process
+ * Used in both the renderer (RecordFormPage draft state) and the main process
  * (AppDataService record persistence). Shared here to keep the logic in sync.
  */
 export const normalizePrimaryEntries = <T extends { isPrimary: boolean }>(entries: T[]): T[] => {

@@ -6,7 +6,7 @@ import type { ContactFormState, PendingFocusTarget } from "../../hooks/useContac
 import { CustomFieldsSection } from "./CustomFieldsSection";
 
 /**
- * Minimal stateful harness mirroring how ContactFormPage wires
+ * Minimal stateful harness mirroring how RecordFormPage wires
  * CustomFieldsSection through useContactForm: `setFormState` only needs to
  * update `customFields` for this component's own behavior, so the rest of
  * ContactFormState is stubbed out.

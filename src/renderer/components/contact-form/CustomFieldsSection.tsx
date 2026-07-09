@@ -84,7 +84,6 @@ export const CustomFieldsSection = ({
                 label="Nombre del campo"
                 value={field.key}
                 suggestions={existingCustomFieldKeys}
-                placeholder="p. ej. Número extranjero"
                 invalid={!!fieldErrors[`customFields.${index}.key`]}
                 errorText={fieldErrors[`customFields.${index}.key`]}
                 onChange={(value) => {

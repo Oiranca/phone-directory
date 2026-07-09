@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { ContactFormPage } from "./ContactFormPage";
+import { RecordFormPage } from "./RecordFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
@@ -82,8 +82,8 @@ const renderWithRoute = (initialEntry: string) => {
   const router = createMemoryRouter(
     [
       { path: "/", element: <div>Directorio</div> },
-      { path: "/contacts/new", element: <ContactFormPage /> },
-      { path: "/contacts/:id/edit", element: <ContactFormPage /> }
+      { path: "/contacts/new", element: <RecordFormPage /> },
+      { path: "/contacts/:id/edit", element: <RecordFormPage /> }
     ],
     { initialEntries: [initialEntry] }
   );
@@ -96,7 +96,7 @@ const renderWithRoute = (initialEntry: string) => {
   return router;
 };
 
-describe("ContactFormPage", () => {
+describe("RecordFormPage", () => {
   beforeEach(() => {
     resetStore();
     Object.defineProperty(window, "hospitalDirectory", {
@@ -757,7 +757,7 @@ describe("ContactFormPage", () => {
         <ToastProvider>
           <RouterProvider
             router={createMemoryRouter(
-              [{ path: "/contacts/new", element: <ContactFormPage /> }],
+              [{ path: "/contacts/new", element: <RecordFormPage /> }],
               { initialEntries: ["/contacts/new"] }
             )}
           />
