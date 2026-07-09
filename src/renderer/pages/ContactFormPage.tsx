@@ -200,7 +200,7 @@ export const ContactFormPage = () => {
                 id="aliases"
                 value={formState.aliases.join(", ")}
                 onChange={(event) => setCommaSeparatedField("aliases", event.target.value)}
-                placeholder="mostrador admisión, centralita"
+                placeholder="p. ej. mostrador admisión, centralita"
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
@@ -212,7 +212,7 @@ export const ContactFormPage = () => {
                 id="tags"
                 value={formState.tags.join(", ")}
                 onChange={(event) => setCommaSeparatedField("tags", event.target.value)}
-                placeholder="admisión, urgencias"
+                placeholder="p. ej. admisión, urgencias"
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>

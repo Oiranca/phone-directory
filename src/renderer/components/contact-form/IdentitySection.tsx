@@ -30,7 +30,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
         aria-required="true"
         aria-invalid={!!fieldErrors.displayName}
         aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
-        placeholder="Admisión — Mostrador principal"
+        placeholder="p. ej. Admisión — Mostrador principal"
         className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
       />
       {fieldErrors.displayName && (
