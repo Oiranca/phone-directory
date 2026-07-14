@@ -16,6 +16,18 @@ export const csvImportPolicySelectionSchema = z.object({
   policy: z.enum(["overwrite", "skip", "merge-fields"])
 });
 
-export const csvImportPolicySelectionListSchema = z.array(csvImportPolicySelectionSchema);
+// Defensive upper bound: this list holds at most one entry per *conflicting*
+// row of the previewed import — a subset of the total row count, which the
+// import services already cap at 5000 rows (MAX_CSV_IMPORT_ROWS in
+// csv-import.service.ts / MAX_SPREADSHEET_IMPORT_ROWS in
+// spreadsheet-import.service.ts). Mirrored here as a literal rather than
+// imported, since src/shared must not depend on src/main. A legitimate
+// payload can never exceed this; anything larger is malformed or malicious
+// and would otherwise force the main process to do unbounded work.
+const MAX_CSV_IMPORT_POLICY_SELECTIONS = 5000;
+
+export const csvImportPolicySelectionListSchema = z
+  .array(csvImportPolicySelectionSchema)
+  .max(MAX_CSV_IMPORT_POLICY_SELECTIONS);
 
 export type CsvImportPolicySelectionInput = z.infer<typeof csvImportPolicySelectionSchema>;

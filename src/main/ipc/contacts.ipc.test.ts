@@ -1180,6 +1180,36 @@ describe("csvImportPolicySelectionSchema — OIR-212 (SEC-5)", () => {
     expect(csvImportPolicySelectionListSchema.safeParse([{ policy: "overwrite" }]).success).toBe(false);
     expect(csvImportPolicySelectionListSchema.safeParse([{ recordIndex: 0 }]).success).toBe(false);
   });
+
+  // Defensive upper bound (renderer-controlled IPC payload) — mirrors the
+  // 5000-row cap already enforced by csv-import.service.ts /
+  // spreadsheet-import.service.ts, since this list holds at most one entry
+  // per conflicting row of the previewed import.
+  it("accepts a policy selection array at the 5000-entry max", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const value = Array.from({ length: 5000 }, (_, i) => ({
+      recordIndex: i,
+      policy: "overwrite" as const
+    }));
+
+    expect(csvImportPolicySelectionListSchema.safeParse(value).success).toBe(true);
+  });
+
+  it("rejects a policy selection array exceeding the 5000-entry max", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const value = Array.from({ length: 5001 }, (_, i) => ({
+      recordIndex: i,
+      policy: "overwrite" as const
+    }));
+
+    expect(csvImportPolicySelectionListSchema.safeParse(value).success).toBe(false);
+  });
 });
 
 describe("contacts:import-csv-dataset — OIR-212 (SEC-5) IPC handler rejects malformed policies via Zod", () => {
