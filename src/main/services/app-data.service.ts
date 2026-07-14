@@ -1163,7 +1163,7 @@ export class AppDataService {
 
     if (this.pathsMatch(settings.dataFilePath, settingsFilePath)) {
       throw new Error(
-        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
+        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${formatPathForError(settings.dataFilePath)}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
       );
     }
 
@@ -1179,7 +1179,7 @@ export class AppDataService {
 
     if (path.extname(settings.dataFilePath).toLowerCase() !== ".json") {
       throw new Error(
-        `La ruta de datos debe terminar en .json. Ruta afectada: ${settings.dataFilePath}.`
+        `La ruta de datos debe terminar en .json. Ruta afectada: ${formatPathForError(settings.dataFilePath)}.`
       );
     }
 

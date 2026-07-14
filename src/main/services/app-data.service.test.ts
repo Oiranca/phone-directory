@@ -193,6 +193,56 @@ describe("AppDataService", () => {
     expect(error.message).toContain("Ruta afectada: already-a-directory.json");
   });
 
+  it("rejects a custom data path that points to the settings file without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const settingsFilePath = path.join(currentUserDataRoot, "data", "settings.json");
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: settingsFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
+      "La ruta de datos no puede apuntar al archivo de configuración."
+    );
+
+    // SEC-3 regression guard: validateEditableSettings' settings-file-collision
+    // branch must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(settingsFilePath);
+    expect(error.message).toContain("Ruta afectada: settings.json");
+  });
+
+  it("rejects a custom data path without a .json extension without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    const nonJsonDataFilePath = path.join(customDataDirectory, "contacts-custom.txt");
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: nonJsonDataFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow("La ruta de datos debe terminar en .json.");
+
+    // SEC-3 regression guard: validateEditableSettings' extension-check branch
+    // must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(nonJsonDataFilePath);
+    expect(error.message).toContain("Ruta afectada: contacts-custom.txt");
+  });
+
   it("rejects relative custom data paths", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
