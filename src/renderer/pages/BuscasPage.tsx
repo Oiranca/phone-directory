@@ -4,6 +4,7 @@ import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { useToast } from "../components/feedback/ToastRegion";
+import { toCompactToastMessage } from "../utils/toastMessage";
 
 const SHIFT_LABELS: Record<string, string> = {
   "mañana": "Mañana",
@@ -135,11 +136,10 @@ export const BuscasPage = () => {
       setEditingId(null);
     } catch (err) {
       setFormError(
-        err instanceof Error
-          ? err.message
-          : editingId
-          ? "Error al actualizar la busca."
-          : "Error al crear la busca."
+        toCompactToastMessage(
+          err,
+          editingId ? "Error al actualizar la busca." : "Error al crear la busca."
+        )
       );
     } finally {
       setIsSaving(false);

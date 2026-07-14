@@ -7,6 +7,7 @@ import type { EditableContactRecord, EditableCustomField, EditableEmailContact, 
 import { reconcilePrimaryEntries } from "../../shared/utils/contacts";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
+import { toCompactToastMessage } from "../utils/toastMessage";
 
 export type ContactFormState = Omit<EditableContactRecord, "person" | "location" | "customFields"> & {
   person: {
@@ -671,9 +672,7 @@ export const useContactForm = (): UseContactFormResult => {
     } catch (error) {
       pushToast({
         type: "error",
-        message: error instanceof Error
-          ? error.message
-          : "No se pudo guardar el registro. Inténtalo de nuevo."
+        message: toCompactToastMessage(error, "No se pudo guardar el registro. Inténtalo de nuevo.")
       });
     } finally {
       setIsSubmitting(false);

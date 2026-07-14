@@ -2,6 +2,7 @@ import { BrowserWindow, app, nativeImage, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
+import { registerCrashHandlers } from "./crash-handlers.js";
 import { registerBuscasIpc } from "./ipc/buscas.ipc.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
@@ -16,6 +17,11 @@ import {
   isAllowedNavigationUrl,
   WINDOW_WEB_PREFERENCES
 } from "./security.js";
+
+// OIR-213 (QA-4) — registered as early as possible so an uncaught exception
+// or unhandled rejection during startup (before the window even exists) is
+// still logged and surfaced instead of silently killing the process.
+registerCrashHandlers({ targetApp: app });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;

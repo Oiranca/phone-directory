@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
+import { toCompactToastMessage } from "../utils/toastMessage";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
 import {
@@ -229,9 +230,7 @@ export const DeduplicatePage = () => {
           : current
       );
     } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "No se pudo cargar duplicados"
-      );
+      setLoadError(toCompactToastMessage(error, "No se pudo cargar duplicados"));
     } finally {
       setIsLoading(false);
     }
@@ -356,10 +355,7 @@ export const DeduplicatePage = () => {
       applyMergeResult(survivor, discardId);
     } catch (error) {
       // Merge truly failed — report it and bail out without touching pair state
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No se pudo fusionar el duplicado. Inténtalo de nuevo.";
+      const message = toCompactToastMessage(error, "No se pudo fusionar el duplicado. Inténtalo de nuevo.");
       pushToast({ type: "error", message });
       setMergingId(null);
       setConfirmState(null);
