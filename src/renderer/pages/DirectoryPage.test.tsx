@@ -1027,6 +1027,98 @@ describe("DirectoryPage", () => {
     expect(firstButton).toHaveAttribute("aria-pressed", "false");
   });
 
+  // PR #136 review: the arrow/Home/End tests above only assert aria-pressed
+  // (selection state) — they never assert that DOM focus actually followed.
+  // focusRecordButton() moves focus via requestAnimationFrame, which is the
+  // genuinely risky part of the MANT-4 roving-tabindex extraction (wiring the
+  // hook's abstract index arithmetic to real DOM focus); useRovingTabIndex's
+  // own unit tests only cover the arithmetic. These regression tests assert
+  // that DOM focus AND aria-pressed selection move together for real keydown
+  // events, using waitFor to await the deferred rAF focus call.
+  describe("keyboard navigation moves DOM focus together with selection (PR #136 regression)", () => {
+    const bootstrap = () => {
+      window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+        contacts: defaultContacts,
+        settings: {
+          editorName: "",
+          dataFilePath: "/tmp/data/contacts.json",
+          backupDirectoryPath: "/tmp/backups",
+          ui: { showInactiveByDefault: false }
+        }
+      });
+    };
+
+    it("ArrowDown moves both DOM focus and selection to the next record", async () => {
+      bootstrap();
+      renderPage();
+      await screen.findByRole("list", { name: "Resultados del directorio" });
+
+      const firstButton = screen.getByRole("button", { name: /admisión general/i });
+      const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+
+      firstButton.focus();
+      fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+
+      await waitFor(() => expect(secondButton).toHaveFocus());
+      expect(secondButton).toHaveAttribute("aria-pressed", "true");
+      expect(firstButton).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("ArrowUp moves both DOM focus and selection to the previous record", async () => {
+      bootstrap();
+      renderPage();
+      await screen.findByRole("list", { name: "Resultados del directorio" });
+
+      const firstButton = screen.getByRole("button", { name: /admisión general/i });
+      const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+
+      firstButton.focus();
+      fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+      await waitFor(() => expect(secondButton).toHaveFocus());
+
+      fireEvent.keyDown(secondButton, { key: "ArrowUp" });
+
+      await waitFor(() => expect(firstButton).toHaveFocus());
+      expect(firstButton).toHaveAttribute("aria-pressed", "true");
+      expect(secondButton).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("Home moves both DOM focus and selection to the first record", async () => {
+      bootstrap();
+      renderPage();
+      await screen.findByRole("list", { name: "Resultados del directorio" });
+
+      const firstButton = screen.getByRole("button", { name: /admisión general/i });
+      const secondButton = screen.getByRole("button", { name: /centro de salud demo/i });
+
+      firstButton.focus();
+      fireEvent.keyDown(firstButton, { key: "ArrowDown" });
+      await waitFor(() => expect(secondButton).toHaveFocus());
+
+      fireEvent.keyDown(secondButton, { key: "Home" });
+
+      await waitFor(() => expect(firstButton).toHaveFocus());
+      expect(firstButton).toHaveAttribute("aria-pressed", "true");
+      expect(secondButton).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("End moves both DOM focus and selection to the last record", async () => {
+      bootstrap();
+      renderPage();
+      await screen.findByRole("list", { name: "Resultados del directorio" });
+
+      const firstButton = screen.getByRole("button", { name: /admisión general/i });
+      const lastButton = screen.getByRole("button", { name: /centro de salud demo/i });
+
+      firstButton.focus();
+      fireEvent.keyDown(firstButton, { key: "End" });
+
+      await waitFor(() => expect(lastButton).toHaveFocus());
+      expect(lastButton).toHaveAttribute("aria-pressed", "true");
+      expect(firstButton).toHaveAttribute("aria-pressed", "false");
+    });
+  });
+
   it("Enter key does not change selection but does not throw", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
