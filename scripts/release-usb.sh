@@ -89,7 +89,7 @@ pnpm run test:e2e
 
 log "Building portable app artifact"
 case "$PLATFORM" in
-  win) pnpm exec electron-builder --win --dir ;;
+  win) pnpm exec electron-builder --win --x64 --dir ;;
   mac) pnpm exec electron-builder --mac --dir ;;
   linux) pnpm exec electron-builder --linux --dir ;;
 esac
