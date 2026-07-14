@@ -25,7 +25,7 @@ export const router = createHashRouter([
         element: <RecordFormPage />
       },
       {
-        // OIR-219: Importar/Exportar was folded into Configuración as a
+        // Importar/Exportar was folded into Configuración as a
         // section. Keep a redirect so old bookmarks/deep links still resolve.
         path: "import-export",
         element: <Navigate to="/settings" replace />

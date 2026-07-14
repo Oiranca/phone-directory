@@ -5,7 +5,7 @@
  * index.ts imports and uses these functions directly, so a regression there
  * (wrong CSP, flipped sandbox flag, loosened navigation rule) will fail here.
  *
- * Covers OIR-117 acceptance criterion 1:
+ * Covers the security-hardening acceptance criterion:
  *   - sandbox flags (webPreferences)
  *   - denied navigation + denied window.open
  *   - Content-Security-Policy header (production and development)

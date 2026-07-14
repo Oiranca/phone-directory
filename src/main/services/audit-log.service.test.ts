@@ -240,7 +240,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-111: CSV formula injection neutralization (CWE-1236)
+  // CSV formula injection neutralization (CWE-1236)
   // ---------------------------------------------------------------------------
 
   describe("toCsv — formula injection neutralization", () => {
@@ -377,7 +377,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-104: fail-closed on corruption
+  // Fail-closed on corruption
   // ---------------------------------------------------------------------------
 
   describe("corruption handling — query", () => {

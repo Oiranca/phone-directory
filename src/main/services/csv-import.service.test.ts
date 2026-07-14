@@ -234,7 +234,7 @@ describe("buildCsvImportPreview", () => {
     expect(dataset.records).toHaveLength(0);
   });
 
-  // OIR-222: role/schedule/sector/section CSV columns (mirrors ODS Categoría/
+  // Role/schedule/sector/section CSV columns (mirrors ODS Categoría/
   // Horario/Sector/Sección) map to organization.role/schedule and
   // location.sector/section.
   it("maps role/schedule/sector/section columns to organization/location fields", async () => {
@@ -273,7 +273,7 @@ describe("buildCsvImportPreview", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-227 — "Principal" must never be auto-assigned to the first phone
+// "Principal" must never be auto-assigned to the first phone
 // ---------------------------------------------------------------------------
 //
 // buildPhones() has two branches: the `phones` JSON branch (used by the
@@ -282,7 +282,7 @@ describe("buildCsvImportPreview", () => {
 // used to force index 0 to isPrimary=true whenever nothing was explicitly
 // marked primary. These tests lock in that neither branch invents a primary
 // phone anymore.
-describe("buildImportPreviewFromRows — isPrimary is never auto-assigned (OIR-227)", () => {
+describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () => {
   let isPrimaryTestRoot: string;
 
   beforeEach(async () => {

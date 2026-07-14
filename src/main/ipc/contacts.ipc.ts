@@ -12,7 +12,7 @@ import { env } from "../config/env.js";
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
-// OIR-219: extensions accepted by the unified pickAndImportDataset dialog filter.
+// Extensions accepted by the unified pickAndImportDataset dialog filter.
 const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -116,14 +116,14 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return service.importDataset(filePaths[0]!);
   });
-  // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset (OIR-219) —
+  // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset —
   // both dispatch to the same normalize/validate/preview pipeline and the same
   // importToken bookkeeping once a source file path has been resolved.
   const runCsvImportPreview = async (event: Electron.IpcMainInvokeEvent, sourceFilePath: string) => {
     const senderId = event.sender.id;
     // previewCsvImport declares { sourceFilePath: string } in its return type so
     // TypeScript proves the field exists here; we destructure it out before the
-    // renderer payload is assembled (OIR-115 — no cast needed).
+    // renderer payload is assembled (no cast needed).
     const preview = await service.previewCsvImport(sourceFilePath);
     const importToken = randomUUID();
     const previousImportToken = senderTokens.get(senderId);
@@ -139,7 +139,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // Invalidate the token when the sender navigates away — a navigation means the
     // import preview UI is gone and any pending confirmation would be from a stale tab.
     //
-    // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+    // Root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
     // navigations — reference-fragment (hash) navigations, pushState/replaceState,
     // and same-page history navigation (see Electron's `isSameDocument` docs). This
     // app uses createHashRouter for all in-app routing, so those are routine and do
@@ -148,7 +148,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // A same-document navigation can be triggered by something as innocuous as a
     // macOS trackpad two-finger swipe (Chromium's overscroll history navigation)
     // while the operator scrolls the (currently non-virtualized, horizontally
-    // overflowing per OIR-223 priority 3) preview table — which would silently
+    // overflowing) preview table — which would silently
     // invalidate an otherwise-still-valid, still-visible pending import and only
     // surface as an opaque error on the LATER confirm click. Only invalidate on a
     // real cross-document navigation (the tab actually left the app UI).
@@ -184,7 +184,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       });
     }
 
-    // Strip the absolute sourceFilePath before sending to the renderer (OIR-115).
+    // Strip the absolute sourceFilePath before sending to the renderer.
     // The path is retained server-side in pendingCsvImports; the renderer
     // identifies the import by importToken only.
     const { sourceFilePath: _stripped, ...safePreview } = preview;
@@ -223,7 +223,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     return runCsvImportPreview(event, sourceFilePath);
   });
 
-  // OIR-219 — single unified "Importar" entry point. Opens ONE native dialog
+  // Single unified "Importar" entry point. Opens ONE native dialog
   // filtered to .json/.csv/.ods/.xls/.xlsx and internally dispatches, by the
   // extension of whatever file the user picked, to the EXISTING pipelines:
   //   .json                → service.importDataset() (full-replace, unchanged)

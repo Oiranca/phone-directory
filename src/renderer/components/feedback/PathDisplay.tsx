@@ -32,7 +32,7 @@ type Props = {
  * PathDisplay — renders only the basename of an absolute filesystem path by
  * default.  The full path is accessible through an explicit "reveal" toggle
  * and a "copy full path" button.  This prevents screenshots from leaking
- * usernames, share names, or workstation directory structure (OIR-115).
+ * usernames, share names, or workstation directory structure.
  */
 export const PathDisplay = ({ path, className, textClassName = "text-sm" }: Props) => {
   const [revealed, setRevealed] = useState(false);

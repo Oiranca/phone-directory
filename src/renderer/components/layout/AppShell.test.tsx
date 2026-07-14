@@ -23,7 +23,7 @@ const LocationProbe = () => {
 
 afterEach(() => {
   cleanup();
-  // OIR-218: reset settings so the last-import watermark test's setState()
+  // Reset settings so the last-import watermark test's setState()
   // doesn't leak into subsequent tests in this file.
   useAppStore.setState({ settings: null });
 });
@@ -36,7 +36,7 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
-    // OIR-219: "Importar/Exportar" was folded into Configuración; the tab no longer exists.
+    // "Importar/Exportar" was folded into Configuración; the tab no longer exists.
     expect(screen.queryByRole("link", { name: "Importar/Exportar" })).not.toBeInTheDocument();
   });
 
@@ -62,7 +62,7 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
-  // OIR-218: the "Local" badge and the big serif "Agenda" heading were removed —
+  // The "Local" badge and the big serif "Agenda" heading were removed —
   // only the "AGENDA HOSPITALARIA" eyebrow remains, plus a last-import
   // watermark shown in the badge's place once an import has happened.
   it("does not show a 'Local' badge", () => {
@@ -122,7 +122,7 @@ describe("AppShell — default mode", () => {
     renderShell();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(screen.getByRole("main")).toHaveAttribute("tabIndex", "-1");
-    // OIR-218 fix: main must suppress the native outline (still true) but must NOT
+    // main must suppress the native outline (still true) but must NOT
     // use the shared `focus-ring` utility — with the bounded-height layout, that
     // ring rendered as full-viewport-height vertical blue lines on every route
     // change (main.focus() below always sets focus-visible for this container).
