@@ -371,8 +371,6 @@ export interface CsvImportResult extends ImportContactsResult {
  *   - "csv-preview"           → reuse the existing CsvImportPreviewPanel/confirm flow
  *   - "unsupported-extension" → the OS dialog filter was somehow bypassed
  *   - "cancelled"             → the user closed the dialog without picking a file
- *
- * See src/shared/schemas/pick-and-import.schema.ts for the runtime envelope schema.
  */
 export type PickAndImportDatasetResult =
   | { kind: "json-import"; result: ImportContactsResult }

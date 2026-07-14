@@ -460,12 +460,15 @@ describe("RecordFormPage", () => {
     const cancelLink = screen.getByRole("link", { name: "Cancelar sin guardar los cambios" });
     const submitButton = screen.getByRole("button", { name: "Crear registro" });
 
-    // DOM (tab) order: Cancelar precedes the submit button
+    // DOM (tab) order: Cancelar precedes the submit button. This is the behavior
+    // that actually matters for keyboard/tab navigation and screen readers; it is
+    // asserted structurally so the test survives Tailwind class renames/refactors
+    // (OIR-217/QA-7 — a prior version of this test asserted a `flex-col-reverse`
+    // class-name substring, which is an implementation detail unrelated to the
+    // real (unrenderable-in-jsdom) visual layout).
     expect(
       cancelLink.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    // Visual order is no longer reversed relative to DOM order
-    expect(cancelLink.parentElement?.className).not.toContain("flex-col-reverse");
   });
 
   it("calls ensureBootstrapLoaded on mount and shows form after load (direct route entry)", async () => {

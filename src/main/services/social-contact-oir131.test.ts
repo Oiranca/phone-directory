@@ -25,27 +25,13 @@ import {
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import type { NormalizedImportRow } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 const makeServiceSheet = (
   name: string,

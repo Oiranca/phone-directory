@@ -496,7 +496,7 @@ describe("useContactForm", () => {
         await result.current.handleSubmit(fakeEvent);
       });
 
-      expect(result.current.fieldErrors["displayName"]).toBeTruthy();
+      expect(result.current.fieldErrors["displayName"]).toBe("Falta el nombre del contacto.");
       expect(window.hospitalDirectory.createRecord).not.toHaveBeenCalled();
     });
 

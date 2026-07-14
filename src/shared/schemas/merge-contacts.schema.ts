@@ -66,4 +66,3 @@ export const mergeContactsSchema = z.object({
 });
 
 export type MergeContactsOverrides = z.infer<typeof mergeContactsOverridesSchema>;
-export type MergeContactsRequest = z.infer<typeof mergeContactsSchema>;
