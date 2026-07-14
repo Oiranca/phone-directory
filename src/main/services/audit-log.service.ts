@@ -8,6 +8,16 @@
  * future operator tooling can wire recovery without touching this layer.
  * The integrityError latch remains deliberately fail-closed: once set, all
  * appends are blocked until an explicit recoverFromIntegrityError() call clears it.
+ *
+ * OIR-206 / ARQ-7 (2026-07-14): the active log file has no size bound on its
+ * own, so `append()` now rotates it once it accumulates
+ * `DEFAULT_ROTATION_THRESHOLD_ENTRIES` entries — the full active history is
+ * archived to a timestamped `audit-log.archived-<ISO timestamp>.json`
+ * sidecar (via the same atomic `writeJsonFile` helper) and the active log
+ * restarts fresh. `query()`/`exportAuditLog()` intentionally only read the
+ * active log, not archived sidecars — archived files are cold storage for
+ * manual/operator recovery, consistent with this being a lightweight
+ * rotation scheme rather than a database migration.
  */
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -50,7 +60,38 @@ export class AuditLogIntegrityError extends Error {
   }
 }
 
+export interface AuditLogServiceOptions {
+  /**
+   * Override the entry-count rotation threshold. Defaults to
+   * `AuditLogService.DEFAULT_ROTATION_THRESHOLD_ENTRIES` (5000).
+   * Intended for unit tests that need to exercise rotation without appending
+   * thousands of entries.
+   */
+  rotationThresholdEntries?: number;
+}
+
 export class AuditLogService {
+  /**
+   * OIR-206 / ARQ-7: rotation threshold for the active audit log.
+   *
+   * Once the active log accumulates this many entries, the NEXT append
+   * archives the full active history to a uniquely named, timestamped
+   * sidecar file and restarts the active log fresh (containing only the
+   * entry that triggered rotation).
+   *
+   * This is a deliberately simple entry-count trigger — not age-based
+   * bucketing, not a SQLite migration. For a single shared workstation
+   * generating on the order of tens of edits per day, 5,000 entries
+   * represents several months of accumulated history, so rotation stays
+   * infrequent while still putting a firm, testable upper bound on the cost
+   * of the read + Zod-validate + rewrite cycle that `append()` performs on
+   * every single call — that cycle can no longer grow unbounded with the
+   * app's total lifetime audit history.
+   */
+  private static readonly DEFAULT_ROTATION_THRESHOLD_ENTRIES = 5000;
+
+  private readonly rotationThresholdEntries: number;
+
   private writeQueue: Promise<void> = Promise.resolve();
 
   /**
@@ -59,6 +100,11 @@ export class AuditLogService {
    * `recoverFromIntegrityError()` is called.
    */
   private integrityError: AuditLogIntegrityError | null = null;
+
+  constructor(options: AuditLogServiceOptions = {}) {
+    this.rotationThresholdEntries =
+      options.rotationThresholdEntries ?? AuditLogService.DEFAULT_ROTATION_THRESHOLD_ENTRIES;
+  }
 
   private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.writeQueue.then(fn);
@@ -209,6 +255,29 @@ export class AuditLogService {
     }
   }
 
+  /**
+   * Archive `entries` (the full active history at the moment rotation is
+   * triggered) to a uniquely named, timestamped sidecar next to the active
+   * log file — e.g. `audit-log.archived-2026-07-14T10-00-00-000Z.json`.
+   *
+   * A full timestamp (mirroring the existing `quarantine()` sidecar naming
+   * convention above), not just a year-month, is used so the archive
+   * filename can never collide even if rotation is triggered more than once
+   * within the same calendar month — no merge/append-to-archive logic is
+   * needed as a result, keeping this a genuinely simple rotation scheme.
+   *
+   * Uses the same atomic dual-fsync `writeJsonFile` helper as the active
+   * log — no new I/O primitive is introduced for archiving.
+   */
+  private async archive(filePath: string, entries: AuditLogEntry[]): Promise<void> {
+    const safeTs = new Date().toISOString().replace(/[:.]/g, "-");
+    const dir = path.dirname(filePath);
+    const base = path.basename(filePath, ".json");
+    const archivePath = path.join(dir, `${base}.archived-${safeTs}.json`);
+    await ensureDirectory(dir);
+    await writeJsonFile(archivePath, entries);
+  }
+
   async append(entry: AuditLogEntry): Promise<void> {
     return this.enqueueWrite(async () => {
       // Refuse append while in integrity-error state.  The caller must call
@@ -224,8 +293,16 @@ export class AuditLogService {
       // if the file is corrupt.  We never reach writeJsonFile in that case.
       const entries = await this.readEntries(filePath);
 
-      entries.push(validated);
-      await writeJsonFile(filePath, entries);
+      let activeEntries = entries;
+      if (activeEntries.length >= this.rotationThresholdEntries) {
+        // OIR-206 / ARQ-7: bound the cost of every future append by archiving
+        // the accumulated history now and continuing with a clean active log.
+        await this.archive(filePath, activeEntries);
+        activeEntries = [];
+      }
+
+      activeEntries.push(validated);
+      await writeJsonFile(filePath, activeEntries);
     });
   }
 
