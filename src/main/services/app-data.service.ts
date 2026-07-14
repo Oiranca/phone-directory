@@ -39,7 +39,7 @@ import type {
 } from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
-import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
+import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
@@ -385,13 +385,13 @@ export class AppDataService {
 
       if (pathLstat.isSymbolicLink()) {
         throw new Error(
-          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+          `${message} Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
         );
       }
 
       if (handleStats.dev !== pathStats.dev || handleStats.ino !== pathStats.ino) {
         throw new Error(
-          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+          `${message} Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
         );
       }
 
@@ -401,7 +401,7 @@ export class AppDataService {
       // placeholder never reaches JSON.parse (which would throw SyntaxError).
       if (rawContents.trim().length === 0) {
         throw new Error(
-          `${message} El archivo de copia de seguridad está vacío y no puede restaurarse. Ruta afectada: ${canonicalSourceFilePath}.`
+          `${message} El archivo de copia de seguridad está vacío y no puede restaurarse. Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}.`
         );
       }
 
@@ -1470,7 +1470,7 @@ export class AppDataService {
 
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       throw new Error(
-        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de copias de seguridad configurada.`
+        `${message} Ruta afectada: ${formatPathForError(filePath)}. El archivo debe estar dentro de la carpeta de copias de seguridad configurada.`
       );
     }
   }
@@ -1497,13 +1497,13 @@ export class AppDataService {
 
       if (error instanceof Error && error.message === "file-exists") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
+          `${message} Ruta afectada: ${formatPathForError(filePath)}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
         );
       }
 
       if (error instanceof Error && error.message === "is-directory") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
+          `${message} Ruta afectada: ${formatPathForError(filePath)}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
         );
       }
 

@@ -103,17 +103,21 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          backupDirectoryPath: missingBackupDirectory
-        })
-      )
-    ).rejects.toThrow(
-      new RegExp(
-        `No se pudo validar la carpeta de copias de seguridad\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
-      )
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        backupDirectoryPath: missingBackupDirectory
+      })
     );
+
+    // SEC-3 regression guard: the error must surface a sanitized, basename-only
+    // path (never the absolute realpath, which embeds the OS username/home dir)
+    // across the IPC boundary.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo validar la carpeta de copias de seguridad\. Ruta afectada: missing-backups\./
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(missingBackupDirectory);
   });
 
   it("rejects custom backup directories that resolve through symlinks", async () => {
@@ -145,15 +149,48 @@ describe("AppDataService", () => {
     const existingDataFilePath = path.join(customDataDirectory, "already-here.json");
     await fs.writeFile(existingDataFilePath, "{}", "utf-8");
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          dataFilePath: existingDataFilePath
-        })
-      )
-    ).rejects.toThrow(
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: existingDataFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
       "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
     );
+
+    // SEC-3 regression guard: assertDataFilePathAvailable must not leak the
+    // absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(existingDataFilePath);
+    expect(error.message).toContain("Ruta afectada: already-here.json");
+  });
+
+  it("rejects a custom data path that points to an existing directory without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const directoryAsDataPath = path.join(testRoot, "already-a-directory.json");
+    await fs.mkdir(directoryAsDataPath, { recursive: true });
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: directoryAsDataPath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
+      "La ruta de datos debe apuntar a un archivo JSON, no a una carpeta."
+    );
+
+    // SEC-3 regression guard: assertDataFilePathAvailable's is-directory branch
+    // must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(directoryAsDataPath);
+    expect(error.message).toContain("Ruta afectada: already-a-directory.json");
   });
 
   it("rejects relative custom data paths", async () => {
@@ -243,15 +280,19 @@ describe("AppDataService", () => {
         return actualFs.lstat(filePath);
       });
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          dataFilePath: customDataFilePath
-        })
-      )
-    ).rejects.toThrow(
-      new RegExp(`No se pudo validar la ruta del archivo de datos\\. Ruta afectada: ${customDataDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Error al verificar la ruta: EACCES: permission denied`)
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath
+      })
     );
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo validar la ruta del archivo de datos\. Ruta afectada: custom-data\. Error al verificar la ruta: EACCES: permission denied/
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(customDataDirectory);
 
     lstatSpy.mockRestore();
   });
@@ -1896,11 +1937,63 @@ describe("AppDataService", () => {
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
 
-    await expect(service.restoreBackup(sourceFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo restaurar la copia de seguridad seleccionada\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\\.`
-      )
+    const rejection = service.restoreBackup(sourceFilePath);
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo restaurar la copia de seguridad seleccionada\. Ruta afectada: replacement\.json\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\./
     );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(sourceFilePath);
+  });
+
+  it("rejects restoreBackup when the backup file is swapped for a symlink mid-validation (TOCTOU), without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const backupPath = await service.createBackup();
+
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    // The initial resolveCanonicalDataFilePath() validation pass (via
+    // assertPathChainIsNotSymlink) must see a real file, otherwise it rejects
+    // before restoreBackup's own later TOCTOU re-check ever runs. Only report
+    // a symlink on the *second* lstat of the leaf — simulating a swap that
+    // happens after the first validation pass but before restoreBackup's
+    // own defense-in-depth re-check.
+    let leafLstatCalls = 0;
+    const lstatSpy = vi.spyOn(fs, "lstat").mockImplementation(async (filePath) => {
+      const isLeaf = typeof filePath === "string" && path.basename(filePath) === path.basename(backupPath);
+
+      if (isLeaf) {
+        leafLstatCalls += 1;
+      }
+
+      const realStats = await actualFs.lstat(filePath);
+
+      if (isLeaf && leafLstatCalls > 1) {
+        return Object.assign(Object.create(Object.getPrototypeOf(realStats)) as typeof realStats, realStats, {
+          isSymbolicLink: () => true
+        });
+      }
+
+      return realStats;
+    });
+
+    const rejection = service.restoreBackup(backupPath);
+
+    // SEC-3 regression guard: the symlink-swap/TOCTOU guard in restoreBackup
+    // must not leak the absolute canonical path into the IPC-facing error.
+    await expect(rejection).rejects.toThrow(
+      /El archivo cambió mientras se validaba y ya no es seguro restaurarlo\./
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(backupPath);
+    expect(error.message).toContain(`Ruta afectada: ${path.basename(backupPath)}.`);
+
+    lstatSpy.mockRestore();
   });
 
   it("previews a normalized CSV with counts, warnings, and row issues", async () => {
@@ -4185,9 +4278,17 @@ describe("AppDataService", () => {
     const emptyBackupPath = path.join(backupDir, "contacts-empty-crash.json");
     await fs.writeFile(emptyBackupPath, "", "utf-8");
 
-    await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
+    const rejection = service.restoreBackup(emptyBackupPath);
+
+    await expect(rejection).rejects.toThrow(
       /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(emptyBackupPath);
+    expect(error.message).toContain("Ruta afectada: contacts-empty-crash.json");
   });
 
   it("still lists and restores valid backups after the 0-byte filter is applied", async () => {
