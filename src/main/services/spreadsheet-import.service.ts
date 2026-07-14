@@ -4,7 +4,7 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Papa from "papaparse";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type CsvImportPreviewInternal, type NormalizedImportRow } from "./csv-import.service.js";
 import type { DirectoryDataset } from "../../shared/types/contact.js";
 import {

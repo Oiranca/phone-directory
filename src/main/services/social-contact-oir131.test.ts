@@ -15,7 +15,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { z } from "zod";
 import {
   socialContactSchema,
@@ -719,7 +719,7 @@ describe("editableSocialContactSchema — url scheme validation (L-01)", () => {
 // ---------------------------------------------------------------------------
 
 import nodeFs_h01 from "node:fs";
-import * as XLSX_h01 from "xlsx-republish";
+import * as XLSX_h01 from "xlsx";
 import { vi } from "vitest";
 
 XLSX_h01.set_fs(nodeFs_h01);

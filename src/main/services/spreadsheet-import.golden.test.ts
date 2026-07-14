@@ -32,7 +32,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import {
   normalizeWorkbookRowsFromFile,
   mergeRecordsByDisplayName,
@@ -812,7 +812,7 @@ describe("golden: OIR-224 merge discriminator (service+location) fix", () => {
 
 describe("golden: error paths", () => {
   it("throws a localized error for a file that cannot be parsed as a workbook", () => {
-    // xlsx-republish can parse arbitrary text as a CSV-like sheet, so a plain text
+    // xlsx can parse arbitrary text as a CSV-like sheet, so a plain text
     // file with no recognizable structure produces "no supported sheets" rather
     // than a parse error. Both error messages are considered localized / valid.
     // This golden test documents the actual runtime behavior.
