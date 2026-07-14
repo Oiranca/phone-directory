@@ -1,23 +1,109 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
-import { getPhonePrivacyFlags, getPreferredResultPhone, normalizeTag } from "../services/search.service";
+import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
-import type { AreaType, RecordType } from "../../shared/constants/catalogs";
+import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
-import { SelectField } from "../components/inputs/SelectField";
+import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+import { normalizeDisplayName } from "../../shared/utils/matching";
 
-const typeLabels = {
-  all: "Todos los tipos",
-  person: "Persona",
-  service: "Servicio",
-  department: "Departamento",
-  control: "Control",
-  supervision: "Supervisión",
-  room: "Sala",
-  "external-center": "Centro externo",
-  other: "Otro"
-} as const satisfies Record<RecordType | "all", string>;
+// OIR-218: CSS custom property tracking the rendered height of the sticky
+// search/filter bar below, kept in sync via ResizeObserver. Used together with
+// APP_HEADER_HEIGHT_CSS_VAR to bound the list/detail columns to the actually
+// available viewport height instead of a hardcoded per-breakpoint guess.
+const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
+
+// OIR-218 (residual page-scroll fix): the vertical "chrome" left over once the
+// header and filter bar heights are subtracted from 100vh — i.e. <main>'s own
+// top+bottom padding (py-5/sm:py-6/lg:py-8 in AppShell) plus the gap-5 this
+// page's root <section> puts between the filter bar and the list/detail row.
+// This MUST track those exact Tailwind breakpoints or the bounded columns'
+// max-height calc silently under-subtracts and the page grows taller than the
+// viewport (the previous flat 3.5rem constant undershot the real lg-breakpoint
+// total of 5.25rem by 1.75rem, which is exactly the page-level scroll that
+// showed up at typical desktop widths, since lg: applies from 1024px width
+// regardless of window height). Defined as a real CSS custom property (via
+// Tailwind's responsive arbitrary-property syntax on the root <section> below)
+// so it resolves with plain CSS media queries — same breakpoints as <main>'s
+// padding — instead of a JS media-query guess that could fall out of sync.
+const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
+
+// OIR-233: a service/area value is only worth its own line when it adds
+// information beyond the displayName already shown above it — several real
+// records (e.g. "Helipuerto (Secretaría)") have a `service` value that is a
+// verbatim duplicate of displayName, which otherwise renders as a redundant
+// repeated line right under the title. Case/whitespace-insensitive equality
+// is enough here — no fuzzy matching needed, this is only meant to catch
+// literal duplicates, not near-misses.
+const isDuplicateOfDisplayName = (value: string | null | undefined, displayName: string): boolean =>
+  typeof value === "string" && value.trim().toLowerCase() === displayName.trim().toLowerCase();
+
+// OIR-233: derives the list card's secondary "service" line, skipping it
+// entirely when it would just repeat the displayName shown in the title.
+const getListServiceLine = (
+  organization: { service?: string; area?: AreaType },
+  displayName: string
+): string | null => {
+  const { service, area } = organization;
+
+  if (service) {
+    if (!isDuplicateOfDisplayName(service, displayName)) {
+      return service;
+    }
+    // Service duplicates the title — only fall back to the area label when
+    // an area is actually set and its label isn't itself a duplicate.
+    return area && !isDuplicateOfDisplayName(areaLabels[area], displayName) ? areaLabels[area] : null;
+  }
+
+  // No service value at all — preserve the original area-label fallback,
+  // including the "Sin área" placeholder when no area is set.
+  return areaLabels[area ?? "none"];
+};
+
+// OIR-238: exact equality (isDuplicateOfDisplayName) isn't enough to catch
+// cases like service="Cocina Francisco Artíles" / displayName="Francisco
+// Artíles" — service already contains the full name as a substring, so
+// composing "{service} - {displayName}" still renders a visible duplication
+// ("Cocina Francisco Artíles - Francisco Artíles"). Compares using the
+// shared NFKD normalizer (normalizeDisplayName) so the check is both
+// case- and accent-insensitive.
+const serviceContainsDisplayName = (service: string, displayName: string): boolean => {
+  const normalizedDisplayName = normalizeDisplayName(displayName);
+  return normalizedDisplayName.length > 0 && normalizeDisplayName(service).includes(normalizedDisplayName);
+};
+
+// OIR-234: the service alone (e.g. "Alergia") is often the detail that makes
+// a contact identifiable at a glance, but it was buried inside the card body
+// instead of the title. Compose "{service} - {displayName}" when the service
+// adds real context beyond what it already states.
+//
+// OIR-238: "adds real context" means service does NOT already contain
+// displayName as a substring (case/accent-insensitive) — a strict superset
+// of the OIR-233 exact-equality case, so "Helipuerto (Secretaría)" (whose
+// service exactly duplicates displayName) still keeps its title unchanged,
+// and "Cocina Francisco Artíles" (whose service merely contains displayName)
+// now renders as just "Cocina Francisco Artíles" instead of duplicating the
+// name a second time.
+const buildDisplayTitle = (displayName: string, organization: { service?: string }): string => {
+  const { service } = organization;
+  if (!service) {
+    return displayName;
+  }
+  return serviceContainsDisplayName(service, displayName) ? service : `${service} - ${displayName}`;
+};
+
+// The offset at which the sticky filter bar itself should stick — right below
+// the sticky app header. Must NOT include the filter bar's own height, or the
+// bar would push itself further down by that amount every time it renders.
+const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
+
+// The offset at which the results list / detail panel should start (right
+// below the sticky app header + sticky filter bar), and the vertical breathing
+// room (page padding + inter-section gaps) to subtract from 100vh when
+// bounding their max-height.
+const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
+const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - var(${PAGE_CHROME_CSS_VAR}, 3.75rem))`;
 
 const areaLabels = {
   all: "Todas las áreas",
@@ -28,12 +114,26 @@ const areaLabels = {
   otros: "Otros"
 } as const satisfies Record<AreaType | "all" | "none", string>;
 
-const tagLabelIntl = new Intl.Collator("es", { sensitivity: "base" });
-
 const privacyInlineRiskText = {
   Confidencial: "Número interno confidencial.",
   "No facilitar a pacientes": "No compartir con pacientes."
 } as const;
+
+// OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets that
+// OIR-230 already tags via `organization.department` (an indexed, weight-5
+// Fuse.js search key — see search.service.ts). These are plain shortcuts
+// that set the SAME `query` state the free-text search input controls; no
+// new filter mechanism is introduced. Order matches the source ODS sheets.
+const BOOK_SHORTCUTS = [
+  "Sindicatos",
+  "UMI",
+  "Rehabilitación",
+  "Quirófanos",
+  "Corporativos",
+  "Telecomunicaciones",
+  "Almacenes",
+  "Juan Carlos 1º"
+] as const;
 
 const RESULTS_PER_PAGE = 10;
 const PAGINATION_WINDOW = 3;
@@ -122,18 +222,25 @@ const getSafeSocialUrl = (social: SocialContact): string | null => {
   return null;
 };
 
-const getPhoneInlinePrivacyFlags = (phone?: PhoneContact): PrivacyFlag[] => {
-  if (!phone) {
-    return [];
-  }
-
+// OIR-218 (fix): the list-card "Privacidad sensible" badge must reflect ANY
+// sensitive phone on the record, not just the single "preferred" phone whose
+// number is shown (getPreferredResultPhone intentionally favors a non-sensitive
+// number for display, so a record's ONLY sensitive phone can be a secondary one
+// that never becomes "preferred"). Scoping this check to the preferred phone
+// alone made the badge silently miss records where the just-edited phone
+// wasn't the one being displayed — looking stale until something else (e.g. a
+// different phone becoming preferred, or a full reload re-deriving state)
+// happened to surface it. Checking every phone on the record keeps the number
+// shown privacy-conscious while making the aggregate warning badge accurate
+// and immediate.
+const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
   const flags: PrivacyFlag[] = [];
 
-  if (phone.confidential) {
+  if (phones.some((phone) => phone.confidential)) {
     flags.push("Confidencial");
   }
 
-  if (phone.noPatientSharing) {
+  if (phones.some((phone) => phone.noPatientSharing)) {
     flags.push("No facilitar a pacientes");
   }
 
@@ -146,15 +253,7 @@ export const DirectoryPage = () => {
     settings,
     query,
     selectedRecordId,
-    selectedType,
-    selectedArea,
-    selectedTags,
-    showInactive,
     setQuery,
-    setSelectedType,
-    setSelectedArea,
-    setSelectedTags,
-    setShowInactive,
     setSelectedRecordId,
     isLoading,
     ensureBootstrapLoaded
@@ -164,42 +263,18 @@ export const DirectoryPage = () => {
   useEffect(() => {
     void ensureBootstrapLoaded();
   }, []);
-  const availableTypes = useMemo(() => contacts?.catalogs.recordTypes ?? [], [contacts]);
-  const availableAreas = useMemo(() => contacts?.catalogs.areas ?? [], [contacts]);
-  const availableTags = useMemo(() => {
-    if (!contacts) {
-      return [];
-    }
-
-    const tagsByNormalizedValue = new Map<string, string>();
-
-    contacts.records.forEach((record) => {
-      record.tags.forEach((tag) => {
-        const trimmedTag = tag.trim();
-
-        if (trimmedTag.length === 0) {
-          return;
-        }
-
-        const normalizedTag = normalizeTag(trimmedTag);
-
-        if (!tagsByNormalizedValue.has(normalizedTag)) {
-          tagsByNormalizedValue.set(normalizedTag, trimmedTag);
-        }
-      });
-    });
-
-    return Array.from(tagsByNormalizedValue.values()).sort((left, right) => tagLabelIntl.compare(left, right));
-  }, [contacts]);
   const deferredQuery = useDeferredValue(query);
+  // OIR-231: filters removed from the UI — only free-text search remains.
+  // `showInactive: true` keeps every record (active + inactive) visible since
+  // there is no longer any UI control to distinguish or hide by status.
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
         contacts?.records ?? [],
         deferredQuery,
-        { selectedType, selectedArea, selectedTags, showInactive }
+        { selectedType: "all", selectedArea: "all", selectedTags: [], showInactive: true }
       ),
-    [contacts, deferredQuery, selectedType, selectedArea, selectedTags, showInactive]
+    [contacts, deferredQuery]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
@@ -211,32 +286,11 @@ export const DirectoryPage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredQuery, selectedType, selectedArea, selectedTags, showInactive]);
+  }, [deferredQuery]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
-
-  useEffect(() => {
-    if (selectedTags.length === 0) {
-      return;
-    }
-
-    const normalizedToAvailableTag = new Map(
-      availableTags.map((tag) => [normalizeTag(tag), tag] as const)
-    );
-    const nextSelectedTags = selectedTags.flatMap((tag) => {
-      const matchingTag = normalizedToAvailableTag.get(normalizeTag(tag));
-      return matchingTag ? [matchingTag] : [];
-    });
-    const hasChanged =
-      nextSelectedTags.length !== selectedTags.length ||
-      nextSelectedTags.some((tag, index) => tag !== selectedTags[index]);
-
-    if (hasChanged) {
-      setSelectedTags(nextSelectedTags);
-    }
-  }, [availableTags, selectedTags, setSelectedTags]);
 
   useEffect(() => {
     if (currentPageRecords.length === 0) {
@@ -255,6 +309,27 @@ export const DirectoryPage = () => {
 
   const listRef = useRef<HTMLUListElement>(null);
   const detailRef = useRef<HTMLElement>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+
+  // OIR-218: keep --directory-filterbar-height in sync with the sticky filter
+  // bar's real rendered height (it grows when active-filter chips appear).
+  // Guarded for environments without ResizeObserver (e.g. jsdom in tests).
+  useLayoutEffect(() => {
+    const filterBarEl = filterBarRef.current;
+    if (!filterBarEl || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const applyHeight = () => {
+      document.documentElement.style.setProperty(FILTER_BAR_HEIGHT_CSS_VAR, `${filterBarEl.getBoundingClientRect().height}px`);
+    };
+
+    applyHeight();
+    const observer = new ResizeObserver(applyHeight);
+    observer.observe(filterBarEl);
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
     if (currentPageRecords.length === 0) {
@@ -367,56 +442,30 @@ export const DirectoryPage = () => {
     return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
   }
 
-  const handleTypeChange = (value: string) => {
-    if (value === "all" || availableTypes.includes(value as RecordType)) {
-      setSelectedType(value as RecordType | "all");
-      return;
-    }
-
-    setSelectedType("all");
-  };
-
-  const handleAreaChange = (value: string) => {
-    if (value === "all" || availableAreas.includes(value as AreaType)) {
-      setSelectedArea(value as AreaType | "all");
-      return;
-    }
-
-    setSelectedArea("all");
-  };
-
-  const handleClearFilters = () => {
-    setQuery("");
-    setSelectedType("all");
-    setSelectedArea("all");
-    setSelectedTags([]);
-    setShowInactive(false);
-  };
-
-  const handleTagChange = (value: string) => {
-    if (value === "all") {
-      setSelectedTags([]);
-      return;
-    }
-
-    if (availableTags.includes(value)) {
-      setSelectedTags([value]);
-      return;
-    }
-
-    setSelectedTags([]);
-  };
-
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
 
   return (
-    <section aria-labelledby="directory-page-title" className="flex flex-col gap-5">
-      {/* Search Header */}
-      <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+    <section
+      aria-labelledby="directory-page-title"
+      // OIR-218: --directory-page-chrome mirrors AppShell's <main> vertical
+      // padding (py-5 / sm:py-6 / lg:py-8) plus this section's own gap-5,
+      // breakpoint-for-breakpoint, so BOUNDED_CONTENT_MAX_HEIGHT's 100vh
+      // subtraction always matches the real rendered chrome — see the
+      // PAGE_CHROME_CSS_VAR comment above for the exact math.
+      className="flex flex-col gap-5 [--directory-page-chrome:3.75rem] sm:[--directory-page-chrome:4.25rem] lg:[--directory-page-chrome:5.25rem]"
+    >
+      {/* Search Header — sticky (OIR-218): stays visible below the app header while
+          the results list/detail panel scroll. */}
+      <div
+        ref={filterBarRef}
+        style={{ top: FILTER_BAR_STICKY_TOP }}
+        className="sticky z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5"
+      >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
+          {/* OIR-231: filters removed — only the free-text search remains. */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -433,140 +482,41 @@ export const DirectoryPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            <div className="w-full md:w-48">
-              <SelectField
-                id="directory-type-filter"
-                label="Tipo"
-                value={selectedType}
-                onChange={handleTypeChange}
-                options={[
-                  { value: "all", label: typeLabels.all },
-                  ...availableTypes.map((type) => ({ value: type, label: typeLabels[type] }))
-                ]}
-              />
-            </div>
-            <div className="w-full md:w-48">
-              <SelectField
-                id="directory-area-filter"
-                label="Área"
-                value={selectedArea}
-                onChange={handleAreaChange}
-                options={[
-                  { value: "all", label: areaLabels.all },
-                  ...availableAreas.map((area) => ({ value: area, label: areaLabels[area] }))
-                ]}
-              />
-            </div>
-            {availableTags.length > 0 || selectedTags.length > 0 ? (
-              <div className="w-full md:w-48">
-                <SelectField
-                  id="directory-tag-filter"
-                  label="Etiqueta"
-                  value={selectedTags[0] ?? "all"}
-                  onChange={handleTagChange}
-                  options={[
-                    { value: "all", label: "Todas las etiquetas" },
-                    ...availableTags.map((tag) => ({ value: tag, label: tag }))
-                  ]}
-                />
-              </div>
-            ) : null}
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(event) => setShowInactive(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
-              />
-              <span className="text-sm font-medium text-slate-700">Mostrar inactivos</span>
-            </label>
-            <p
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              className="text-xs font-medium text-slate-500"
-            >
-              {visibleRecords.length} resultados
-            </p>
+          {/* OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets.
+              Clicking a chip sets `query` (the same state the search input above
+              controls) to the exact department name, reusing the existing
+              free-text search — no new filter mechanism. Clicking the active
+              chip again clears the query back to an unfiltered view. */}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Accesos rápidos por libro">
+            {BOOK_SHORTCUTS.map((book) => {
+              const isActive = query === book;
+              return (
+                <button
+                  key={book}
+                  type="button"
+                  onClick={() => setQuery(isActive ? "" : book)}
+                  aria-pressed={isActive}
+                  className={[
+                    "focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    isActive
+                      ? "border-scs-blue bg-scs-blue text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  ].join(" ")}
+                >
+                  {book}
+                </button>
+              );
+            })}
           </div>
-          {(query || selectedType !== "all" || selectedArea !== "all" || selectedTags.length > 0 || showInactive) && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              {query ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {query}
-                  <button
-                    type="button"
-                    aria-label="Eliminar filtro: búsqueda"
-                    onClick={() => setQuery("")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedType !== "all" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {typeLabels[selectedType]}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${typeLabels[selectedType]}`}
-                    onClick={() => setSelectedType("all")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedArea !== "all" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {areaLabels[selectedArea]}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${areaLabels[selectedArea]}`}
-                    onClick={() => setSelectedArea("all")}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              {selectedTags.map((tag) => (
-                <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  #{tag}
-                  <button
-                    type="button"
-                    aria-label={`Eliminar filtro: ${tag}`}
-                    onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {showInactive ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  Inactivos
-                  <button
-                    type="button"
-                    aria-label="Eliminar filtro: Inactivos"
-                    onClick={() => setShowInactive(false)}
-                    className="focus-ring touch-target ml-0.5 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="focus-ring rounded-full px-2 py-1 font-semibold text-scs-blue transition hover:text-scs-blueDark"
-              >
-                Limpiar
-              </button>
-            </div>
-          )}
+          <p
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="text-xs font-medium text-slate-500"
+          >
+            {visibleRecords.length} resultados
+          </p>
         </div>
       </div>
 
@@ -574,12 +524,52 @@ export const DirectoryPage = () => {
       <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
         
         {/* Left Column: Results List */}
-        <div className="flex flex-col gap-3">
-          <ul ref={listRef} onKeyDown={handleListKeyDown} aria-label="Resultados del directorio" className="flex flex-col gap-3">
+        {/* OIR-218 (fix): the height budget is bounded on THIS column, not just the
+            <ul>, so the pagination nav below is always part of the same bounded
+            box and never pushed below the fold. The <ul> is a flex child
+            (flex-1 min-h-0) that only shrinks and scrolls internally for the
+            leftover space once the (always-visible) pagination nav is accounted
+            for — previously the nav sat outside the bounded area entirely, so it
+            was only reachable via page-level scroll that the internal list's own
+            scrollbar silently absorbed. */}
+        <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 flex-col gap-3">
+          <ul
+            ref={listRef}
+            onKeyDown={handleListKeyDown}
+            aria-label="Resultados del directorio"
+            // OIR-218 (fix): overflow-y-auto turns this into a scroll container, which
+            // also computes overflow-x to "auto" per spec and clips any ink outside the
+            // padding box — including the selected card's `ring-1 ring-scs-blue` box
+            // shadow, which was getting cut off on the left/right edges since the list
+            // previously had 0 left padding and only 4px (pr-1) on the right. `px-1`
+            // gives the 1px ring room to render fully on both sides; `-mx-1` cancels
+            // that padding back out at the box level so the cards stay visually flush
+            // with the pagination nav and other siblings below (same rendered width).
+            //
+            // OIR-218 (follow-up): the same clipping happens on the TOP/BOTTOM edges
+            // — the scroll container's padding-box boundary (where scrolling starts
+            // and ends) clips the ring's box-shadow there too, most visibly on the
+            // first/last card. `py-1 -my-1` mirrors the horizontal fix vertically.
+            // This <ul> is `flex-1` with `flex-basis: 0%` inside a `min-h-0` flex
+            // column, so its rendered (margin-box) height is whatever main-axis space
+            // is left over after the sibling empty-state/pagination nav and `gap-3`
+            // are accounted for — that leftover amount is fixed by the flex layout,
+            // not by this element's own padding/margin. Pulling in `-my-1` frees up
+            // 4px top+bottom from the margin box, which flex-grow then hands straight
+            // back to this item's border-box height (net height unchanged), and
+            // `py-1` claims that same 4px as padding so the ring has room to render.
+            // The <ul>'s outer edges — and therefore the overall bounded column's
+            // height budget from BOUNDED_CONTENT_MAX_HEIGHT — are unaffected, so this
+            // cannot reintroduce the page-level scroll fixed by the max-height/
+            // min-h-0/overflow-y-auto pattern above (verified by the zero-page-scroll
+            // e2e assertion).
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-1 -mx-1 -my-1"
+          >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
-            const privacyFlags = getPhoneInlinePrivacyFlags(primaryPhone);
+            const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
+            const serviceLine = getListServiceLine(record.organization, record.displayName);
 
             return (
               <li key={record.id}>
@@ -595,24 +585,22 @@ export const DirectoryPage = () => {
                       : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
                   ].join(" ")}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-semibold text-scs-blueDark">{record.displayName}</h3>
-                      <p className="truncate text-xs text-slate-500">
-                        {typeLabels[record.type]} · {record.organization.department ?? "Sin unidad"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      {record.status === "inactive" ? (
-                        <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          Inactivo
-                        </span>
-                      ) : null}
-                    </div>
+                  <div className="min-w-0">
+                    {/* OIR-234: prefix the title with the service when it adds context
+                        beyond displayName (see buildDisplayTitle). */}
+                    <h3 className="truncate font-semibold text-scs-blueDark">
+                      {buildDisplayTitle(record.displayName, record.organization)}
+                    </h3>
+                    {/* OIR-229: role/job title (ODS "Categoría") is the only thing that
+                        distinguishes same-department contacts in the list — shown on its
+                        own line directly under the title. */}
+                    {record.organization.role ? (
+                      <p className="truncate text-xs font-medium text-slate-600">{record.organization.role}</p>
+                    ) : null}
                   </div>
-                  <p className="mt-2 truncate text-sm text-slate-600">
-                    {record.organization.service ?? areaLabels[record.organization.area ?? "none"]}
-                  </p>
+                  {/* OIR-233: skip this line entirely when the service value is just a
+                      duplicate of the displayName above (see getListServiceLine). */}
+                  {serviceLine ? <p className="mt-2 truncate text-sm text-slate-600">{serviceLine}</p> : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
                     {privacyFlags.length > 0 && (
@@ -628,17 +616,17 @@ export const DirectoryPage = () => {
           })}
           </ul>
           {visibleRecords.length === 0 && contacts.records.length === 0 && (
-            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               La agenda está vacía. Añade el primer contacto para empezar.
             </div>
           )}
           {visibleRecords.length === 0 && contacts.records.length > 0 && (
-            <div role="status" aria-live="polite" className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
+            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
               No se han encontrado resultados para esta búsqueda.
             </div>
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
-            <nav aria-label="Paginación de resultados" className="rounded-2xl border border-slate-200 bg-white p-2">
+            <nav aria-label="Paginación de resultados" className="shrink-0 rounded-2xl border border-slate-200 bg-white p-2">
               <div className="flex flex-wrap items-center justify-center gap-1.5">
                 <button
                   type="button"
@@ -697,37 +685,52 @@ export const DirectoryPage = () => {
         </div>
 
         {/* Right Column: Detail View (Sticky) */}
-        <section ref={detailRef} aria-label="Detalle del registro seleccionado" onKeyDown={handleDetailKeyDown} className="lg:sticky lg:top-6">
-          <div className="rounded-3xl bg-white p-6 shadow-panel sm:p-8">
+        <section
+          ref={detailRef}
+          aria-label="Detalle del registro seleccionado"
+          onKeyDown={handleDetailKeyDown}
+          style={{ top: STICKY_CONTENT_TOP }}
+          className="lg:sticky"
+        >
+          {/* OIR-218: bounded to the available viewport height with overflow-y-auto
+              — no scrollbar appears while content fits; it only scrolls internally
+              (never growing the page) when a record has enough phones/emails/socials
+              to genuinely overflow. */}
+          <div
+            style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
+            className="overflow-y-auto rounded-3xl bg-white p-6 shadow-panel sm:p-8"
+          >
             <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
             {selectedRecord ? (
               <div className="space-y-6">
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-scs-blue ring-1 ring-slate-200">
-                          {typeLabels[selectedRecord.type]}
-                        </span>
-                        {selectedRecord.status === "inactive" ? (
-                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                            Inactivo
-                          </span>
-                        ) : null}
-                        {selectedRecordPrivacyFlags.map((flag) => (
-                          <span
-                            key={flag}
-                            className={flag === "Confidencial"
-                              ? "rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
-                              : "rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"}
-                          >
-                            {flag}
-                          </span>
-                        ))}
-                      </div>
-                      <h4 className="mt-4 max-w-4xl text-3xl font-semibold leading-tight text-scs-blueDark sm:text-4xl">
-                        {selectedRecord.displayName}
+                      {/* OIR-233: the type pill (e.g. "SERVICIO") was removed as noise —
+                          only render this row (and its top margin to the title below)
+                          when there's an actual privacy-flag pill to show. */}
+                      {selectedRecordPrivacyFlags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {selectedRecordPrivacyFlags.map((flag) => (
+                            <span
+                              key={flag}
+                              className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                            >
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {/* OIR-234: prefix the title with the service when it adds context
+                          beyond displayName (see buildDisplayTitle). */}
+                      <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
+                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization)}
                       </h4>
+                      {/* OIR-229: role/job title (ODS "Categoría") shown alongside the
+                          detail header so it's visible without extra clicks. */}
+                      {selectedRecord.organization.role ? (
+                        <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
+                      ) : null}
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
@@ -739,45 +742,51 @@ export const DirectoryPage = () => {
                   </div>
                 </div>
 
-                <div className={selectedRecord.location ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"}>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <dl className="grid gap-4 sm:grid-cols-3">
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unidad</dt>
-                        <dd className="mt-3 break-words text-base font-semibold text-slate-900 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.department ?? "Sin unidad"}
-                        </dd>
-                      </div>
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Servicio</dt>
-                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
-                          {selectedRecord.organization.service ?? "Sin servicio"}
-                        </dd>
-                      </div>
-                      <div className="min-w-0">
-                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Área</dt>
-                        <dd className="mt-3 break-words text-sm font-medium text-slate-700 [overflow-wrap:anywhere]">
-                          {areaLabels[selectedRecord.organization.area ?? "none"]}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
+                {/* OIR-238: promoted from a conditional inline subtitle (OIR-236) to its
+                    own always-visible card, matching Ubicación below — the composed
+                    title (buildDisplayTitle) can obscure or reshape the raw name, so the
+                    canonical displayName should always be visible on its own, not just
+                    when the title happens to be composed.
 
-                  {selectedRecord.location && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
-                      <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                        {[
-                          selectedRecord.location.building,
-                          selectedRecord.location.floor,
-                          selectedRecord.location.room,
-                          selectedRecord.location.text
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "Sin ubicación detallada"}
-                      </p>
-                    </div>
-                  )}
+                    OIR-240 regression fix: OIR-238 rendered selectedRecord.displayName
+                    unconditionally, which duplicates the Servicio value whenever
+                    displayName is not a genuinely distinct name (e.g. a blank ODS
+                    "Nombre" column falls back to the service label itself — see
+                    normalizeServiceSheet).
+
+                    OIR-241 correction: OIR-240 gated this on serviceContainsDisplayName
+                    (the broader substring check meant only for title-composition
+                    dedup in buildDisplayTitle), which wrongly hid genuine names whose
+                    service happens to contain them as a substring for unrelated
+                    data-entry reasons (e.g. displayName="Francisco Artíles" /
+                    service="Cocina Francisco Artíles" — a real, distinct name, not a
+                    fallback copy). The "blank Nombre column falls back to service
+                    verbatim" case always produces an EXACT match, never a partial
+                    one, so the correct check here is isDuplicateOfDisplayName
+                    (OIR-233's exact-equality helper), not serviceContainsDisplayName.
+                    buildDisplayTitle's use of serviceContainsDisplayName for title
+                    composition is a separate concern and is unaffected. */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
+                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                    {isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName)
+                      ? "Sin nombre y apellidos registrado"
+                      : selectedRecord.displayName}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
+                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                    {[
+                      selectedRecord.location?.building,
+                      selectedRecord.location?.floor,
+                      selectedRecord.location?.room,
+                      selectedRecord.location?.text
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "Sin ubicación detallada"}
+                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -810,11 +819,6 @@ export const DirectoryPage = () => {
                           {phone.confidential && (
                             <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
                               Confidencial
-                            </span>
-                          )}
-                          {phone.noPatientSharing && (
-                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                              No pacientes
                             </span>
                           )}
                         </div>

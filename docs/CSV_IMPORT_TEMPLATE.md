@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the MVP CSV contract for importing hospital directory data into the application.
+This document defines the current CSV contract for importing hospital directory data into the application.
 
 The importer is designed for a **normalized CSV template**, not for arbitrary raw spreadsheet exports. If the original `.ods` file is visually structured or inconsistent, it should be cleaned into this template before import.
 
@@ -53,6 +53,8 @@ In addition, each row must contain at least one of the following after normaliza
 - `department`
 - `service`
 - `specialty`
+- `role` (OIR-222 — job title/role, e.g. "Enfermero/a", "Doctora/or")
+- `schedule` (OIR-222 — operating hours, e.g. "8:00-22:00")
 
 ### Location
 
@@ -60,6 +62,8 @@ In addition, each row must contain at least one of the following after normaliza
 - `floor`
 - `room`
 - `locationText`
+- `sector` (OIR-222 — distinct sub-area, e.g. "Laboratorio", "Enfermería")
+- `section` (OIR-222 — distinct sub-unit label, e.g. "Despacho", "Consulta")
 
 ### Phones
 
@@ -113,7 +117,7 @@ Allowed values:
 
 ### `area`
 
-Recommended MVP values:
+Recommended values:
 
 - `sanitaria-asistencial`
 - `gestion-administracion`
@@ -145,8 +149,8 @@ Allowed values:
 - `type` -> `record.type`
 - `displayName` -> `record.displayName`
 - `firstName` + `lastName` -> `record.person`
-- `area`, `department`, `service`, `specialty` -> `record.organization`
-- `building`, `floor`, `room`, `locationText` -> `record.location`
+- `area`, `department`, `service`, `specialty`, `role`, `schedule` -> `record.organization`
+- `building`, `floor`, `room`, `locationText`, `sector`, `section` -> `record.location`
 - `tags` -> `record.tags`
 - `aliases` -> `record.aliases`
 - `notes` -> `record.notes`

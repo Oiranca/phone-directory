@@ -9,8 +9,17 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { blankRecord, buildStableExternalId, normalizeServiceSheet } from "./spreadsheet-parsers.js";
+import {
+  blankRecord,
+  buildStableExternalId,
+  normalizeServiceSheet,
+  normalizeTabularAgendaSheet,
+  isAgendaTabularHeader,
+  stripPlantaPrefix,
+  AGENDA_TABULAR_HEADER_MARKERS,
+} from "./spreadsheet-parsers.js";
 import type { SheetData, SheetProfile } from "./spreadsheet-parsers.js";
+import { parseSiNoFlag } from "./spreadsheet-normalize.js";
 
 // ---------------------------------------------------------------------------
 // blankRecord
@@ -144,7 +153,11 @@ describe("blankRecord", () => {
       "phone2NoPatientSharing",
       "phone2Notes",
       "phone2Number",
+      "role",
       "room",
+      "schedule",
+      "section",
+      "sector",
       "service",
       "social1Handle",
       "social1IsPrimary",
@@ -361,5 +374,466 @@ describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", ()
     const { records } = normalizeServiceSheet(sheet, makeProfile("URGENCIAS"));
     expect(records).toHaveLength(1);
     expect(records[0]!.phone1Number).toBe("928123456");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeServiceSheet — OIR-227 residual gap (Comentarios must not
+// duplicate onto phone-level notes)
+// ---------------------------------------------------------------------------
+
+describe("normalizeServiceSheet — OIR-227 residual fix (notes duplication)", () => {
+  it("does NOT duplicate note text onto phone-level notes (record.notes stays the source of truth)", () => {
+    const sheet = makeSheet("Guardia", [
+      ["Guardia", "928123456", "Turno de tarde"],
+    ]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("Guardia"));
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ notes?: string }>;
+
+    // Record-level notes still carries the note text.
+    expect(records[0]!.notes).toBe("Turno de tarde");
+    // Phone-level notes must be absent, not a copy of the record-level notes.
+    expect(phones[0]!.notes).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeTabularAgendaSheet / isAgendaTabularHeader / stripPlantaPrefix (OIR-222)
+// ---------------------------------------------------------------------------
+
+const AGENDA_HEADER_ROW = [
+  "Nombre",
+  "Categoría",
+  "Servicio",
+  "Número 1",
+  "Número 2",
+  "Número 3",
+  "Número 4",
+  "Número 5",
+  "Número 6",
+  "Número 7",
+  "Horario",
+  "Confidencial",
+  "Edificio",
+  "Planta",
+  "Sector",
+  "Sección",
+  "Comentarios",
+];
+
+const makeAgendaProfile = (): SheetProfile => ({
+  parser: "tabular",
+  canonicalSlug: "agenda",
+  department: "",
+  area: undefined,
+  rowsToSkip: 1,
+  detectedFormat: "exportación cruda de agenda tabular",
+  detectionConfidence: "high",
+});
+
+/** Pads/truncates a sparse row description into the 17-column Agenda shape. */
+const agendaRow = (cells: Partial<Record<
+  "nombre" | "categoria" | "servicio" | "numero1" | "numero2" | "numero3" | "numero4" |
+  "numero5" | "numero6" | "numero7" | "horario" | "confidencial" | "edificio" | "planta" |
+  "sector" | "seccion" | "comentarios",
+  string
+>>): string[] => [
+  cells.nombre ?? "",
+  cells.categoria ?? "",
+  cells.servicio ?? "",
+  cells.numero1 ?? "",
+  cells.numero2 ?? "",
+  cells.numero3 ?? "",
+  cells.numero4 ?? "",
+  cells.numero5 ?? "",
+  cells.numero6 ?? "",
+  cells.numero7 ?? "",
+  cells.horario ?? "",
+  cells.confidencial ?? "",
+  cells.edificio ?? "",
+  cells.planta ?? "",
+  cells.sector ?? "",
+  cells.seccion ?? "",
+  cells.comentarios ?? "",
+];
+
+describe("isAgendaTabularHeader", () => {
+  it("matches the exact real 17-column Agenda header", () => {
+    expect(isAgendaTabularHeader(AGENDA_HEADER_ROW)).toBe(true);
+  });
+
+  it("matches regardless of accent/case/whitespace differences (normalizeMarker)", () => {
+    const messy = AGENDA_HEADER_ROW.map((h) => h.toUpperCase());
+    expect(isAgendaTabularHeader(messy)).toBe(true);
+  });
+
+  it("has exactly 17 markers matching AGENDA_TABULAR_HEADER_MARKERS", () => {
+    expect(AGENDA_TABULAR_HEADER_MARKERS).toHaveLength(17);
+  });
+
+  it("does NOT match when a column is missing (shorter header)", () => {
+    expect(isAgendaTabularHeader(AGENDA_HEADER_ROW.slice(0, 16))).toBe(false);
+  });
+
+  it("does NOT match an unrelated header (e.g. legacy service-sheet header)", () => {
+    expect(isAgendaTabularHeader(["Servicio", "Número", "Comentarios"])).toBe(false);
+  });
+
+  it("does NOT match when columns are reordered", () => {
+    const reordered = [...AGENDA_HEADER_ROW];
+    [reordered[0], reordered[1]] = [reordered[1]!, reordered[0]!];
+    expect(isAgendaTabularHeader(reordered)).toBe(false);
+  });
+});
+
+describe("stripPlantaPrefix", () => {
+  it("strips a leading 'Planta ' (case-insensitive) prefix", () => {
+    expect(stripPlantaPrefix("Planta 4")).toBe("4");
+    expect(stripPlantaPrefix("planta baja")).toBe("baja");
+    expect(stripPlantaPrefix("PLANTA Baja")).toBe("Baja");
+  });
+
+  it("leaves a value with no 'Planta ' prefix unchanged", () => {
+    expect(stripPlantaPrefix("4")).toBe("4");
+    expect(stripPlantaPrefix("Baja")).toBe("Baja");
+  });
+
+  it("returns an empty string for an empty/whitespace-only input", () => {
+    expect(stripPlantaPrefix("")).toBe("");
+    expect(stripPlantaPrefix("   ")).toBe("");
+  });
+});
+
+describe("parseSiNoFlag", () => {
+  it("recognizes 'Si' / 'Sí' case- and accent-insensitively as true", () => {
+    expect(parseSiNoFlag("Si")).toBe(true);
+    expect(parseSiNoFlag("sí")).toBe(true);
+    expect(parseSiNoFlag("SÍ")).toBe(true);
+    expect(parseSiNoFlag(" si ")).toBe(true);
+  });
+
+  it("treats anything else (including empty string) as false", () => {
+    expect(parseSiNoFlag("")).toBe(false);
+    expect(parseSiNoFlag("No")).toBe(false);
+    expect(parseSiNoFlag("sin")).toBe(false);
+    expect(parseSiNoFlag("true")).toBe(false);
+  });
+});
+
+describe("normalizeTabularAgendaSheet (OIR-222)", () => {
+  it("maps Servicio -> displayName/service when Nombre is empty", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Admisión Central", numero1: "79649" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    expect(records[0]!.displayName).toBe("Admisión Central");
+    expect(records[0]!.service).toBe("Admisión Central");
+  });
+
+  it("prefers Nombre over Servicio for displayName when both are present", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ nombre: "Nereida", servicio: "Alergia", numero1: "79162" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.displayName).toBe("Nereida");
+    expect(records[0]!.service).toBe("Alergia");
+  });
+
+  it("maps Categoría -> role and Horario -> schedule (new fields, OIR-222)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Admisión Central Secretaría", categoria: "Secretario/a", horario: "8:00-22:00", numero1: "70010" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.role).toBe("Secretario/a");
+    expect(records[0]!.schedule).toBe("8:00-22:00");
+  });
+
+  it("maps Edificio -> building and Planta -> floor, stripping the 'Planta ' prefix", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Enfermedades Emergentes Control (Planta 1)", edificio: "Hospital Polivalente", planta: "Planta 1", numero1: "75348" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.building).toBe("Hospital Polivalente");
+    expect(records[0]!.floor).toBe("1");
+  });
+
+  it("maps Sector -> location.sector and Sección -> location.section (new fields, OIR-222)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Anatomía Patológica - Laboratorio", sector: "Laboratorio", numero1: "79543" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.sector).toBe("Laboratorio");
+
+    const sheet2 = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Alergia", categoria: "Enfermero/a", seccion: "Enfermería", numero1: "79198" }),
+    ]);
+    const records2 = normalizeTabularAgendaSheet(sheet2, makeAgendaProfile());
+    expect(records2[0]!.section).toBe("Enfermería");
+  });
+
+  it("maps Comentarios -> notes", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Aparcamiento", numero1: "928411034", comentarios: "Personal de la casa" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.notes).toBe("Personal de la casa");
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-227 — Comentarios must not duplicate onto phone-level notes
+  // ---------------------------------------------------------------------------
+
+  it("does NOT duplicate Comentarios onto phone-level notes (record.notes stays the source of truth)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Donaciones",
+        numero1: "79454",
+        comentarios: "Dónde donar: 8:30-14:30 sala de donantes",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ notes?: string }>;
+
+    // Record-level notes still carries the Comentarios text.
+    expect(records[0]!.notes).toBe("Dónde donar: 8:30-14:30 sala de donantes");
+    expect(records[0]!.phone1Notes).toBe("");
+    // Phone-level notes must be absent, not a copy of Comentarios.
+    expect(phones[0]!.notes).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-227 — "Principal" must never be auto-assigned on import
+  // ---------------------------------------------------------------------------
+
+  it("does not mark any imported phone as isPrimary by default, even the first one", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Admisión Central",
+        numero1: "79649",
+        numero2: "79650",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ isPrimary: boolean }>;
+
+    expect(phones.every((p) => p.isPrimary === false)).toBe(true);
+    expect(records[0]!.phone1IsPrimary).toBe("false");
+    expect(records[0]!.phone2IsPrimary).toBe("false");
+  });
+
+  it("extracts a phone from every populated Número 1-7 column (up to 7)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Anatomía Patológica - Laboratorio",
+        numero1: "79543",
+        numero2: "79544",
+        numero3: "79545",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string }>;
+    expect(phones.map((p) => p.number)).toEqual(["79543", "79544", "79545"]);
+  });
+
+  it("Confidencial 'Si' sets confidential=true on ALL phones for that row, not just the first (OIR-222 Step 3)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({
+        servicio: "Anatómico Forense (Medicina Legal)",
+        numero1: "56884",
+        numero2: "677980175",
+        confidencial: "Si",
+      }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string; confidential: boolean }>;
+    expect(phones).toHaveLength(2);
+    expect(phones.every((p) => p.confidential)).toBe(true);
+    expect(records[0]!.phone1Confidential).toBe("true");
+    expect(records[0]!.phone2Confidential).toBe("true");
+  });
+
+  it("leaves confidential=false on all phones when Confidencial is empty", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Admisión Central", numero1: "79649", numero2: "79650" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ confidential: boolean }>;
+    expect(phones.every((p) => !p.confidential)).toBe(true);
+  });
+
+  it("recognizes 'Sí' (with accent) the same as 'Si'", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Test", numero1: "12345", confidencial: "Sí" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ confidential: boolean }>;
+    expect(phones[0]!.confidential).toBe(true);
+  });
+
+  it("excludes a section-divider row (single non-empty cell in column 0, e.g. 'Letra A')", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      ["Letra A", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      agendaRow({ servicio: "Admisión Central", numero1: "79649" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    expect(records[0]!.displayName).toBe("Admisión Central");
+  });
+
+  it("excludes a row with no Nombre and no Servicio (nothing to build a displayName from)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ numero1: "12345" }), // phone with no name/service at all
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(0);
+  });
+
+  it("produces distinct externalIds for two rows with the same displayName/service", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Alergia", categoria: "Enfermero/a", numero1: "79198" }),
+      agendaRow({ servicio: "Alergia", categoria: "Doctora/or", numero1: "79196" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(2);
+    expect(records[0]!.externalId).not.toBe(records[1]!.externalId);
+  });
+
+  // -------------------------------------------------------------------------
+  // OIR-224 — Categoría -> type mapping (primary, with heuristic fallback)
+  // -------------------------------------------------------------------------
+
+  it("maps a known Categoría value ('Enfermero/a') to type 'person' (OIR-224 primary mechanism)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Alergia", categoria: "Enfermero/a", numero1: "79198" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("person");
+  });
+
+  it("maps a known leadership Categoría value ('Jefe/a') to type 'supervision' (OIR-224 primary mechanism)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Almacén", categoria: "Jefe/a", numero1: "70263" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("supervision");
+  });
+
+  it("matches a Categoría value case-insensitively (real-file case variant 'Jefe/a de estudio' vs 'Jefe/a De Estudio')", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Test", categoria: "jefe/a de estudio", numero1: "11111" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.type).toBe("supervision");
+  });
+
+  it("defaults to 'other' (no keyword guessing) when Categoría is blank", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Supervisión de Enfermería", numero1: "22222" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    // OIR-230: no Categoría mapping applies (blank) — type is never guessed
+    // from displayName keywords, so it defaults to the neutral "other".
+    expect(records[0]!.type).toBe("other");
+  });
+
+  it("defaults to 'other' (no keyword guessing) when Categoría has no mapped entry", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Sala De Espera", categoria: "Un Valor Sin Mapear", numero1: "33333" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    // OIR-230: unmapped Categoría — type is never guessed from displayName
+    // keywords, so it defaults to the neutral "other".
+    expect(records[0]!.type).toBe("other");
+  });
+
+  it("still populates role from Categoría even when Categoría also drives type (OIR-222 behavior preserved)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Enfermedades Emergentes (Despacho)", categoria: "Auxiliar Administrativo/a", numero1: "75340" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.role).toBe("Auxiliar Administrativo/a");
+    expect(records[0]!.type).toBe("person");
+  });
+
+  // -------------------------------------------------------------------------
+  // OIR-224 — área is left blank for Agenda-imported records
+  // -------------------------------------------------------------------------
+
+  it("leaves área blank instead of guessing one from Servicio/displayName (no genuine Área column in the real file)", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      // "Admisión" would previously have driven inferAreaFromLabel to guess
+      // "gestion-administracion" — that guess must no longer happen.
+      agendaRow({ servicio: "Admisión Central", numero1: "79649" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records[0]!.area).toBe("");
+  });
+
+  // -------------------------------------------------------------------------
+  // Inserted "Fax" column (e.g. the real "Sindicatos" sheet)
+  // -------------------------------------------------------------------------
+
+  const AGENDA_HEADER_ROW_WITH_FAX = [
+    ...AGENDA_HEADER_ROW.slice(0, 10),
+    "Fax",
+    ...AGENDA_HEADER_ROW.slice(10),
+  ];
+
+  it("maps a value in an inserted Fax column to a phone entry with kind 'fax'", () => {
+    const rowWithFax = [
+      "Juan Pérez", // Nombre
+      "Enfermero/a", // Categoría
+      "Urgencias", // Servicio
+      "11111", "", "", "", "", "", "", // Número 1..7
+      "912345678", // Fax
+      "", "", "", "", "", "", "", // Horario..Comentarios
+    ];
+    const sheet = makeSheet("Sindicatos", [AGENDA_HEADER_ROW_WITH_FAX, rowWithFax]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string; kind: string }>;
+    const faxEntry = phones.find((entry) => entry.kind === "fax");
+    expect(faxEntry).toBeDefined();
+    expect(faxEntry?.number).toBe("912345678");
+  });
+
+  it("does not add a fax phone entry when the inserted Fax column is empty", () => {
+    const rowWithoutFax = [
+      "Juan Pérez", // Nombre
+      "Enfermero/a", // Categoría
+      "Urgencias", // Servicio
+      "11111", "", "", "", "", "", "", // Número 1..7
+      "", // Fax (empty)
+      "", "", "", "", "", "", "", // Horario..Comentarios
+    ];
+    const sheet = makeSheet("Sindicatos", [AGENDA_HEADER_ROW_WITH_FAX, rowWithoutFax]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ kind: string }>;
+    expect(phones.some((entry) => entry.kind === "fax")).toBe(false);
   });
 });

@@ -24,10 +24,12 @@ import type {
   EditableContactRecord,
   ExportContactsResult,
   ImportContactsResult,
+  PickAndImportDatasetResult,
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
 import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../schemas/busca.schema.js";
+import type { MergeContactsOverrides } from "../schemas/merge-contacts.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
 export interface HospitalDirectoryApi {
@@ -57,6 +59,10 @@ export interface HospitalDirectoryApi {
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
 
+  // OIR-219: unified single-picker import entry point. Opens one native
+  // dialog and dispatches by extension to importDataset()/previewCsvImport().
+  pickAndImportDataset: () => Promise<PickAndImportDatasetResult>;
+
   // Buscas — manual registry
   listBuscas: () => Promise<BuscaRecord[]>;
   addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
@@ -68,7 +74,11 @@ export interface HospitalDirectoryApi {
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;
-  mergeContacts: (req: { keepId: string; discardId: string }) => Promise<ContactRecord>;
+  mergeContacts: (req: {
+    keepId: string;
+    discardId: string;
+    overrides?: MergeContactsOverrides;
+  }) => Promise<ContactRecord>;
 
   // Push events from main → renderer
   onAutoBackupFailure: (listener: (event: AutoBackupFailureEvent) => void) => () => void;

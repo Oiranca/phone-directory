@@ -4,7 +4,9 @@ import {
   auditLogEntrySchema,
   appSettingsSchema,
   contactRecordSchema,
+  customFieldSchema,
   directoryDatasetSchema,
+  editableContactRecordSchema,
   phoneContactSchema,
   emailContactSchema,
 } from "./contact";
@@ -16,6 +18,7 @@ import type {
   AutoBackupSettings,
   AutoBackupTrigger,
   ContactRecord,
+  CustomField,
   DirectoryDataset,
   EditableAppSettings,
   EmailContact,
@@ -163,5 +166,103 @@ describe("OIR-118 serialization parity — derived types round-trip identically"
     // Compile-time proof: an empty object is assignable to AuditLogQueryParams
     const params: AuditLogQueryParams = {};
     expect(params).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-232: custom key-value fields — schema validation.
+// ---------------------------------------------------------------------------
+
+describe("customFieldSchema", () => {
+  it("accepts a valid custom field", () => {
+    const fixture: CustomField = { id: "cf_001", key: "Número extranjero", value: "+34 600 000 000" };
+    expect(customFieldSchema.parse(fixture)).toEqual(fixture);
+  });
+
+  it("rejects a custom field missing required properties", () => {
+    expect(() => customFieldSchema.parse({ id: "cf_001", key: "Número extranjero" })).toThrow(ZodError);
+  });
+});
+
+describe("contactRecordSchema.customFields", () => {
+  const recordFixture = defaultContacts.records[0]!;
+
+  it("accepts a record with valid customFields", () => {
+    const fixture = {
+      ...recordFixture,
+      customFields: [{ id: "cf_001", key: "Número extranjero", value: "+34 600 000 000" }],
+    };
+    const parsed: ContactRecord = contactRecordSchema.parse(fixture);
+    expect(parsed.customFields).toEqual(fixture.customFields);
+  });
+
+  it("is absent (backward compatible) on records without customFields", () => {
+    const parsed: ContactRecord = contactRecordSchema.parse(recordFixture);
+    expect(parsed.customFields).toBeUndefined();
+  });
+
+  it("rejects a record with a malformed customFields entry (missing value)", () => {
+    const fixture = {
+      ...recordFixture,
+      customFields: [{ id: "cf_001", key: "Número extranjero" }],
+    };
+    expect(() => contactRecordSchema.parse(fixture)).toThrow(ZodError);
+  });
+});
+
+describe("editableContactRecordSchema.customFields", () => {
+  const baseEditable = {
+    type: "person" as const,
+    displayName: "Test Contact",
+    organization: {},
+    contactMethods: { phones: [], emails: [] },
+    status: "active" as const,
+  };
+
+  it("accepts a payload with a valid custom field", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      customFields: [{ id: "cf_001", key: "Número extranjero", value: "+34 600 000 000" }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customFields).toEqual([
+        { id: "cf_001", key: "Número extranjero", value: "+34 600 000 000" },
+      ]);
+    }
+  });
+
+  it("rejects a custom field with an empty key", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      customFields: [{ id: "cf_001", key: "   ", value: "algo" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a custom field with an empty value", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      customFields: [{ id: "cf_001", key: "Número extranjero", value: "   " }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("trims key and value", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      customFields: [{ id: "cf_001", key: "  Número extranjero  ", value: "  +34 600 000 000  " }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customFields).toEqual([
+        { id: "cf_001", key: "Número extranjero", value: "+34 600 000 000" },
+      ]);
+    }
+  });
+
+  it("omitting customFields entirely is valid", () => {
+    const result = editableContactRecordSchema.safeParse(baseEditable);
+    expect(result.success).toBe(true);
   });
 });

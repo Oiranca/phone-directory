@@ -1,11 +1,11 @@
 #!/bin/sh
 USB_ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP="$USB_ROOT/mac-arm64/Phone Directory.app"
+APP="$USB_ROOT/mac-arm64/HospiAgenda.app"
 if [ ! -d "$APP" ]; then
-    APP="$USB_ROOT/mac/Phone Directory.app"
+    APP="$USB_ROOT/mac/HospiAgenda.app"
 fi
 if [ ! -d "$APP" ]; then
-    echo "ERROR: Cannot find Phone Directory.app in mac-arm64/ or mac/ at $USB_ROOT"
+    echo "ERROR: Cannot find HospiAgenda.app in mac-arm64/ or mac/ at $USB_ROOT"
     exit 1
 fi
 # NOTE: Launches the Mach-O binary directly (unsigned/unnotarized build assumed).
@@ -13,5 +13,5 @@ fi
 # In that case, switch to: open -a "$APP" and pass --portable via a CLI arg instead.
 # USB media is deployer-controlled; residual TOCTOU window between the -d check and backgrounded launch is accepted.
 nohup env ELECTRON_PORTABLE=1 ELECTRON_PORTABLE_ROOT_PATH="$USB_ROOT/portable-data" \
-    "$APP/Contents/MacOS/Phone Directory" </dev/null >/dev/null 2>&1 &
+    "$APP/Contents/MacOS/HospiAgenda" </dev/null >/dev/null 2>&1 &
 exit 0

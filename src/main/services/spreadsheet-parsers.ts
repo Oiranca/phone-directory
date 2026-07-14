@@ -27,7 +27,6 @@ import {
   detectPrivacy,
   cleanNoteFragments,
   dedupeKeepOrder,
-  classifyType,
   aliasesFromLabel,
   normalizeDisplayNameForMerge,
   normalizeNumberForDedup,
@@ -35,7 +34,9 @@ import {
   normalizeMarker,
   normalizeAscii,
   isExcludedLabel,
+  parseSiNoFlag,
 } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
 // ---------------------------------------------------------------------------
 // Record construction helpers (moved here from spreadsheet-normalize.ts to
@@ -53,10 +54,16 @@ export const blankRecord = (): NormalizedImportRow => ({
   department: "",
   service: "",
   specialty: "",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  role: "",
+  schedule: "",
   building: "",
   floor: "",
   room: "",
   locationText: "",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  sector: "",
+  section: "",
   phone1Label: "",
   phone1Number: "",
   phone1Extension: "",
@@ -119,7 +126,7 @@ export type SheetData = {
 export type DetectionConfidence = "high" | "medium" | "low";
 
 export type SheetProfile = {
-  parser: "centers" | "service";
+  parser: "centers" | "service" | "tabular";
   canonicalSlug: string;
   department: string;
   area?: string;
@@ -564,7 +571,10 @@ export const normalizeServiceSheet = (
         currentSection && currentSection !== metadata.department ? currentSection : "social",
         label
       ])}`;
-      record.type = classifyType(label, metadata.slug);
+      // OIR-230: type is never keyword-guessed from displayName/section text —
+      // service sheets have no Categoría-equivalent concept, so type defaults
+      // to the neutral "other" instead.
+      record.type = "other";
       record.displayName = label;
       record.area = metadata.area;
       record.department = metadata.department;
@@ -600,7 +610,10 @@ export const normalizeServiceSheet = (
       dedupedPhoneNumbers[0],
       dedupedPhoneNumbers[1]
     ])}`;
-    record.type = classifyType(label, metadata.slug);
+    // OIR-230: type is never keyword-guessed from displayName/section text —
+    // service sheets have no Categoría-equivalent concept, so type defaults
+    // to the neutral "other" instead.
+    record.type = "other";
     record.displayName = label;
     record.area = metadata.area;
     record.department = metadata.department;
@@ -609,21 +622,31 @@ export const normalizeServiceSheet = (
     record.notes = finalNotes;
     record.status = "active";
 
-    const phoneEntries = dedupedPhoneNumbers.map((number, index) => ({
+    const phoneEntries = dedupedPhoneNumbers.map((number) => ({
       number,
       label: sheet.name,
       kind: "internal",
-      isPrimary: index === 0,
+      // OIR-227: "Principal" is a manual, user-editable choice made on the
+      // contact's edit form (see PhonesSection.tsx) — it has no equivalent
+      // column in the source sheet, so it must never be auto-assigned to
+      // the first imported phone.
+      isPrimary: false,
       confidential: privacy.confidential,
       noPatientSharing: privacy.noPatientSharing,
-      notes: finalNotes || undefined
+      // OIR-227 (residual gap): Comentarios/notes belong to the contact, not
+      // to an individual phone — they are already stored at record.notes
+      // above. Duplicating them here caused the note text to render directly
+      // under the phone number instead of only in the contact's dedicated
+      // "Notas" section.
+      notes: undefined
     }));
     record.phones = JSON.stringify(phoneEntries);
 
     record.phone1Label = dedupedPhoneNumbers.length > 0 ? "Principal" : "";
     record.phone1Number = dedupedPhoneNumbers[0] ?? "";
     record.phone1Kind = dedupedPhoneNumbers.length > 0 ? "internal" : "";
-    record.phone1IsPrimary = dedupedPhoneNumbers.length > 0 ? "true" : "false";
+    // OIR-227: do not auto-assign "Principal" on import (see comment above).
+    record.phone1IsPrimary = "false";
     record.phone1Confidential = privacy.confidential ? "true" : "false";
     record.phone1NoPatientSharing = privacy.noPatientSharing ? "true" : "false";
     record.phone1Notes = finalNotes;
@@ -645,17 +668,492 @@ export const normalizeServiceSheet = (
 };
 
 // ---------------------------------------------------------------------------
+// Tabular Agenda-sheet parser (OIR-222)
+// ---------------------------------------------------------------------------
+
+/**
+ * OIR-224 — Categoría -> RecordType mapping for the Agenda tabular import
+ * path.
+ *
+ * Distinct "Categoría" values extracted directly from the hospital's real
+ * Agenda ODS export (23 values, verified against the source file). Keys are
+ * normalized with normalizeDisplayNameForMerge (trim + lowercase +
+ * diacritic-strip + collapse whitespace) so accidental case variants in the
+ * source data (e.g. "Jefe/a De Estudio" vs "Jefe/a de estudio") resolve to
+ * the same entry.
+ *
+ * THIS MAPPING IS A PROPOSED DEFAULT, NOT A FINAL PRODUCT DECISION — it is
+ * intentionally a reasonable best-guess mapping to unblock the Agenda import
+ * path, but it requires explicit user sign-off before being considered
+ * settled (see OIR-224 task notes). Roles denoting a specific individual's
+ * job function (nurse, doctor, secretary, technician, etc.) map to "person";
+ * roles denoting a leadership/oversight function (chief, supervisor,
+ * director, ward-study lead, etc.) map to "supervision", consistent with the
+ * existing displayName-keyword heuristic already mapping the substring
+ * "supervisi" to "supervision" (see classifyType above).
+ */
+export const AGENDA_CATEGORIA_TYPE_MAP: Record<string, string> = {
+  "enfermero/a": "person",
+  "doctora/or": "person",
+  "secretario/a": "person",
+  "jefe/a": "supervision",
+  "administrativo/a": "person",
+  "supervisor/a": "supervision",
+  "tecnico/a": "person",
+  "fotografo/a": "person",
+  "informatica/o": "person",
+  "ilustrador/a": "person",
+  dietista: "person",
+  "auxiliar administrativo/a": "person",
+  "directora/or": "supervision",
+  "jefe/a de estudio": "supervision",
+  "encargado/a": "supervision",
+  "fisico/a": "person",
+  "subdirectora/or": "supervision",
+  "gobernante/a": "supervision",
+  auxiliar: "person",
+  "ingeniera/o": "person",
+  periodista: "person",
+  "axuliar tecnico sanitario/a": "person"
+};
+
+/**
+ * Resolves a NormalizedImportRow `type` for an Agenda-tabular row (OIR-224,
+ * fallback removed OIR-230).
+ *
+ * Sole mechanism: look up the row's "Categoría" value (normalized) in
+ * AGENDA_CATEGORIA_TYPE_MAP. The user explicitly does not want type guessed
+ * from displayName keywords, so a blank or unmapped Categoría now defaults to
+ * the neutral "other" instead of falling back to a keyword heuristic.
+ */
+const classifyAgendaType = (categoria: string): string => {
+  const key = normalizeDisplayNameForMerge(categoria);
+  const mapped = key ? AGENDA_CATEGORIA_TYPE_MAP[key] : undefined;
+
+  return mapped ?? "other";
+};
+
+/**
+ * Canonical 17-column header for the hospital's real "Agenda" ODS export:
+ * Nombre, Categoría, Servicio, Número 1..7, Horario, Confidencial, Edificio,
+ * Planta, Sector, Sección, Comentarios. Compared against a sheet's first row
+ * via normalizeMarker (diacritic-stripped, uppercase, whitespace-stripped) so
+ * accent/case/spacing differences in the source file don't break detection.
+ */
+export const AGENDA_TABULAR_HEADER_MARKERS = [
+  "NOMBRE",
+  "CATEGORIA",
+  "SERVICIO",
+  "NUMERO1",
+  "NUMERO2",
+  "NUMERO3",
+  "NUMERO4",
+  "NUMERO5",
+  "NUMERO6",
+  "NUMERO7",
+  "HORARIO",
+  "CONFIDENCIAL",
+  "EDIFICIO",
+  "PLANTA",
+  "SECTOR",
+  "SECCION",
+  "COMENTARIOS"
+] as const;
+
+/**
+ * Column indices within a tabular Agenda-sheet data row, matching
+ * AGENDA_TABULAR_HEADER_MARKERS above 1:1 by position. Kept as the fallback
+ * shape returned by resolveAgendaColumnIndices for the canonical 17-column
+ * header.
+ */
+export type AgendaColumnIndices = {
+  nombre: number;
+  categoria: number;
+  servicio: number;
+  numeroStart: number;
+  numeroEnd: number; // inclusive — Número 1..7
+  // Optional inserted "Fax" column (e.g. the real "Sindicatos" sheet). Absent
+  // (undefined) on sheets that don't have one — the canonical 17-column
+  // header falls into this case.
+  fax?: number;
+  horario: number;
+  confidencial: number;
+  edificio: number;
+  planta: number;
+  sector: number;
+  seccion: number;
+  comentarios: number;
+};
+
+const AGENDA_COLUMN: AgendaColumnIndices = {
+  nombre: 0,
+  categoria: 1,
+  servicio: 2,
+  numeroStart: 3,
+  numeroEnd: 9, // inclusive — Número 1..7
+  horario: 10,
+  confidencial: 11,
+  edificio: 12,
+  planta: 13,
+  sector: 14,
+  seccion: 15,
+  comentarios: 16
+};
+
+/**
+ * The first 10 columns (Nombre, Categoría, Servicio, Número 1-7) MUST appear
+ * at these exact fixed positions for a sheet to be treated as Agenda-tabular
+ * at all — this positional guarantee is what lets normalizeTabularAgendaSheet
+ * read Nombre/Categoría/Servicio/Número by fixed index instead of guessing
+ * from cell content.
+ */
+const AGENDA_FIXED_PREFIX_MARKERS = [
+  "NOMBRE",
+  "CATEGORIA",
+  "SERVICIO",
+  "NUMERO1",
+  "NUMERO2",
+  "NUMERO3",
+  "NUMERO4",
+  "NUMERO5",
+  "NUMERO6",
+  "NUMERO7"
+] as const;
+
+/**
+ * Trailer columns required after the fixed prefix. OIR-230: located BY NAME
+ * anywhere after the fixed prefix (rather than assumed to be at fixed
+ * positions 10-16) so a sheet with an EXTRA inserted column — e.g. the real
+ * "Sindicatos" sheet, which has a "Fax" column between Número 7 and Horario —
+ * is still recognized as an Agenda-tabular sheet instead of silently falling
+ * through to the legacy service-sheet heuristics (which drop rows whose only
+ * meaningful cell is an ALL-CAPS Servicio value with a blank Nombre).
+ */
+const AGENDA_TRAILER_MARKERS = [
+  "HORARIO",
+  "CONFIDENCIAL",
+  "EDIFICIO",
+  "PLANTA",
+  "SECTOR",
+  "SECCION",
+  "COMENTARIOS"
+] as const;
+
+/**
+ * Resolves column indices for a tabular Agenda-format header row (OIR-222;
+ * widened OIR-230 to tolerate extra inserted columns). Returns null when the
+ * header does not match. See AGENDA_FIXED_PREFIX_MARKERS/AGENDA_TRAILER_MARKERS
+ * above for the exact matching rules.
+ */
+export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnIndices | null => {
+  const normalized = headerRow.map((cell) => normalizeMarker(cell ?? ""));
+
+  const fixedOk = AGENDA_FIXED_PREFIX_MARKERS.every((marker, index) => normalized[index] === marker);
+
+  if (!fixedOk) {
+    return null;
+  }
+
+  const trailerStart = AGENDA_FIXED_PREFIX_MARKERS.length;
+  const trailerIndexes = AGENDA_TRAILER_MARKERS.map((marker) => normalized.indexOf(marker, trailerStart));
+
+  if (trailerIndexes.some((index) => index === -1)) {
+    return null;
+  }
+
+  const [horario, confidencial, edificio, planta, sector, seccion, comentarios] = trailerIndexes as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ];
+
+  // Optional extra "Fax" column (e.g. the real "Sindicatos" sheet — see
+  // AGENDA_TRAILER_MARKERS comment above). Not part of the required trailer
+  // shape, so its absence must not fail header detection.
+  const faxIndex = normalized.indexOf("FAX", trailerStart);
+
+  return {
+    nombre: 0,
+    categoria: 1,
+    servicio: 2,
+    numeroStart: 3,
+    numeroEnd: 9,
+    fax: faxIndex === -1 ? undefined : faxIndex,
+    horario,
+    confidencial,
+    edificio,
+    planta,
+    sector,
+    seccion,
+    comentarios
+  };
+};
+
+/**
+ * Returns true when `headerRow` matches the Agenda tabular header shape (see
+ * resolveAgendaColumnIndices).
+ */
+export const isAgendaTabularHeader = (headerRow: string[]): boolean =>
+  resolveAgendaColumnIndices(headerRow) !== null;
+
+/**
+ * Strips a leading "Planta " (case/diacritic-insensitive) word from a Planta
+ * column value (e.g. "Planta 4" -> "4", "Planta Baja" -> "Baja") so it can be
+ * stored in location.floor without duplicating the "Planta " prefix that
+ * AppDataService's location-summary builder already re-adds at display time
+ * (see app-data.service.ts: `if (loc?.floor) locationParts.push(\`Planta ${loc.floor}\`)`).
+ */
+export const stripPlantaPrefix = (value: string): string => {
+  const trimmed = clean(value);
+  const match = /^planta\s+(.+)$/i.exec(trimmed);
+  return match ? clean(match[1]!) : trimmed;
+};
+
+/**
+ * Parses a tabular Agenda-format sheet (OIR-222): a flat table with an exact
+ * 17-column header (Nombre, Categoría, Servicio, Número 1..7, Horario,
+ * Confidencial, Edificio, Planta, Sector, Sección, Comentarios), one contact
+ * per data row. Unlike normalizeServiceSheet, columns are read by FIXED INDEX
+ * (not inferred from cell content) because the header guarantees positional
+ * meaning.
+ *
+ * Row exclusions (see OIR-222 investigation, confirmed against the real file):
+ *   - the header row itself (handled by profile.rowsToSkip)
+ *   - "section divider" rows with exactly one non-empty cell, in column 0
+ *     (e.g. "Letra A", "Hospital Polivalente")
+ *   - rows with no Nombre AND no Servicio (nothing to build a displayName from)
+ *
+ * Row-level Confidencial ("Si"/"Sí") is applied to EVERY phone built from that
+ * row's Número 1..7 columns (OIR-222 Step 3), not just the first phone.
+ */
+export const normalizeTabularAgendaSheet = (
+  sheet: SheetData,
+  profile: SheetProfile
+): NormalizedImportRow[] => {
+  // OIR-230: resolve column positions from THIS sheet's own header row rather
+  // than assuming the canonical fixed layout — tolerates sheets with an extra
+  // inserted column (e.g. "Sindicatos"' Fax column). Falls back to the
+  // canonical fixed layout in the (expected-never) case the header row is
+  // missing, since detectSheetProfile already validated it before routing here.
+  const columns = resolveAgendaColumnIndices(sheet.rows[0] ?? []) ?? AGENDA_COLUMN;
+  const data = sheet.rows.slice(profile.rowsToSkip);
+  const records: NormalizedImportRow[] = [];
+
+  data.forEach((row, rowIndex) => {
+    const cells = row.map((value) => clean(value));
+    const nonEmptyIndexes = cells
+      .map((value, index) => (value ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (nonEmptyIndexes.length === 0) {
+      return;
+    }
+
+    // Section divider row (e.g. "Letra A", "Hospital Polivalente"): exactly one
+    // non-empty cell, in column 0 (Nombre).
+    if (nonEmptyIndexes.length === 1 && nonEmptyIndexes[0] === 0) {
+      return;
+    }
+
+    const nombre = cells[columns.nombre] ?? "";
+    const categoria = cells[columns.categoria] ?? "";
+    const servicio = cells[columns.servicio] ?? "";
+    const horario = cells[columns.horario] ?? "";
+    const confidencialRaw = cells[columns.confidencial] ?? "";
+    const edificio = cells[columns.edificio] ?? "";
+    const planta = cells[columns.planta] ?? "";
+    const sector = cells[columns.sector] ?? "";
+    const seccion = cells[columns.seccion] ?? "";
+    const comentarios = cells[columns.comentarios] ?? "";
+
+    const displayName = nombre || servicio;
+
+    if (!displayName) {
+      return;
+    }
+
+    // Row-level Confidencial ("Si"/"Sí") applies to every phone on this row
+    // (OIR-222 Step 3) — OR'd with the existing free-text privacy-marker
+    // detection over Comentarios for defense in depth (same markers used by
+    // the legacy service-sheet parser).
+    const rowConfidential = parseSiNoFlag(confidencialRaw);
+    const privacy = detectPrivacy(comentarios);
+    const confidential = rowConfidential || privacy.confidential;
+
+    const phoneEntries: SerializedPhoneEntry[] = [];
+
+    for (let column = columns.numeroStart; column <= columns.numeroEnd; column += 1) {
+      const cellValue = cells[column] ?? "";
+
+      if (!cellValue) {
+        continue;
+      }
+
+      extractNumbers(cellValue).forEach((number) => {
+        phoneEntries.push({
+          number,
+          label: `Número ${column - columns.numeroStart + 1}`,
+          kind: "internal",
+          // OIR-227: "Principal" is a manual, user-editable choice made on
+          // the contact's edit form — the Agenda sheet has no such column,
+          // so it must never be auto-assigned to the first imported phone.
+          isPrimary: false,
+          confidential,
+          noPatientSharing: privacy.noPatientSharing,
+          // OIR-227: Comentarios belongs to the contact, not to an individual
+          // phone — it is already stored at record.notes below. Duplicating
+          // it here caused the Comentarios text to render directly under the
+          // phone number instead of in the contact's dedicated "Notas"
+          // section.
+          notes: undefined
+        });
+      });
+    }
+
+    // The Fax column (present on sheets like "Sindicatos" — see
+    // resolveAgendaColumnIndices above) is a distinct, optional trailing
+    // column beyond Número 1..7. Without this, any value entered there was
+    // silently dropped instead of being imported as a fax phone entry.
+    const faxValue = columns.fax !== undefined ? cells[columns.fax] ?? "" : "";
+
+    if (faxValue) {
+      extractNumbers(faxValue).forEach((number) => {
+        phoneEntries.push({
+          number,
+          label: "Fax",
+          kind: "fax",
+          isPrimary: false,
+          confidential,
+          noPatientSharing: privacy.noPatientSharing,
+          notes: undefined
+        });
+      });
+    }
+
+    const record = blankRecord();
+
+    record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([String(rowIndex), displayName, servicio])}`;
+    // OIR-224: Categoría is the SOLE type-inference mechanism for the Agenda
+    // path (see classifyAgendaType/AGENDA_CATEGORIA_TYPE_MAP above). A blank
+    // or unmapped Categoría value defaults to "other" (OIR-230 — no
+    // displayName-keyword guessing).
+    record.type = classifyAgendaType(categoria);
+    record.displayName = displayName;
+    // OIR-224: the real Agenda ODS has no genuine Área column — inferring one
+    // from Servicio/displayName produced wrong slug-like guesses (e.g.
+    // "gestion-administracion" guessed from an unrelated label). Agenda-
+    // imported records get a blank área instead; área remains an optional
+    // field elsewhere in the schema/UI.
+    record.area = "";
+    // OIR-230: tag every contact with its source sheet's name as department
+    // (profile.department — "" for the main canonical "Agenda" sheet itself,
+    // the sheet's own name for every other per-department "book" sheet) so a
+    // future feature can filter/search by exact department value.
+    record.department = profile.department;
+    record.service = servicio;
+    record.role = categoria;
+    record.schedule = horario;
+    record.building = edificio;
+    record.floor = planta ? stripPlantaPrefix(planta) : "";
+    record.sector = sector;
+    record.section = seccion;
+    record.aliases = aliasesFromLabel(displayName);
+    record.notes = cleanNoteFragments([comentarios]).join(" | ");
+    record.status = "active";
+    record.phones = JSON.stringify(phoneEntries);
+
+    const first = phoneEntries[0];
+    const second = phoneEntries[1];
+
+    record.phone1Label = first ? first.label : "";
+    record.phone1Number = first?.number ?? "";
+    record.phone1Kind = first ? "internal" : "";
+    // OIR-227: do not auto-assign "Principal" on import (see comment above).
+    record.phone1IsPrimary = "false";
+    record.phone1Confidential = first?.confidential ? "true" : "false";
+    record.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
+    record.phone1Notes = first?.notes ?? "";
+
+    if (second) {
+      record.phone2Label = second.label;
+      record.phone2Number = second.number;
+      record.phone2Kind = "internal";
+      record.phone2IsPrimary = "false";
+      record.phone2Confidential = second.confidential ? "true" : "false";
+      record.phone2NoPatientSharing = second.noPatientSharing ? "true" : "false";
+      record.phone2Notes = second.notes ?? "";
+    }
+
+    records.push(record);
+  });
+
+  return records;
+};
+
+// ---------------------------------------------------------------------------
 // Cross-sheet merge
 // ---------------------------------------------------------------------------
 
 /**
- * Merges service-sheet NormalizedImportRows that share the same normalized
- * displayName (trim + lowercase + strip diacritics) into a single row.
+ * Builds the composite identity key used by mergeRecordsByDisplayName (OIR-224).
  *
- * Merge rules (confirmed with operator):
- * - Identity key: exact normalized displayName equality only (no fuzzy match).
+ * Root cause fixed here: the Agenda tabular parser falls back to the
+ * "Servicio" column value for displayName whenever "Nombre" is blank (the
+ * common case for most rows). Two GENUINELY DISTINCT rows — e.g. "Bioquímica"
+ * (general line) and "Bioquímica" (Despacho/office line, confidential) — can
+ * therefore share the exact same displayName purely because they share the
+ * same Servicio value, even though they are different desks/entities with
+ * different phones and a different confidentiality status. Merging them by
+ * displayName alone silently bleeds a confidential flag from one onto the
+ * other (over- or under-flagging depending on dedup order).
+ *
+ * Fix: identity now requires displayName equality AND a location/service
+ * discriminator (organization.service + building/floor/sector/section) to
+ * also match. Rows that share only an inherited/Servicio-derived name but
+ * differ on the discriminator are treated as separate entities and never
+ * merged. All discriminator components are run through the same
+ * normalizeDisplayNameForMerge fold (trim + lowercase + diacritic-strip) as
+ * displayName itself, so trivial accent/case differences between sheets (see
+ * the "accent-normalizes displayName" cross-sheet golden test) do not cause
+ * spurious over-splitting of genuinely-same-entity rows.
+ */
+const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
+  const displayNameKey = normalizeDisplayNameForMerge(record.displayName);
+
+  if (!displayNameKey) {
+    return "";
+  }
+
+  const serviceKey = normalizeDisplayNameForMerge(record.service ?? "");
+  const buildingKey = normalizeDisplayNameForMerge(record.building ?? "");
+  const floorKey = normalizeDisplayNameForMerge(record.floor ?? "");
+  const sectorKey = normalizeDisplayNameForMerge(record.sector ?? "");
+  const sectionKey = normalizeDisplayNameForMerge(record.section ?? "");
+
+  return [displayNameKey, serviceKey, buildingKey, floorKey, sectorKey, sectionKey].join("::");
+};
+
+/**
+ * Merges service-sheet NormalizedImportRows that share the same normalized
+ * displayName (trim + lowercase + strip diacritics) AND the same
+ * service/location discriminator (OIR-224 — see buildMergeIdentityKey) into
+ * a single row.
+ *
+ * Merge rules (confirmed with operator; refined OIR-224):
+ * - Identity key: normalized displayName equality AND normalized
+ *   service+building+floor+sector+location equality (no fuzzy match).
+ *   Rows with the same displayName but a different discriminator remain
+ *   separate records — see buildMergeIdentityKey for why this matters.
  * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
- *   digit string; keep first occurrence. Each phone retains the source sheet
+ *   digit string; keep first occurrence's position, but OR the
+ *   confidential/noPatientSharing flags across every duplicate occurrence of
+ *   the same number (OIR-224 — a confidential duplicate must never be
+ *   silently dropped just because a non-confidential duplicate of the same
+ *   number was processed first or last). Each phone retains the source sheet
  *   label it was tagged with in normalizeServiceSheet.
  * - externalId: the FIRST record's externalId is kept (deterministic, stable
  *   across re-imports of the same file PROVIDED sheet order in the workbook is
@@ -673,7 +1171,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       continue;
     }
 
-    const key = normalizeDisplayNameForMerge(record.displayName);
+    const key = buildMergeIdentityKey(record);
 
     if (!key) {
       continue;
@@ -699,7 +1197,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       continue;
     }
 
-    const key = normalizeDisplayNameForMerge(record.displayName);
+    const key = buildMergeIdentityKey(record);
 
     if (!key) {
       result.push(record);
@@ -727,7 +1225,12 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       noPatientSharing: boolean;
       notes?: string;
     }> = [];
-    const seenNormalized = new Set<string>();
+    // OIR-224: maps a normalized digit string to its index in combinedPhones,
+    // so that when the SAME number appears more than once in the group being
+    // merged, we can OR its confidential/noPatientSharing flags into the
+    // already-kept entry instead of silently discarding a later (or earlier)
+    // duplicate's flags. A confidential duplicate must always win.
+    const seenNormalized = new Map<string, number>();
 
     for (const groupRecord of group) {
       let entries: Array<{
@@ -752,16 +1255,41 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       for (const entry of entries) {
         const normalized = normalizeNumberForDedup(entry.number);
 
-        if (normalized && !seenNormalized.has(normalized)) {
-          seenNormalized.add(normalized);
-          combinedPhones.push(entry);
+        if (!normalized) {
+          continue;
         }
+
+        const existingIndex = seenNormalized.get(normalized);
+
+        if (existingIndex === undefined) {
+          seenNormalized.set(normalized, combinedPhones.length);
+          combinedPhones.push(entry);
+          continue;
+        }
+
+        // Duplicate occurrence of a number already kept: OR the privacy
+        // flags in rather than discarding this occurrence's flags (OIR-224
+        // defense-in-depth — never let a confidential duplicate get dropped
+        // because a public duplicate of the same number was kept first).
+        const existing = combinedPhones[existingIndex]!;
+        combinedPhones[existingIndex] = {
+          ...existing,
+          confidential: existing.confidential || entry.confidential,
+          noPatientSharing: existing.noPatientSharing || entry.noPatientSharing
+        };
       }
     }
 
-    const reassertedPhones = combinedPhones.map((phone, index) => ({
+    // OIR-227 (residual gap): "Principal" is a manual, user-editable choice
+    // (see PhonesSection.tsx) — it must never be re-derived from a phone's
+    // position in the merged array. Preserve whatever isPrimary each phone
+    // already carried coming in (the parsers upstream never auto-assign
+    // isPrimary=true on import, so in practice this stays false; genuine
+    // multi-primary conflicts, if any, are reconciled downstream by
+    // ensureSinglePrimary in csv-import.service.ts).
+    const reassertedPhones = combinedPhones.map((phone) => ({
       ...phone,
-      isPrimary: index === 0
+      isPrimary: phone.isPrimary
     }));
 
     const base = { ...group[0]! };
@@ -794,7 +1322,10 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     base.phone1Label = first ? "Principal" : "";
     base.phone1Number = first?.number ?? "";
     base.phone1Kind = first ? "internal" : "";
-    base.phone1IsPrimary = first ? "true" : "false";
+    // OIR-227 (residual gap): reflect the phone's actual isPrimary value
+    // instead of assuming "true" whenever a first phone exists — keeps this
+    // flat mirror field consistent with the reasserted `phones` JSON above.
+    base.phone1IsPrimary = first?.isPrimary ? "true" : "false";
     base.phone1Confidential = first?.confidential ? "true" : "false";
     base.phone1NoPatientSharing = first?.noPatientSharing ? "true" : "false";
     base.phone1Notes = first?.notes ?? "";

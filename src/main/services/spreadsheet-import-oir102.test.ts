@@ -117,7 +117,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     expect(phones.map((p) => p.number)).toEqual(["10001", "10002", "10003"]);
   });
 
-  it("marks only the first phone as primary", () => {
+  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["55555", "66666", "77777"] }
@@ -127,7 +127,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     const phones = JSON.parse(result.rows[0]!.phones!) as Array<{ number: string; isPrimary: boolean }>;
 
-    expect(phones[0]!.isPrimary).toBe(true);
+    expect(phones[0]!.isPrimary).toBe(false);
     expect(phones[1]!.isPrimary).toBe(false);
     expect(phones[2]!.isPrimary).toBe(false);
   });
@@ -206,7 +206,7 @@ describe("cross-sheet merge by normalized displayName (root cause 2)", () => {
     expect(numbers).toHaveLength(3);
   });
 
-  it("preserves a single primary phone on the merged contact", () => {
+  it("does not assign a primary phone on the merged contact (OIR-227 residual fix — 'Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary-merged.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Banco de Sangre", numbers: ["11111"] }
@@ -221,8 +221,8 @@ describe("cross-sheet merge by normalized displayName (root cause 2)", () => {
     const phones = JSON.parse(row.phones!) as Array<{ isPrimary: boolean }>;
 
     const primaryCount = phones.filter((p) => p.isPrimary).length;
-    expect(primaryCount).toBe(1);
-    expect(phones[0]!.isPrimary).toBe(true);
+    expect(primaryCount).toBe(0);
+    expect(phones[0]!.isPrimary).toBe(false);
   });
 
   it("keeps the first record's externalId for the merged contact (stable re-import key)", () => {
@@ -345,9 +345,11 @@ describe("full pipeline: normalize → buildImportPreviewFromRows", () => {
     expect(phoneNumbers.filter((n) => n === "22222")).toHaveLength(1);
     expect(phoneNumbers).toHaveLength(4);
 
-    // Exactly one primary phone.
+    // OIR-227 residual fix: "Principal" is never auto-assigned on import,
+    // even after a cross-sheet merge — it stays a manual, user-editable
+    // choice made on the contact's edit form.
     const primaryCount = record!.contactMethods.phones.filter((p) => p.isPrimary).length;
-    expect(primaryCount).toBe(1);
+    expect(primaryCount).toBe(0);
   });
 
   it("produces separate ContactRecords for variant names", async () => {

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { ContactFormPage } from "./ContactFormPage";
+import { RecordFormPage } from "./RecordFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
@@ -82,8 +82,8 @@ const renderWithRoute = (initialEntry: string) => {
   const router = createMemoryRouter(
     [
       { path: "/", element: <div>Directorio</div> },
-      { path: "/contacts/new", element: <ContactFormPage /> },
-      { path: "/contacts/:id/edit", element: <ContactFormPage /> }
+      { path: "/contacts/new", element: <RecordFormPage /> },
+      { path: "/contacts/:id/edit", element: <RecordFormPage /> }
     ],
     { initialEntries: [initialEntry] }
   );
@@ -96,7 +96,7 @@ const renderWithRoute = (initialEntry: string) => {
   return router;
 };
 
-describe("ContactFormPage", () => {
+describe("RecordFormPage", () => {
   beforeEach(() => {
     resetStore();
     Object.defineProperty(window, "hospitalDirectory", {
@@ -266,6 +266,54 @@ describe("ContactFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
+    // OIR-222 metadata fields (role/schedule/sector/section) have no form
+    // control of their own yet. Editing an unrelated field (displayName) and
+    // saving must not silently drop them from the persisted record.
+    const recordWithImportedMetadata = {
+      ...defaultContacts.records[0],
+      organization: {
+        ...defaultContacts.records[0].organization,
+        role: "Enfermera",
+        schedule: "8:00-15:00"
+      },
+      location: {
+        ...defaultContacts.records[0].location,
+        sector: "Enfermería",
+        section: "Consulta"
+      }
+    };
+    const datasetWithImportedMetadata = {
+      ...defaultContacts,
+      records: [recordWithImportedMetadata, ...defaultContacts.records.slice(1)]
+    };
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: datasetWithImportedMetadata,
+      settings: editableSettings
+    });
+
+    renderWithRoute(`/contacts/${recordWithImportedMetadata.id}/edit`);
+
+    expect(await screen.findByDisplayValue(recordWithImportedMetadata.displayName)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+      target: { value: "Admisión actualizada (metadatos)" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const [, submittedPayload] = (window.hospitalDirectory.updateRecord as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect(submittedPayload.organization.role).toBe("Enfermera");
+    expect(submittedPayload.organization.schedule).toBe("8:00-15:00");
+    expect(submittedPayload.location.sector).toBe("Enfermería");
+    expect(submittedPayload.location.section).toBe("Consulta");
+  });
+
   it("keeps one primary phone when the current primary is unchecked", async () => {
     renderWithRoute("/contacts/new");
 
@@ -278,6 +326,38 @@ describe("ContactFormPage", () => {
 
     expect(primaryCheckboxes[0]).not.toBeChecked();
     expect(primaryCheckboxes[1]).toBeChecked();
+  });
+
+  it("OIR-239: unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
+    renderWithRoute("/contacts/new");
+
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+      target: { value: "Único Teléfono" }
+    });
+    fireEvent.change(screen.getByLabelText(/número/i), {
+      target: { value: "556677" }
+    });
+
+    const primaryCheckbox = screen.getByRole("checkbox", { name: "Principal" });
+    expect(primaryCheckbox).toBeChecked();
+
+    fireEvent.click(primaryCheckbox);
+
+    // Must NOT be silently re-checked — zero primaries is a valid state
+    // when there is only one entry and the user explicitly unchecked it.
+    expect(primaryCheckbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Crear registro" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.createRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const submittedPayload = (window.hospitalDirectory.createRecord as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0];
+    expect(submittedPayload.contactMethods.phones[0]?.isPrimary).toBe(false);
   });
 
   it("announces and focuses the new phone row when adding a phone", async () => {
@@ -725,7 +805,7 @@ describe("ContactFormPage", () => {
         <ToastProvider>
           <RouterProvider
             router={createMemoryRouter(
-              [{ path: "/contacts/new", element: <ContactFormPage /> }],
+              [{ path: "/contacts/new", element: <RecordFormPage /> }],
               { initialEntries: ["/contacts/new"] }
             )}
           />

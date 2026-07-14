@@ -1,6 +1,6 @@
 # USB Deployment Guide
 
-This document describes how to prepare a USB drive for portable Phone Directory distribution.
+This document describes how to prepare a USB drive for portable HospiAgenda distribution.
 
 ## Step 1 — Build the USB package
 
@@ -26,8 +26,8 @@ To also produce an AppImage (optional Linux fallback), temporarily add `"AppImag
 pnpm run release:usb -- linux
 ```
 
-When `dist-portable/Phone Directory-<version>.AppImage` exists, the release script
-copies it into the USB package as `Phone Directory.AppImage`.
+When `dist-portable/HospiAgenda-<version>.AppImage` exists, the release script
+copies it into the USB package as `HospiAgenda.AppImage`.
 
 The `dist-portable/` directory is gitignored. Build on the target platform or use a CI runner.
 
@@ -70,14 +70,14 @@ A fully populated multi-platform drive looks like this:
 ```
 USB_ROOT/
 ├── win-unpacked/
-│   └── Phone Directory.exe
+│   └── HospiAgenda.exe
 ├── mac/
-│   └── Phone Directory.app/
+│   └── HospiAgenda.app/
 ├── mac-arm64/
-│   └── Phone Directory.app/
+│   └── HospiAgenda.app/
 ├── linux-unpacked/
-│   └── phone-directory
-├── Phone Directory.AppImage     (optional)
+│   └── hospiagenda
+├── HospiAgenda.AppImage     (optional)
 ├── launch.bat
 ├── launch.sh
 ├── launch.command

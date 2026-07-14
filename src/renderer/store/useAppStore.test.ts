@@ -70,10 +70,10 @@ describe("search service helpers", () => {
     ];
 
     expect(getPreferredResultPhone(record)?.number).toBe("111");
-    expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial", "No facilitar a pacientes"]);
+    expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial"]);
   });
 
-  it("returns privacy flags in a stable priority order", () => {
+  it("returns only the Confidencial flag regardless of noPatientSharing", () => {
     const record = structuredClone(defaultContacts.records[0]);
     record.contactMethods.phones = [
       {
@@ -90,7 +90,7 @@ describe("search service helpers", () => {
       }
     ];
 
-    expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial", "No facilitar a pacientes"]);
+    expect(getPhonePrivacyFlags(record)).toEqual(["Confidencial"]);
   });
 });
 

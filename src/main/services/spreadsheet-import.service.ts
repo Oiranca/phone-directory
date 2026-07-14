@@ -22,6 +22,8 @@ import {
 import {
   normalizeServiceSheet,
   normalizeCentersSheet,
+  normalizeTabularAgendaSheet,
+  isAgendaTabularHeader,
   resolveServiceRowLabel,
   mergeRecordsByDisplayName,
 } from "./spreadsheet-parsers.js";
@@ -49,10 +51,16 @@ const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "department",
   "service",
   "specialty",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  "role",
+  "schedule",
   "building",
   "floor",
   "room",
   "locationText",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  "sector",
+  "section",
   "phone1Label",
   "phone1Number",
   "phone1Extension",
@@ -128,7 +136,7 @@ export type SpreadsheetImportNormalizationResult = {
 };
 
 type SheetProfile = {
-  parser: "centers" | "service";
+  parser: "centers" | "service" | "tabular";
   canonicalSlug: string;
   department: string;
   area?: string;
@@ -210,6 +218,20 @@ const serviceHeaderAliases = {
   phone: new Set(["NUMERO", "NUMEROLARGO", "TELEFONO", "TELEFONO", "TLF", "EXTENSION"])
 };
 
+/**
+ * OIR-230: matches a phone-header alias exactly (serviceHeaderAliases.phone)
+ * OR a numbered "Número N" column (e.g. "NUMERO1".."NUMERO7", normalized).
+ * Fixes a header-leak bug: a sheet whose header is "Nombre, Categoría,
+ * Servicio, Número 1, Número 2, ..." (the Agenda-tabular column layout, see
+ * spreadsheet-parsers.ts) previously scored only 2 (the "NOMBRE" label match)
+ * because "NUMERO1" didn't match the bare "NUMERO" alias — below the >=3
+ * threshold that triggers skipping the header row. That let the header row
+ * itself get treated as a data row by the legacy heuristics below (e.g. its
+ * "Nombre" cell leaking into a record's department/notes as literal text).
+ */
+const isServicePhoneHeaderCell = (cell: string) =>
+  serviceHeaderAliases.phone.has(cell) || /^NUMERO\d+$/.test(cell);
+
 const detectHeaderRowIndex = (
   rows: string[][],
   scorer: (row: string[]) => number
@@ -246,7 +268,7 @@ const scoreServiceHeader = (row: string[]) => {
   let score = 0;
 
   if (serviceHeaderAliases.label.has(normalized[0] ?? "")) score += 2;
-  if (normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell))) score += 2;
+  if (normalized.slice(1).some((cell) => isServicePhoneHeaderCell(cell))) score += 2;
 
   return score;
 };
@@ -254,7 +276,7 @@ const scoreServiceHeader = (row: string[]) => {
 const hasStrictServiceHeader = (row: string[]) => {
   const normalized = row.slice(0, 4).map((cell) => normalizeMarker(cell));
   return ["SERVICIO", "UNIDAD"].includes(normalized[0] ?? "") &&
-    normalized.slice(1).some((cell) => serviceHeaderAliases.phone.has(cell));
+    normalized.slice(1).some((cell) => isServicePhoneHeaderCell(cell));
 };
 
 const analyzeRawServiceRows = (rows: string[][], startIndex = 0) => {
@@ -341,6 +363,29 @@ const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => 
   return count;
 };
 
+/**
+ * OIR-222: the hospital's real ODS export names the canonical, complete
+ * directory sheet "Agenda" (slug "agenda"). The same workbook also contains
+ * "Agenda_3" (a byte-identical duplicate/backup copy) and "Departamentos" (a
+ * separate, much smaller, mostly-blank department-index sheet) which both
+ * happen to share the same Agenda tabular header. Those two are excluded by
+ * slug below (AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) rather than falling
+ * through to the generic centers/service heuristics — the legacy heuristics
+ * extract phone-like digit runs from ANY cell, so a structured column like
+ * Horario ("8:00-22:00") gets misparsed as a fake phone number ("8002200").
+ */
+const AGENDA_TABULAR_SHEET_SLUG = "agenda";
+
+/**
+ * OIR-230: sheets confirmed (from a prior real export of this same workbook)
+ * to share the Agenda tabular header without being a genuine per-department
+ * "book" of contacts — see AGENDA_TABULAR_SHEET_SLUG comment above. Both must
+ * keep being skipped entirely rather than imported as duplicate/junk
+ * department sheets. Matched by slug (normalizeAscii of the sheet name), so
+ * accent/case variants are also caught.
+ */
+const AGENDA_TABULAR_NON_DEPARTMENT_SLUGS = new Set(["agenda-3", "departamentos"]);
+
 const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   if (sheet.rows.length === 0) {
     return null;
@@ -349,6 +394,47 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   // Fix: skip navigation / TOC sheets by slug before any further analysis.
   if (isNavigationSheet(sheet.slug)) {
     return null;
+  }
+
+  // OIR-222/OIR-230: a sheet whose header matches the Agenda tabular format
+  // (see resolveAgendaColumnIndices — tolerates extra inserted columns, e.g.
+  // the real "Sindicatos" sheet's Fax column). The canonical directory sheet
+  // (slug "agenda") is routed to the dedicated tabular parser with a blank
+  // department. Two known non-department artifacts (a byte-identical
+  // duplicate and a TOC sheet — AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) are
+  // skipped entirely, exactly as before. Every OTHER sheet sharing this
+  // header is a genuine per-department "book" of contacts (e.g. the real
+  // "Almacenes", "Quirófanos", "Corporativos" sheets) — OIR-230 requires
+  // every contact imported from one of these to be tagged with the sheet's
+  // own name as department, so route it to the same tabular parser instead of
+  // silently dropping it (previous behavior) or misparsing it via the legacy
+  // heuristics.
+  if (isAgendaTabularHeader(sheet.rows[0] ?? [])) {
+    if (sheet.slug === AGENDA_TABULAR_SHEET_SLUG) {
+      return {
+        parser: "tabular",
+        canonicalSlug: AGENDA_TABULAR_SHEET_SLUG,
+        department: "",
+        area: undefined,
+        rowsToSkip: 1,
+        detectedFormat: "exportación cruda de agenda tabular",
+        detectionConfidence: "high"
+      };
+    }
+
+    if (AGENDA_TABULAR_NON_DEPARTMENT_SLUGS.has(sheet.slug)) {
+      return null;
+    }
+
+    return {
+      parser: "tabular",
+      canonicalSlug: sheet.slug,
+      department: clean(sheet.name),
+      area: undefined,
+      rowsToSkip: 1,
+      detectedFormat: "exportación cruda de agenda tabular (hoja de departamento)",
+      detectionConfidence: "high"
+    };
   }
 
   // INTERIM (OIR-102): Skip Buscas (pager/localizador) sheets.
@@ -418,6 +504,23 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   }
 
   const derivedDepartment = (() => {
+    // OIR-230: prefer the sheet's own (real, human-assigned) tab name over a
+    // guess derived from the first row's content. Guessing from content was
+    // the root cause of a header-leak bug: when the header row wasn't reliably
+    // recognized as a header (see isServicePhoneHeaderCell fix above), its
+    // first cell (e.g. literal "Nombre") could be picked up here as the
+    // "meaningful label" and become every record's department. Sheet tab
+    // names are a much more reliable department signal in general — except
+    // for spreadsheet-assigned generic defaults ("Sheet1"/"Hoja1"/"Plan1"),
+    // which carry no real information and still fall back to content-derived
+    // guessing exactly as before.
+    const cleanedSheetName = clean(sheet.name);
+    const isGenericSheetName = !cleanedSheetName || /^(sheet|hoja|plan)\d*$/.test(normalizeAscii(cleanedSheetName));
+
+    if (!isGenericSheetName) {
+      return prettifyLabel(cleanedSheetName);
+    }
+
     const firstMeaningfulLabel = sheet.rows
       .slice(serviceHeader.score >= 3 ? serviceHeader.index + 1 : 0, 8)
       .map((row) => resolveServiceRowLabel(row.map((cell) => clean(cell))))
@@ -620,6 +723,11 @@ export const normalizeWorkbookRowsFromFile = (
 
     if (profile.parser === "centers") {
       records.push(...normalizeCentersSheet(sheet, profile));
+      continue;
+    }
+
+    if (profile.parser === "tabular") {
+      records.push(...normalizeTabularAgendaSheet(sheet, profile));
       continue;
     }
 

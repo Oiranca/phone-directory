@@ -6,6 +6,7 @@ import * as XLSX from "xlsx-republish";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
+import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
 
 const getPathMock = vi.fn();
 
@@ -592,7 +593,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: ["coordinación urgencias"],
       tags: ["urgencias"],
@@ -690,7 +692,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -757,7 +760,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -790,7 +794,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -849,7 +854,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -895,7 +901,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -955,7 +962,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1003,7 +1011,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1036,7 +1045,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1095,7 +1105,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1144,7 +1155,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1177,7 +1189,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1228,7 +1241,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
@@ -1268,7 +1282,8 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: existing.aliases,
       tags: existing.tags,
@@ -1286,7 +1301,7 @@ describe("AppDataService", () => {
     expect(result.contacts.metadata.areaCounts.especialidades).toBe(1);
   });
 
-  it("promotes the first phone to primary when none is marked on save", async () => {
+  it("OIR-239: does not invent a primary phone on createRecord when none is marked", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1319,15 +1334,110 @@ describe("AppDataService", () => {
             noPatientSharing: false
           }
         ],
-        emails: []
+        emails: [],
+        socials: []
       },
       aliases: [],
       tags: [],
       status: "active"
     });
 
-    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(true);
+    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
     expect(result.contacts.records[0]?.contactMethods.phones[1]?.isPrimary).toBe(false);
+  });
+
+  it("OIR-239: persists a single explicit isPrimary: false phone on createRecord without re-forcing it to true", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const result = await service.createRecord({
+      type: "service",
+      displayName: "Un solo teléfono sin principal",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_single_no_primary",
+            label: "Único",
+            number: "33333",
+            kind: "internal",
+            isPrimary: false,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
+  });
+
+  it("OIR-239: persists a single explicit isPrimary: false phone on updateRecord without re-forcing it to true", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const created = await service.createRecord({
+      type: "service",
+      displayName: "Registro a actualizar",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            id: "ph_update_primary",
+            label: "Único",
+            number: "44444",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }
+        ],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    const savedRecordId = created.savedRecordId;
+    const existingRecord = created.contacts.records.find((record) => record.id === savedRecordId)!;
+
+    const updated = await service.updateRecord(savedRecordId, {
+      type: "service",
+      displayName: "Registro a actualizar",
+      organization: {
+        department: "Información"
+      },
+      contactMethods: {
+        phones: [
+          {
+            ...existingRecord.contactMethods.phones[0]!,
+            isPrimary: false
+          }
+        ],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      status: "active"
+    });
+
+    expect(updated.contacts.records.find((record) => record.id === savedRecordId)?.contactMethods.phones[0]?.isPrimary).toBe(false);
   });
 
   it("exports the current dataset and lists backups in reverse chronological order", async () => {
@@ -1530,6 +1640,201 @@ describe("AppDataService", () => {
       await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
     ) as { records: Array<{ displayName: string }> };
     expect(persisted.records[0]?.displayName).toBe("Importado");
+  });
+
+  // OIR-218: last-import watermark shown in the app header.
+  it("records lastImportedAt on the returned and persisted settings after a JSON dataset import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const beforeImport = await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8");
+    expect(JSON.parse(beforeImport).lastImportedAt).toBeUndefined();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const before = Date.now();
+    const importResult = await service.importDataset(sourceFilePath);
+    const after = Date.now();
+
+    expect(importResult.settings.lastImportedAt).toBeDefined();
+    const importedAtMs = new Date(importResult.settings.lastImportedAt!).getTime();
+    expect(importedAtMs).toBeGreaterThanOrEqual(before);
+    expect(importedAtMs).toBeLessThanOrEqual(after);
+
+    const persistedSettings = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+    ) as { lastImportedAt?: string };
+    expect(persistedSettings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+  });
+
+  it("does not set lastImportedAt when restoring a backup (only file imports count)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const backupPath = await service.createBackup();
+
+    const restoreResult = await service.restoreBackup(backupPath);
+
+    expect(restoreResult.settings.lastImportedAt).toBeUndefined();
+  });
+
+  it("backfills lastImportedAt from a historical bulk-import audit entry on bootstrap", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const historicalTimestamp = "2026-01-05T10:00:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: historicalTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 12 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(historicalTimestamp);
+    const persistedSettings = JSON.parse(
+      await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+    ) as { lastImportedAt?: string };
+    expect(persistedSettings.lastImportedAt).toBe(historicalTimestamp);
+  });
+
+  it("backfills lastImportedAt from the most recent of several dataset-replace/bulk-import audit entries", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const olderTimestamp = "2025-11-01T08:00:00.000Z";
+    const newerTimestamp = "2026-02-20T16:30:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: olderTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 5 },
+        { timestamp: newerTimestamp, editor: "Samuel", action: "dataset-replace", recordsAffected: 40 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(newerTimestamp);
+  });
+
+  it("leaves lastImportedAt unset when the audit log has no historical import entry", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBeUndefined();
+  });
+
+  it("does not overwrite an existing lastImportedAt with an audit-log backfill", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const sourceFilePath = path.join(testRoot, "incoming", "replacement.json");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+    const importResult = await service.importDataset(sourceFilePath);
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: "2020-01-01T00:00:00.000Z", editor: "Samuel", action: "dataset-replace", recordsAffected: 1 }
+      ]),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+  });
+
+  it("concurrency regression: bootstrap backfill does not clobber a concurrent saveSettings", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings({ editorName: "Original Editor" }));
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const historicalTimestamp = "2026-01-05T10:00:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: historicalTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 12 }
+      ]),
+      "utf-8"
+    );
+
+    // Force the exact race the reviewer flagged: hold the backfill's
+    // audit-log lookup open (simulating the async gap between reading the
+    // settings snapshot and persisting the backfilled value) until a
+    // concurrent saveSettings() has fully completed and persisted its own
+    // change. Before the fix, the backfill wrote its stale pre-race snapshot
+    // back to disk (with only lastImportedAt added), clobbering the
+    // concurrent editorName change.
+    let releaseAuditLookup: (() => void) | undefined;
+    const auditLookupGate = new Promise<void>((resolve) => {
+      releaseAuditLookup = resolve;
+    });
+    const originalGetAuditLog = AppDataAuditFacade.prototype.getAuditLog;
+    const getAuditLogSpy = vi
+      .spyOn(AppDataAuditFacade.prototype, "getAuditLog")
+      .mockImplementation(async function (
+        this: AppDataAuditFacade,
+        ...args: Parameters<typeof AppDataAuditFacade.prototype.getAuditLog>
+      ) {
+        await auditLookupGate;
+        return originalGetAuditLog.apply(this, args);
+      });
+
+    try {
+      const bootstrapPromise = service.getBootstrapData();
+
+      // Let bootstrap's earlier awaits (ensureInitialFiles, readSettings) run
+      // and reach the now-gated audit-log lookup before the concurrent save.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await service.saveSettings(buildEditableSettings({ editorName: "Concurrent Editor" }));
+
+      releaseAuditLookup?.();
+      const bootstrap = await bootstrapPromise;
+
+      expect(bootstrap.settings.lastImportedAt).toBe(historicalTimestamp);
+
+      const persisted = JSON.parse(
+        await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+      ) as { editorName: string; lastImportedAt?: string };
+
+      // Both the concurrent saveSettings() change and the backfilled
+      // lastImportedAt must survive — neither operation should clobber the
+      // other's write.
+      expect(persisted.editorName).toBe("Concurrent Editor");
+      expect(persisted.lastImportedAt).toBe(historicalTimestamp);
+    } finally {
+      getAuditLogSpy.mockRestore();
+    }
   });
 
   it("restores a selected backup and creates a safety backup first", async () => {
@@ -1758,6 +2063,47 @@ describe("AppDataService", () => {
     expect(updated.contactMethods.phones.some((phone) => phone.number === "67890")).toBe(true);
     expect(updated.contactMethods.emails.some((email) => email.address === "nuevo@example.com")).toBe(true);
     expect(updated.tags).toContain("nuevo");
+  });
+
+  it("does not invent a primary phone when merge-fields merges a record where none is marked primary (OIR-227 residual gap)", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const createSourceFilePath = path.join(testRoot, "incoming", "no-primary-create.csv");
+    await fs.mkdir(path.dirname(createSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      createSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "no-primary-1,service,Sin Principal,Recepción,11111,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const created = await service.importCsvDataset(createSourceFilePath);
+    const createdRecord = created.contacts.records.find((record) => record.externalId === "no-primary-1")!;
+    expect(createdRecord.contactMethods.phones.every((phone) => !phone.isPrimary)).toBe(true);
+
+    const mergeSourceFilePath = path.join(testRoot, "incoming", "no-primary-merge.csv");
+    await fs.writeFile(
+      mergeSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "no-primary-1,service,Sin Principal,Recepción,22222,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const preview = await service.previewCsvImport(mergeSourceFilePath);
+    const result = await service.importCsvDataset(mergeSourceFilePath, [
+      { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+    ]);
+    const merged = result.contacts.records.find((record) => record.externalId === "no-primary-1")!;
+
+    expect(merged.contactMethods.phones.some((phone) => phone.number === "11111")).toBe(true);
+    expect(merged.contactMethods.phones.some((phone) => phone.number === "22222")).toBe(true);
+    expect(merged.contactMethods.phones.every((phone) => !phone.isPrimary)).toBe(true);
   });
 
   it("previews conflicts created by duplicate rows inside the same import file", async () => {
@@ -2150,6 +2496,37 @@ describe("AppDataService", () => {
         record.contactMethods.phones.some((phone) => phone.noPatientSharing)
       )
     ).toBe(true);
+  });
+
+  // OIR-218: last-import watermark shown in the app header — CSV/spreadsheet
+  // bulk-import path.
+  it("records lastImportedAt after a spreadsheet (CSV/ODS) bulk import", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Servicio", "Número", "Notas"],
+      ["Urgencias", "", ""],
+      ["Mostrador", "55555", ""]
+    ]);
+    XLSX.utils.book_append_sheet(workbook, sheet, "Urgencias");
+
+    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    XLSX.writeFile(workbook, sourceFilePath);
+
+    const before = Date.now();
+    const result = await service.importCsvDataset(sourceFilePath);
+    const after = Date.now();
+
+    expect(result.settings.lastImportedAt).toBeDefined();
+    const importedAtMs = new Date(result.settings.lastImportedAt!).getTime();
+    expect(importedAtMs).toBeGreaterThanOrEqual(before);
+    expect(importedAtMs).toBeLessThanOrEqual(after);
   });
 
   it("updates an existing external center when row order changes but phone and service stay the same", async () => {
@@ -3085,7 +3462,8 @@ describe("AppDataService", () => {
               noPatientSharing: false
             }
           ],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],
@@ -3256,7 +3634,7 @@ describe("AppDataService", () => {
       type: "service" as const,
       displayName: `Concurrent ${label}`,
       organization: { department: "Test" },
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [] as string[],
       tags: [] as string[],
       status: "active" as const
@@ -3465,7 +3843,8 @@ describe("AppDataService", () => {
         organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
         contactMethods: {
           phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],
@@ -3523,7 +3902,8 @@ describe("AppDataService", () => {
         organization: { department: "D", service: "S", area: "sanitaria-asistencial" as const },
         contactMethods: {
           phones: [{ id: phoneId, number: phone, kind: "internal" as const, isPrimary: true, confidential: false, noPatientSharing: false }],
-          emails: []
+          emails: [],
+          socials: []
         },
         aliases: [],
         tags: [],
@@ -4041,5 +4421,343 @@ describe("AppDataService", () => {
     // Must contain the corrected plain-language phrase.
     expect(message).toContain("archivo de datos");
     expect(message).toContain("Ya existe un archivo en esa ruta");
+  });
+
+  // OIR-224: real-file regression test for the "Confidencial" flag misassignment
+  // bug reported by the operator (a non-confidential row like "Admisión Central"
+  // showed the privacy badge after import, while a genuinely confidential row lost
+  // it). Root cause: `mergeImportedRecordFields` (the "Combinar" / merge-fields
+  // conflict policy, used when re-importing a file whose rows already exist)
+  // appended only genuinely NEW phone numbers and left EXISTING phone numbers
+  // completely untouched — so a phone's confidential/noPatientSharing markers,
+  // once wrong (e.g. from data imported before OIR-222's tabular Agenda parser
+  // existed, or a manual slip), could never be corrected by re-importing the
+  // (now-correct) source file. The row-level parser itself (spreadsheet-parsers.ts
+  // normalizeTabularAgendaSheet) was already verified correct against this same
+  // real file — see the "fresh import" assertions below — so the merge-policy
+  // layer was the actual defect.
+  //
+  // Runs against the REAL hospital ODS export (not a synthetic fixture) per the
+  // investigation mandate: synthetic data could accidentally avoid the exact
+  // mechanism that reproduced this bug. Skipped automatically when the file is
+  // not present on the current machine (it is operator-provided data, never
+  // committed to the repo).
+  describe("OIR-224: Confidencial flag correctness against the real Agenda ODS", () => {
+    const REAL_ODS_CANDIDATE_PATHS = [
+      "/Users/samuelromeroarbelo/Documents/Telefonista/Buscas y Agenda normalizados/Agenda Normalizada.ods",
+      "/private/tmp/claude-501/-Users-samuelromeroarbelo-Projects-phone-directory/282c1726-23ec-42ee-8849-5ae5acc7508e/scratchpad/ods_inspect/agenda.ods"
+    ];
+
+    const findRealOdsPath = (): string | undefined =>
+      REAL_ODS_CANDIDATE_PATHS.find((candidate) => nodeFs.existsSync(candidate));
+
+    const realOdsPath = findRealOdsPath();
+
+    it.skipIf(!realOdsPath)(
+      "fresh import: 'Admisión Central' is NOT confidential and 'Admisión Central (Interno)' IS, matching the real source rows",
+      async () => {
+        const { AppDataService } = await import("./app-data.service.js");
+
+        const service = new AppDataService();
+        await service.ensureInitialFiles();
+        await service.saveSettings(buildEditableSettings());
+
+        // OIR-224 (merge-discriminator fix): correctly splitting rows that used to
+        // wrongly collapse by displayName alone (see spreadsheet-parsers.ts
+        // mergeRecordsByDisplayName) surfaces a small number of genuine intra-batch
+        // duplicate-phone matches even on a FRESH import (e.g. two real rows for the
+        // same person "Malena" under two different Servicio headings, both with the
+        // same extension) — AppDataService's own conflict-detection layer
+        // (buildStableMergeKeys / detectConflicts) treats those as resolvable
+        // conflicts requiring an explicit policy, same as it always has for any
+        // duplicate phone number. Resolve them all with "merge-fields" (the least
+        // lossy policy) so this test can assert on the unrelated Admisión Central
+        // rows below.
+        const preview = await service.previewCsvImport(realOdsPath!);
+        const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const result = await service.importCsvDataset(realOdsPath!, policySelections);
+
+        const notConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        );
+        const confidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        );
+
+        expect(notConfidential).toBeDefined();
+        expect(notConfidential!.contactMethods.phones.some((phone) => phone.confidential)).toBe(false);
+
+        expect(confidential).toBeDefined();
+        expect(confidential!.contactMethods.phones.every((phone) => phone.confidential)).toBe(true);
+      }
+    );
+
+    it.skipIf(!realOdsPath)(
+      "re-import with the 'Combinar' (merge-fields) conflict policy CORRECTS stale confidential flags to match the real source rows",
+      async () => {
+        const { AppDataService } = await import("./app-data.service.js");
+
+        const service = new AppDataService();
+        await service.ensureInitialFiles();
+        await service.saveSettings(buildEditableSettings());
+
+        // OIR-224 (merge-discriminator fix): see the "fresh import" test above for
+        // why the initial import also needs its (now correctly-surfaced) intra-batch
+        // duplicate-phone conflicts resolved before it can proceed.
+        const firstPreview = await service.previewCsvImport(realOdsPath!);
+        const firstPolicySelections = (firstPreview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const first = await service.importCsvDataset(realOdsPath!, firstPolicySelections);
+
+        // Simulate stale/legacy data: flip both flags so they are WRONG relative
+        // to the real source — mirrors a record imported before OIR-222's
+        // row-level Confidencial mapping existed, or a manual mistake.
+        const staleNotConfidential = first.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        )!;
+        const staleConfidential = first.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        )!;
+        staleNotConfidential.contactMethods.phones[0]!.confidential = true; // WRONG: source says false
+        staleConfidential.contactMethods.phones[0]!.confidential = false; // WRONG: source says true
+        await fs.writeFile(
+          path.join(testRoot, "data", "contacts.json"),
+          JSON.stringify(first.contacts, null, 2)
+        );
+
+        const preview = await service.previewCsvImport(realOdsPath!);
+        const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
+          recordIndex: conflict.recordIndex,
+          policy: "merge-fields" as const
+        }));
+        const result = await service.importCsvDataset(realOdsPath!, policySelections);
+
+        const correctedNotConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central"
+        );
+        const correctedConfidential = result.contacts.records.find(
+          (record) => record.displayName.trim() === "Admisión Central (Interno)"
+        );
+
+        expect(correctedNotConfidential).toBeDefined();
+        expect(correctedNotConfidential!.contactMethods.phones.some((phone) => phone.confidential)).toBe(false);
+
+        expect(correctedConfidential).toBeDefined();
+        expect(correctedConfidential!.contactMethods.phones.every((phone) => phone.confidential)).toBe(true);
+      }
+    );
+  });
+
+  describe("OIR-245: mergeDuplicates does not drop role/schedule/location/customFields", () => {
+    it("fills role, schedule and location subfields from the discarded record, and unions customFields", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const keepRecord = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: {
+          department: "Urgencias",
+          service: "Coordinación"
+          // role/schedule intentionally absent — must be filled from discard.
+        },
+        location: {
+          building: "Hospital General"
+          // sector/section intentionally absent — must be filled from discard.
+        },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_keep_1", key: "Extensión antigua", value: "1234" }]
+      });
+
+      const discardRecord = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez (duplicado)",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: {
+          department: "Urgencias",
+          role: "Enfermera",
+          schedule: "8:00-15:00"
+        },
+        location: {
+          building: "Hospital General",
+          sector: "Enfermería",
+          section: "Consulta"
+        },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_discard_1", key: "Turno", value: "Mañana" }]
+      });
+
+      const merged = await service.mergeDuplicates(
+        keepRecord.savedRecordId,
+        discardRecord.savedRecordId
+      );
+
+      // role/schedule: absent on keeper, present on discard — must survive.
+      expect(merged.organization.role).toBe("Enfermera");
+      expect(merged.organization.schedule).toBe("8:00-15:00");
+
+      // location: keeper already has a location object (building), but is
+      // missing sector/section — those must be filled in from discard, not
+      // dropped because the keeper's location object already existed.
+      expect(merged.location?.building).toBe("Hospital General");
+      expect(merged.location?.sector).toBe("Enfermería");
+      expect(merged.location?.section).toBe("Consulta");
+
+      // customFields: union of both records, no conflicting keys here so
+      // both must be present.
+      expect(merged.customFields).toHaveLength(2);
+      expect(merged.customFields?.some((field) => field.key === "Extensión antigua" && field.value === "1234")).toBe(
+        true
+      );
+      expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
+    });
+
+    it("keeps the keeper's customFields value when both records define the same key", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const keepRecord = await service.createRecord({
+        type: "person",
+        displayName: "Luis García",
+        person: { firstName: "Luis", lastName: "García" },
+        organization: {},
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_keep_2", key: "Turno", value: "Mañana" }]
+      });
+
+      const discardRecord = await service.createRecord({
+        type: "person",
+        displayName: "Luis García (duplicado)",
+        person: { firstName: "Luis", lastName: "García" },
+        organization: {},
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_discard_2", key: "Turno", value: "Tarde" }]
+      });
+
+      const merged = await service.mergeDuplicates(
+        keepRecord.savedRecordId,
+        discardRecord.savedRecordId
+      );
+
+      expect(merged.customFields).toHaveLength(1);
+      expect(merged.customFields?.[0]?.value).toBe("Mañana");
+    });
+  });
+
+  describe("OIR-245 (import path): merge-fields conflict policy does not drop role/schedule/location/customFields", () => {
+    it("fills organization.role/schedule and location.sector/section from the imported row when the current record lacks them", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      const sourceFilePath = path.join(testRoot, "incoming", "merge-fields-role-schedule-location.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,role,schedule,building,sector,section,phone1Number,status",
+          `${existing.externalId},service,${existing.displayName},${existing.organization.department},Enfermera,8:00-15:00,Hospital General,Enfermería,Consulta,55555,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const result = await service.importCsvDataset(sourceFilePath, [
+        { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+      ]);
+      const updated = result.contacts.records.find((record) => record.id === existing.id)!;
+
+      expect(result.conflictPolicyCounts?.["merge-fields"]).toBe(1);
+      // The existing record had no role/schedule/sector/section — these must
+      // be filled in from the imported row instead of being dropped.
+      expect(updated.organization.role).toBe("Enfermera");
+      expect(updated.organization.schedule).toBe("8:00-15:00");
+      expect(updated.location?.sector).toBe("Enfermería");
+      expect(updated.location?.section).toBe("Consulta");
+    });
+
+    it("unions customFields (current record wins on key conflict), mirroring mergeDuplicates", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const current = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: { department: "Urgencias" },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_current_1", key: "Extensión antigua", value: "1234" }]
+      });
+      const currentRecord = (await service.getBootstrapData()).contacts.records.find(
+        (record) => record.id === current.savedRecordId
+      )!;
+
+      // OIR-245: the CSV/ODS import pipeline does not currently map a
+      // customFields column, so there is no public API that produces an
+      // "imported" ContactRecord carrying customFields. Exercise the merge
+      // helper directly (as a unit test of the merge logic itself) — this is
+      // the same union/kept-wins behavior already covered end-to-end for
+      // mergeDuplicates() above, applied to the import-conflict code path.
+      const importedRecord = {
+        ...currentRecord,
+        id: "cnt_imported_placeholder",
+        customFields: [
+          { id: "cf_imported_1", key: "Turno", value: "Mañana" },
+          // Conflicting key with the current record — current record must win.
+          { id: "cf_imported_2", key: "Extensión antigua", value: "9999" }
+        ]
+      };
+
+      const merged = (
+        service as unknown as {
+          mergeImportedRecordFields: (
+            currentRec: typeof currentRecord,
+            importedRec: typeof currentRecord,
+            exportedAt: string,
+            editorName: string
+          ) => typeof currentRecord;
+        }
+      ).mergeImportedRecordFields(currentRecord, importedRecord, "2026-07-14T00:00:00Z", "Tester");
+
+      expect(merged.customFields).toHaveLength(2);
+      expect(
+        merged.customFields?.some((field) => field.key === "Extensión antigua" && field.value === "1234")
+      ).toBe(true);
+      expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
+    });
   });
 });

@@ -50,7 +50,8 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       organization: { department: "Admisión", area: "gestion-administracion" },
       contactMethods: {
         phones: [{ id: "ph_k1", label: "Principal", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
-        emails: [{ id: "em_k1", address: "admision@hospital.es", isPrimary: true }]
+        emails: [{ id: "em_k1", address: "admision@hospital.es", isPrimary: true }],
+        socials: []
       },
       aliases: [],
       tags: ["admisión"],
@@ -70,7 +71,8 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
         emails: [
           { id: "em_d1", address: "admision2@hospital.es", isPrimary: true },
           { id: "em_d2", address: "admision@hospital.es", isPrimary: false }
-        ]
+        ],
+        socials: []
       },
       aliases: [],
       tags: ["admisión", "urgencias"],
@@ -111,7 +113,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       type: "service",
       displayName: "Registro existente",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -132,7 +134,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
       type: "service",
       displayName: "Registro existente",
       organization: {},
-      contactMethods: { phones: [], emails: [] },
+      contactMethods: { phones: [], emails: [], socials: [] },
       aliases: [],
       tags: [],
       notes: undefined,
@@ -142,6 +144,178 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     await expect(
       service.mergeDuplicates(keepRecord.savedRecordId, "nonexistent-discard-id")
     ).rejects.toThrow("Contact not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-225 — field-level overrides applied on top of the keep/discard merge
+// ---------------------------------------------------------------------------
+
+describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overrides)", () => {
+  let testRoot: string;
+
+  beforeEach(async () => {
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-merge-overrides-"));
+    getPathMock.mockImplementation(() => testRoot);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
+    getPathMock.mockReset();
+  });
+
+  it("(a) behaves exactly like the no-overrides path when overrides is undefined", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: { department: "Admisión" },
+      contactMethods: {
+        phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: { phones: [], emails: [], socials: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(keepRecord.savedRecordId, discardRecord.savedRecordId);
+
+    expect(merged.displayName).toBe("Admisión General");
+    expect(merged.type).toBe("service");
+  });
+
+  it("(b) applies a displayName + type override on top of the automatic merge", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: { department: "Admisión" },
+      contactMethods: { phones: [], emails: [], socials: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "department",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: { phones: [], emails: [], socials: [] },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const merged = await service.mergeDuplicates(
+      keepRecord.savedRecordId,
+      discardRecord.savedRecordId,
+      { displayName: "Admisión General (corregido)", type: "department" }
+    );
+
+    expect(merged.displayName).toBe("Admisión General (corregido)");
+    expect(merged.type).toBe("department");
+  });
+
+  it("(b) applies a contactMethods.phones override, replacing the automatically-merged phone list", async () => {
+    const { AppDataService } = await import("../services/app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const keepRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General",
+      organization: {},
+      contactMethods: {
+        phones: [{ id: "ph_k1", number: "70001", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    const discardRecord = await service.createRecord({
+      type: "service",
+      displayName: "Admisión General (duplicado)",
+      organization: {},
+      contactMethods: {
+        phones: [{ id: "ph_d1", number: "70002", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }],
+        emails: [],
+        socials: []
+      },
+      aliases: [],
+      tags: [],
+      notes: undefined,
+      status: "active"
+    });
+
+    // Override with a hand-edited phone list: corrected number for ph_k1,
+    // and deliberately drop the discard's phone (user chose not to keep it).
+    const merged = await service.mergeDuplicates(
+      keepRecord.savedRecordId,
+      discardRecord.savedRecordId,
+      {
+        contactMethods: {
+          phones: [
+            { id: "ph_k1", number: "70099", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false }
+          ]
+        }
+      }
+    );
+
+    const phoneNumbers = merged.contactMethods.phones.map((p) => p.number);
+    expect(phoneNumbers).toEqual(["70099"]);
+  });
+
+  it("(c) the IPC handler rejects a malformed overrides payload before it ever reaches the service", async () => {
+    const { ipcMain } = await import("electron");
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    const mergeDuplicatesMock = vi.fn();
+    const serviceMock = { mergeDuplicates: mergeDuplicatesMock };
+
+    registerContactsIpc(serviceMock as never);
+
+    const handleMock = vi.mocked(ipcMain.handle);
+    const registeredCall = handleMock.mock.calls.find(
+      ([channel]) => channel === "contacts:merge-duplicates"
+    );
+    expect(registeredCall).toBeDefined();
+    const handler = registeredCall![1] as (...args: unknown[]) => Promise<unknown>;
+
+    await expect(
+      handler({}, {
+        keepId: "cnt_a",
+        discardId: "cnt_b",
+        overrides: { status: "inactive" } // status is not an overridable field — must be rejected
+      })
+    ).rejects.toThrow("Invalid merge request");
+
+    expect(mergeDuplicatesMock).not.toHaveBeenCalled();
   });
 });
 
@@ -245,15 +419,17 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 // ---------------------------------------------------------------------------
 
 // Helper: build a minimal EventEmitter-style webContents stub
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic listener args (e.g. did-start-navigation's details object)
+type Listener = (...args: any[]) => void;
 function makeWebContentsSender(id: number): {
   id: number;
-  listeners: Map<string, Array<() => void>>;
-  on: (event: string, fn: () => void) => void;
-  once: (event: string, fn: () => void) => void;
-  removeListener: (event: string, fn: () => void) => void;
-  emit: (event: string) => void;
+  listeners: Map<string, Array<Listener>>;
+  on: (event: string, fn: Listener) => void;
+  once: (event: string, fn: Listener) => void;
+  removeListener: (event: string, fn: Listener) => void;
+  emit: (event: string, ...args: unknown[]) => void;
 } {
-  const listeners = new Map<string, Array<() => void>>();
+  const listeners = new Map<string, Array<Listener>>();
 
   return {
     id,
@@ -264,8 +440,8 @@ function makeWebContentsSender(id: number): {
       listeners.set(event, bucket);
     },
     once(event, fn) {
-      const wrapped = () => {
-        fn();
+      const wrapped: Listener = (...args) => {
+        fn(...args);
         this.removeListener(event, wrapped);
       };
       this.on(event, wrapped);
@@ -274,10 +450,10 @@ function makeWebContentsSender(id: number): {
       const bucket = listeners.get(event) ?? [];
       listeners.set(event, bucket.filter((f) => f !== fn));
     },
-    emit(event) {
+    emit(event, ...args) {
       const bucket = listeners.get(event) ?? [];
       // Copy the bucket before iterating in case listeners mutate it (e.g. once wrappers)
-      [...bucket].forEach((f) => f());
+      [...bucket].forEach((f) => f(...args));
     }
   };
 }
@@ -455,8 +631,50 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     const sender = makeWebContentsSender(10);
     const importToken = await runPreview(sender);
 
-    // Simulate the renderer navigating away
+    // Simulate the renderer navigating away (real cross-document navigation —
+    // no event-details object, matching Electron's legacy call signature).
     sender.emit("did-start-navigation");
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    await expect(
+      handler({ sender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+  // navigations (hash/fragment changes, pushState/replaceState, same-page history
+  // navigation — see Electron's `isSameDocument` event field). This app routes
+  // entirely via createHashRouter, so an in-app hash change — or even a macOS
+  // trackpad swipe-navigation gesture while scrolling the preview table — must
+  // NOT invalidate an otherwise-still-valid pending import, since the renderer
+  // document (and the preview UI holding the token) never actually unloaded.
+  it("same-document navigation (hash change / isSameDocument) does NOT invalidate the token", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+
+    // Simulate a same-document navigation event — the modern Electron handler
+    // signature passes a single details object with isSameDocument: true.
+    sender.emit("did-start-navigation", { isSameDocument: true });
+
+    const handler = handlers.get("contacts:import-csv-dataset");
+    if (!handler) throw new Error("import handler not registered");
+
+    const result = await handler({ sender } as unknown, importToken, []);
+
+    expect(result).toBeDefined();
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("same-document navigation followed by a REAL cross-document navigation still invalidates the token", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+
+    sender.emit("did-start-navigation", { isSameDocument: true });
+    sender.emit("did-start-navigation", { isSameDocument: false });
 
     const handler = handlers.get("contacts:import-csv-dataset");
     if (!handler) throw new Error("import handler not registered");
@@ -611,5 +829,182 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     // Path 4: token gone (no-pending-import branch after cap invalidation) — same message
     const err4 = await handler({ sender: legitimateSender } as unknown, importToken, []).catch((e: Error) => e);
     expect((err4 as Error).message).toBe(expectedError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-219 — pickAndImportDataset: single unified "Importar" entry point
+//
+// Verifies the extension-based dispatch: main owns the one dialog, and routes
+// to the same underlying pipelines used by the existing importDataset /
+// previewCsvImport channels, without ever accepting a renderer-supplied path.
+// ---------------------------------------------------------------------------
+
+describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let serviceMock: {
+    importDataset: ReturnType<typeof vi.fn>;
+    previewCsvImport: ReturnType<typeof vi.fn>;
+    [key: string]: unknown;
+  };
+  let showOpenDialogMock: ReturnType<typeof vi.fn>;
+
+  const jsonImportResult = {
+    contacts: { records: [], exportedAt: "2026-07-04T00:00:00.000Z", metadata: {}, catalogs: {} },
+    settings: {},
+    backupPath: "/tmp/backups/auto.json",
+    importedFilePath: "/tmp/incoming/replacement.json",
+    recordCount: 0
+  };
+
+  const csvPreviewStub = {
+    sourceFilePath: "/tmp/incoming/directory.csv",
+    fileName: "directory.csv",
+    totalRowCount: 1,
+    validRowCount: 1,
+    invalidRowCount: 0,
+    warningCount: 0,
+    recordCount: 1,
+    mergedRecordCount: 1,
+    createdCount: 1,
+    updatedCount: 0,
+    buscasSkippedRowCount: 0,
+    socialHandleSkippedRowCount: 0,
+    parsedBuscasCellCount: 0,
+    typeCounts: {},
+    areaCounts: {},
+    rowIssues: [],
+    warnings: [],
+    previewRows: [],
+    conflictCount: 0,
+    conflictedRecords: [],
+    policiesResolved: true
+  };
+
+  beforeEach(async () => {
+    vi.resetModules();
+
+    handlers = new Map();
+    showOpenDialogMock = vi.fn();
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: showOpenDialogMock,
+        showSaveDialog: vi.fn()
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    serviceMock = {
+      importDataset: vi.fn().mockResolvedValue(jsonImportResult),
+      previewCsvImport: vi.fn().mockResolvedValue({ ...csvPreviewStub }),
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn(),
+      resetDataset: vi.fn(),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn(),
+      restoreBackup: vi.fn(),
+      exportDataset: vi.fn(),
+      importCsvDataset: vi.fn(),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    };
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  const getHandler = () => {
+    const handler = handlers.get("contacts:pick-and-import-dataset");
+    if (!handler) throw new Error("pickAndImportDataset handler not registered");
+    return handler;
+  };
+
+  it("dispatches to service.importDataset() (unchanged full-replace pipeline) for a .json pick", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
+    const sender = makeWebContentsSender(1);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(serviceMock.importDataset).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+    expect(response).toEqual({ kind: "json-import", result: jsonImportResult });
+  });
+
+  it("dispatches to the same normalize/validate/preview pipeline as previewCsvImport for a .csv pick", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/directory.csv"] });
+    const sender = makeWebContentsSender(2);
+
+    const response = await getHandler()({ sender } as unknown) as {
+      kind: string;
+      preview: { importToken: string; sourceFilePath?: string; fileName: string };
+    };
+
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(response.kind).toBe("csv-preview");
+    // OIR-115 parity — the absolute source path must never reach the renderer here either.
+    expect(Object.prototype.hasOwnProperty.call(response.preview, "sourceFilePath")).toBe(false);
+    expect(typeof response.preview.importToken).toBe("string");
+    expect(response.preview.fileName).toBe("directory.csv");
+  });
+
+  it.each(["ods", "xls", "xlsx"])("also dispatches .%s picks to the CSV-like pipeline", async (extension) => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [`/tmp/incoming/directory.${extension}`] });
+    const sender = makeWebContentsSender(3);
+
+    const response = await getHandler()({ sender } as unknown) as { kind: string };
+
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(`/tmp/incoming/directory.${extension}`);
+    expect(response.kind).toBe("csv-preview");
+  });
+
+  it("returns { kind: 'cancelled' } when the dialog is dismissed without a selection", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+    const sender = makeWebContentsSender(4);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(response).toEqual({ kind: "cancelled" });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+  });
+
+  it("returns { kind: 'unsupported-extension' } and touches neither pipeline for an unexpected extension", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/malware.exe"] });
+    const sender = makeWebContentsSender(5);
+
+    const response = await getHandler()({ sender } as unknown);
+
+    expect(response).toEqual({ kind: "unsupported-extension", extension: "exe" });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+  });
+
+  it("opens exactly one native dialog filtered to json/csv/ods/xls/xlsx", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
+    const sender = makeWebContentsSender(6);
+
+    await getHandler()({ sender } as unknown);
+
+    expect(showOpenDialogMock).toHaveBeenCalledTimes(1);
+    const [options] = showOpenDialogMock.mock.calls[0] as [{ filters: Array<{ extensions: string[] }> }];
+    expect(options.filters[0]?.extensions.sort()).toEqual(["csv", "json", "ods", "xls", "xlsx"]);
   });
 });

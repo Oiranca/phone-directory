@@ -7,6 +7,7 @@ export type {
   EmailContact,
   SocialPlatform,
   SocialContact,
+  CustomField,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -103,6 +104,18 @@ export interface EditableSocialContact {
   isPrimary: boolean;
 }
 
+/**
+ * Editable custom key-value field entry (OIR-232). Lets a user record ad-hoc
+ * information the fixed form doesn't cover (e.g. "Número extranjero" for one
+ * contact). Mirrors the EditablePhoneContact pattern: `id` is a stable entry
+ * identifier used for form list identity only.
+ */
+export interface EditableCustomField {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface EditableContactRecord {
   id?: string;
   externalId?: string;
@@ -117,12 +130,20 @@ export interface EditableContactRecord {
     service?: string;
     area?: AreaType;
     specialty?: string;
+    /** OIR-222: role/job title (ODS "Categoría" column). */
+    role?: string;
+    /** OIR-222: operating hours/schedule (ODS "Horario" column). */
+    schedule?: string;
   };
   location?: {
     building?: string;
     floor?: string;
     room?: string;
     text?: string;
+    /** OIR-222: ODS "Sector" column. */
+    sector?: string;
+    /** OIR-222: ODS "Sección" column. */
+    section?: string;
   };
   contactMethods: {
     phones: EditablePhoneContact[];
@@ -132,6 +153,8 @@ export interface EditableContactRecord {
   aliases: string[];
   tags: string[];
   notes?: string;
+  /** OIR-232: user-defined key/value pairs for information the fixed form doesn't cover. */
+  customFields?: EditableCustomField[];
   status: "active" | "inactive";
 }
 
@@ -338,6 +361,24 @@ export interface CsvImportResult extends ImportContactsResult {
    */
   rowIssues: CsvImportIssue[];
 }
+
+/**
+ * OIR-219 — discriminated-union response for pickAndImportDataset, the single
+ * unified "Importar" entry point. Lets the renderer route to whichever
+ * existing UI matches the flow that main actually dispatched to, without ever
+ * receiving a file path back:
+ *   - "json-import"           → reuse the existing JSON full-replace result handling
+ *   - "csv-preview"           → reuse the existing CsvImportPreviewPanel/confirm flow
+ *   - "unsupported-extension" → the OS dialog filter was somehow bypassed
+ *   - "cancelled"             → the user closed the dialog without picking a file
+ *
+ * See src/shared/schemas/pick-and-import.schema.ts for the runtime envelope schema.
+ */
+export type PickAndImportDatasetResult =
+  | { kind: "json-import"; result: ImportContactsResult }
+  | { kind: "csv-preview"; preview: CsvImportPreviewWithConflicts }
+  | { kind: "unsupported-extension"; extension: string }
+  | { kind: "cancelled" };
 
 export interface AuditLogResult {
   entries: AuditLogEntry[];

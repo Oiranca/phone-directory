@@ -24,7 +24,7 @@ Copy the contents of that directory to the USB root.
 The staged package includes the platform payload folder, the platform launcher,
 `README.txt`, and a generated `RELEASE_MANIFEST.txt` with the build timestamp,
 version, and source commit. Linux packages may also include
-`Phone Directory.AppImage` when the build configuration produces it.
+`HospiAgenda.AppImage` when the build configuration produces it.
 
 For the full packaging and operator handoff process, see
 [../docs/USB_RELEASE_HANDOFF_CHECKLIST.md](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
@@ -96,13 +96,13 @@ Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass
 
 This script extracts selected sheets from the hospital `.ods` workbook into CSV working files.
 
-It is intended for migration work before importing into the MVP application.
+It is intended for migration work before importing into the application.
 
 ### Features
 
 - list workbook sheets
 - export one or more sheets to CSV
-- export the recommended first MVP sheet group
+- export the recommended `first-mvp` sheet group
 - remove empty rows by default
 - remove index rows such as `ÍNDICE AGENDA` by default
 
@@ -123,7 +123,7 @@ python3 scripts/extract_ods_to_csv.py "/path/to/file.ods" \
   --outdir tmp/ods-export
 ```
 
-Export the recommended first MVP group:
+Export the recommended `first-mvp` group:
 
 ```bash
 python3 scripts/extract_ods_to_csv.py "/path/to/file.ods" \
@@ -148,7 +148,7 @@ python3 scripts/extract_ods_to_csv.py "/path/to/file.ods" \
 
 ## `normalize_working_csvs.py`
 
-This script converts the extracted working CSV files into the MVP import template.
+This script converts the extracted working CSV files into the project import template.
 
 ### Usage
 
@@ -160,7 +160,7 @@ python3 scripts/normalize_working_csvs.py \
 
 ### Current Scope
 
-- supports the recommended first MVP sheet group
+- supports the recommended `first-mvp` sheet group
 - applies heuristic type, area, and department mapping
 - detects some privacy markers from notes
 - emits a CSV aligned with the project import template
@@ -176,7 +176,7 @@ This is a first-pass normalizer. The generated CSV should still be reviewed befo
 
 ## `validate_normalized_csv.py`
 
-This script validates a normalized CSV against the MVP CSV contract and emits a human-readable summary.
+This script validates a normalized CSV against the current CSV contract and emits a human-readable summary.
 
 ### Usage
 
@@ -200,7 +200,7 @@ python3 scripts/validate_normalized_csv.py \
 
 ## `convert_csv_to_contacts_json.py`
 
-This script converts a validated normalized CSV into the MVP `contacts.json` dataset.
+This script converts a validated normalized CSV into the project `contacts.json` dataset.
 
 ### Usage
 
@@ -213,7 +213,7 @@ python3 scripts/convert_csv_to_contacts_json.py \
 
 ### Output
 
-The generated JSON follows the project MVP dataset shape:
+The generated JSON follows the project dataset shape:
 
 - dataset version
 - export timestamp

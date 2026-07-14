@@ -115,10 +115,10 @@ copy_linux_appimage() {
   local source
 
   version="$(read_package_version)"
-  source="$DIST_ROOT/Phone Directory-$version.AppImage"
+  source="$DIST_ROOT/HospiAgenda-$version.AppImage"
 
   if [[ -f "$source" ]]; then
-    cp "$source" "$PACKAGE_ROOT/Phone Directory.AppImage"
+    cp "$source" "$PACKAGE_ROOT/HospiAgenda.AppImage"
   fi
 }
 
@@ -154,7 +154,7 @@ copy_required "$REPO_ROOT/usb-launchers/README.txt" "$PACKAGE_ROOT/README.txt"
 PKG_VERSION="$(read_package_version)"
 
 cat > "$PACKAGE_ROOT/RELEASE_MANIFEST.txt" <<EOF
-Phone Directory USB release
+HospiAgenda USB release
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Platform: $PLATFORM
 Version: $PKG_VERSION

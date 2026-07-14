@@ -116,7 +116,6 @@ export const SocialsSection = ({
                   ref={(el) => { handleInputRefs.current[social.id] = el; }}
                   value={social.handle ?? ""}
                   onChange={(event) => updateSocial(social.id, { handle: event.target.value })}
-                  placeholder="@hospitalejemplo"
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
@@ -127,7 +126,6 @@ export const SocialsSection = ({
                   id={`social-url-${social.id}`}
                   value={social.url ?? ""}
                   onChange={(event) => updateSocial(social.id, { url: event.target.value })}
-                  placeholder="https://instagram.com/hospital"
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>

@@ -10,7 +10,7 @@ describe("DuplicateDetectionService", () => {
     type: "person",
     displayName: "Test Person",
     organization: {},
-    contactMethods: { phones: [], emails: [] },
+    contactMethods: { phones: [], emails: [], socials: [] },
     aliases: [],
     tags: [],
     status: "active",
@@ -287,7 +287,8 @@ describe("DuplicateDetectionService", () => {
         organization: { department: "Urgencias" },
         contactMethods: {
           phones: [{ id: "ph-1", number: "612345678", label: "work", isPrimary: true, kind: "direct", confidential: false, noPatientSharing: false }],
-          emails: []
+          emails: [],
+          socials: []
         }
       });
       const recordB = buildMinimalContact({

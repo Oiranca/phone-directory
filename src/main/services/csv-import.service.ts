@@ -38,10 +38,16 @@ const SUPPORTED_COLUMNS = [
   "department",
   "service",
   "specialty",
+  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  "role",
+  "schedule",
   "building",
   "floor",
   "room",
   "locationText",
+  // OIR-222: ODS "Sector"/"Sección" columns.
+  "sector",
+  "section",
   "phone1Label",
   "phone1Number",
   "phone1Extension",
@@ -202,11 +208,16 @@ const ensureSinglePrimary = <T extends { isPrimary: boolean }>(
     });
   }
 
-  if (items.length === 0) {
+  // OIR-227: only reconcile an actual conflict (more than one entry
+  // explicitly marked primary) by keeping the first and clearing the rest.
+  // When zero entries are marked primary, leave them all as-is — "Principal"
+  // must never be invented at import time; it stays a manual, user-editable
+  // choice made on the contact's edit form.
+  if (primaryIndexes.length <= 1) {
     return items;
   }
 
-  const primaryIndex = primaryIndexes[0] ?? 0;
+  const primaryIndex = primaryIndexes[0]!;
 
   return items.map((item, index) => ({
     ...item,
@@ -249,15 +260,18 @@ const buildPhones = (
           label: entry.label || undefined,
           number: entry.number,
           kind: SUPPORTED_PHONE_KINDS.has(entry.kind) ? entry.kind : "internal",
-          isPrimary: index === 0,
+          // OIR-227: respect whatever the normalizer computed instead of
+          // forcing the first phone to be "Principal" — the spreadsheet
+          // parsers no longer auto-assign isPrimary on import.
+          isPrimary: entry.isPrimary,
           confidential: entry.confidential,
           noPatientSharing: entry.noPatientSharing,
           notes: entry.notes || undefined
         }) as PhoneContact
       );
 
-      // ensureSinglePrimary is a no-op here (we already set index 0 as
-      // primary) but call it for invariant safety.
+      // Reconciles the rare case where more than one entry was explicitly
+      // marked primary (e.g. after a cross-sheet merge); otherwise a no-op.
       return ensureSinglePrimary(
         phones,
         "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
@@ -549,7 +563,10 @@ export const buildImportPreviewFromRows = async (
       building: maybe(row.building),
       floor: maybe(row.floor),
       room: maybe(row.room),
-      text: maybe(row.locationText)
+      text: maybe(row.locationText),
+      // OIR-222: ODS "Sector"/"Sección" columns.
+      sector: maybe(row.sector),
+      section: maybe(row.section)
     });
 
     // (OIR-131): socials count as a valid contact method — a social-only row is accepted.
@@ -601,7 +618,10 @@ export const buildImportPreviewFromRows = async (
           department: maybe(row.department),
           service: maybe(row.service),
           area,
-          specialty: maybe(row.specialty)
+          specialty: maybe(row.specialty),
+          // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario").
+          role: maybe(row.role),
+          schedule: maybe(row.schedule)
         }),
         location: Object.keys(location).length > 0 ? location : undefined,
         contactMethods: {

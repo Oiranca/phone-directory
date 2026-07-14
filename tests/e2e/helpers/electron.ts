@@ -68,7 +68,10 @@ export const closeElectronApp = async (electronApp: ElectronApplication) => {
 };
 
 export const waitForDirectory = async (page: Page) => {
-  await expect(page.getByRole("heading", { name: "Directorio" })).toBeVisible();
+  // OIR-218 removed the visible "Agenda"/"Directorio" heading from the app
+  // header by design, so we wait on the search input instead — it is a
+  // stable, always-present element on the Directory page.
+  await expect(page.getByPlaceholder("Buscar contacto o servicio")).toBeVisible();
 };
 
 export const readContactsFile = async (userDataPath: string) => {

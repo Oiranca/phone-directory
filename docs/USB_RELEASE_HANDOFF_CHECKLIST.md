@@ -74,7 +74,7 @@ Expected USB root files vary by platform:
 | macOS | `mac/` and/or `mac-arm64/`, `launch.command`, `README.txt`, `RELEASE_MANIFEST.txt` |
 | Linux | `linux-unpacked/`, `launch.sh`, `README.txt`, `RELEASE_MANIFEST.txt` |
 
-Linux may also include `Phone Directory.AppImage` when the build configuration produces the versioned AppImage artifact.
+Linux may also include `HospiAgenda.AppImage` when the build configuration produces the versioned AppImage artifact.
 
 If the USB filesystem strips executable bits, restore them after copying:
 

@@ -82,35 +82,55 @@ test.describe("OIR-22 critical MVP flows", () => {
     }
   });
 
-  test("exports JSON, re-imports it, and creates a backup on disk", async () => {
-    const workspace = await createWorkspace("export-import-backup");
-    const exportPath = path.join(workspace.exportsDir, "contacts-export.json");
-    const { electronApp, page } = await launchElectronApp({
-      userDataPath: workspace.userDataPath,
-      saveDialogPaths: [exportPath],
-      openDialogPaths: [exportPath]
+  test("creates a local backup on disk and re-imports it", async () => {
+    // OIR-224: the "Guardar la copia en otra carpeta…" secondary link/export
+    // entry point was removed from the "Copia de seguridad" card entirely
+    // (the operator confirmed choosing another destination folder is never
+    // needed). This flow now only exercises the single "Crear copia de
+    // seguridad" action, then re-imports that same local backup file — the
+    // underlying exportDataset()/createBackup() IPC mechanism is unchanged.
+    const workspace = await createWorkspace("backup-reimport");
+    let launched = await launchElectronApp({
+      userDataPath: workspace.userDataPath
     });
 
     try {
-      await waitForDirectory(page);
-      await page.getByRole("link", { name: "Importar/Exportar" }).click();
-      await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
+      await waitForDirectory(launched.page);
+      await launched.page.getByRole("link", { name: "Configuración" }).click();
+      await expect(launched.page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Exportar JSON/i }).click();
-      await expect(page.getByText("Exportación completada.")).toBeVisible();
-      await expect(fs.access(exportPath)).resolves.toBeUndefined();
+      await expect(launched.page.getByRole("button", { name: /Guardar la copia en otra carpeta/i })).toHaveCount(0);
 
-      await page.getByRole("button", { name: /Crear copia de seguridad/i }).click();
-      await expect(page.getByText("Copia de seguridad creada.")).toBeVisible();
-      await expect(listBackupFiles(workspace.userDataPath)).resolves.toHaveLength(1);
+      await launched.page.getByRole("button", { name: /Crear copia de seguridad/i }).click();
+      await expect(launched.page.getByText("Copia de seguridad creada.")).toBeVisible();
+      const backupFiles = await listBackupFiles(workspace.userDataPath);
+      expect(backupFiles).toHaveLength(1);
+      const backupFilePath = path.join(workspace.userDataPath, "backups", backupFiles[0]!.name);
 
-      await page.getByRole("button", { name: /Importar JSON/i }).click();
-      const importJsonDialog = page.getByRole("dialog", { name: "Confirmar importación JSON" });
-      await expect(importJsonDialog).toBeVisible();
-      await importJsonDialog.getByRole("button", { name: "Importar JSON" }).click();
-      await expect(page.getByText("Importación completada.")).toBeVisible();
+      await closeElectronApp(launched.electronApp);
+
+      // Relaunch with the native file dialog stubbed to return the backup
+      // file that was just created, then re-import it via the unified
+      // "Importar" entry point (JSON full-replace path).
+      launched = await launchElectronApp({
+        userDataPath: workspace.userDataPath,
+        openDialogPaths: [backupFilePath]
+      });
+
+      await waitForDirectory(launched.page);
+      await launched.page.getByRole("link", { name: "Configuración" }).click();
+      await expect(launched.page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
+
+      // OIR-219: single unified "Importar" entry point — one button, one native
+      // dialog (json/csv/ods/xls/xlsx filter), gated by a pre-selection safety
+      // confirmation covering both possible outcomes.
+      await launched.page.getByRole("button", { name: "Importar" }).click();
+      const pickImportDialog = launched.page.getByRole("dialog", { name: "Seleccionar archivo para importar" });
+      await expect(pickImportDialog).toBeVisible();
+      await pickImportDialog.getByRole("button", { name: "Elegir archivo" }).click();
+      await expect(launched.page.getByText("Importación completada.")).toBeVisible();
     } finally {
-      await closeElectronApp(electronApp);
+      await closeElectronApp(launched.electronApp);
       await removeWorkspace(workspace);
     }
   });
@@ -138,10 +158,12 @@ test.describe("OIR-22 critical MVP flows", () => {
 
     try {
       await waitForDirectory(page);
-      await page.getByRole("link", { name: "Importar/Exportar" }).click();
-      await expect(page.getByRole("heading", { name: "Importar y exportar datos" })).toBeVisible();
+      await page.getByRole("link", { name: "Configuración" }).click();
+      await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      await page.getByRole("button", { name: /Importar CSV\/ODS/i }).click();
+      // OIR-219: single unified "Importar" entry point.
+      await page.getByRole("button", { name: "Importar" }).click();
+      await page.getByRole("button", { name: "Elegir archivo" }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
       await expect(page.getByRole("heading", { name: "directory.csv" })).toBeVisible();
       await expect(page.getByText("Altas", { exact: true })).toBeVisible();
@@ -160,6 +182,50 @@ test.describe("OIR-22 critical MVP flows", () => {
       await waitForDirectory(page);
       await page.getByLabel("Buscar contactos").fill("Mostrador E2E");
       await expect(page.getByRole("button", { name: /Mostrador E2E/i })).toBeVisible();
+    } finally {
+      await closeElectronApp(electronApp);
+      await removeWorkspace(workspace);
+    }
+  });
+
+  test("OIR-218: Directory page has zero page-level vertical scroll at common viewport sizes", async () => {
+    // Regression guard for OIR-218's "sticky filter bar + bounded/paginated
+    // results list + bounded detail panel" layout: only the list/detail
+    // panel's own internal overflow-y-auto may scroll — the document itself
+    // must always fit exactly within the viewport, at any window size.
+    const workspace = await createWorkspace("zero-page-scroll");
+    const { electronApp, page } = await launchElectronApp({
+      userDataPath: workspace.userDataPath
+    });
+
+    try {
+      await waitForDirectory(page);
+
+      const viewportsToCheck = [
+        { width: 1440, height: 768 },
+        { width: 1440, height: 900 },
+        { width: 1920, height: 1080 }
+      ];
+
+      for (const viewport of viewportsToCheck) {
+        await page.setViewportSize(viewport);
+        // Let the ResizeObserver-driven --app-header-height /
+        // --directory-filterbar-height CSS custom properties settle after
+        // the resize before measuring.
+        await page.waitForTimeout(150);
+
+        const measurement = await page.evaluate(() => ({
+          scrollHeight: document.documentElement.scrollHeight,
+          innerHeight: window.innerHeight
+        }));
+
+        // 1px epsilon for sub-pixel rounding across browser engines.
+        expect(
+          measurement.scrollHeight,
+          `Directory page produced page-level scroll at ${viewport.width}x${viewport.height}: ` +
+            `scrollHeight=${measurement.scrollHeight} innerHeight=${measurement.innerHeight}`
+        ).toBeLessThanOrEqual(measurement.innerHeight + 1);
+      }
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);

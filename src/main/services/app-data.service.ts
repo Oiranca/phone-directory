@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
+import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts.schema.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
@@ -39,8 +40,40 @@ import type {
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
-import { normalizePrimaryEntries } from "../../shared/utils/contacts.js";
+import { reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
+
+/**
+ * Union `customFields` from both records of a duplicate-merge pair.
+ *
+ * - Every custom field on the kept record is preserved as-is.
+ * - Any custom field on the discarded record whose `key` doesn't already
+ *   exist on the kept record is appended (union, not replace).
+ * - On a `key` conflict, the kept record's value wins (OIR-245).
+ * - Returns `undefined` when neither record has any custom fields, matching
+ *   the optional shape of `contactRecordSchema.customFields`.
+ */
+const mergeCustomFields = (
+  keepFields: ContactRecord["customFields"],
+  discardFields: ContactRecord["customFields"]
+): ContactRecord["customFields"] => {
+  if (!keepFields?.length && !discardFields?.length) {
+    return undefined;
+  }
+
+  const merged = [...(keepFields ?? [])];
+  const keepKeys = new Set(merged.map((field) => field.key.trim().toLowerCase()));
+
+  for (const field of discardFields ?? []) {
+    const normalizedKey = field.key.trim().toLowerCase();
+    if (!keepKeys.has(normalizedKey)) {
+      merged.push(field);
+      keepKeys.add(normalizedKey);
+    }
+  }
+
+  return merged;
+};
 
 export class AppDataService {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -110,7 +143,7 @@ export class AppDataService {
 
   async getBootstrapData(): Promise<BootstrapResult> {
     await this.ensureInitialFiles();
-    const settings = await this.readSettings(true);
+    const settings = await this.backfillLastImportedAtFromAuditLog(await this.readSettings(true));
     const contactsFilePath = settings.dataFilePath;
 
     try {
@@ -312,9 +345,11 @@ export class AppDataService {
       importSource: path.basename(sourceFilePath)
     });
 
+    const updatedSettings = await this.recordLastImportedAt(settings, now);
+
     return {
       contacts: importedContacts,
-      settings: this.toEditableSettings(settings),
+      settings: this.toEditableSettings(updatedSettings),
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: importedContacts.records.length
@@ -517,9 +552,11 @@ export class AppDataService {
       }
     }
 
+    const updatedSettings = await this.recordLastImportedAt(settings, now);
+
     return {
       contacts: merged.contacts,
-      settings: this.toEditableSettings(settings),
+      settings: this.toEditableSettings(updatedSettings),
       backupPath,
       importedFilePath: sourceFilePath,
       recordCount: merged.contacts.records.length,
@@ -549,9 +586,12 @@ export class AppDataService {
       ...parsed,
       id: savedRecordId,
       contactMethods: {
-        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: normalizePrimaryEntries(parsed.contactMethods.emails),
-        socials: normalizePrimaryEntries(parsed.contactMethods.socials)
+        // OIR-239: use the non-inventing reconciler — "Principal" must stay a
+        // manual, user-editable choice; a record with zero phones/emails/
+        // socials marked primary must not have one silently forced on save.
+        phones: reconcilePrimaryEntries(parsed.contactMethods.phones),
+        emails: reconcilePrimaryEntries(parsed.contactMethods.emails),
+        socials: reconcilePrimaryEntries(parsed.contactMethods.socials)
       },
       audit: {
         createdAt: now,
@@ -600,9 +640,10 @@ export class AppDataService {
       id: currentRecord.id,
       source: currentRecord.source,
       contactMethods: {
-        phones: normalizePrimaryEntries(parsed.contactMethods.phones),
-        emails: normalizePrimaryEntries(parsed.contactMethods.emails),
-        socials: normalizePrimaryEntries(parsed.contactMethods.socials)
+        // OIR-239: see createRecord above — never invent a primary here.
+        phones: reconcilePrimaryEntries(parsed.contactMethods.phones),
+        emails: reconcilePrimaryEntries(parsed.contactMethods.emails),
+        socials: reconcilePrimaryEntries(parsed.contactMethods.socials)
       },
       audit: {
         ...currentRecord.audit,
@@ -634,7 +675,11 @@ export class AppDataService {
     });
   }
 
-  async mergeDuplicates(keepId: string, discardId: string): Promise<ContactRecord> {
+  async mergeDuplicates(
+    keepId: string,
+    discardId: string,
+    overrides?: MergeContactsOverrides
+  ): Promise<ContactRecord> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
@@ -701,15 +746,36 @@ export class AppDataService {
         department: keepRecord.organization.department || discardRecord.organization.department,
         service: keepRecord.organization.service || discardRecord.organization.service,
         area: keepRecord.organization.area || discardRecord.organization.area,
-        specialty: keepRecord.organization.specialty || discardRecord.organization.specialty
+        specialty: keepRecord.organization.specialty || discardRecord.organization.specialty,
+        // OIR-245: role/schedule were previously dropped entirely when the
+        // keeper lacked them — fill in from the discarded record instead.
+        role: keepRecord.organization.role || discardRecord.organization.role,
+        schedule: keepRecord.organization.schedule || discardRecord.organization.schedule
       },
-      // Copy location from discard if keeper doesn't have one
-      location: keepRecord.location || discardRecord.location,
+      // OIR-245: merge location field-by-field instead of all-or-nothing —
+      // a keeper that already has a location object but is missing a
+      // subfield (e.g. sector/section) should still inherit it from the
+      // discarded record's location.
+      location:
+        keepRecord.location || discardRecord.location
+          ? {
+              building: keepRecord.location?.building || discardRecord.location?.building,
+              floor: keepRecord.location?.floor || discardRecord.location?.floor,
+              room: keepRecord.location?.room || discardRecord.location?.room,
+              text: keepRecord.location?.text || discardRecord.location?.text,
+              sector: keepRecord.location?.sector || discardRecord.location?.sector,
+              section: keepRecord.location?.section || discardRecord.location?.section
+            }
+          : undefined,
+      // OIR-245: union customFields from both records; kept record wins on
+      // key conflicts.
+      customFields: mergeCustomFields(keepRecord.customFields, discardRecord.customFields),
       // Merge contact methods with deduplication
       contactMethods: {
-        phones: normalizePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
-        emails: normalizePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails]),
-        socials: normalizePrimaryEntries([...keepRecord.contactMethods.socials, ...extraSocials])
+        // OIR-239: never invent a primary when merging duplicates.
+        phones: reconcilePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
+        emails: reconcilePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails]),
+        socials: reconcilePrimaryEntries([...keepRecord.contactMethods.socials, ...extraSocials])
       },
       // Merge aliases
       aliases: [...keepRecord.aliases, ...extraAliases],
@@ -729,9 +795,50 @@ export class AppDataService {
       }
     });
 
+    // OIR-225 — apply user-supplied field overrides on top of the automatic
+    // keep/discard merge result, AFTER the merge logic above has already run.
+    // Explicit edits win over whatever the automatic union produced. Only the
+    // top-level keys actually present in `overrides` are replaced; anything
+    // omitted keeps the value `mergedRecord` already computed above.
+    const finalRecord = overrides
+      ? contactRecordSchema.parse({
+          ...mergedRecord,
+          ...(overrides.displayName !== undefined ? { displayName: overrides.displayName } : {}),
+          ...(overrides.type !== undefined ? { type: overrides.type } : {}),
+          ...(overrides.externalId !== undefined ? { externalId: overrides.externalId } : {}),
+          ...(overrides.person !== undefined
+            ? { person: { ...mergedRecord.person, ...overrides.person } }
+            : {}),
+          ...(overrides.organization !== undefined
+            ? { organization: { ...mergedRecord.organization, ...overrides.organization } }
+            : {}),
+          ...(overrides.location !== undefined
+            ? { location: { ...mergedRecord.location, ...overrides.location } }
+            : {}),
+          ...(overrides.contactMethods !== undefined
+            ? {
+                contactMethods: {
+                  phones: reconcilePrimaryEntries(
+                    overrides.contactMethods.phones ?? mergedRecord.contactMethods.phones
+                  ),
+                  emails: reconcilePrimaryEntries(
+                    overrides.contactMethods.emails ?? mergedRecord.contactMethods.emails
+                  ),
+                  socials: reconcilePrimaryEntries(
+                    overrides.contactMethods.socials ?? mergedRecord.contactMethods.socials
+                  )
+                }
+              }
+            : {}),
+          ...(overrides.aliases !== undefined ? { aliases: overrides.aliases } : {}),
+          ...(overrides.tags !== undefined ? { tags: overrides.tags } : {}),
+          ...(overrides.notes !== undefined ? { notes: overrides.notes } : {})
+        })
+      : mergedRecord;
+
     const nextRecords = contacts.records
       .filter((r) => r.id !== discardId)
-      .map((r) => (r.id === keepId ? mergedRecord : r));
+      .map((r) => (r.id === keepId ? finalRecord : r));
 
     const nextContacts = this.buildNextDataset(nextRecords, contacts, editorName, now);
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
@@ -748,7 +855,7 @@ export class AppDataService {
       changes: { discardedId: { old: discardId, new: null } }
     });
 
-    return mergedRecord;
+    return finalRecord;
     });
   }
 
@@ -767,8 +874,78 @@ export class AppDataService {
       editorName: settings.editorName,
       dataFilePath: settings.dataFilePath,
       backupDirectoryPath: settings.backupDirectoryPath,
-      ui: settings.ui
+      ui: settings.ui,
+      lastImportedAt: settings.lastImportedAt
     };
+  }
+
+  /**
+   * OIR-218: persists the "last import" watermark shown in the app header.
+   * Only called from importDataset / importCsvDataset — restoring an internal
+   * backup or editing a single record does not count as "importing a file".
+   * Reuses the standard atomic writeJsonFile path (dual-fsync); no parallel
+   * write mechanism is introduced.
+   */
+  private async recordLastImportedAt(settings: AppSettings, timestamp: string): Promise<AppSettings> {
+    const nextSettings: AppSettings = { ...settings, lastImportedAt: timestamp };
+    await writeJsonFile(getSettingsFilePath(), nextSettings);
+    return nextSettings;
+  }
+
+  /**
+   * OIR-218 (item 4): one-time backfill for datasets that were imported before
+   * lastImportedAt existed. If the current settings have no lastImportedAt,
+   * check the audit log for a historical "bulk-import" or "dataset-replace"
+   * entry (both are written by importCsvDataset / importDataset respectively)
+   * and, if one exists, persist the most recent such timestamp as
+   * lastImportedAt so the header watermark can show it going forward.
+   *
+   * If the audit log has no such entry (e.g. the dataset predates audit
+   * logging, or the log was reset), lastImportedAt is intentionally left
+   * unset — we never fabricate a timestamp. The user only sees the watermark
+   * after their next real import.
+   *
+   * Best-effort: any audit-log read failure (including a quarantined/corrupt
+   * log) must not block bootstrap, so failures here are swallowed.
+   */
+  private async backfillLastImportedAtFromAuditLog(settings: AppSettings): Promise<AppSettings> {
+    if (settings.lastImportedAt) {
+      return settings;
+    }
+
+    try {
+      const [bulkImportResult, datasetReplaceResult] = await Promise.all([
+        this.auditFacade.getAuditLog({ action: "bulk-import" }),
+        this.auditFacade.getAuditLog({ action: "dataset-replace" })
+      ]);
+
+      const candidateTimestamps = [bulkImportResult.entries[0]?.timestamp, datasetReplaceResult.entries[0]?.timestamp]
+        .filter((timestamp): timestamp is string => Boolean(timestamp))
+        .sort();
+      const latestTimestamp = candidateTimestamps[candidateTimestamps.length - 1];
+
+      if (!latestTimestamp) {
+        return settings;
+      }
+
+      // Route the write through the shared write queue and re-read the
+      // settings snapshot immediately before persisting. `settings` above was
+      // read before the audit-log lookup, so writing it back directly here
+      // (outside the queue) could race a concurrent saveSettings()/import and
+      // clobber fields that operation changed with this stale snapshot.
+      return await this.enqueueWrite(async () => {
+        const latestSettings = await this.readSettings(true);
+        if (latestSettings.lastImportedAt) {
+          // A concurrent operation already set it (e.g. a real import
+          // completed while this backfill was queued) — don't overwrite it
+          // with our older best-effort guess.
+          return latestSettings;
+        }
+        return await this.recordLastImportedAt(latestSettings, latestTimestamp);
+      });
+    } catch {
+      return settings;
+    }
   }
 
   private async readContacts(settings: AppSettings) {
@@ -1490,13 +1667,50 @@ export class AppDataService {
     exportedAt: string,
     editorName: string
   ): ContactRecord {
-    const hasPhone = new Set(currentRecord.contactMethods.phones.map((phone) => normalizePhoneForDedup(phone.number)));
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
     const socialMergeKey = (s: { platform: string; handle?: string; url?: string }): string =>
       `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
     const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
+
+    // OIR-224: index imported phones by normalized number so phones that
+    // already exist on the current record can have their PRIVACY MARKERS
+    // (confidential / noPatientSharing) refreshed from the freshly re-imported
+    // source row, instead of silently keeping whatever stale value the current
+    // record happened to have. Before this fix, re-importing the same source
+    // file with the "merge-fields" ("Combinar") conflict policy would append
+    // only genuinely NEW phone numbers and leave existing ones completely
+    // untouched — so a phone number that was previously imported with the
+    // wrong confidential flag (e.g. from data predating OIR-222's row-level
+    // Confidencial mapping, or a manual mistake) would keep showing the wrong
+    // flag forever, no matter how many times the (now-correct) source file was
+    // re-imported. The source ODS/CSV row is the authoritative statement of
+    // whether a number is confidential, so it must win on every re-import.
+    const importedPhoneByKey = new Map<string, (typeof importedRecord.contactMethods.phones)[number]>();
+    for (const phone of importedRecord.contactMethods.phones) {
+      const key = normalizePhoneForDedup(phone.number);
+      if (key && !importedPhoneByKey.has(key)) {
+        importedPhoneByKey.set(key, phone);
+      }
+    }
+
+    const refreshedCurrentPhones = currentRecord.contactMethods.phones.map((phone) => {
+      const key = normalizePhoneForDedup(phone.number);
+      const importedMatch = key ? importedPhoneByKey.get(key) : undefined;
+
+      if (!importedMatch) {
+        return phone;
+      }
+
+      return {
+        ...phone,
+        confidential: importedMatch.confidential,
+        noPatientSharing: importedMatch.noPatientSharing
+      };
+    });
+
+    const hasPhone = new Set(refreshedCurrentPhones.map((phone) => normalizePhoneForDedup(phone.number)));
     const nextPhones = [
-      ...currentRecord.contactMethods.phones,
+      ...refreshedCurrentPhones,
       ...importedRecord.contactMethods.phones.filter((phone) => {
         const key = normalizePhoneForDedup(phone.number);
         return key && !hasPhone.has(key);
@@ -1522,17 +1736,45 @@ export class AppDataService {
         department: currentRecord.organization.department ?? importedRecord.organization.department,
         service: currentRecord.organization.service ?? importedRecord.organization.service,
         area: currentRecord.organization.area ?? importedRecord.organization.area,
-        specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty
+        specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty,
+        // OIR-245 (import path): role/schedule were previously dropped
+        // entirely whenever the current record lacked them — fill in from
+        // the imported record instead, mirroring mergeDuplicates().
+        role: currentRecord.organization.role ?? importedRecord.organization.role,
+        schedule: currentRecord.organization.schedule ?? importedRecord.organization.schedule
       },
-      location: currentRecord.location ?? importedRecord.location,
+      // OIR-245 (import path): merge location field-by-field instead of
+      // all-or-nothing — a current record that already has a location object
+      // but is missing a subfield (e.g. sector/section) must still inherit it
+      // from the imported record's location, mirroring mergeDuplicates().
+      location:
+        currentRecord.location ?? importedRecord.location
+          ? {
+              building: currentRecord.location?.building ?? importedRecord.location?.building,
+              floor: currentRecord.location?.floor ?? importedRecord.location?.floor,
+              room: currentRecord.location?.room ?? importedRecord.location?.room,
+              text: currentRecord.location?.text ?? importedRecord.location?.text,
+              sector: currentRecord.location?.sector ?? importedRecord.location?.sector,
+              section: currentRecord.location?.section ?? importedRecord.location?.section
+            }
+          : undefined,
       contactMethods: {
-        phones: normalizePrimaryEntries(nextPhones),
-        emails: normalizePrimaryEntries(nextEmails),
-        socials: normalizePrimaryEntries(nextSocials)
+        // OIR-227 (residual gap #3) / OIR-239: normalizePrimaryEntries invents
+        // a primary when none is marked, which reintroduces the auto-assigned
+        // "Principal" bug for any record touched by a merge-fields conflict
+        // resolution. Only reconcile a genuine conflict (more than one
+        // explicitly marked) via the shared, non-inventing reconciler.
+        phones: reconcilePrimaryEntries(nextPhones),
+        emails: reconcilePrimaryEntries(nextEmails),
+        socials: reconcilePrimaryEntries(nextSocials)
       },
       aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
       tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
       notes: currentRecord.notes ?? importedRecord.notes,
+      // OIR-245 (import path): union customFields from both records instead
+      // of dropping the imported ones entirely; current record wins on key
+      // conflicts, mirroring mergeDuplicates().
+      customFields: mergeCustomFields(currentRecord.customFields, importedRecord.customFields),
       audit: {
         ...currentRecord.audit,
         updatedAt: exportedAt,

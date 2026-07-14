@@ -1,6 +1,6 @@
-# Hospital Directory MVP
+# HospiAgenda
 
-Local-first desktop MVP for managing a hospital contact directory.
+Local-first desktop application for managing a hospital contact directory.
 
 The project is designed for administrative staff and prioritizes:
 
@@ -14,7 +14,7 @@ The project is designed for administrative staff and prioritizes:
 
 The repository currently includes:
 
-- project planning and MVP scope documents
+- project planning and current scope documents
 - migration tooling from `.ods` to normalized CSV and `contacts.json`
 - React + Electron bootstrap
 - shared types and Zod schemas
@@ -160,7 +160,7 @@ Actual local data generated during migration stays outside versioned files.
 ## Migration Workflow
 
 1. Extract selected sheets from the source `.ods`
-2. Normalize working CSVs into the MVP CSV template
+2. Normalize working CSVs into the current CSV template
 3. Validate the normalized CSV
 4. Convert the validated CSV into `contacts.json`
 

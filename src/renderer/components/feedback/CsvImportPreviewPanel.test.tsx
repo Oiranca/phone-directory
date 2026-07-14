@@ -186,8 +186,12 @@ describe("CsvImportPreviewPanel", () => {
     it("shows type and area counts", () => {
       renderPanel(allValidPreview);
 
-      expect(screen.getByText("service: 2")).toBeInTheDocument();
-      expect(screen.getByText("person: 1")).toBeInTheDocument();
+      // OIR-223 priority 2: "Tipos detectados" chips show the Spanish
+      // RECORD_TYPE_LABELS mapping, not the raw internal enum value. The
+      // stored/internal typeCounts keys (service/person) are unchanged —
+      // only the rendered label is translated.
+      expect(screen.getByText("Servicio: 2")).toBeInTheDocument();
+      expect(screen.getByText("Persona: 1")).toBeInTheDocument();
       expect(screen.getByText("gestion-administracion: 2")).toBeInTheDocument();
     });
 

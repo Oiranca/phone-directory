@@ -6,12 +6,72 @@ This mapping guide is based on the current hospital directory workbook used duri
 
 ## Goal
 
-The purpose of this document is to convert the current `.ods` hospital directory into the normalized CSV template used by the MVP importer.
+The purpose of this document is to convert the current `.ods` hospital directory into the normalized CSV template used by the importer.
 
 Reference template files:
 
 - [CSV_IMPORT_TEMPLATE.md](./CSV_IMPORT_TEMPLATE.md)
 - [csv/contacts-import-template.csv](../csv/contacts-import-template.csv)
+
+## 0. OIR-222 Update — Tabular "Agenda" Sheet (Real Hospital Export)
+
+The hospital's real ODS export contains a sheet literally named **"Agenda"**
+that is a flat, structured 17-column table — a genuinely different shape from
+the "visual directory workbook" described in the rest of this document
+(sections 1-11 below, which predate this format and remain accurate for other
+sheet families that still use the older layout).
+
+### 0.1 Header (exact column order)
+
+```
+Nombre, Categoría, Servicio, Número 1, Número 2, Número 3, Número 4, Número 5,
+Número 6, Número 7, Horario, Confidencial, Edificio, Planta, Sector, Sección,
+Comentarios
+```
+
+The importer detects this exact header (accent/case-insensitive) on a sheet
+named "Agenda" and routes it to a dedicated column-position-based parser
+(`normalizeTabularAgendaSheet` in `src/main/services/spreadsheet-parsers.ts`),
+**not** the generic label+phone heuristics used for the older sheet families.
+
+### 0.2 Column mapping
+
+| ODS column      | Maps to                                   | Notes |
+|------------------|--------------------------------------------|-------|
+| `Nombre`         | `record.displayName`                       | Falls back to `Servicio` when empty (many rows have no named holder). |
+| `Categoría`      | `organization.role` **(new field)**        | Job title/role (e.g. "Enfermero/a", "Jefe/a", "Doctora/or"). No existing field represented this. |
+| `Servicio`       | `organization.service`                     | Existing field. |
+| `Número 1`–`Número 7` | `contactMethods.phones[]`              | One phone entry per non-empty cell (a cell may expand to more than one number via the existing compact-range/suffix rules). |
+| `Horario`        | `organization.schedule` **(new field)**    | Operating hours (e.g. "8:00-22:00"). No existing field represented this. Also excluded from phone-number extraction (previously misparsed as a fake phone digit string). |
+| `Confidencial`   | `contactMethods.phones[*].confidential`    | Row-level "Si"/"Sí" (case/accent-insensitive) is applied to **every** phone built from that row's `Número 1`–`Número 7` columns, not just the first — reuses the existing `confidential` phone field (OIR-105/OIR-218), no new field. |
+| `Edificio`       | `location.building`                        | Existing field. |
+| `Planta`         | `location.floor`                           | Existing field. A leading "Planta " word is stripped (e.g. "Planta 4" → "4") because the location-summary display already re-adds the "Planta " prefix. |
+| `Sector`         | `location.sector` **(new field)**          | Distinct from `department`/`service`/`area` (e.g. "Laboratorio", "Enfermería"). |
+| `Sección`        | `location.section` **(new field)**         | Distinct sub-unit label (e.g. "Despacho", "Control", "Consulta", "Citas", "Secretaría"). |
+| `Comentarios`    | `record.notes`                             | Existing field, same as the "comments column → notes" rule in section 6/7 below. Also scanned for the existing privacy markers (§6) for defense in depth. |
+
+### 0.3 Excluded rows
+
+- The header row itself.
+- "Section divider" rows with exactly one non-empty cell, in column `Nombre`
+  (e.g. `Letra A`, `Hospital Polivalente`) — these are visual section markers
+  in the source sheet, not contacts.
+- Rows with no `Nombre` and no `Servicio` (nothing to build a `displayName`
+  from).
+
+### 0.4 Duplicate/out-of-scope sheets sharing the same header
+
+The real workbook also contains `Agenda_3` (a byte-identical duplicate of
+`Agenda`) and `Departamentos` (a separate, much smaller, mostly-blank table)
+which both happen to share the exact same 17-column header. Only the sheet
+literally named `Agenda` is routed to the tabular parser; any other sheet with
+this header is skipped entirely (not merely deprioritized) so the legacy
+heuristics never run against a structured column layout they weren't designed
+for — running them would misparse `Horario` values as fake phone numbers and,
+via cross-sheet merge-by-displayName, contaminate the real `Agenda` rows.
+
+This was confirmed against the real source file: parsing "Agenda" alone
+(pre-merge, per source row) yields exactly 670 rows / 23 confidential rows.
 
 ## 1. Key Finding About the Source File
 
@@ -31,7 +91,7 @@ Use a two-step normalization approach:
 1. Extract data from selected `.ods` sheets into working CSV files
 2. Normalize those working files into the project import template
 
-For the MVP, do **not** attempt a universal automatic import of all sheets at once. Instead, process the workbook by sheet family.
+For the current migration approach, do **not** attempt a universal automatic import of all sheets at once. Instead, process the workbook by sheet family.
 
 ## 3. Sheet Families and Recommended Mapping
 
@@ -128,7 +188,7 @@ Recommended mapping:
 
 Important rule:
 
-If the source text mixes role and person name, keep `displayName` intact for the MVP.
+If the source text mixes role and person name, keep `displayName` intact for now.
 
 Example:
 
@@ -154,9 +214,9 @@ Recommended mapping:
 - if the numbers are internal search/pager codes rather than phones, keep them in:
   - `notes`
   - or `aliases`
-  - or a later custom field if added after MVP
+  - or a later custom field if added afterward
 
-MVP recommendation:
+Recommendation:
 
 - do not force all `busca` values into phone fields
 - if a value is clearly a usable internal contact number, map it as `phoneXNumber`
@@ -196,7 +256,7 @@ Recommended displayName pattern:
 
 ## 4. Recommended Initial Area Inference
 
-For the MVP migration, use the following initial area heuristics:
+For the current migration, use the following initial area heuristics:
 
 - `gestion-administracion`
   - admissions
@@ -313,7 +373,7 @@ To reduce risk, normalize in this order:
 8. alphabetic sheets `A-Z`
 9. `Buscas_*` sheets last
 
-This order gives a useful MVP dataset early and postpones the noisiest sources.
+This order gives a useful initial dataset early and postpones the noisiest sources.
 
 ## 10. Suggested Intermediate Workflow
 
@@ -328,7 +388,7 @@ Recommended workflow:
 
 ## 11. Suggested First Migration Scope
 
-For the first usable MVP dataset, prioritize these sheets:
+For the first usable dataset, prioritize these sheets:
 
 - `Admisión_Central`
 - `Urgencias`
