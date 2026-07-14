@@ -1722,9 +1722,28 @@ export class AppDataService {
         department: currentRecord.organization.department ?? importedRecord.organization.department,
         service: currentRecord.organization.service ?? importedRecord.organization.service,
         area: currentRecord.organization.area ?? importedRecord.organization.area,
-        specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty
+        specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty,
+        // OIR-245 (import path): role/schedule were previously dropped
+        // entirely whenever the current record lacked them — fill in from
+        // the imported record instead, mirroring mergeDuplicates().
+        role: currentRecord.organization.role ?? importedRecord.organization.role,
+        schedule: currentRecord.organization.schedule ?? importedRecord.organization.schedule
       },
-      location: currentRecord.location ?? importedRecord.location,
+      // OIR-245 (import path): merge location field-by-field instead of
+      // all-or-nothing — a current record that already has a location object
+      // but is missing a subfield (e.g. sector/section) must still inherit it
+      // from the imported record's location, mirroring mergeDuplicates().
+      location:
+        currentRecord.location ?? importedRecord.location
+          ? {
+              building: currentRecord.location?.building ?? importedRecord.location?.building,
+              floor: currentRecord.location?.floor ?? importedRecord.location?.floor,
+              room: currentRecord.location?.room ?? importedRecord.location?.room,
+              text: currentRecord.location?.text ?? importedRecord.location?.text,
+              sector: currentRecord.location?.sector ?? importedRecord.location?.sector,
+              section: currentRecord.location?.section ?? importedRecord.location?.section
+            }
+          : undefined,
       contactMethods: {
         // OIR-227 (residual gap #3) / OIR-239: normalizePrimaryEntries invents
         // a primary when none is marked, which reintroduces the auto-assigned
@@ -1738,6 +1757,10 @@ export class AppDataService {
       aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
       tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
       notes: currentRecord.notes ?? importedRecord.notes,
+      // OIR-245 (import path): union customFields from both records instead
+      // of dropping the imported ones entirely; current record wins on key
+      // conflicts, mirroring mergeDuplicates().
+      customFields: mergeCustomFields(currentRecord.customFields, importedRecord.customFields),
       audit: {
         ...currentRecord.audit,
         updatedAt: exportedAt,

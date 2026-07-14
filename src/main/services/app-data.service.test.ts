@@ -4596,4 +4596,97 @@ describe("AppDataService", () => {
       expect(merged.customFields?.[0]?.value).toBe("Mañana");
     });
   });
+
+  describe("OIR-245 (import path): merge-fields conflict policy does not drop role/schedule/location/customFields", () => {
+    it("fills organization.role/schedule and location.sector/section from the imported row when the current record lacks them", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const initial = await service.getBootstrapData();
+      const existing = initial.contacts.records[0]!;
+
+      const sourceFilePath = path.join(testRoot, "incoming", "merge-fields-role-schedule-location.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,role,schedule,building,sector,section,phone1Number,status",
+          `${existing.externalId},service,${existing.displayName},${existing.organization.department},Enfermera,8:00-15:00,Hospital General,Enfermería,Consulta,55555,active`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      const result = await service.importCsvDataset(sourceFilePath, [
+        { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+      ]);
+      const updated = result.contacts.records.find((record) => record.id === existing.id)!;
+
+      expect(result.conflictPolicyCounts?.["merge-fields"]).toBe(1);
+      // The existing record had no role/schedule/sector/section — these must
+      // be filled in from the imported row instead of being dropped.
+      expect(updated.organization.role).toBe("Enfermera");
+      expect(updated.organization.schedule).toBe("8:00-15:00");
+      expect(updated.location?.sector).toBe("Enfermería");
+      expect(updated.location?.section).toBe("Consulta");
+    });
+
+    it("unions customFields (current record wins on key conflict), mirroring mergeDuplicates", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const current = await service.createRecord({
+        type: "person",
+        displayName: "Ana Pérez",
+        person: { firstName: "Ana", lastName: "Pérez" },
+        organization: { department: "Urgencias" },
+        contactMethods: { phones: [], emails: [], socials: [] },
+        aliases: [],
+        tags: [],
+        status: "active",
+        customFields: [{ id: "cf_current_1", key: "Extensión antigua", value: "1234" }]
+      });
+      const currentRecord = (await service.getBootstrapData()).contacts.records.find(
+        (record) => record.id === current.savedRecordId
+      )!;
+
+      // OIR-245: the CSV/ODS import pipeline does not currently map a
+      // customFields column, so there is no public API that produces an
+      // "imported" ContactRecord carrying customFields. Exercise the merge
+      // helper directly (as a unit test of the merge logic itself) — this is
+      // the same union/kept-wins behavior already covered end-to-end for
+      // mergeDuplicates() above, applied to the import-conflict code path.
+      const importedRecord = {
+        ...currentRecord,
+        id: "cnt_imported_placeholder",
+        customFields: [
+          { id: "cf_imported_1", key: "Turno", value: "Mañana" },
+          // Conflicting key with the current record — current record must win.
+          { id: "cf_imported_2", key: "Extensión antigua", value: "9999" }
+        ]
+      };
+
+      const merged = (
+        service as unknown as {
+          mergeImportedRecordFields: (
+            currentRec: typeof currentRecord,
+            importedRec: typeof currentRecord,
+            exportedAt: string,
+            editorName: string
+          ) => typeof currentRecord;
+        }
+      ).mergeImportedRecordFields(currentRecord, importedRecord, "2026-07-14T00:00:00Z", "Tester");
+
+      expect(merged.customFields).toHaveLength(2);
+      expect(
+        merged.customFields?.some((field) => field.key === "Extensión antigua" && field.value === "1234")
+      ).toBe(true);
+      expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
+    });
+  });
 });
