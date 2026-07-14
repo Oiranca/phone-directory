@@ -18,12 +18,12 @@ export const phoneContactSchema = z.object({
   kind: z.string(),
   isPrimary: z.boolean(),
   // Advisory presentation marker only — not an enforced access control; records and flagged values
-  // remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+  // remain fully searchable. See audit plan §4 P1-03 resolution.
   // NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
   // phones when selecting the default displayed number — this is UI convenience, not a security gate.
   confidential: z.boolean(),
   // Advisory presentation marker only — not an enforced access control; records and flagged values
-  // remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+  // remain fully searchable. See audit plan §4 P1-03 resolution.
   // NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
   // phones when selecting the default displayed number — this is UI convenience, not a security gate.
   noPatientSharing: z.boolean(),
@@ -38,7 +38,7 @@ export const emailContactSchema = z.object({
 });
 
 /**
- * Platform enum for social-media contacts (OIR-131).
+ * Platform enum for social-media contacts.
  * Naming mirrors the existing kind/type enum convention: lowercase slug.
  */
 export const socialPlatformSchema = z.enum([
@@ -53,7 +53,7 @@ export const socialPlatformSchema = z.enum([
 ]);
 
 /**
- * Persisted social-media contact entry (OIR-131).
+ * Persisted social-media contact entry.
  * At least one of `handle` or `url` is required (enforced by .refine).
  * BACKWARD COMPAT: contactMethods.socials uses .default([]) so old records parse fine.
  */
@@ -87,7 +87,7 @@ export const socialContactSchema = z.object({
 );
 
 /**
- * Persisted custom key-value field (OIR-232). Lets a user record ad-hoc
+ * Persisted custom key-value field. Lets a user record ad-hoc
  * information the fixed form doesn't cover (e.g. "Número extranjero" for one
  * contact) without a schema change per new field. `id` is a stable entry
  * identifier only (mirrors the phones/emails/socials pattern for list
@@ -114,11 +114,11 @@ export const contactRecordSchema = z.object({
     service: z.string().optional(),
     area: z.enum(AREAS).optional(),
     specialty: z.string().optional(),
-    // OIR-222: role/job title (ODS "Categoría" column, e.g. "Enfermero/a", "Jefe/a",
+    // Role/job title (ODS "Categoría" column, e.g. "Enfermero/a", "Jefe/a",
     // "Doctora/or"). No existing field represented this — added as a new optional
     // string field following the same pattern as the other organization fields.
     role: z.string().optional(),
-    // OIR-222: operating hours/schedule (ODS "Horario" column, e.g. "8:00-22:00").
+    // Operating hours/schedule (ODS "Horario" column, e.g. "8:00-22:00").
     // No existing field represented this — added as a new optional string field.
     schedule: z.string().optional()
   }),
@@ -127,25 +127,25 @@ export const contactRecordSchema = z.object({
     floor: z.string().optional(),
     room: z.string().optional(),
     text: z.string().optional(),
-    // OIR-222: ODS "Sector" column (e.g. "Enfermería", "Laboratorio"). Distinct
+    // ODS "Sector" column (e.g. "Enfermería", "Laboratorio"). Distinct
     // from department/service/area — added as a new optional string field
     // following the same pattern as building/floor/room.
     sector: z.string().optional(),
-    // OIR-222: ODS "Sección" column (e.g. "Despacho", "Control", "Consulta",
+    // ODS "Sección" column (e.g. "Despacho", "Control", "Consulta",
     // "Citas", "Secretaría"). Added as a new optional string field.
     section: z.string().optional()
   }).optional(),
   contactMethods: z.object({
     phones: z.array(phoneContactSchema),
     emails: z.array(emailContactSchema),
-    // BACKWARD COMPAT (OIR-131): existing persisted records have no `socials` field.
+    // BACKWARD COMPAT: existing persisted records have no `socials` field.
     // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
     socials: z.array(socialContactSchema).default([])
   }),
   aliases: z.array(z.string()),
   tags: z.array(z.string()),
   notes: z.string().optional(),
-  // OIR-232: user-defined key/value pairs for information the fixed form
+  // User-defined key/value pairs for information the fixed form
   // doesn't cover. Optional — absent on records that don't use it, including
   // all existing persisted records.
   customFields: z.array(customFieldSchema).optional(),
@@ -199,7 +199,7 @@ export const appSettingsSchema = z.object({
       retentionCount: z.number().int().min(1).max(100)
     }).default(autoBackupDefaults)
   }),
-  // OIR-218: timestamp of the last time the dataset was replaced/merged from an
+  // Timestamp of the last time the dataset was replaced/merged from an
   // external file import (JSON dataset-replace or CSV/spreadsheet bulk-import).
   // Not user-editable — written only by AppDataService.importDataset /
   // importCsvDataset. Absent until the first import ever happens.
@@ -224,9 +224,9 @@ export const editablePhoneContactSchema = z.object({
   extension: optionalTextField(),
   kind: z.string().trim().min(1, "El tipo de teléfono es obligatorio."),
   isPrimary: z.boolean(),
-  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105).
+  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution.
   confidential: z.boolean(),
-  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution (OIR-105).
+  // Advisory presentation marker only — not an enforced access control. See audit plan §4 P1-03 resolution.
   noPatientSharing: z.boolean(),
   notes: optionalTextField()
 });
@@ -239,7 +239,7 @@ export const editableEmailContactSchema = z.object({
 });
 
 /**
- * Editable social-media contact entry (OIR-131).
+ * Editable social-media contact entry.
  * Mirrors the EditablePhoneContact pattern: trim transforms applied,
  * at-least-one-of handle/url validated.
  */
@@ -259,7 +259,7 @@ export const editableSocialContactSchema = z.object({
 );
 
 /**
- * Editable custom key-value field entry (OIR-232). Mirrors the
+ * Editable custom key-value field entry. Mirrors the
  * EditablePhoneContact pattern: trim transforms applied, both key and value
  * required (an incomplete entry blocks save rather than being silently
  * dropped, same as a phone with no number).
@@ -310,9 +310,9 @@ export const editableContactRecordSchema = z.object({
     service: optionalTextField(),
     area: z.enum(AREAS).optional(),
     specialty: optionalTextField(),
-    // OIR-222: see contactRecordSchema.organization.role for rationale.
+    // See contactRecordSchema.organization.role for rationale.
     role: optionalTextField(),
-    // OIR-222: see contactRecordSchema.organization.schedule for rationale.
+    // See contactRecordSchema.organization.schedule for rationale.
     schedule: optionalTextField()
   }),
   location: z.object({
@@ -320,9 +320,9 @@ export const editableContactRecordSchema = z.object({
     floor: optionalTextField(),
     room: optionalTextField(),
     text: optionalTextField(),
-    // OIR-222: see contactRecordSchema.location.sector for rationale.
+    // See contactRecordSchema.location.sector for rationale.
     sector: optionalTextField(),
-    // OIR-222: see contactRecordSchema.location.section for rationale.
+    // See contactRecordSchema.location.section for rationale.
     section: optionalTextField()
   }).optional(),
   contactMethods: z.object({
@@ -333,7 +333,7 @@ export const editableContactRecordSchema = z.object({
   aliases: z.array(z.string().trim().min(1)).default([]),
   tags: z.array(z.string().trim().min(1)).default([]),
   notes: optionalTextField(),
-  // OIR-232: see contactRecordSchema.customFields for rationale.
+  // See contactRecordSchema.customFields for rationale.
   customFields: z.array(editableCustomFieldSchema).optional(),
   status: z.enum(["active", "inactive"], {
     errorMap: () => ({ message: "Selecciona un estado válido." })
@@ -352,13 +352,13 @@ export type PhoneContact = z.infer<typeof phoneContactSchema>;
 /** Persisted email entry — derived from the persistence schema. */
 export type EmailContact = z.infer<typeof emailContactSchema>;
 
-/** Persisted custom key-value field entry — derived from the persistence schema (OIR-232). */
+/** Persisted custom key-value field entry — derived from the persistence schema. */
 export type CustomField = z.infer<typeof customFieldSchema>;
 
-/** Social-media platform enum — derived from the persistence schema (OIR-131). */
+/** Social-media platform enum — derived from the persistence schema. */
 export type SocialPlatform = z.infer<typeof socialPlatformSchema>;
 
-/** Persisted social-media contact entry — derived from the persistence schema (OIR-131). */
+/** Persisted social-media contact entry — derived from the persistence schema. */
 export type SocialContact = z.infer<typeof socialContactSchema>;
 
 /** Persisted contact record — derived from the persistence schema. */

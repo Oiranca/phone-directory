@@ -72,14 +72,14 @@ export interface EditablePhoneContact {
   isPrimary: boolean;
   /**
    * Advisory presentation marker only — not an enforced access control; records and flagged values
-   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * remain fully searchable. See audit plan §4 P1-03 resolution.
    * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes confidential
    * phones when selecting the default displayed number — this is UI convenience, not a security gate.
    */
   confidential: boolean;
   /**
    * Advisory presentation marker only — not an enforced access control; records and flagged values
-   * remain fully searchable. See audit plan §4 P1-03 resolution (OIR-105).
+   * remain fully searchable. See audit plan §4 P1-03 resolution.
    * NOTE: getPreferredResultPhone() in search.service.ts intentionally deprioritizes noPatientSharing
    * phones when selecting the default displayed number — this is UI convenience, not a security gate.
    */
@@ -94,7 +94,7 @@ export interface EditableEmailContact {
   isPrimary: boolean;
 }
 
-/** Editable social-media contact entry (OIR-131). Mirrors EditablePhoneContact pattern. */
+/** Editable social-media contact entry. Mirrors EditablePhoneContact pattern. */
 export interface EditableSocialContact {
   id: string;
   platform: import("../schemas/contact.js").SocialPlatform;
@@ -105,7 +105,7 @@ export interface EditableSocialContact {
 }
 
 /**
- * Editable custom key-value field entry (OIR-232). Lets a user record ad-hoc
+ * Editable custom key-value field entry. Lets a user record ad-hoc
  * information the fixed form doesn't cover (e.g. "Número extranjero" for one
  * contact). Mirrors the EditablePhoneContact pattern: `id` is a stable entry
  * identifier used for form list identity only.
@@ -130,9 +130,9 @@ export interface EditableContactRecord {
     service?: string;
     area?: AreaType;
     specialty?: string;
-    /** OIR-222: role/job title (ODS "Categoría" column). */
+    /** Role/job title (ODS "Categoría" column). */
     role?: string;
-    /** OIR-222: operating hours/schedule (ODS "Horario" column). */
+    /** Operating hours/schedule (ODS "Horario" column). */
     schedule?: string;
   };
   location?: {
@@ -140,9 +140,9 @@ export interface EditableContactRecord {
     floor?: string;
     room?: string;
     text?: string;
-    /** OIR-222: ODS "Sector" column. */
+    /** ODS "Sector" column. */
     sector?: string;
-    /** OIR-222: ODS "Sección" column. */
+    /** ODS "Sección" column. */
     section?: string;
   };
   contactMethods: {
@@ -153,7 +153,7 @@ export interface EditableContactRecord {
   aliases: string[];
   tags: string[];
   notes?: string;
-  /** OIR-232: user-defined key/value pairs for information the fixed form doesn't cover. */
+  /** User-defined key/value pairs for information the fixed form doesn't cover. */
   customFields?: EditableCustomField[];
   status: "active" | "inactive";
 }
@@ -226,17 +226,17 @@ export interface CsvImportPreview {
   createdCount: number;
   updatedCount: number;
   /**
-   * INTERIM (OIR-102 / OIR-134): Rows silently skipped because they belong to
+   * INTERIM: Rows silently skipped because they belong to
    * Buscas (pager) sheets — a deferred import path. Always 0 for the CSV path.
    */
   buscasSkippedRowCount: number;
   /**
-   * INTERIM (OIR-102 / OIR-134): Rows silently skipped because they are
+   * INTERIM: Rows silently skipped because they are
    * social-media handle rows inside service sheets. Always 0 for the CSV path.
    */
   socialHandleSkippedRowCount: number;
   /**
-   * OIR-130: Number of buscas (pager) cells successfully parsed from buscas sheets.
+   * Number of buscas (pager) cells successfully parsed from buscas sheets.
    * A value > 0 means the workbook contained valid buscas content even if validRowCount === 0.
    * Used by the renderer confirm gate to allow confirming buscas-only workbooks.
    * Always 0 for the CSV path and for workbooks with no buscas sheets.
@@ -261,7 +261,7 @@ export interface CsvImportPolicySelection {
 }
 
 /**
- * Lean phone entry for conflict diff display (OIR-132).
+ * Lean phone entry for conflict diff display.
  * Carries only what the diff renderer needs: number, label, kind.
  */
 export interface ConflictPhoneSummary {
@@ -271,7 +271,7 @@ export interface ConflictPhoneSummary {
 }
 
 /**
- * Lean email entry for conflict diff display (OIR-132).
+ * Lean email entry for conflict diff display.
  */
 export interface ConflictEmailSummary {
   address: string;
@@ -279,7 +279,7 @@ export interface ConflictEmailSummary {
 }
 
 /**
- * Lean social-media entry for conflict diff display (OIR-132).
+ * Lean social-media entry for conflict diff display.
  */
 export interface ConflictSocialSummary {
   platform: import("../schemas/contact.js").SocialPlatform;
@@ -302,11 +302,11 @@ export interface ConflictRecordSummary {
   specialty?: string;
   /** Compact single-line location string, e.g. "Edificio A · Planta 2 · Hab 301". */
   locationSummary?: string;
-  /** Lean phone list for field-level diff (OIR-132). */
+  /** Lean phone list for field-level diff. */
   phones: ConflictPhoneSummary[];
-  /** Lean email list for field-level diff (OIR-132). */
+  /** Lean email list for field-level diff. */
   emails: ConflictEmailSummary[];
-  /** Lean social list for field-level diff (OIR-132). */
+  /** Lean social list for field-level diff. */
   socials: ConflictSocialSummary[];
 }
 
@@ -327,7 +327,7 @@ export interface ConflictedImportRecord {
   /** I18n key for conflict reason (e.g., "conflict_reason.phone_match"). Resolved in the renderer for localization. */
   conflictReasonKey: string;
   /**
-   * The specific value that triggered the match (OIR-132).
+   * The specific value that triggered the match.
    * For phone-match: the normalized phone number. For email-match: the email address.
    * Not populated for external-id-match (raw IDs are not rendered to the user).
    */
@@ -354,7 +354,7 @@ export interface CsvImportResult extends ImportContactsResult {
   conflictCount: number;
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
   /**
-   * OIR-200: Rejected rows are skipped rather than blocking the whole import.
+   * Rejected rows are skipped rather than blocking the whole import.
    * This carries the same per-row reasons already surfaced in the preview
    * (CsvImportPreview.rowIssues) so the post-import summary can list exactly
    * which rows were skipped and why.
@@ -363,7 +363,7 @@ export interface CsvImportResult extends ImportContactsResult {
 }
 
 /**
- * OIR-219 — discriminated-union response for pickAndImportDataset, the single
+ * Discriminated-union response for pickAndImportDataset, the single
  * unified "Importar" entry point. Lets the renderer route to whichever
  * existing UI matches the flow that main actually dispatched to, without ever
  * receiving a file path back:

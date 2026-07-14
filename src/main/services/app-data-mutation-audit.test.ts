@@ -1,5 +1,5 @@
 /**
- * OIR-112 — Mutation audit coverage tests
+ * Mutation audit coverage tests
  *
  * Verifies:
  *  1. Exactly ONE audit entry is appended per successful mutation
@@ -86,7 +86,7 @@ const readAuditLog = async (testRoot: string) => {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe("AppDataService — mutation audit coverage (OIR-112)", () => {
+describe("AppDataService — mutation audit coverage", () => {
   let testRoot: string;
 
   beforeEach(async () => {

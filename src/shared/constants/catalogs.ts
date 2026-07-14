@@ -19,7 +19,7 @@ export const AREAS = [
 export type RecordType = (typeof RECORD_TYPES)[number];
 export type AreaType = (typeof AREAS)[number];
 
-// OIR-223: single source of truth for the Spanish display label of each
+// Single source of truth for the Spanish display label of each
 // RecordType value. Originally defined ad hoc inside DirectoryPage.tsx's
 // filter UI — hoisted here so any other renderer surface (e.g. the CSV/ODS
 // import preview's "Tipos detectados" chips) can reuse the exact same

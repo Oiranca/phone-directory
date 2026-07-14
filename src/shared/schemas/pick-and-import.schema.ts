@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * OIR-219 — response envelope for the unified "Importar" entry point
+ * Response envelope for the unified "Importar" entry point
  * (pickAndImportDataset).
  *
  * The main process owns the single native open-dialog (filtered to

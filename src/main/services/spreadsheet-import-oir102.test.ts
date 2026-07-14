@@ -1,5 +1,5 @@
 /**
- * OIR-102 — ODS multi-sheet phone-number data-loss regression tests.
+ * ODS multi-sheet phone-number data-loss regression tests.
  *
  * Two root causes fixed:
  *   1. 2-phone cap: normalizeServiceSheet only emitted phone1/phone2; 3rd+
@@ -117,7 +117,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     expect(phones.map((p) => p.number)).toEqual(["10001", "10002", "10003"]);
   });
 
-  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
+  it("does not mark any phone as primary by default ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["55555", "66666", "77777"] }
@@ -206,7 +206,7 @@ describe("cross-sheet merge by normalized displayName (root cause 2)", () => {
     expect(numbers).toHaveLength(3);
   });
 
-  it("does not assign a primary phone on the merged contact (OIR-227 residual fix — 'Principal' is manual-only)", () => {
+  it("does not assign a primary phone on the merged contact ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary-merged.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Banco de Sangre", numbers: ["11111"] }
@@ -345,7 +345,7 @@ describe("full pipeline: normalize → buildImportPreviewFromRows", () => {
     expect(phoneNumbers.filter((n) => n === "22222")).toHaveLength(1);
     expect(phoneNumbers).toHaveLength(4);
 
-    // OIR-227 residual fix: "Principal" is never auto-assigned on import,
+    // "Principal" is never auto-assigned on import,
     // even after a cross-sheet merge — it stays a manual, user-editable
     // choice made on the contact's edit form.
     const primaryCount = record!.contactMethods.phones.filter((p) => p.isPrimary).length;

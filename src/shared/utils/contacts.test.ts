@@ -33,7 +33,7 @@ describe("normalizePrimaryEntries", () => {
   });
 });
 
-describe("reconcilePrimaryEntries (OIR-239: never invents a primary)", () => {
+describe("reconcilePrimaryEntries (never invents a primary)", () => {
   it("returns an empty array unchanged", () => {
     expect(reconcilePrimaryEntries<Entry>([])).toEqual([]);
   });

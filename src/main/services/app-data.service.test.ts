@@ -1301,7 +1301,7 @@ describe("AppDataService", () => {
     expect(result.contacts.metadata.areaCounts.especialidades).toBe(1);
   });
 
-  it("OIR-239: does not invent a primary phone on createRecord when none is marked", async () => {
+  it("does not invent a primary phone on createRecord when none is marked", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1346,7 +1346,7 @@ describe("AppDataService", () => {
     expect(result.contacts.records[0]?.contactMethods.phones[1]?.isPrimary).toBe(false);
   });
 
-  it("OIR-239: persists a single explicit isPrimary: false phone on createRecord without re-forcing it to true", async () => {
+  it("persists a single explicit isPrimary: false phone on createRecord without re-forcing it to true", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1381,7 +1381,7 @@ describe("AppDataService", () => {
     expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
   });
 
-  it("OIR-239: persists a single explicit isPrimary: false phone on updateRecord without re-forcing it to true", async () => {
+  it("persists a single explicit isPrimary: false phone on updateRecord without re-forcing it to true", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1642,7 +1642,7 @@ describe("AppDataService", () => {
     expect(persisted.records[0]?.displayName).toBe("Importado");
   });
 
-  // OIR-218: last-import watermark shown in the app header.
+  // Last-import watermark shown in the app header.
   it("records lastImportedAt on the returned and persisted settings after a JSON dataset import", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -2065,7 +2065,7 @@ describe("AppDataService", () => {
     expect(updated.tags).toContain("nuevo");
   });
 
-  it("does not invent a primary phone when merge-fields merges a record where none is marked primary (OIR-227 residual gap)", async () => {
+  it("does not invent a primary phone when merge-fields merges a record where none is marked primary", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -2169,9 +2169,9 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-132 — toConflictRecordSummary: phones, emails, socials, locationSummary, matchingFieldValue
+  // toConflictRecordSummary: phones, emails, socials, locationSummary, matchingFieldValue
   // ---------------------------------------------------------------------------
-  describe("OIR-132: conflict field-level diff — toConflictRecordSummary population", () => {
+  describe("conflict field-level diff — toConflictRecordSummary population", () => {
     it("populates phones array in the conflict summary payload", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -2314,7 +2314,7 @@ describe("AppDataService", () => {
     });
 
     it("sets matchingFieldValue to the first-in-record phone, not the lexicographically-first (Bug-1)", async () => {
-      // Regression guard for OIR-132 Bug-1:
+      // Regression guard for Bug-1:
       //
       // buildStableMergeKeys keys a record on its FULL sorted normalized phone set,
       // so a phone-match conflict requires IDENTICAL phone sets — subset-phone
@@ -2355,7 +2355,7 @@ describe("AppDataService", () => {
     });
 
     it("sets matchingFieldValue to the original formatted phone, not the normalized form (Bug-2)", async () => {
-      // Regression guard for OIR-132 Bug-2:
+      // Regression guard for Bug-2:
       // Record A has "+34 600 111 222" (formatted), Record B has "34600111222" (digits-only).
       // Both normalize to "34600111222".  The badge must show the imported record's original
       // formatted string, not the stripped digits-only form.
@@ -2498,7 +2498,7 @@ describe("AppDataService", () => {
     ).toBe(true);
   });
 
-  // OIR-218: last-import watermark shown in the app header — CSV/spreadsheet
+  // Last-import watermark shown in the app header — CSV/spreadsheet
   // bulk-import path.
   it("records lastImportedAt after a spreadsheet (CSV/ODS) bulk import", async () => {
     const { AppDataService } = await import("./app-data.service.js");
@@ -3250,14 +3250,14 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
-    // OIR-200: a file with zero valid rows (and no buscas content) still blocks
+    // A file with zero valid rows (and no buscas content) still blocks
     // the import — this is the "nothing valid" guard, kept intentionally.
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
       "El archivo no contiene filas válidas para importar."
     );
   });
 
-  it("OIR-200: imports valid rows while skipping rejected rows instead of blocking the whole file", async () => {
+  it("imports valid rows while skipping rejected rows instead of blocking the whole file", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -3775,10 +3775,10 @@ describe("AppDataService", () => {
   });
 
   // -------------------------------------------------------------------------
-  // OIR-108 characterization tests — lock observable behavior before extraction
+  // Characterization tests — lock observable behavior before extraction
   // -------------------------------------------------------------------------
 
-  describe("OIR-108 characterization: audit-log delegation", () => {
+  describe("characterization: audit-log delegation", () => {
     it("getAuditLog returns an empty result when no entries have been appended", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -3828,7 +3828,7 @@ describe("AppDataService", () => {
     });
   });
 
-  describe("OIR-108 characterization: write-queue ordering", () => {
+  describe("characterization: write-queue ordering", () => {
     it("concurrent createRecord calls serialize in submission order and all writes land", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -3930,7 +3930,7 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Atomic backup claim (OIR-114) — fs.open('wx') / O_CREAT|O_EXCL tests
+  // Atomic backup claim — fs.open('wx') / O_CREAT|O_EXCL tests
   // ---------------------------------------------------------------------------
 
   it("atomic claim: retries on EEXIST from fs.open and succeeds with a different path", async () => {
@@ -4056,7 +4056,7 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // createAutoBackup delegation (OIR-114 FIX 2) — must delegate to createBackupCore
+  // createAutoBackup delegation (FIX 2) — must delegate to createBackupCore
   // ---------------------------------------------------------------------------
 
   it("createAutoBackup delegates to createBackupCore: produces a valid backup file", async () => {
@@ -4215,10 +4215,10 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-130: buscas persistence — preview must NOT write, confirm MUST write
+  // Buscas persistence — preview must NOT write, confirm MUST write
   // ---------------------------------------------------------------------------
 
-  it("OIR-130: previewCsvImport does NOT persist buscas records (side-effect-free)", async () => {
+  it("previewCsvImport does NOT persist buscas records (side-effect-free)", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const { BuscasService } = await import("./buscas.service.js");
 
@@ -4265,7 +4265,7 @@ describe("AppDataService", () => {
     expect(importedRecords).toHaveLength(0);
   });
 
-  it("OIR-130: importCsvDataset persists buscas records after contacts are written", async () => {
+  it("importCsvDataset persists buscas records after contacts are written", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const { BuscasService } = await import("./buscas.service.js");
 
@@ -4311,7 +4311,7 @@ describe("AppDataService", () => {
     expect(numbers).toContain("7322");
   });
 
-  it("OIR-130: importCsvDataset returns contacts result even when buscas persist fails", async () => {
+  it("importCsvDataset returns contacts result even when buscas persist fails", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     // Inject a buscasService stub that always throws.
@@ -4350,7 +4350,7 @@ describe("AppDataService", () => {
     expect(result.createdCount).toBeGreaterThan(0);
   });
 
-  it("OIR-130: importCsvDataset persists buscas records when workbook has zero contact rows (buscas-only ODS)", async () => {
+  it("importCsvDataset persists buscas records when workbook has zero contact rows (buscas-only ODS)", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const { BuscasService } = await import("./buscas.service.js");
 
@@ -4396,9 +4396,9 @@ describe("AppDataService", () => {
     expect(numbers).toContain("8803");
   });
 
-  it("OIR-181: saveSettings file-exists error message contains no 'dataset' jargon", async () => {
+  it("saveSettings file-exists error message contains no 'dataset' jargon", async () => {
     // Regression guard: assertDataFilePathAvailable must use plain-language copy
-    // when the destination data file already exists (OIR-181 policy).
+    // when the destination data file already exists (copy policy).
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -4423,14 +4423,14 @@ describe("AppDataService", () => {
     expect(message).toContain("Ya existe un archivo en esa ruta");
   });
 
-  // OIR-224: real-file regression test for the "Confidencial" flag misassignment
+  // Real-file regression test for the "Confidencial" flag misassignment
   // bug reported by the operator (a non-confidential row like "Admisión Central"
   // showed the privacy badge after import, while a genuinely confidential row lost
   // it). Root cause: `mergeImportedRecordFields` (the "Combinar" / merge-fields
   // conflict policy, used when re-importing a file whose rows already exist)
   // appended only genuinely NEW phone numbers and left EXISTING phone numbers
   // completely untouched — so a phone's confidential/noPatientSharing markers,
-  // once wrong (e.g. from data imported before OIR-222's tabular Agenda parser
+  // once wrong (e.g. from data imported before the tabular Agenda parser
   // existed, or a manual slip), could never be corrected by re-importing the
   // (now-correct) source file. The row-level parser itself (spreadsheet-parsers.ts
   // normalizeTabularAgendaSheet) was already verified correct against this same
@@ -4442,7 +4442,7 @@ describe("AppDataService", () => {
   // mechanism that reproduced this bug. Skipped automatically when the file is
   // not present on the current machine (it is operator-provided data, never
   // committed to the repo).
-  describe("OIR-224: Confidencial flag correctness against the real Agenda ODS", () => {
+  describe("Confidencial flag correctness against the real Agenda ODS", () => {
     const REAL_ODS_CANDIDATE_PATHS = [
       "/Users/samuelromeroarbelo/Documents/Telefonista/Buscas y Agenda normalizados/Agenda Normalizada.ods",
       "/private/tmp/claude-501/-Users-samuelromeroarbelo-Projects-phone-directory/282c1726-23ec-42ee-8849-5ae5acc7508e/scratchpad/ods_inspect/agenda.ods"
@@ -4462,7 +4462,7 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        // OIR-224 (merge-discriminator fix): correctly splitting rows that used to
+        // Merge-discriminator fix: correctly splitting rows that used to
         // wrongly collapse by displayName alone (see spreadsheet-parsers.ts
         // mergeRecordsByDisplayName) surfaces a small number of genuine intra-batch
         // duplicate-phone matches even on a FRESH import (e.g. two real rows for the
@@ -4504,7 +4504,7 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        // OIR-224 (merge-discriminator fix): see the "fresh import" test above for
+        // Merge-discriminator fix: see the "fresh import" test above for
         // why the initial import also needs its (now correctly-surfaced) intra-batch
         // duplicate-phone conflicts resolved before it can proceed.
         const firstPreview = await service.previewCsvImport(realOdsPath!);
@@ -4515,7 +4515,7 @@ describe("AppDataService", () => {
         const first = await service.importCsvDataset(realOdsPath!, firstPolicySelections);
 
         // Simulate stale/legacy data: flip both flags so they are WRONG relative
-        // to the real source — mirrors a record imported before OIR-222's
+        // to the real source — mirrors a record imported before the
         // row-level Confidencial mapping existed, or a manual mistake.
         const staleNotConfidential = first.contacts.records.find(
           (record) => record.displayName.trim() === "Admisión Central"
@@ -4553,7 +4553,7 @@ describe("AppDataService", () => {
     );
   });
 
-  describe("OIR-245: mergeDuplicates does not drop role/schedule/location/customFields", () => {
+  describe("mergeDuplicates does not drop role/schedule/location/customFields", () => {
     it("fills role, schedule and location subfields from the discarded record, and unions customFields", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -4668,7 +4668,7 @@ describe("AppDataService", () => {
     });
   });
 
-  describe("OIR-245 (import path): merge-fields conflict policy does not drop role/schedule/location/customFields", () => {
+  describe("merge-fields conflict policy (import path) does not drop role/schedule/location/customFields", () => {
     it("fills organization.role/schedule and location.sector/section from the imported row when the current record lacks them", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -4726,7 +4726,7 @@ describe("AppDataService", () => {
         (record) => record.id === current.savedRecordId
       )!;
 
-      // OIR-245: the CSV/ODS import pipeline does not currently map a
+      // The CSV/ODS import pipeline does not currently map a
       // customFields column, so there is no public API that produces an
       // "imported" ContactRecord carrying customFields. Exercise the merge
       // helper directly (as a unit test of the merge logic itself) — this is

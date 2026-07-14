@@ -164,7 +164,7 @@ describe("DirectoryPage", () => {
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
-  it("shows inactive records without any way to hide them (OIR-231: filters removed)", async () => {
+  it("shows inactive records without any way to hide them (filters removed)", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
       ...structuredClone(defaultContacts.records[0]),
@@ -189,13 +189,13 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    // OIR-234: this record inherits organization.service ("Información") from
+    // This record inherits organization.service ("Información") from
     // the spread fixture record, so the title is composed with that prefix.
     expect((await screen.findAllByText(/control de noche/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText("Inactivo")).not.toBeInTheDocument();
   });
 
-  it("does not render any type/area/tag/inactive filter controls (OIR-231)", async () => {
+  it("does not render any type/area/tag/inactive filter controls", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -218,7 +218,7 @@ describe("DirectoryPage", () => {
     expect(screen.queryByRole("button", { name: "Limpiar" })).not.toBeInTheDocument();
   });
 
-  it("shows organization.role in the list card subtitle when present (OIR-229)", async () => {
+  it("shows organization.role in the list card subtitle when present", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.organization.role = "Jefe/a de Servicio";
 
@@ -239,7 +239,7 @@ describe("DirectoryPage", () => {
     expect(within(list).getByText("Jefe/a de Servicio")).toBeInTheDocument();
   });
 
-  it("does not render a role line in the list card when organization.role is absent (OIR-229)", async () => {
+  it("does not render a role line in the list card when organization.role is absent", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -254,16 +254,16 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
-    // OIR-234: the title is composed as "{service} - {displayName}" when the
+    // The title is composed as "{service} - {displayName}" when the
     // service adds context, so match with a regex instead of the exact name.
     const heading = within(list).getByText(/admisión general/i);
     const card = heading.closest("div.min-w-0");
-    // OIR-233: the Tipo/Unidad subtitle line was removed entirely, so with no
+    // The Tipo/Unidad subtitle line was removed entirely, so with no
     // role set the title's wrapper div renders no <p> at all.
     expect(card?.querySelectorAll("p")).toHaveLength(0);
   });
 
-  it("does not render the Tipo/Unidad subtitle line in list cards (OIR-233)", async () => {
+  it("does not render the Tipo/Unidad subtitle line in list cards", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -283,7 +283,7 @@ describe("DirectoryPage", () => {
     expect(within(list).queryByText("Servicio · Admisión")).not.toBeInTheDocument();
   });
 
-  it("does not render the service line in a list card when it duplicates the displayName (OIR-233)", async () => {
+  it("does not render the service line in a list card when it duplicates the displayName", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Helipuerto (Secretaría)";
     contacts.records[0]!.organization.service = "Helipuerto (Secretaría)";
@@ -307,7 +307,7 @@ describe("DirectoryPage", () => {
     expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
   });
 
-  it("still renders the service line in a list card when it genuinely differs from the displayName (OIR-233)", async () => {
+  it("still renders the service line in a list card when it genuinely differs from the displayName", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -325,14 +325,14 @@ describe("DirectoryPage", () => {
     // defaultContacts.records[0].organization.service === "Información", distinct
     // from displayName "Admisión General" — it must still render. (Both fixture
     // records happen to share this service value, so scope to record[0]'s card.)
-    // OIR-234: the title itself is now composed as "Información - Admisión
+    // The title itself is now composed as "Información - Admisión
     // General" for this same reason, so match with a regex.
     const heading = within(list).getByText(/admisión general/i);
     const card = heading.closest("button");
     expect(within(card as HTMLElement).getAllByText("Información").length).toBeGreaterThan(0);
   });
 
-  it("shows organization.role in the detail view when present (OIR-229)", async () => {
+  it("shows organization.role in the detail view when present", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.organization.role = "Enfermero/a";
 
@@ -379,7 +379,7 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
   });
 
-  it("does not render the type pill in the detail view header (OIR-233)", async () => {
+  it("does not render the type pill in the detail view header", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -398,7 +398,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
   });
 
-  it("still renders privacy-flag pills in the detail header once the type pill is removed (OIR-233)", async () => {
+  it("still renders privacy-flag pills in the detail header once the type pill is removed", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
 
@@ -421,7 +421,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
   });
 
-  it("composes the title as '{service} - {displayName}' in the list card and detail view when the service adds context (OIR-234)", async () => {
+  it("composes the title as '{service} - {displayName}' in the list card and detail view when the service adds context", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Nereida";
     contacts.records[0]!.organization.service = "Alergia";
@@ -444,13 +444,13 @@ describe("DirectoryPage", () => {
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).getByText("Alergia - Nereida")).toBeInTheDocument();
-    // OIR-236/OIR-238: the raw displayName ("Nereida") is otherwise hidden inside the
+    // The raw displayName ("Nereida") is otherwise hidden inside the
     // composed title, so it's always surfaced as its own labeled card in the detail view.
     expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
     expect(within(detail).getByText("Nereida")).toBeInTheDocument();
   });
 
-  it("collapses the composed title to just the service when it already contains the displayName as a substring (OIR-238)", async () => {
+  it("collapses the composed title to just the service when it already contains the displayName as a substring", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Francisco Artíles";
     contacts.records[0]!.organization.service = "Cocina Francisco Artíles";
@@ -472,7 +472,7 @@ describe("DirectoryPage", () => {
     // Service already contains the full name — must NOT render as
     // "Cocina Francisco Artíles - Francisco Artíles". The title (h3) itself
     // must be exactly "Cocina Francisco Artíles" with no appended name — the
-    // getListServiceLine secondary line (OIR-233, untouched by this fix) may
+    // getListServiceLine secondary line (untouched by this fix) may
     // still separately repeat the service value, which is pre-existing behavior.
     expect(
       within(list).queryByText(/Cocina Francisco Artíles - Francisco Artíles/)
@@ -485,7 +485,7 @@ describe("DirectoryPage", () => {
       within(detail).queryByText(/Cocina Francisco Artíles - Francisco Artíles/)
     ).not.toBeInTheDocument();
     expect(within(detail).getByText("Cocina Francisco Artíles")).toBeInTheDocument();
-    // OIR-241: service merely CONTAINS the full name as a substring (a
+    // Service merely CONTAINS the full name as a substring (a
     // data-entry convention for this row), it does not EXACTLY equal it —
     // "Francisco Artíles" is still a genuine, distinct name and must be shown
     // in its own card, not hidden behind the empty-state placeholder. Only an
@@ -496,7 +496,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).queryByText("Sin nombre y apellidos registrado")).not.toBeInTheDocument();
   });
 
-  it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view (OIR-234)", async () => {
+  it("keeps the title unchanged when the service duplicates the displayName, in both list card and detail view", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Helipuerto (Secretaría)";
     contacts.records[0]!.organization.service = "Helipuerto (Secretaría)";
@@ -521,18 +521,18 @@ describe("DirectoryPage", () => {
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
-    // OIR-240: displayName exactly duplicates the service — "Helipuerto
+    // displayName exactly duplicates the service — "Helipuerto
     // (Secretaría)" must now appear only ONCE in the detail view (the
     // uncomposed title); the Nombre y Apellidos card must NOT repeat it and
     // instead shows the empty-state placeholder.
     expect(within(detail).getAllByText("Helipuerto (Secretaría)").length).toBe(1);
-    // OIR-238: "Nombre y Apellidos" is now its own always-visible card (no longer
+    // "Nombre y Apellidos" is now its own always-visible card (no longer
     // conditional on the title being composed), so it must still render here.
     expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
     expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
   });
 
-  it("shows the empty-state placeholder in Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column (OIR-240)", async () => {
+  it("shows the empty-state placeholder in Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Sindicato Médico";
     contacts.records[0]!.organization.service = "Sindicato Médico";
@@ -561,7 +561,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
   });
 
-  it("leaves the title unchanged when organization.service is absent (OIR-234)", async () => {
+  it("leaves the title unchanged when organization.service is absent", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Recepción Central";
     contacts.records[0]!.organization.service = undefined;
@@ -583,7 +583,7 @@ describe("DirectoryPage", () => {
     expect(within(list).getByText("Recepción Central")).toBeInTheDocument();
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
-    // OIR-238: "Recepción Central" now appears twice in the detail view — once as
+    // "Recepción Central" now appears twice in the detail view — once as
     // the (uncomposed) title, and once in the always-visible "Nombre y Apellidos"
     // card — so assert on both occurrences instead of a single unique match.
     expect(within(detail).getAllByText("Recepción Central").length).toBe(2);
@@ -770,7 +770,7 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("Registro extra 9")).not.toBeInTheDocument();
   });
 
-  // OIR-218: layout/scroll polish — filter bar stays visible while scrolling
+  // Layout/scroll polish — filter bar stays visible while scrolling
   // (sticky), and the results list / detail panel are bounded to the viewport
   // (overflow-y-auto) instead of growing the page indefinitely.
   it("keeps the filter bar sticky and bounds the results list/detail panel height", async () => {
@@ -1224,7 +1224,7 @@ describe("DirectoryPage", () => {
     expect(screen.getByText(/nota-super-larga/)).toHaveClass("break-words");
   });
 
-  it("shows the 'Privacidad sensible' list-card badge immediately after marking a non-preferred phone confidential (OIR-218)", async () => {
+  it("shows the 'Privacidad sensible' list-card badge immediately after marking a non-preferred phone confidential", async () => {
     // Regression test: the badge previously only checked the single "preferred"
     // (non-sensitive) phone returned by getPreferredResultPhone, so a record
     // whose ONLY confidential phone is a secondary/non-preferred one never
@@ -1289,7 +1289,7 @@ describe("DirectoryPage", () => {
     expect(screen.getAllByText("70005").length).toBeGreaterThan(0);
   });
 
-  // OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets.
+  // Quick-search shortcuts for the 8 known ODS "book" sheets.
   it("clicking a book shortcut sets the search query and filters to matching department records", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({

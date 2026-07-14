@@ -45,8 +45,8 @@ export const normalizePrimaryEntries = <T extends { isPrimary: boolean }>(entrie
 
 /**
  * Like `normalizePrimaryEntries`, but never invents a primary when none is
- * marked — "Principal" must stay a manual, user-editable choice (OIR-227,
- * OIR-239). Only reconciles a genuine conflict (more than one entry
+ * marked — "Principal" must stay a manual, user-editable choice.
+ * Only reconciles a genuine conflict (more than one entry
  * explicitly marked isPrimary); demotes every extra after the first.
  *
  * - Zero entries marked primary: returned unchanged (zero stays zero).

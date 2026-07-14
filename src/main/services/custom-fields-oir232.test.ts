@@ -1,10 +1,10 @@
 /**
- * OIR-232 — Custom key-value fields on a contact.
+ * Custom key-value fields on a contact.
  *
  * Integration test: confirms customFields round-trips through the existing
  * generic create/update-contact IPC flow (AppDataService.createRecord /
  * updateRecord) without any field-specific persistence code, mirroring the
- * H-01 socials regression test in social-contact-oir131.test.ts.
+ * H-01 socials regression test in social-contact-methods.test.ts.
  */
 
 import nodeFs from "node:fs";
@@ -24,7 +24,7 @@ vi.mock("electron", () => ({
   }
 }));
 
-describe("OIR-232 — customFields survive createRecord + updateRecord", () => {
+describe("customFields survive createRecord + updateRecord", () => {
   let testRoot: string;
 
   beforeEach(async () => {

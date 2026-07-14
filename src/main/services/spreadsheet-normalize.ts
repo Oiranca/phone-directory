@@ -7,7 +7,7 @@
  *   - STATELESS: no module-level state that changes at runtime
  *   - FORMAT-AGNOSTIC: they serve both the service-sheet and centers-sheet parsers
  *
- * Extracted from spreadsheet-import.service.ts as part of OIR-109. The
+ * Extracted from spreadsheet-import.service.ts. The
  * heuristics that decide WHICH parser applies (detectSheetProfile, scoring
  * functions, format detection) deliberately remain in the main service so
  * this module stays free of decision logic.
@@ -256,7 +256,7 @@ export const detectPrivacy = (notes: string): { confidential: boolean; noPatient
 /**
  * Parses a row-level "Si"/"Sí" (case- and accent-insensitive) boolean cell value,
  * as used by the ODS "Confidencial" column in the tabular Agenda sheet format
- * (OIR-222). Reuses normalizeMarker (NFKD strip diacritics + uppercase + strip
+ * Reuses normalizeMarker (NFKD strip diacritics + uppercase + strip
  * whitespace) so "Si", "sí", " SÍ " all resolve the same way. Any other value
  * (including empty string) is treated as false.
  */

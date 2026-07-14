@@ -12,7 +12,7 @@ import type {
   MergePolicy
 } from "../../../shared/types/contact";
 
-// OIR-223 priority 2: the preview's stored/internal value stays the raw
+// The preview's stored/internal value stays the raw
 // RecordType enum string (typeCounts keys) — only the DISPLAYED label is
 // translated, reusing the exact same Spanish mapping already used by the
 // Directory page's type filter (RECORD_TYPE_LABELS). Any type value that
@@ -51,7 +51,7 @@ const POLICY_LABELS: Record<MergePolicy, string> = {
   "merge-fields": "Combinar"
 };
 
-/** Plain-language consequence descriptions shown below each policy label (OIR-178). */
+/** Plain-language consequence descriptions shown below each policy label. */
 const POLICY_DESCRIPTIONS: Record<MergePolicy, string> = {
   skip: "La fila del CSV no se importa; el contacto existente no cambia.",
   overwrite: "El contacto existente se reemplaza con los datos del CSV. Los datos actuales se perderán.",
@@ -79,7 +79,7 @@ const formatDetectionConfidence = (value: CsvImportPreviewWithConflicts["detecti
 };
 
 // ---------------------------------------------------------------------------
-// ConflictFieldDiff — field-level diff for a single conflict pair (OIR-132).
+// ConflictFieldDiff — field-level diff for a single conflict pair.
 // ---------------------------------------------------------------------------
 
 type ConflictRecordColProps = {
@@ -229,16 +229,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
   const hasRejectedRows = preview.invalidRowCount > 0;
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
-  // OIR-130: A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
+  // A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
   // Treat it as confirmable. Only block when BOTH contact rows AND buscas content are absent.
   const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
-  // OIR-200: Rejected rows alone no longer block confirmation — they are skipped
+  // Rejected rows alone no longer block confirmation — they are skipped
   // and imported partially alongside the valid rows. The only real blocker left
   // is having nothing importable at all (see hasImportableContent above).
   const isConfirmDisabled = isMutating || hasUnresolvedConflicts || !hasImportableContent;
 
   // ---------------------------------------------------------------------------
-  // OIR-133 — multi-select state (purely local UI, no IPC/main change needed).
+  // Multi-select state (purely local UI, no IPC/main change needed).
   // selectedIndices tracks the set of conflict recordIndex values the operator
   // has checked.  bulkPolicy is the policy the operator wants to apply to the
   // selection in one click.
@@ -247,7 +247,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const [bulkPolicy, setBulkPolicy] = useState<MergePolicy>("skip");
 
   // ---------------------------------------------------------------------------
-  // OIR-176 — conflict record pagination.
+  // Conflict record pagination.
   // conflictsPage is 0-based. Reset to 0 whenever a new file is previewed.
   // ---------------------------------------------------------------------------
   const [conflictsPage, setConflictsPage] = useState(0);
@@ -257,7 +257,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   }, [preview.importToken]);
 
   // ---------------------------------------------------------------------------
-  // OIR-122 — preview row pagination.
+  // Preview row pagination.
   // previewPage is 1-based. Reset to page 1 whenever a new file is previewed.
   // ---------------------------------------------------------------------------
   const [previewPage, setPreviewPage] = useState(1);
@@ -284,7 +284,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
   const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
 
-  // OIR-182 item 3: count how many conflicts already have a policy selected.
+  // Count how many conflicts already have a policy selected.
   const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
 
   // PR #106 review: replace window.confirm with the shared accessible ConfirmDialog.
@@ -293,7 +293,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
-  // OIR-182 item 4 / Finding B (PR111): warn before closing whenever there is
+  // Finding B (PR111): warn before closing whenever there is
   // unsaved conflict-resolution work — including the fully-resolved-but-not-yet-
   // confirmed state, since selectedPolicy choices only take effect once the
   // operator clicks "Confirmar importación" (onConfirm). Closing before that,
@@ -393,7 +393,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </>
           )}
         </div>
-        {/* OIR-182 item 2: confirm button moved to sticky footer; only close remains here */}
+        {/* Confirm button moved to sticky footer; only close remains here */}
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <button
             ref={closeButtonRef}
@@ -407,7 +407,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       </div>
 
-      {/* Nothing-importable blocker (OIR-200: only shown when there are no valid rows at all) */}
+      {/* Nothing-importable blocker (only shown when there are no valid rows at all) */}
       {hasRejectedRows && !hasImportableContent && (
         <div
           role="alert"
@@ -418,7 +418,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* Partial-import notice (OIR-200): rejected rows are skipped, valid rows still import */}
+      {/* Partial-import notice: rejected rows are skipped, valid rows still import */}
       {hasRejectedRows && hasImportableContent && (
         <div
           role="status"
@@ -462,7 +462,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* OIR-130: Buscas rows are now parsed and imported into the Buscas section. */}
+      {/* Buscas rows are now parsed and imported into the Buscas section. */}
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
@@ -527,7 +527,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
 
       {conflictedRecords.length > 0 && (
         <div className="mt-6">
-          {/* OIR-133 — bulk-apply toolbar */}
+          {/* Bulk-apply toolbar */}
           <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
             {/* Select-all / deselect-all */}
             <label className="flex items-center gap-2 text-sm font-medium text-amber-900">
@@ -595,7 +595,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             </div>
           </div>
 
-          {/* OIR-182 item 3: resolution progress counter (sibling span preserves exact text for tests) */}
+          {/* Resolution progress counter (sibling span preserves exact text for tests) */}
           <div className="flex items-baseline gap-3">
             <p className="text-sm font-semibold text-emerald-950">
               Conflictos ({conflictedRecords.length})
@@ -721,7 +721,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             })}
           </div>
 
-          {/* OIR-176 — conflict pagination controls */}
+          {/* Conflict pagination controls */}
           {conflictedRecords.length > CONFLICTS_PER_PAGE && (
             <nav aria-label="Navegación de conflictos" className="mt-3 rounded-2xl border border-amber-200 bg-white/80 p-2">
               <div className="flex items-center justify-center gap-2">
@@ -751,7 +751,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
-              {/* OIR-182 item 7: live region announces conflict page changes to screen readers */}
+              {/* Live region announces conflict page changes to screen readers */}
               <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
                 Página {conflictsPage + 1} de {Math.ceil(conflictedRecords.length / CONFLICTS_PER_PAGE)}
               </span>
@@ -803,7 +803,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
               </span>
             )}
           </p>
-          {/* OIR-223 priority 3: the table scrolls horizontally INSIDE its own
+          {/* The table scrolls horizontally INSIDE its own
               container (overflow-x-auto below) rather than forcing page-level
               scroll — but a native scrollbar alone is easy to miss (e.g. macOS
               auto-hides scrollbars by default), which is what made a fully
@@ -875,7 +875,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                     <td className="px-3 py-2 text-slate-600">
                       {row.department ?? "—"}
                     </td>
-                    {/* OIR-223 priority 3: area slugs (e.g. "gestion-administracion") can be
+                    {/* Area slugs (e.g. "gestion-administracion") can be
                         long — allow wrapping instead of whitespace-nowrap so the value is
                         never cut off; the table's own overflow-x-auto wrapper (below) still
                         covers any residual overflow without affecting the page layout. */}
@@ -948,7 +948,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                   </svg>
                 </button>
               </div>
-              {/* OIR-182 item 7: live region announces preview row page changes to screen readers */}
+              {/* Live region announces preview row page changes to screen readers */}
               <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
                 Página {safePage} de {totalPreviewPages}
               </span>
@@ -964,7 +964,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* OIR-182 item 2: single sticky confirm footer — CTA appears in one place only */}
+      {/* Single sticky confirm footer — CTA appears in one place only */}
       <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex flex-col items-end gap-1">
