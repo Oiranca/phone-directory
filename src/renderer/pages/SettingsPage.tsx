@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { useToast } from "../components/feedback/ToastRegion";
 import { DataManagementSection } from "../components/settings/DataManagementSection";
 import { useAppStore } from "../store/useAppStore";
@@ -85,7 +86,7 @@ export const SettingsPage = () => {
   }, [managedDefaults, settings]);
 
   if (!settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;
+    return <LoadingStatus message="Cargando configuración…" className="rounded-3xl bg-white p-6 shadow-panel" busy />;
   }
 
   const isDirty =

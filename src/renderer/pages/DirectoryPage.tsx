@@ -6,6 +6,7 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { normalizeDisplayName } from "../../shared/utils/matching";
 
 // OIR-218: CSS custom property tracking the rendered height of the sticky
@@ -439,7 +440,7 @@ export const DirectoryPage = () => {
   };
 
   if (isLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
+    return <LoadingStatus message="Cargando datos locales…" />;
   }
 
   const selectedRecord =

@@ -1,9 +1,11 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
 import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { useToast } from "../components/feedback/ToastRegion";
+import { useFocusOnMount } from "../hooks/useFocusOnMount";
 
 const SHIFT_LABELS: Record<string, string> = {
   "mañana": "Mañana",
@@ -60,11 +62,10 @@ export const BuscasPage = () => {
     void loadBuscas();
   }, []);
 
-  useLayoutEffect(() => {
-    if (showForm) {
-      firstFieldRef.current?.focus();
-    }
-  }, [showForm, editingId]);
+  // `when` combines showForm with editingId so switching from "create" to
+  // "edit" (or vice versa) while the form stays open re-triggers focus, not
+  // just the initial open — see useFocusOnMount's docstring.
+  useFocusOnMount(firstFieldRef, showForm && (editingId ?? "new"));
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -170,11 +171,7 @@ export const BuscasPage = () => {
   };
 
   if (isLoading) {
-    return (
-      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">
-        Cargando buscas…
-      </section>
-    );
+    return <LoadingStatus message="Cargando buscas…" />;
   }
 
   if (loadError) {

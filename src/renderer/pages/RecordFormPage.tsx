@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { Link, useBlocker } from "react-router-dom";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { CustomFieldsSection } from "../components/contact-form/CustomFieldsSection";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
@@ -75,11 +76,7 @@ export const RecordFormPage = () => {
 
 
   if (isLoading || !hasContacts || !hasSettings) {
-    return (
-      <section role="status" aria-live="polite" className="rounded-3xl bg-white p-6 shadow-panel">
-        Cargando formulario…
-      </section>
-    );
+    return <LoadingStatus message="Cargando formulario…" className="rounded-3xl bg-white p-6 shadow-panel" />;
   }
 
   if (existingRecordMissing) {

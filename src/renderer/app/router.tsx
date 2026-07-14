@@ -1,11 +1,29 @@
+import { Suspense, lazy } from "react";
+import type { ReactElement } from "react";
 import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { BuscasPage } from "../pages/BuscasPage";
 import { RecordFormPage } from "../pages/RecordFormPage";
-import { DeduplicatePage } from "../pages/DeduplicatePage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
-import { SettingsPage } from "../pages/SettingsPage";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
+
+// OIR-214 / ARQ-10 — code-splitting: previously every route (including
+// SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
+// DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
+// all 7 pages shipped in the single initial bundle chunk regardless of
+// whether the operator ever visits them. These two are the highest-leverage
+// routes to split off since neither is the landing page and both pull in
+// sizeable, only-conditionally-used UI. DirectoryPage stays a static/eager
+// import since it's the index route and the first thing users see.
+const SettingsPage = lazy(() => import("../pages/SettingsPage").then((mod) => ({ default: mod.SettingsPage })));
+const DeduplicatePage = lazy(() =>
+  import("../pages/DeduplicatePage").then((mod) => ({ default: mod.DeduplicatePage }))
+);
+
+const withSuspense = (element: ReactElement) => (
+  <Suspense fallback={<LoadingStatus message="Cargando…" />}>{element}</Suspense>
+);
 
 export const router = createHashRouter([
   {
@@ -32,7 +50,7 @@ export const router = createHashRouter([
       },
       {
         path: "settings",
-        element: <SettingsPage />
+        element: withSuspense(<SettingsPage />)
       },
       {
         path: "buscas",
@@ -40,7 +58,7 @@ export const router = createHashRouter([
       },
       {
         path: "deduplicate",
-        element: <DeduplicatePage />
+        element: withSuspense(<DeduplicatePage />)
       },
       {
         path: "*",
