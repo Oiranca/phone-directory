@@ -1,12 +1,11 @@
-import { Suspense, lazy } from "react";
-import type { ReactElement } from "react";
+import { lazy } from "react";
 import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { BuscasPage } from "../pages/BuscasPage";
 import { RecordFormPage } from "../pages/RecordFormPage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
-import { LoadingStatus } from "../components/feedback/LoadingStatus";
+import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
 
 // OIR-214 / ARQ-10 — code-splitting: previously every route (including
 // SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
@@ -21,9 +20,11 @@ const DeduplicatePage = lazy(() =>
   import("../pages/DeduplicatePage").then((mod) => ({ default: mod.DeduplicatePage }))
 );
 
-const withSuspense = (element: ReactElement) => (
-  <Suspense fallback={<LoadingStatus message="Cargando…" />}>{element}</Suspense>
-);
+// PR review follow-up — `withSuspense` originally only handled the pending
+// state. `withLazyRouteBoundary` additionally catches a rejected dynamic
+// import (missing/corrupt chunk file) and shows recoverable UI instead of
+// crashing to a blank screen. See LazyRouteBoundary.tsx for details.
+const withSuspense = withLazyRouteBoundary;
 
 export const router = createHashRouter([
   {
