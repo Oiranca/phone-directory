@@ -772,6 +772,10 @@ export type AgendaColumnIndices = {
   servicio: number;
   numeroStart: number;
   numeroEnd: number; // inclusive — Número 1..7
+  // Optional inserted "Fax" column (e.g. the real "Sindicatos" sheet). Absent
+  // (undefined) on sheets that don't have one — the canonical 17-column
+  // header falls into this case.
+  fax?: number;
   horario: number;
   confidencial: number;
   edificio: number;
@@ -867,12 +871,18 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
     number
   ];
 
+  // Optional extra "Fax" column (e.g. the real "Sindicatos" sheet — see
+  // AGENDA_TRAILER_MARKERS comment above). Not part of the required trailer
+  // shape, so its absence must not fail header detection.
+  const faxIndex = normalized.indexOf("FAX", trailerStart);
+
   return {
     nombre: 0,
     categoria: 1,
     servicio: 2,
     numeroStart: 3,
     numeroEnd: 9,
+    fax: faxIndex === -1 ? undefined : faxIndex,
     horario,
     confidencial,
     edificio,
@@ -999,6 +1009,26 @@ export const normalizeTabularAgendaSheet = (
           // it here caused the Comentarios text to render directly under the
           // phone number instead of in the contact's dedicated "Notas"
           // section.
+          notes: undefined
+        });
+      });
+    }
+
+    // The Fax column (present on sheets like "Sindicatos" — see
+    // resolveAgendaColumnIndices above) is a distinct, optional trailing
+    // column beyond Número 1..7. Without this, any value entered there was
+    // silently dropped instead of being imported as a fax phone entry.
+    const faxValue = columns.fax !== undefined ? cells[columns.fax] ?? "" : "";
+
+    if (faxValue) {
+      extractNumbers(faxValue).forEach((number) => {
+        phoneEntries.push({
+          number,
+          label: "Fax",
+          kind: "fax",
+          isPrimary: false,
+          confidential,
+          noPatientSharing: privacy.noPatientSharing,
           notes: undefined
         });
       });

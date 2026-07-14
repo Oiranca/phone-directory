@@ -792,4 +792,48 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     expect(records[0]!.area).toBe("");
   });
+
+  // -------------------------------------------------------------------------
+  // Inserted "Fax" column (e.g. the real "Sindicatos" sheet)
+  // -------------------------------------------------------------------------
+
+  const AGENDA_HEADER_ROW_WITH_FAX = [
+    ...AGENDA_HEADER_ROW.slice(0, 10),
+    "Fax",
+    ...AGENDA_HEADER_ROW.slice(10),
+  ];
+
+  it("maps a value in an inserted Fax column to a phone entry with kind 'fax'", () => {
+    const rowWithFax = [
+      "Juan Pérez", // Nombre
+      "Enfermero/a", // Categoría
+      "Urgencias", // Servicio
+      "11111", "", "", "", "", "", "", // Número 1..7
+      "912345678", // Fax
+      "", "", "", "", "", "", "", // Horario..Comentarios
+    ];
+    const sheet = makeSheet("Sindicatos", [AGENDA_HEADER_ROW_WITH_FAX, rowWithFax]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string; kind: string }>;
+    const faxEntry = phones.find((entry) => entry.kind === "fax");
+    expect(faxEntry).toBeDefined();
+    expect(faxEntry?.number).toBe("912345678");
+  });
+
+  it("does not add a fax phone entry when the inserted Fax column is empty", () => {
+    const rowWithoutFax = [
+      "Juan Pérez", // Nombre
+      "Enfermero/a", // Categoría
+      "Urgencias", // Servicio
+      "11111", "", "", "", "", "", "", // Número 1..7
+      "", // Fax (empty)
+      "", "", "", "", "", "", "", // Horario..Comentarios
+    ];
+    const sheet = makeSheet("Sindicatos", [AGENDA_HEADER_ROW_WITH_FAX, rowWithoutFax]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+    expect(records).toHaveLength(1);
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ kind: string }>;
+    expect(phones.some((entry) => entry.kind === "fax")).toBe(false);
+  });
 });
