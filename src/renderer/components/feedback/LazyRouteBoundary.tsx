@@ -1,14 +1,23 @@
-import { Component, Suspense } from "react";
-import type { ErrorInfo, ReactElement, ReactNode } from "react";
+import { Component, Suspense, lazy } from "react";
+import type { ComponentType, ErrorInfo, ReactElement, ReactNode } from "react";
 import { StatePanel } from "./StatePanel";
 import { LoadingStatus } from "./LoadingStatus";
 
+/**
+ * Factory passed straight through to `React.lazy()`. Callers must pass the
+ * factory itself (e.g. `() => import("../pages/SettingsPage")`), not an
+ * already-constructed lazy element — see the boundary's doc comment below
+ * for why that distinction matters for retry.
+ */
+type LazyComponentFactory = () => Promise<{ default: ComponentType }>;
+
 interface LazyRouteBoundaryProps {
-  children: ReactNode;
+  factory: LazyComponentFactory;
 }
 
 interface LazyRouteBoundaryState {
   error: Error | null;
+  LazyComponent: ComponentType;
 }
 
 /**
@@ -27,11 +36,29 @@ interface LazyRouteBoundaryState {
  * added in a separate, not-yet-merged PR (OIR-205). If/when that top-level
  * boundary lands, this one simply catches the error first — no conflict,
  * since React error boundaries can be nested.
+ *
+ * OIR-214 review follow-up #2 — `React.lazy(factory)` memoizes the promise
+ * returned by `factory` per call: once that promise has rejected, every
+ * subsequent render of the *same* lazy component reference just re-throws
+ * the same cached rejection, it never re-invokes `factory`. A naive retry
+ * that only cleared the error state and re-rendered the same lazy component
+ * therefore did nothing useful — the user landed right back here.
+ *
+ * To make retry actually re-attempt the dynamic import, this boundary owns
+ * the current lazy component in its own state (`LazyComponent`) instead of
+ * receiving an already-built lazy element as a prop. Retrying calls
+ * `React.lazy(this.props.factory)` again — a brand new call, so a fresh
+ * promise and a fresh invocation of `factory` (and therefore a fresh
+ * `import()`) — and swaps that new lazy component into state alongside
+ * clearing the error, so the next render attempts the import from scratch.
  */
 class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRouteBoundaryState> {
-  state: LazyRouteBoundaryState = { error: null };
+  constructor(props: LazyRouteBoundaryProps) {
+    super(props);
+    this.state = { error: null, LazyComponent: lazy(props.factory) };
+  }
 
-  static getDerivedStateFromError(error: Error): LazyRouteBoundaryState {
+  static getDerivedStateFromError(error: Error): Pick<LazyRouteBoundaryState, "error"> {
     return { error };
   }
 
@@ -40,11 +67,11 @@ class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRoute
   }
 
   private handleRetry = (): void => {
-    this.setState({ error: null });
+    this.setState({ error: null, LazyComponent: lazy(this.props.factory) });
   };
 
   render(): ReactNode {
-    const { error } = this.state;
+    const { error, LazyComponent } = this.state;
 
     if (error) {
       return (
@@ -65,16 +92,21 @@ class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRoute
       );
     }
 
-    return this.props.children;
+    return (
+      <Suspense fallback={<LoadingStatus message="Cargando…" />}>
+        <LazyComponent />
+      </Suspense>
+    );
   }
 }
 
 /**
- * Wraps a lazily-loaded route element with both a pending-state fallback
- * (`Suspense`) and a rejection fallback (`LazyRouteErrorBoundary`).
+ * Wraps a route's dynamic-import factory with both a pending-state fallback
+ * (`Suspense`) and a rejection fallback (`LazyRouteErrorBoundary`) that can
+ * genuinely retry the import. Takes the factory itself (not a pre-built
+ * `React.lazy()` element) so the boundary can re-invoke `React.lazy()` on
+ * retry — see the class doc comment above.
  */
-export const withLazyRouteBoundary = (element: ReactElement): ReactElement => (
-  <LazyRouteErrorBoundary>
-    <Suspense fallback={<LoadingStatus message="Cargando…" />}>{element}</Suspense>
-  </LazyRouteErrorBoundary>
+export const withLazyRouteBoundary = (factory: LazyComponentFactory): ReactElement => (
+  <LazyRouteErrorBoundary factory={factory} />
 );
