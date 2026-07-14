@@ -14,10 +14,14 @@
  * `DEFAULT_ROTATION_THRESHOLD_ENTRIES` entries — the full active history is
  * archived to a timestamped `audit-log.archived-<ISO timestamp>.json`
  * sidecar (via the same atomic `writeJsonFile` helper) and the active log
- * restarts fresh. `query()`/`exportAuditLog()` intentionally only read the
- * active log, not archived sidecars — archived files are cold storage for
- * manual/operator recovery, consistent with this being a lightweight
- * rotation scheme rather than a database migration.
+ * restarts fresh. `query()`/`exportAuditLog()` intentionally still only READ
+ * entries from the active log, not archived sidecars — archived files remain
+ * cold storage for manual/operator recovery, consistent with this being a
+ * lightweight rotation scheme rather than a database migration. However
+ * (security review follow-up, same day), `query()`'s result now also reports
+ * `hasArchivedHistory` / `archivedFileCount` — a cheap directory-listing check,
+ * not a content read — so callers/exports are never silently unaware that
+ * older, rotated-out history exists elsewhere.
  */
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -278,6 +282,30 @@ export class AuditLogService {
     await writeJsonFile(archivePath, entries);
   }
 
+  /**
+   * OIR-206 follow-up (security review, 2026-07-14): count the archived
+   * sidecar files (`<base>.archived-<timestamp>.json`) sitting next to the
+   * active log, WITHOUT reading/parsing their contents — a `fs.readdir` +
+   * filename filter is all that's needed to tell callers that older history
+   * exists elsewhere. This keeps `query()`/`exportAuditLog()` cheap: they
+   * still only read the active log, but no longer do so silently when
+   * archived history is present.
+   *
+   * Never throws: if the directory cannot be listed (e.g. it does not exist
+   * yet, or a transient permission error), archived-file visibility is
+   * best-effort and falls back to 0 rather than failing the query/export.
+   */
+  private async countArchivedFiles(filePath: string): Promise<number> {
+    const dir = path.dirname(filePath);
+    const base = path.basename(filePath, ".json");
+    try {
+      const entries = await fs.readdir(dir);
+      return entries.filter((name) => name.startsWith(`${base}.archived-`) && name.endsWith(".json")).length;
+    } catch {
+      return 0;
+    }
+  }
+
   async append(entry: AuditLogEntry): Promise<void> {
     return this.enqueueWrite(async () => {
       // Refuse append while in integrity-error state.  The caller must call
@@ -297,6 +325,26 @@ export class AuditLogService {
       if (activeEntries.length >= this.rotationThresholdEntries) {
         // OIR-206 / ARQ-7: bound the cost of every future append by archiving
         // the accumulated history now and continuing with a clean active log.
+        //
+        // Security review follow-up (2026-07-14) — accepted non-atomicity:
+        // `archive()` and the `activeEntries = []` reset below are two
+        // separate operations, not one atomic transaction. If the process
+        // crashes in the window AFTER `archive()`'s writeJsonFile has fully
+        // committed the sidecar but BEFORE the next line's `writeJsonFile`
+        // call persists the reset active log, the active log on disk still
+        // holds the same entries that were just archived. On the next
+        // `append()` call (post-restart), those entries would be re-archived
+        // into a second, distinctly-named sidecar the next time the
+        // threshold is hit — producing a *duplicate* copy of that batch of
+        // entries across two archive files, never a loss of entries.
+        //
+        // This is a deliberate, accepted tradeoff for this simple
+        // (non-SQLite, no two-phase-commit) rotation design: duplication is
+        // recoverable (an operator/future dedup tool can diff timestamps),
+        // whereas losing audit entries is not. Building real two-phase-commit
+        // semantics here would be over-engineering for a local single-user
+        // app with an already-tiny crash window (two fast sequential atomic
+        // writes). Do not "fix" this without discussing the tradeoff first.
         await this.archive(filePath, activeEntries);
         activeEntries = [];
       }
@@ -350,9 +398,16 @@ export class AuditLogService {
       filtered = filtered.filter((e) => e.recordName?.toLowerCase().includes(q));
     }
 
+    // OIR-206 follow-up (security review): surface archived-history visibility
+    // rather than silently reading only the active log with no indication that
+    // older, rotated-out entries exist elsewhere.
+    const archivedFileCount = await this.countArchivedFiles(filePath);
+
     return {
       entries: filtered.slice().reverse(),
-      totalCount: filtered.length
+      totalCount: filtered.length,
+      hasArchivedHistory: archivedFileCount > 0,
+      archivedFileCount
     };
   }
 
