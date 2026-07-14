@@ -224,11 +224,23 @@ export class AppDataService {
     // a real risk on the disk-constrained USB deployment this app targets.
     // Reuses the same retentionCount knob and pruning primitive as auto-backups
     // so retention behavior stays consistent between the two backup families.
-    await this.pruneBackupsByPrefix(
-      settings,
-      "contacts-",
-      "No se pudo rotar las copias de seguridad del directorio."
-    );
+    //
+    // OIR-204 follow-up: pruning failures (e.g. EACCES/EBUSY on a locked backup
+    // file on Windows) must NOT fail the calling operation (importDataset /
+    // restoreBackup / resetDataset) — the actual backup file above was already
+    // created successfully. Non-fatal: log so operators can diagnose, matching
+    // the console.error convention used for the non-fatal buscas import failure
+    // in importCsvDataset below.
+    try {
+      await this.pruneBackupsByPrefix(
+        settings,
+        "contacts-",
+        "No se pudo rotar las copias de seguridad del directorio."
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[BackupRetention] Failed to prune contacts-* backups — ${errMsg}`);
+    }
     return backupFilePath;
   }
 

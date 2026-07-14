@@ -3893,6 +3893,50 @@ describe("AppDataService", () => {
     expect(files.filter((file) => file.startsWith("contacts-"))).toHaveLength(1);
   });
 
+  // OIR-204 QA follow-up: a pruning failure (e.g. EACCES/EBUSY on a locked
+  // backup file) must not fail the calling operation — the backup file itself
+  // was already created successfully by the time pruning runs.
+  it("importDataset/restoreBackup/resetDataset still succeed when pruneBackupsByPrefix throws", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // Force the fs.readdir call inside pruneBackupsByPrefix to throw. This is
+    // the first readdir invoked in each of the flows exercised below.
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" })
+    );
+
+    const sourceFilePath = path.join(testRoot, "import-source.json");
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const importResult = await service.importDataset(sourceFilePath);
+    expect(importResult.recordCount).toBe(defaultContacts.records.length);
+    // The backup file itself was created before pruning ran and failed.
+    await expect(fs.access(importResult.backupPath)).resolves.toBeUndefined();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+
+    consoleErrorSpy.mockClear();
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EBUSY: resource busy or locked"), { code: "EBUSY" })
+    );
+    const restoreResult = await service.restoreBackup(importResult.backupPath);
+    expect(restoreResult.recordCount).toBe(defaultContacts.records.length);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+
+    consoleErrorSpy.mockClear();
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" })
+    );
+    const resetResult = await service.resetDataset();
+    expect(resetResult.contacts.records).toHaveLength(0);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+  });
+
   // -------------------------------------------------------------------------
   // OIR-108 characterization tests — lock observable behavior before extraction
   // -------------------------------------------------------------------------
