@@ -216,7 +216,7 @@ export const SettingsPage = () => {
         dataFilePath,
         backupDirectoryPath,
         ui: {
-          // OIR-231: the "Mostrar inactivos al iniciar" UI toggle was removed
+          // The "Mostrar inactivos al iniciar" UI toggle was removed
           // along with the Inactivo feature. showInactiveByDefault is left as
           // inert dead config in the schema (see project decision) — preserve
           // whatever value is already persisted rather than exposing it here.
@@ -278,7 +278,7 @@ export const SettingsPage = () => {
               </p>
             </div>
 
-            {/* OIR-221: "Copia de seguridad automática" compacted into a single tight
+            {/* "Copia de seguridad automática" compacted into a single tight
                 row-group — the toggle, schedule and retention all share one row on
                 wider screens instead of being spread across separate stacked blocks. */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -376,7 +376,7 @@ export const SettingsPage = () => {
               </div>
             </div>
 
-            {/* OIR-221: the raw data-file/backup-folder path fields are technical
+            {/* The raw data-file/backup-folder path fields are technical
                 and almost never touched day-to-day on this shared workstation, so
                 they are folded away behind a collapsed "Avanzado" disclosure rather
                 than shown prominently. The underlying settings values are untouched

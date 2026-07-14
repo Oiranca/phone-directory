@@ -4,7 +4,7 @@ import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
 // time so no require() is emitted in the CJS output. These are used solely for
 // the compile-time parity assertions on the inline maps below.
 //
-// Why runtime import is not possible (OIR-103 constraint):
+// Why runtime import is not possible:
 //   shared/ipc/channels.ts is ESM ("type":"module" in package.json). Electron's
 //   sandboxed preload (sandbox: true) can only require() built-in Node/Electron
 //   modules — relative file paths are blocked at runtime. A type-import is safe
@@ -17,7 +17,7 @@ import type {
 } from "../shared/ipc/channels.js";
 
 // Channel constants are inlined here — they cannot be required from a
-// separate module at runtime (see OIR-103 constraint above).
+// separate module at runtime (see constraint above).
 //
 // Compile-time parity: each map below uses `satisfies` against the type of
 // the corresponding export in shared/ipc/channels.ts. If a key is added,

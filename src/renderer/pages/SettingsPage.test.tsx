@@ -81,7 +81,7 @@ describe("SettingsPage", () => {
         createBackup: vi.fn(),
         createRecord: vi.fn(),
         updateRecord: vi.fn(),
-        // OIR-219: DataManagementSection (formerly the standalone Importar/Exportar
+        // DataManagementSection (formerly the standalone Importar/Exportar
         // page) now renders inside SettingsPage and calls listBackups() on mount.
         listBackups: vi.fn().mockResolvedValue([]),
         exportDataset: vi.fn(),
@@ -107,7 +107,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 
-  it("saves the editor name preference (OIR-231: no inactive-default toggle in the UI)", async () => {
+  it("saves the editor name preference (no inactive-default toggle in the UI)", async () => {
     renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("SettingsPage", () => {
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
         ui: {
-          // OIR-231: showInactiveByDefault is inert dead config now — the
+          // showInactiveByDefault is inert dead config now — the
           // already-persisted value is preserved rather than user-editable.
           showInactiveByDefault: false,
           autoBackup: editableSettings.ui.autoBackup
@@ -516,13 +516,13 @@ describe("SettingsPage", () => {
     expect(resetBtn.className).toContain("focus-ring");
   });
 
-  // OIR-221: the "Estado actual" sidebar and "Qué cambia al guardar" explainer
+  // The "Estado actual" sidebar and "Qué cambia al guardar" explainer
   // panel were removed as noise for a non-technical operator — everything they
   // showed either duplicated the editable fields already on the page or the
-  // OIR-218 header watermark. See the "Avanzado" disclosure tests below for the
+  // header watermark. See the "Avanzado" disclosure tests below for the
   // coverage that replaced the old path-field assertions.
 
-  it("OIR-221: data-path help copy uses plain 'directorio' wording, not 'dataset' jargon (OIR-193)", async () => {
+  it("data-path help copy uses plain 'directorio' wording, not 'dataset' jargon", async () => {
     renderPage();
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
@@ -538,7 +538,7 @@ describe("SettingsPage", () => {
     expect(document.body.innerHTML).not.toContain("dataset");
   });
 
-  it("OIR-221: path fields are folded away behind a collapsed 'Avanzado' disclosure by default", async () => {
+  it("path fields are folded away behind a collapsed 'Avanzado' disclosure by default", async () => {
     renderPage();
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
@@ -553,7 +553,7 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Ruta de la carpeta de copias de seguridad")).toHaveValue("/tmp/backups");
   });
 
-  it("OIR-221: removed noise (Estado actual sidebar, Qué cambia al guardar explainer) is gone", async () => {
+  it("removed noise (Estado actual sidebar, Qué cambia al guardar explainer) is gone", async () => {
     renderPage();
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 

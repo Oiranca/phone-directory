@@ -1,5 +1,5 @@
 /**
- * Dev-startup smoke tests + production loadFile() wiring checks (OIR-117 AC3/AC4).
+ * Dev-startup smoke tests + production loadFile() wiring checks (AC3/AC4).
  *
  * SCOPE BOUNDARY — what this suite covers and what it does NOT:
  *

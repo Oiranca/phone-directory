@@ -1,5 +1,5 @@
 /**
- * OIR-103 — E2E coverage for the CSV bulk-import conflict-resolution flow.
+ * E2E coverage for the CSV bulk-import conflict-resolution flow.
  *
  * Cases covered:
  *   - no-conflict import (pure altas, no policy step)
@@ -45,7 +45,7 @@ const conflictCsv = (displayName: string, phone: string) =>
 
 /**
  * Navigate to Configuración, drive the unified "Importar" entry point
- * (OIR-219: one button, one native dialog, one pre-selection confirmation)
+ * (one button, one native dialog, one pre-selection confirmation)
  * for the given file path, and wait for the CSV preview panel to appear.
  */
 const openPreview = async (page: import("@playwright/test").Page) => {
@@ -60,7 +60,7 @@ const openPreview = async (page: import("@playwright/test").Page) => {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe("OIR-103 CSV import conflict-resolution flows", () => {
+test.describe("CSV import conflict-resolution flows", () => {
   // -------------------------------------------------------------------------
   // No-conflict import
   // -------------------------------------------------------------------------

@@ -25,7 +25,7 @@ if (typeof globalThis.localStorage === "undefined") {
 
 const originalWarn = console.warn;
 
-// OIR-189 P3 (Finding C) — without a reset, localStorage-backed state (e.g. the
+// Without a reset, localStorage-backed state (e.g. the
 // dedup dismissed-pairs list, or any future storage key) can leak across test
 // files/cases within the same run, causing order-dependent flakiness.
 // sessionStorage is cleared too, defensively, in case future code starts using it.

@@ -267,7 +267,7 @@ describe("RecordFormPage", () => {
   });
 
   it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
-    // OIR-222 metadata fields (role/schedule/sector/section) have no form
+    // Imported metadata fields (role/schedule/sector/section) have no form
     // control of their own yet. Editing an unrelated field (displayName) and
     // saving must not silently drop them from the persisted record.
     const recordWithImportedMetadata = {
@@ -328,7 +328,7 @@ describe("RecordFormPage", () => {
     expect(primaryCheckboxes[1]).toBeChecked();
   });
 
-  it("OIR-239: unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
+  it("unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
     renderWithRoute("/contacts/new");
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();

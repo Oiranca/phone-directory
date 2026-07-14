@@ -11,7 +11,7 @@ import {
   waitForDirectory
 } from "./helpers/electron";
 
-test.describe("OIR-22 critical MVP flows", () => {
+test.describe("critical MVP flows", () => {
   test("loads the app and opens a detail from search", async () => {
     const workspace = await createWorkspace("search-detail");
     const { electronApp, page } = await launchElectronApp({
@@ -83,7 +83,7 @@ test.describe("OIR-22 critical MVP flows", () => {
   });
 
   test("creates a local backup on disk and re-imports it", async () => {
-    // OIR-224: the "Guardar la copia en otra carpeta…" secondary link/export
+    // The "Guardar la copia en otra carpeta…" secondary link/export
     // entry point was removed from the "Copia de seguridad" card entirely
     // (the operator confirmed choosing another destination folder is never
     // needed). This flow now only exercises the single "Crear copia de
@@ -121,7 +121,7 @@ test.describe("OIR-22 critical MVP flows", () => {
       await launched.page.getByRole("link", { name: "Configuración" }).click();
       await expect(launched.page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      // OIR-219: single unified "Importar" entry point — one button, one native
+      // Single unified "Importar" entry point — one button, one native
       // dialog (json/csv/ods/xls/xlsx filter), gated by a pre-selection safety
       // confirmation covering both possible outcomes.
       await launched.page.getByRole("button", { name: "Importar" }).click();
@@ -161,7 +161,7 @@ test.describe("OIR-22 critical MVP flows", () => {
       await page.getByRole("link", { name: "Configuración" }).click();
       await expect(page.getByRole("heading", { name: "Datos e importación" })).toBeVisible();
 
-      // OIR-219: single unified "Importar" entry point.
+      // Single unified "Importar" entry point.
       await page.getByRole("button", { name: "Importar" }).click();
       await page.getByRole("button", { name: "Elegir archivo" }).click();
       await expect(page.getByText("Vista previa importación")).toBeVisible();
@@ -188,8 +188,8 @@ test.describe("OIR-22 critical MVP flows", () => {
     }
   });
 
-  test("OIR-218: Directory page has zero page-level vertical scroll at common viewport sizes", async () => {
-    // Regression guard for OIR-218's "sticky filter bar + bounded/paginated
+  test("Directory page has zero page-level vertical scroll at common viewport sizes", async () => {
+    // Regression guard for the "sticky filter bar + bounded/paginated
     // results list + bounded detail panel" layout: only the list/detail
     // panel's own internal overflow-y-auto may scroll — the document itself
     // must always fit exactly within the viewport, at any window size.
