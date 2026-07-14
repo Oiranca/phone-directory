@@ -450,24 +450,19 @@ export const DeduplicatePage = () => {
   // Empty state: no duplicates found (also rendered after the last pair is merged)
   if (pairStates.length === 0) {
     return (
-      <section className="rounded-3xl bg-white p-8 shadow-panel">
-        <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+      <StatePanel
+        icon={
           <div className="rounded-full bg-emerald-50 p-4">
             <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          {/* Stable focus target for post-merge keyboard flow when 0 pairs remain */}
-          <h2
-            ref={emptyStateHeadingRef}
-            tabIndex={-1}
-            className="text-base font-semibold text-slate-700 focus:outline-none"
-          >
-            No se encontraron duplicados
-          </h2>
-          <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
-        </div>
-      </section>
+        }
+        title="No se encontraron duplicados"
+        // Stable focus target for post-merge keyboard flow when 0 pairs remain
+        titleRef={emptyStateHeadingRef}
+        message="El directorio no tiene registros con datos coincidentes."
+      />
     );
   }
 
