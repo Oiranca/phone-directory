@@ -266,6 +266,54 @@ describe("RecordFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
+    // OIR-222 metadata fields (role/schedule/sector/section) have no form
+    // control of their own yet. Editing an unrelated field (displayName) and
+    // saving must not silently drop them from the persisted record.
+    const recordWithImportedMetadata = {
+      ...defaultContacts.records[0],
+      organization: {
+        ...defaultContacts.records[0].organization,
+        role: "Enfermera",
+        schedule: "8:00-15:00"
+      },
+      location: {
+        ...defaultContacts.records[0].location,
+        sector: "Enfermería",
+        section: "Consulta"
+      }
+    };
+    const datasetWithImportedMetadata = {
+      ...defaultContacts,
+      records: [recordWithImportedMetadata, ...defaultContacts.records.slice(1)]
+    };
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: datasetWithImportedMetadata,
+      settings: editableSettings
+    });
+
+    renderWithRoute(`/contacts/${recordWithImportedMetadata.id}/edit`);
+
+    expect(await screen.findByDisplayValue(recordWithImportedMetadata.displayName)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+      target: { value: "Admisión actualizada (metadatos)" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const [, submittedPayload] = (window.hospitalDirectory.updateRecord as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect(submittedPayload.organization.role).toBe("Enfermera");
+    expect(submittedPayload.organization.schedule).toBe("8:00-15:00");
+    expect(submittedPayload.location.sector).toBe("Enfermería");
+    expect(submittedPayload.location.section).toBe("Consulta");
+  });
+
   it("keeps one primary phone when the current primary is unchecked", async () => {
     renderWithRoute("/contacts/new");
 
