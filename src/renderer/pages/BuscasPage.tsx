@@ -3,6 +3,7 @@ import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../.
 import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { StatePanel } from "../components/feedback/StatePanel";
+import { StatusBanner } from "../components/feedback/StatusBanner";
 import { useToast } from "../components/feedback/ToastRegion";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -259,11 +260,7 @@ export const BuscasPage = () => {
           <h3 className="mb-5 text-lg font-semibold text-scs-blueDark">
             {editingId ? "Editar busca" : "Nueva busca"}
           </h3>
-          {formError && (
-            <div role="alert" className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-              {formError}
-            </div>
-          )}
+          {formError && <StatusBanner type="error" message={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="form-device-number" className="mb-2 block text-sm font-medium text-slate-700">

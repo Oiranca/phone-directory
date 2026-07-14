@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { StatusBanner } from "../components/feedback/StatusBanner";
 import { useToast } from "../components/feedback/ToastRegion";
 import { DataManagementSection } from "../components/settings/DataManagementSection";
 import { useAppStore } from "../store/useAppStore";
@@ -446,15 +447,18 @@ export const SettingsPage = () => {
           </div>
 
           {saveError ? (
-            <div role="alert" className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-              <p className="font-semibold">No se pudo guardar la configuración</p>
-              <p className="mt-2">{saveError}</p>
+            <div className="mt-6">
+              <StatusBanner
+                type="error"
+                title="No se pudo guardar la configuración"
+                message={saveError}
+              />
               {canOfferManagedReset ? (
                 <button
                   type="button"
                   onClick={() => void handleResetPathsToDefaults()}
                   disabled={isSaving || isResettingPaths}
-                  className="focus-ring mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isResettingPaths ? "Cargando rutas…" : "Cargar rutas gestionadas"}
                 </button>
