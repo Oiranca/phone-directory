@@ -928,7 +928,21 @@ export class AppDataService {
         return settings;
       }
 
-      return await this.recordLastImportedAt(settings, latestTimestamp);
+      // Route the write through the shared write queue and re-read the
+      // settings snapshot immediately before persisting. `settings` above was
+      // read before the audit-log lookup, so writing it back directly here
+      // (outside the queue) could race a concurrent saveSettings()/import and
+      // clobber fields that operation changed with this stale snapshot.
+      return await this.enqueueWrite(async () => {
+        const latestSettings = await this.readSettings(true);
+        if (latestSettings.lastImportedAt) {
+          // A concurrent operation already set it (e.g. a real import
+          // completed while this backfill was queued) — don't overwrite it
+          // with our older best-effort guess.
+          return latestSettings;
+        }
+        return await this.recordLastImportedAt(latestSettings, latestTimestamp);
+      });
     } catch {
       return settings;
     }

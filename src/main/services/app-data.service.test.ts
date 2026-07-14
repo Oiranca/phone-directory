@@ -6,6 +6,7 @@ import * as XLSX from "xlsx-republish";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
+import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
 
 const getPathMock = vi.fn();
 
@@ -1764,6 +1765,76 @@ describe("AppDataService", () => {
     const bootstrap = await service.getBootstrapData();
 
     expect(bootstrap.settings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+  });
+
+  it("concurrency regression: bootstrap backfill does not clobber a concurrent saveSettings", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings({ editorName: "Original Editor" }));
+
+    const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
+    const historicalTimestamp = "2026-01-05T10:00:00.000Z";
+    await fs.writeFile(
+      auditLogFilePath,
+      JSON.stringify([
+        { timestamp: historicalTimestamp, editor: "Samuel", action: "bulk-import", recordsAffected: 12 }
+      ]),
+      "utf-8"
+    );
+
+    // Force the exact race the reviewer flagged: hold the backfill's
+    // audit-log lookup open (simulating the async gap between reading the
+    // settings snapshot and persisting the backfilled value) until a
+    // concurrent saveSettings() has fully completed and persisted its own
+    // change. Before the fix, the backfill wrote its stale pre-race snapshot
+    // back to disk (with only lastImportedAt added), clobbering the
+    // concurrent editorName change.
+    let releaseAuditLookup: (() => void) | undefined;
+    const auditLookupGate = new Promise<void>((resolve) => {
+      releaseAuditLookup = resolve;
+    });
+    const originalGetAuditLog = AppDataAuditFacade.prototype.getAuditLog;
+    const getAuditLogSpy = vi
+      .spyOn(AppDataAuditFacade.prototype, "getAuditLog")
+      .mockImplementation(async function (
+        this: AppDataAuditFacade,
+        ...args: Parameters<typeof AppDataAuditFacade.prototype.getAuditLog>
+      ) {
+        await auditLookupGate;
+        return originalGetAuditLog.apply(this, args);
+      });
+
+    try {
+      const bootstrapPromise = service.getBootstrapData();
+
+      // Let bootstrap's earlier awaits (ensureInitialFiles, readSettings) run
+      // and reach the now-gated audit-log lookup before the concurrent save.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await service.saveSettings(buildEditableSettings({ editorName: "Concurrent Editor" }));
+
+      releaseAuditLookup?.();
+      const bootstrap = await bootstrapPromise;
+
+      expect(bootstrap.settings.lastImportedAt).toBe(historicalTimestamp);
+
+      const persisted = JSON.parse(
+        await fs.readFile(path.join(testRoot, "data", "settings.json"), "utf-8")
+      ) as { editorName: string; lastImportedAt?: string };
+
+      // Both the concurrent saveSettings() change and the backfilled
+      // lastImportedAt must survive — neither operation should clobber the
+      // other's write.
+      expect(persisted.editorName).toBe("Concurrent Editor");
+      expect(persisted.lastImportedAt).toBe(historicalTimestamp);
+    } finally {
+      getAuditLogSpy.mockRestore();
+    }
   });
 
   it("restores a selected backup and creates a safety backup first", async () => {
