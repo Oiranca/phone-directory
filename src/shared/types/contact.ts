@@ -212,11 +212,18 @@ export interface CsvImportPreviewRow {
   warningMessages?: string[];
 }
 
+/**
+ * Confidence level reported by the spreadsheet/CSV import format-detection
+ * heuristics (see spreadsheet-parsers.ts / spreadsheet-import.service.ts).
+ * MANT-5: single canonical declaration — previously redeclared in 4 places.
+ */
+export type DetectionConfidence = "high" | "medium" | "low";
+
 export interface CsvImportPreview {
   importToken: string;
   fileName: string;
   detectedFormat?: string;
-  detectionConfidence?: "high" | "medium" | "low";
+  detectionConfidence?: DetectionConfidence;
   totalRowCount: number;
   validRowCount: number;
   invalidRowCount: number;

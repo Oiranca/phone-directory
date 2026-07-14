@@ -11,11 +11,19 @@
  *      `normalizeDisplayNameForMerge` (NFKD + \p{Diacritic}) in
  *      spreadsheet-normalize. Both callers now use the single canonical NFKD
  *      form exported from this module.
+ *
+ * MANT-16: this file must never import from `src/main/**` — shared code is a
+ * dependency of main, never the other way around. It previously imported
+ * `normalizeDisplayNameForMerge` / `normalizeNumberForDedup` from
+ * `main/services/spreadsheet-normalize.ts` solely to assert they equal the
+ * exact function they are re-exported from there — a tautology (TypeScript's
+ * `export { x as y }` already guarantees identity; no runtime test adds
+ * coverage). Those two assertions were removed rather than "fixed" in place,
+ * since the only correct fix for a shared→main import is to not have one.
  */
 
 import { describe, expect, it } from "vitest";
 import { normalizePhoneForDedup, normalizePhoneForMergeDedup, computeMetadataCounts, normalizeDisplayName } from "./matching.js";
-import { normalizeDisplayNameForMerge } from "../../main/services/spreadsheet-normalize.js";
 import type { ContactRecord } from "../types/contact.js";
 
 // ---------------------------------------------------------------------------
@@ -91,17 +99,6 @@ describe("normalizePhoneForDedup", () => {
     // Parity: matches original from app-data buildStableMergeKeys / mergeImportedRecordFields
     const originalAppData = (phone: string) => phone.replace(/\D/g, "");
     expect(normalizePhoneForDedup(input)).toBe(originalAppData(input));
-  });
-
-  it("parity: normalizePhoneForDedup equals normalizeNumberForDedup from spreadsheet-normalize", async () => {
-    // Dynamically import to keep test isolated from service-layer side-effects
-    const { normalizeNumberForDedup } = await import(
-      "../../main/services/spreadsheet-normalize.js"
-    );
-    const inputs = ["928101234", "+34 928 101 234", "928-10-12", ""];
-    for (const input of inputs) {
-      expect(normalizePhoneForDedup(input)).toBe(normalizeNumberForDedup(input));
-    }
   });
 });
 
@@ -317,13 +314,6 @@ describe("normalizeDisplayName — canonical NFKD form", () => {
 
   it.each(COMMON_INPUTS)("normalizeDisplayName(%j) === %j", (input, expected) => {
     expect(normalizeDisplayName(input)).toBe(expected);
-  });
-
-  it("normalizeDisplayNameForMerge is an alias for the same canonical NFKD function", () => {
-    const inputs = ["Juan García", "María José", "áéíóú", "ÁÉÍÓÚ", "ñoño", "  MARÍA  "];
-    for (const input of inputs) {
-      expect(normalizeDisplayName(input)).toBe(normalizeDisplayNameForMerge(input));
-    }
   });
 
   it("strips compatibility characters (NFKD decomposes ligatures, halfwidth, etc.)", () => {
