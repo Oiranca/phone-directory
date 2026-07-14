@@ -675,6 +675,49 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Sin ubicación detallada")).toBeInTheDocument();
   });
 
+  // OIR-247: ODS parsing intentionally stores the bare floor/room value (e.g.
+  // "6"), relying on display-time reconstruction of the "Planta "/"Hab "
+  // prefixes (see stripPlantaPrefix in spreadsheet-parsers.ts and
+  // formatLocationFloor/formatLocationRoom in shared/utils/contacts.ts). The
+  // Ubicación card used to raw-join location.floor/location.room, rendering a
+  // bare "6" instead of "Planta 6".
+  it("prefixes floor and room with 'Planta'/'Hab' in the Ubicación card, matching locationSummary's format", async () => {
+    const contacts = structuredClone(defaultContacts);
+    const target = contacts.records[1]!;
+    target.location = {
+      ...target.location,
+      floor: "6",
+      room: "301"
+    };
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      },
+      selectedRecordId: target.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    const locationText = within(detail).getByText(/Planta 6/);
+    expect(locationText).toBeInTheDocument();
+    expect(locationText.textContent).toContain("Planta 6");
+    expect(locationText.textContent).toContain("Hab 301");
+    expect(locationText.textContent).not.toMatch(/·\s*6\s*·/);
+  });
+
   it("limits result-card risk text to the visible phone while keeping detail warnings", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones = [

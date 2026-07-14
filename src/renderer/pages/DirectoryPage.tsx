@@ -7,6 +7,7 @@ import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { normalizeDisplayName } from "../../shared/utils/matching";
+import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/contacts";
 
 // OIR-218: CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -780,8 +781,8 @@ export const DirectoryPage = () => {
                   <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
                     {[
                       selectedRecord.location?.building,
-                      selectedRecord.location?.floor,
-                      selectedRecord.location?.room,
+                      formatLocationFloor(selectedRecord.location?.floor),
+                      formatLocationRoom(selectedRecord.location?.room),
                       selectedRecord.location?.text
                     ]
                       .filter(Boolean)
