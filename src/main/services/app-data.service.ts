@@ -218,6 +218,17 @@ export class AppDataService {
     const settings = await this.readSettings(true);
     const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear la copia de seguridad del directorio.");
     this.autoBackupEditCount = 0;
+    // Cap the number of manual/import/restore/reset backups just like auto-backups
+    // (OIR-204). Without this, repeated import/export/reset cycles accumulate
+    // unlimited "contacts-*" backup files, each a full PII copy, with no cap —
+    // a real risk on the disk-constrained USB deployment this app targets.
+    // Reuses the same retentionCount knob and pruning primitive as auto-backups
+    // so retention behavior stays consistent between the two backup families.
+    await this.pruneBackupsByPrefix(
+      settings,
+      "contacts-",
+      "No se pudo rotar las copias de seguridad del directorio."
+    );
     return backupFilePath;
   }
 
@@ -1368,22 +1379,32 @@ export class AppDataService {
     // createBackupFilePathUnique + copyFileWithContext) instead of duplicating
     // that logic here.  This ensures the two code paths can never diverge.
     await this.createBackupCore(settings, "auto-backup", "No se pudo crear la copia de seguridad automática del directorio.");
-    await this.pruneAutoBackups(settings);
+    await this.pruneBackupsByPrefix(
+      settings,
+      "auto-backup-",
+      "No se pudo rotar las copias de seguridad automáticas del directorio."
+    );
   }
 
-  private async pruneAutoBackups(settings: AppSettings) {
+  /**
+   * Shared retention primitive: keeps only the `settings.ui.autoBackup.retentionCount`
+   * most recent backup files whose name starts with `filePrefix`, deleting the rest.
+   * Used both for automatic backups ("auto-backup-") and for manual/import/restore/
+   * reset backups ("contacts-", OIR-204) so the two backup families share a single
+   * retention cap instead of drifting apart.
+   */
+  private async pruneBackupsByPrefix(settings: AppSettings, filePrefix: string, pruneErrorMessage: string) {
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
       "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
-    const pruneErrorMessage = "No se pudo rotar las copias de seguridad automáticas del directorio.";
 
     try {
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-      const autoBackupFiles = (
+      const prefixedBackupFiles = (
         await Promise.all(
           entries
-            .filter((entry) => entry.isFile() && entry.name.startsWith("auto-backup-") && entry.name.endsWith(".json"))
+            .filter((entry) => entry.isFile() && entry.name.startsWith(filePrefix) && entry.name.endsWith(".json"))
             .map(async (entry) => {
               const filePath = path.join(backupDirectory, entry.name);
 
@@ -1407,10 +1428,10 @@ export class AppDataService {
         )
       ).filter((entry): entry is { filePath: string; createdAt: number } => entry !== null);
 
-      autoBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+      prefixedBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
 
       await Promise.all(
-        autoBackupFiles
+        prefixedBackupFiles
           .slice(settings.ui.autoBackup.retentionCount)
           .map(async (entry) => {
             try {

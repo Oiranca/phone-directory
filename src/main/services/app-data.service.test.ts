@@ -645,7 +645,7 @@ describe("AppDataService", () => {
     expect(files).toHaveLength(2);
     expect(files.at(-1)).toMatch(/^auto-backup-/);
     // Drain any in-flight write-queue entries before the afterEach removes the
-    // temp dir, preventing an ENOTEMPTY race between pruneAutoBackups and fs.rm.
+    // temp dir, preventing an ENOTEMPTY race between pruneBackupsByPrefix and fs.rm.
     await service.dispose();
   });
 
@@ -3772,6 +3772,125 @@ describe("AppDataService", () => {
     const times = backups.map((b) => new Date(b.createdAt).getTime());
     expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
     expect(times[1]).toBeGreaterThanOrEqual(times[2]!);
+  });
+
+  // -------------------------------------------------------------------------
+  // OIR-204 — createBackup (manual/import/restore/reset) prunes old contacts-*
+  // backups using the same retentionCount cap as auto-backups, so repeated
+  // import/export/reset cycles cannot accumulate unlimited PII-bearing files.
+  // -------------------------------------------------------------------------
+
+  it("prunes old contacts-* backups down to the configured retentionCount", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 2
+          }
+        }
+      })
+    );
+
+    const firstPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const thirdPath = await service.createBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = (await fs.readdir(backupDir)).filter(
+      (file) => file.startsWith("contacts-") && file.endsWith(".json")
+    );
+
+    // Only the retentionCount (2) most recent contacts-* backups survive.
+    expect(files).toHaveLength(2);
+    await expect(fs.access(firstPath)).rejects.toThrow();
+    await expect(fs.access(secondPath)).resolves.toBeUndefined();
+    await expect(fs.access(thirdPath)).resolves.toBeUndefined();
+  });
+
+  it("prunes old contacts-* backups created via importDataset/restoreBackup/resetDataset, not just createBackup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 1
+          }
+        }
+      })
+    );
+
+    const sourceFilePath = path.join(testRoot, "import-source.json");
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    // Each of these call sites delegates to the same createBackupInner primitive.
+    await service.importDataset(sourceFilePath);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const backupPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await service.restoreBackup(backupPath);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await service.resetDataset();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = (await fs.readdir(backupDir)).filter(
+      (file) => file.startsWith("contacts-") && file.endsWith(".json")
+    );
+
+    // retentionCount=1: only the single most recent contacts-* backup remains
+    // even though 4 backup-producing operations ran.
+    expect(files).toHaveLength(1);
+  });
+
+  it("does not prune auto-backup-* files when pruning contacts-* backups, and vice versa", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 1
+          }
+        }
+      })
+    );
+
+    const backupDir = path.join(testRoot, "backups");
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.writeFile(path.join(backupDir, "auto-backup-2026-01-01T00-00-00-000Z.json"), "{}\n", "utf-8");
+
+    await service.createBackup();
+
+    const files = await fs.readdir(backupDir);
+    expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+    expect(files.filter((file) => file.startsWith("contacts-"))).toHaveLength(1);
   });
 
   // -------------------------------------------------------------------------
