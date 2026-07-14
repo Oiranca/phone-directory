@@ -10,6 +10,7 @@
  * Pure-ish and dependency-injectable (mirrors security.ts's extraction
  * pattern) so it can be unit tested without booting a real Electron app.
  */
+import path from "node:path";
 import type { App } from "electron";
 import { dialog } from "electron";
 import { logCrash, type CrashSource } from "./services/crash-log.service.js";
@@ -29,11 +30,73 @@ export interface CrashHandlerDeps {
 
 const CRASH_DIALOG_TITLE = "Error inesperado";
 
+/**
+ * JSON.stringify throws (rather than returning undefined) for values that
+ * are non-serializable — e.g. an object with a circular reference, or one
+ * containing a BigInt. Because a thrown/rejected value is exactly the kind
+ * of thing that can be in a malformed shape when the program is already
+ * failing, this must never throw itself: describeError() runs inside the
+ * uncaughtException/unhandledRejection listener, so an uncaught throw here
+ * would skip recordCrash/showErrorBox entirely for this class of input —
+ * defeating the point of the crash safety net for its own edge case.
+ */
+const safeStringify = (error: unknown): string => {
+  try {
+    return JSON.stringify(error);
+  } catch {
+    try {
+      return String(error);
+    } catch {
+      return "Unknown error";
+    }
+  }
+};
+
 const describeError = (error: unknown): { message: string; stack?: string } => {
   if (error instanceof Error) {
     return { message: error.message, stack: error.stack };
   }
-  return { message: typeof error === "string" ? error : JSON.stringify(error) };
+  return { message: typeof error === "string" ? error : safeStringify(error) };
+};
+
+const DIALOG_DIAGNOSTIC_SUFFIX_PATTERNS = [
+  /\s+Ruta afectada:.*$/u,
+  /\s+Ruta de origen:.*$/u,
+  /\s+Ruta de destino:.*$/u,
+  /\s+Archivo afectado:.*$/u
+];
+
+// Matches absolute POSIX paths (leading `/`) and Windows paths (`C:\...`),
+// stopping at whitespace/quote/bracket characters.
+const ABSOLUTE_PATH_PATTERN = /(?:[A-Za-z]:)?[/\\][^\s"'<>]+/gu;
+
+/**
+ * Redacts absolute filesystem paths from a crash message before it is shown
+ * in a user-facing dialog. Mirrors the diagnostic-suffix stripping already
+ * used for renderer toasts (src/renderer/utils/toastMessage.ts, OIR-213) —
+ * which exists specifically to avoid leaking "Ruta afectada:"/"Archivo
+ * afectado:" suffixes that can embed absolute paths (and thus the OS
+ * username) — plus a generic absolute-path redaction, since a raw
+ * uncaughtException/unhandledRejection message is not guaranteed to carry
+ * one of those known suffixes. This app is a PII-handling phone directory
+ * deployed as a shared-workstation USB install, so the dialog (visible to
+ * anyone at the machine) must never surface a raw absolute path. The full,
+ * unredacted message is still written to the operator-only crash-log.jsonl
+ * via recordCrash() before this redaction is applied.
+ */
+const redactMessageForDialog = (message: string): string => {
+  const withoutDiagnosticSuffixes = DIALOG_DIAGNOSTIC_SUFFIX_PATTERNS.reduce(
+    (current, pattern) => current.replace(pattern, ""),
+    message
+  );
+
+  return withoutDiagnosticSuffixes.replace(ABSOLUTE_PATH_PATTERN, (match) => {
+    try {
+      return path.basename(match) || "<ruta oculta>";
+    } catch {
+      return "<ruta oculta>";
+    }
+  });
 };
 
 /**
@@ -59,7 +122,7 @@ export const registerCrashHandlers = (deps: CrashHandlerDeps = {}): void => {
 
     showErrorBox(
       CRASH_DIALOG_TITLE,
-      `La aplicación ha encontrado un error inesperado y debe cerrarse.\n\n${message}`
+      `La aplicación ha encontrado un error inesperado y debe cerrarse.\n\n${redactMessageForDialog(message)}`
     );
 
     exit(1);

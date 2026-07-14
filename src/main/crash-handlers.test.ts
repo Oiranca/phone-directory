@@ -147,6 +147,57 @@ describe("registerCrashHandlers", () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  it("still records the crash and shows a dialog when the thrown value is circular (non-JSON-serializable)", () => {
+    const fakeProcess = makeFakeProcess();
+    const recordCrash = vi.fn();
+    const showErrorBox = vi.fn();
+    const exit = vi.fn();
+
+    registerCrashHandlers({ targetProcess: fakeProcess, recordCrash, showErrorBox, exit });
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    // JSON.stringify(circular) throws a TypeError ("Converting circular
+    // structure to JSON") — describeError() must not let that escape the
+    // uncaughtException listener, or recordCrash/showErrorBox would be
+    // silently skipped for this exact class of malformed error value.
+    expect(() => fakeProcess.emit("uncaughtException", circular)).not.toThrow();
+
+    expect(recordCrash).toHaveBeenCalledTimes(1);
+    expect(showErrorBox).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("redacts absolute paths from the dialog message but keeps the full message in the crash log", () => {
+    const fakeProcess = makeFakeProcess();
+    const recordCrash = vi.fn();
+    const showErrorBox = vi.fn();
+    const exit = vi.fn();
+
+    registerCrashHandlers({ targetProcess: fakeProcess, recordCrash, showErrorBox, exit });
+
+    const sensitivePath =
+      "/Users/jdoe/Library/Application Support/phone-directory/data/contacts.json";
+    const error = new Error(`No se pudo leer el archivo. Ruta afectada: ${sensitivePath}.`);
+
+    fakeProcess.emit("uncaughtException", error);
+
+    // The full, unredacted message must still reach the operator-only
+    // crash-log.jsonl via recordCrash().
+    expect(recordCrash).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining(sensitivePath) })
+    );
+
+    // But the user-facing dialog must never surface the raw absolute path
+    // (which embeds the OS username) or contact data diagnostic suffix.
+    expect(showErrorBox).toHaveBeenCalledTimes(1);
+    const dialogMessage = showErrorBox.mock.calls[0]![1];
+    expect(dialogMessage).not.toContain(sensitivePath);
+    expect(dialogMessage).not.toContain("jdoe");
+    expect(dialogMessage).not.toContain("Ruta afectada:");
+  });
+
   it("on render-process-gone: does NOT record/exit for a clean-exit reason", () => {
     const fakeProcess = makeFakeProcess();
     const fakeApp = makeFakeApp();
