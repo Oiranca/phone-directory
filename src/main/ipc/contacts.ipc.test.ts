@@ -148,7 +148,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-225 — field-level overrides applied on top of the keep/discard merge
+// Field-level overrides applied on top of the keep/discard merge
 // ---------------------------------------------------------------------------
 
 describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overrides)", () => {
@@ -409,7 +409,7 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-113 — import token sender binding
+// Import token sender binding
 //
 // Tests for the importCsvDataset handler's sender equality check, token
 // invalidation on navigation/destruction, and concurrency safety.
@@ -458,7 +458,7 @@ function makeWebContentsSender(id: number): {
   };
 }
 
-describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
+describe("contacts:import-csv-dataset — sender binding", () => {
   // Captured handler registry, reset per test so each test gets a fresh
   // registerContactsIpc call with its own token map.
   let handlers: Map<string, (...args: unknown[]) => unknown>;
@@ -645,7 +645,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+  // Root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
   // navigations (hash/fragment changes, pushState/replaceState, same-page history
   // navigation — see Electron's `isSameDocument` event field). This app routes
   // entirely via createHashRouter, so an in-app hash change — or even a macOS
@@ -686,7 +686,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  it("OIR-115 — sourceFilePath is stripped from the preview payload before reaching the renderer", async () => {
+  it("sourceFilePath is stripped from the preview payload before reaching the renderer", async () => {
     const sender = makeWebContentsSender(10);
     const handler = handlers.get("contacts:preview-csv-import");
     if (!handler) throw new Error("preview handler not registered");
@@ -833,14 +833,14 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-219 — pickAndImportDataset: single unified "Importar" entry point
+// pickAndImportDataset: single unified "Importar" entry point
 //
 // Verifies the extension-based dispatch: main owns the one dialog, and routes
 // to the same underlying pipelines used by the existing importDataset /
 // previewCsvImport channels, without ever accepting a renderer-supplied path.
 // ---------------------------------------------------------------------------
 
-describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch", () => {
+describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     importDataset: ReturnType<typeof vi.fn>;
@@ -959,7 +959,7 @@ describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch",
     expect(serviceMock.previewCsvImport).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
     expect(serviceMock.importDataset).not.toHaveBeenCalled();
     expect(response.kind).toBe("csv-preview");
-    // OIR-115 parity — the absolute source path must never reach the renderer here either.
+    // Parity with previewCsvImport — the absolute source path must never reach the renderer here either.
     expect(Object.prototype.hasOwnProperty.call(response.preview, "sourceFilePath")).toBe(false);
     expect(typeof response.preview.importToken).toBe("string");
     expect(response.preview.fileName).toBe("directory.csv");
@@ -1010,7 +1010,7 @@ describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch",
 });
 
 // ---------------------------------------------------------------------------
-// OIR-212 (SEC-4) — global cap on concurrent pending CSV imports
+// SEC-4 — global cap on concurrent pending CSV imports
 //
 // pendingCsvImports previously had no upper bound across ALL senders (only a
 // per-sender previous-token invalidation). Verifies the defensive global cap:
@@ -1018,7 +1018,7 @@ describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch",
 // preview, rather than letting the map grow unbounded until TTLs expire.
 // ---------------------------------------------------------------------------
 
-describe("contacts:preview-csv-import — OIR-212 (SEC-4) global pending-import cap", () => {
+describe("contacts:preview-csv-import — SEC-4 global pending-import cap", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;
@@ -1112,13 +1112,13 @@ describe("contacts:preview-csv-import — OIR-212 (SEC-4) global pending-import 
 });
 
 // ---------------------------------------------------------------------------
-// OIR-212 (SEC-5) — csvImportPolicySelectionSchema (Zod) replaces manual
+// SEC-5 — csvImportPolicySelectionSchema (Zod) replaces manual
 // typeof/Number.isInteger/Set.has validation of importCsvDataset's policy
 // array, matching this codebase's "every IPC input goes through Zod"
 // convention (createRecord, updateRecord, mergeDuplicates, busca channels).
 // ---------------------------------------------------------------------------
 
-describe("csvImportPolicySelectionSchema — OIR-212 (SEC-5)", () => {
+describe("csvImportPolicySelectionSchema — SEC-5", () => {
   it("accepts a well-formed policy selection array", async () => {
     const { csvImportPolicySelectionListSchema } = await import(
       "../../shared/schemas/csv-import-policy.schema.js"
@@ -1212,7 +1212,7 @@ describe("csvImportPolicySelectionSchema — OIR-212 (SEC-5)", () => {
   });
 });
 
-describe("contacts:import-csv-dataset — OIR-212 (SEC-5) IPC handler rejects malformed policies via Zod", () => {
+describe("contacts:import-csv-dataset — SEC-5 IPC handler rejects malformed policies via Zod", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;

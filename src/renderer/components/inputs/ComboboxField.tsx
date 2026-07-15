@@ -28,7 +28,7 @@ const normalizeForMatch = (text: string): string =>
   text.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /**
- * Minimal free-text combobox with filtered suggestions (OIR-232).
+ * Minimal free-text combobox with filtered suggestions.
  * Unlike SelectField (fixed single-select), this always accepts arbitrary
  * typed text — suggestions are offered as shortcuts, never enforced.
  * Used for the custom-field key name so a user can pick a previously-used

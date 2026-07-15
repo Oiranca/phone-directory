@@ -1,8 +1,8 @@
 /**
  * matching.ts — Pure shared helpers for phone normalization, display-name
  * normalization, and dataset metadata counting, extracted from
- * duplicate-detection.service.ts and csv-import.service.ts as part of OIR-119.
- * OIR-134 superseded the OIR-119 display-name divergence — now unified to NFKD.
+ * duplicate-detection.service.ts and csv-import.service.ts.
+ * A later change superseded an earlier display-name divergence — now unified to NFKD.
  *
  * All functions are PURE: no I/O, no side effects, no Node.js built-ins.
  *
@@ -70,9 +70,9 @@ export const normalizePhoneForMergeDedup = (phone: string): string =>
  * Two names that are equal after this transform are considered the same
  * contact for deduplication and cross-sheet merge purposes.
  *
- * OIR-134: supersedes the separate NFD+char-range form that lived in
- * duplicate-detection.service.ts (OIR-119 had deliberately kept them apart;
- * OIR-134 unifies both callers to NFKD). The NFKD form handles compatibility
+ * Supersedes the separate NFD+char-range form that lived in
+ * duplicate-detection.service.ts (an earlier change had deliberately kept them apart;
+ * this unifies both callers to NFKD). The NFKD form handles compatibility
  * characters (ligatures, halfwidth) that NFD does not decompose.
  *
  * Used by:

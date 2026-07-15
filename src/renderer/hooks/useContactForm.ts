@@ -20,13 +20,13 @@ export type ContactFormState = Omit<EditableContactRecord, "person" | "location"
     room: string;
     text: string;
     /**
-     * OIR-222 imported metadata (ODS "Sector" column). No form control edits
+     * Imported metadata (ODS "Sector" column). No form control edits
      * this field yet — it is carried through as a hidden passthrough value so
      * editing an unrelated field never drops it on save (see buildPayload).
      */
     sector?: string;
     /**
-     * OIR-222 imported metadata (ODS "Sección" column). Hidden passthrough,
+     * Imported metadata (ODS "Sección" column). Hidden passthrough,
      * same rationale as `sector` above.
      */
     section?: string;
@@ -172,7 +172,7 @@ const toFormState = (record: EditableContactRecord): ContactFormState => ({
     service: record.organization.service ?? "",
     area: record.organization.area,
     specialty: record.organization.specialty ?? "",
-    // OIR-222 imported metadata — no form control edits these yet, but they
+    // Imported metadata — no form control edits these yet, but they
     // must survive an unrelated save instead of being dropped (see
     // buildPayload, which forwards `organization`/`location` unmodified).
     role: record.organization.role,
@@ -237,7 +237,7 @@ const promoteSiblingAsPrimary = <T extends { id: string; isPrimary: boolean }>(
   const fallbackIndex = entries.findIndex((entry) => entry.id !== excludedId);
 
   if (fallbackIndex === -1) {
-    // OIR-239: single-entry case — there is no sibling to promote. Return
+    // Single-entry case — there is no sibling to promote. Return
     // entries unchanged instead of inventing a primary; zero primaries is a
     // valid, user-chosen state (e.g. unchecking "Principal" on the only
     // phone/email/social must not silently re-check it).

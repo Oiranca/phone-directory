@@ -10,7 +10,7 @@ import {
 } from "./helpers/electron";
 
 /**
- * OIR-219: the "Importar" card is now a single unified entry point — one
+ * The "Importar" card is now a single unified entry point — one
  * button opens exactly one native dialog after a pre-selection safety
  * confirmation. Drives that two-click sequence for the tests below.
  */
@@ -19,7 +19,7 @@ const openImportPicker = async (page: import("@playwright/test").Page) => {
   await page.getByRole("button", { name: "Elegir archivo" }).click();
 };
 
-test.describe("OIR-57 bulk import preview UI", () => {
+test.describe("bulk import preview UI", () => {
   test("preview shows row table with accepted status for all-valid rows", async () => {
     const workspace = await createWorkspace("preview-all-valid");
     const csvPath = path.join(workspace.incomingDir, "all-valid.csv");
@@ -121,7 +121,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Confirm button is disabled
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
 
-      // Error message toast (OIR-200: nothing importable at all is still blocked)
+      // Error message toast (nothing importable at all is still blocked)
       await expect(page.getByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
@@ -165,7 +165,7 @@ test.describe("OIR-57 bulk import preview UI", () => {
       // Error message for rejected row is visible in table
       await expect(table.getByText("El tipo es obligatorio.")).toBeVisible();
 
-      // OIR-200: a partial import (some valid, some rejected rows) is no longer
+      // A partial import (some valid, some rejected rows) is no longer
       // blocked — the panel shows a non-blocking status notice (not a hard
       // alert), and the valid rows remain importable.
       const previewPanel = page.getByRole("region", { name: "Vista previa de importación" });

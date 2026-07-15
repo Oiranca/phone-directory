@@ -1,5 +1,5 @@
 /**
- * OIR-116 — Electron API contract tests
+ * Electron API contract tests
  *
  * Validates three things:
  * 1. Handler registration coverage — every renderer-invokable channel (derived from the

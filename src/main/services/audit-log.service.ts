@@ -1,15 +1,15 @@
 /**
- * OIR-124 decision (2026-06-23): The audit log is an internal JSON record only.
+ * Decision (2026-06-23): The audit log is an internal JSON record only.
  * The renderer audit UI (AuditLogPage) and its renderer-facing IPC boundary
  * (getAuditLog / exportAuditLog / recoverAuditLog channels + HospitalDirectoryApi
- * methods) were removed in OIR-124. Backend capture (appendEntry on every
+ * methods) were removed. Backend capture (appendEntry on every
  * create/update/merge) and the service-layer recovery path
  * (recoverFromIntegrityError / AppDataService.recoverAuditLog) are retained so
  * future operator tooling can wire recovery without touching this layer.
  * The integrityError latch remains deliberately fail-closed: once set, all
  * appends are blocked until an explicit recoverFromIntegrityError() call clears it.
  *
- * OIR-206 / ARQ-7 (2026-07-14): the active log file has no size bound on its
+ * ARQ-7 (2026-07-14): the active log file has no size bound on its
  * own, so `append()` now rotates it once it accumulates
  * `DEFAULT_ROTATION_THRESHOLD_ENTRIES` entries — the full active history is
  * archived to a timestamped `audit-log.archived-<ISO timestamp>.json`
@@ -76,7 +76,7 @@ export interface AuditLogServiceOptions {
 
 export class AuditLogService {
   /**
-   * OIR-206 / ARQ-7: rotation threshold for the active audit log.
+   * ARQ-7: rotation threshold for the active audit log.
    *
    * Once the active log accumulates this many entries, the NEXT append
    * archives the full active history to a uniquely named, timestamped
@@ -283,7 +283,7 @@ export class AuditLogService {
   }
 
   /**
-   * OIR-206 follow-up (security review, 2026-07-14): count the archived
+   * Follow-up (security review, 2026-07-14): count the archived
    * sidecar files (`<base>.archived-<timestamp>.json`) sitting next to the
    * active log, WITHOUT reading/parsing their contents — a `fs.readdir` +
    * filename filter is all that's needed to tell callers that older history
@@ -323,7 +323,7 @@ export class AuditLogService {
 
       let activeEntries = entries;
       if (activeEntries.length >= this.rotationThresholdEntries) {
-        // OIR-206 / ARQ-7: bound the cost of every future append by archiving
+        // ARQ-7: bound the cost of every future append by archiving
         // the accumulated history now and continuing with a clean active log.
         //
         // Security review follow-up (2026-07-14) — accepted non-atomicity:
@@ -398,7 +398,7 @@ export class AuditLogService {
       filtered = filtered.filter((e) => e.recordName?.toLowerCase().includes(q));
     }
 
-    // OIR-206 follow-up (security review): surface archived-history visibility
+    // Follow-up (security review): surface archived-history visibility
     // rather than silently reading only the active log with no indication that
     // older, rotated-out entries exist elsewhere.
     const archivedFileCount = await this.countArchivedFiles(filePath);

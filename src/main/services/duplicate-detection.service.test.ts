@@ -479,7 +479,7 @@ describe("DuplicateDetectionService", () => {
       );
     }, 120_000);
 
-    // OIR-107 acceptance: 5 000-record scale — abort early (before first chunk boundary)
+    // Acceptance: 5 000-record scale — abort early (before first chunk boundary)
     // rather than running the full O(n²) scan so the test stays fast on CI.
     // This proves: (a) a 5k dataset is correctly sized/built, (b) abort at i=0 is
     // honored immediately even at production scale.

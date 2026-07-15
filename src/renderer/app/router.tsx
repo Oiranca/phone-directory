@@ -6,7 +6,7 @@ import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
 
-// OIR-214 / ARQ-10 — code-splitting: previously every route (including
+// ARQ-10 — code-splitting: previously every route (including
 // SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
 // DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
 // all 7 pages shipped in the single initial bundle chunk regardless of
@@ -45,7 +45,7 @@ export const router = createHashRouter([
         element: <RecordFormPage />
       },
       {
-        // OIR-219: Importar/Exportar was folded into Configuración as a
+        // Importar/Exportar was folded into Configuración as a
         // section. Keep a redirect so old bookmarks/deep links still resolve.
         path: "import-export",
         element: <Navigate to="/settings" replace />

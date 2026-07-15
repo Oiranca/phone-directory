@@ -59,7 +59,7 @@ export interface HospitalDirectoryApi {
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
 
-  // OIR-219: unified single-picker import entry point. Opens one native
+  // Unified single-picker import entry point. Opens one native
   // dialog and dispatches by extension to importDataset()/previewCsvImport().
   pickAndImportDataset: () => Promise<PickAndImportDatasetResult>;
 

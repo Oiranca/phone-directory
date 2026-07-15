@@ -5,7 +5,7 @@
  *   1. Electron's sandbox (sandbox: true) restricts the preload's require()
  *      to built-in Node/Electron modules — relative file paths are blocked.
  *      This is why index.cts must inline its channel constants (it cannot
- *      require a sibling api.cjs). This was the root constraint from OIR-103.
+ *      require a sibling api.cjs). This was the root constraint that shaped the design.
  *   2. Vite 6's ssrTransformScript feeds .cts content to Rollup WITHOUT
  *      stripping TypeScript first. Even `export const X = "y" as const`
  *      causes a parse failure. .cts files genuinely cannot be imported in the

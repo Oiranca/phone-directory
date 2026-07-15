@@ -51,14 +51,14 @@ const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "department",
   "service",
   "specialty",
-  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  // Role/job title and operating hours (ODS "Categoría"/"Horario" columns).
   "role",
   "schedule",
   "building",
   "floor",
   "room",
   "locationText",
-  // OIR-222: ODS "Sector"/"Sección" columns.
+  // ODS "Sector"/"Sección" columns.
   "sector",
   "section",
   "phone1Label",
@@ -83,7 +83,7 @@ const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "email2",
   "email2Label",
   "email2IsPrimary",
-  // Social media columns (OIR-131)
+  // Social media columns
   "social1Platform",
   "social1Handle",
   "social1Url",
@@ -120,7 +120,7 @@ export type SpreadsheetImportNormalizationResult = {
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
   /**
-   * OIR-130: Parse result for buscas sheets found in the workbook.
+   * Parse result for buscas sheets found in the workbook.
    * Populated when one or more sheets with a "buscas" slug prefix are present.
    * The caller (AppDataService.previewCsvImport) persists these via BuscasService.
    * buscasSkippedRowCount counts rows that were in buscas sheets but yielded no
@@ -129,7 +129,7 @@ export type SpreadsheetImportNormalizationResult = {
   buscasParseResult: BuscasSheetParseResult;
   /** Alias kept for backwards-compat with preview panel display (genuinely-unparseable buscas rows). */
   buscasSkippedRowCount: number;
-  /** OIR-131/OIR-134: Rows skipped because they are social-media handles. */
+  /** Rows skipped because they are social-media handles. */
   socialHandleSkippedRowCount: number;
 };
 
@@ -168,7 +168,7 @@ const isNavigationSheet = (slug: string): boolean => {
 };
 
 /**
- * INTERIM (OIR-102): Slug prefix for Buscas sheets (pager/localizador system).
+ * INTERIM: Slug prefix for Buscas sheets (pager/localizador system).
  *
  * Sheets like Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores, and
  * Buscas_Varios belong to the separate Buscas (pager/localizador) section that
@@ -179,7 +179,7 @@ const isNavigationSheet = (slug: string): boolean => {
  *
  * These sheets are skipped here — kept distinct from isNavigationSheet so the
  * reason is explicit and easy to remove once a proper Buscas ODS-import path
- * is built.  Tracked as a future Linear feature (child of OIR-102).
+ * is built.  Tracked as a future feature in the issue tracker.
  */
 const BUSCAS_SHEET_SLUG_PREFIX = "buscas";
 
@@ -217,7 +217,7 @@ const serviceHeaderAliases = {
 };
 
 /**
- * OIR-230: matches a phone-header alias exactly (serviceHeaderAliases.phone)
+ * Matches a phone-header alias exactly (serviceHeaderAliases.phone)
  * OR a numbered "Número N" column (e.g. "NUMERO1".."NUMERO7", normalized).
  * Fixes a header-leak bug: a sheet whose header is "Nombre, Categoría,
  * Servicio, Número 1, Número 2, ..." (the Agenda-tabular column layout, see
@@ -362,7 +362,7 @@ const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => 
 };
 
 /**
- * OIR-222: the hospital's real ODS export names the canonical, complete
+ * The hospital's real ODS export names the canonical, complete
  * directory sheet "Agenda" (slug "agenda"). The same workbook also contains
  * "Agenda_3" (a byte-identical duplicate/backup copy) and "Departamentos" (a
  * separate, much smaller, mostly-blank department-index sheet) which both
@@ -375,7 +375,7 @@ const countFlatPhoneBearingRows = (rows: string[][], startIndex = 0): number => 
 const AGENDA_TABULAR_SHEET_SLUG = "agenda";
 
 /**
- * OIR-230: sheets confirmed (from a prior real export of this same workbook)
+ * Sheets confirmed (from a prior real export of this same workbook)
  * to share the Agenda tabular header without being a genuine per-department
  * "book" of contacts — see AGENDA_TABULAR_SHEET_SLUG comment above. Both must
  * keep being skipped entirely rather than imported as duplicate/junk
@@ -394,7 +394,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
     return null;
   }
 
-  // OIR-222/OIR-230: a sheet whose header matches the Agenda tabular format
+  // A sheet whose header matches the Agenda tabular format
   // (see resolveAgendaColumnIndices — tolerates extra inserted columns, e.g.
   // the real "Sindicatos" sheet's Fax column). The canonical directory sheet
   // (slug "agenda") is routed to the dedicated tabular parser with a blank
@@ -402,7 +402,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   // duplicate and a TOC sheet — AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) are
   // skipped entirely, exactly as before. Every OTHER sheet sharing this
   // header is a genuine per-department "book" of contacts (e.g. the real
-  // "Almacenes", "Quirófanos", "Corporativos" sheets) — OIR-230 requires
+  // "Almacenes", "Quirófanos", "Corporativos" sheets) — this requires
   // every contact imported from one of these to be tagged with the sheet's
   // own name as department, so route it to the same tabular parser instead of
   // silently dropping it (previous behavior) or misparsing it via the legacy
@@ -435,7 +435,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
     };
   }
 
-  // INTERIM (OIR-102): Skip Buscas (pager/localizador) sheets.
+  // INTERIM: Skip Buscas (pager/localizador) sheets.
   // These belong to a separate app section that does not yet have an ODS-import
   // pipeline.  Their column header "PRINCIPAL / RESIDENTE" would be mistakenly
   // parsed as a contact and rejected, blocking the whole import.
@@ -502,7 +502,7 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   }
 
   const derivedDepartment = (() => {
-    // OIR-230: prefer the sheet's own (real, human-assigned) tab name over a
+    // Prefer the sheet's own (real, human-assigned) tab name over a
     // guess derived from the first row's content. Guessing from content was
     // the root cause of a header-leak bug: when the header row wasn't reliably
     // recognized as a header (see isServicePhoneHeaderCell fix above), its
@@ -701,7 +701,7 @@ export const normalizeWorkbookRowsFromFile = (
       continue;
     }
 
-    // OIR-130: Route buscas sheets to the dedicated pager parser instead of skipping.
+    // Route buscas sheets to the dedicated pager parser instead of skipping.
     // These sheets (Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores,
     // Buscas_Varios) use column-per-holder-type layout and belong to the separate
     // Buscas section. parseBuscasSheets() is called after the loop with all collected
@@ -740,7 +740,7 @@ export const normalizeWorkbookRowsFromFile = (
     );
   }
 
-  // OIR-130: Parse buscas sheets collected above.
+  // Parse buscas sheets collected above.
   const buscasParseResult = parseBuscasSheets(buscasSheets);
 
   // Allow import of buscas-only workbooks (no phone contacts) only when at least one

@@ -266,7 +266,7 @@ describe("RecordFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
-  it("OIR-209: shows the record-not-found state and moves focus to its heading when editing a missing record", async () => {
+  it("shows the record-not-found state and moves focus to its heading when editing a missing record", async () => {
     renderWithRoute("/contacts/cnt_does_not_exist/edit");
 
     const heading = await screen.findByRole("heading", { name: "Registro no encontrado" });
@@ -284,7 +284,7 @@ describe("RecordFormPage", () => {
   });
 
   it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
-    // OIR-222 metadata fields (role/schedule/sector/section) have no form
+    // Imported metadata fields (role/schedule/sector/section) have no form
     // control of their own yet. Editing an unrelated field (displayName) and
     // saving must not silently drop them from the persisted record.
     const recordWithImportedMetadata = {
@@ -345,7 +345,7 @@ describe("RecordFormPage", () => {
     expect(primaryCheckboxes[1]).toBeChecked();
   });
 
-  it("OIR-239: unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
+  it("unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
     renderWithRoute("/contacts/new");
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
@@ -480,7 +480,7 @@ describe("RecordFormPage", () => {
     // DOM (tab) order: Cancelar precedes the submit button. This is the behavior
     // that actually matters for keyboard/tab navigation and screen readers; it is
     // asserted structurally so the test survives Tailwind class renames/refactors
-    // (OIR-217/QA-7 — a prior version of this test asserted a `flex-col-reverse`
+    // (QA-7 — a prior version of this test asserted a `flex-col-reverse`
     // class-name substring, which is an implementation detail unrelated to the
     // real (unrenderable-in-jsdom) visual layout).
     expect(

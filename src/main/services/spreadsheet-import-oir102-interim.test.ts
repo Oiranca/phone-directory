@@ -1,7 +1,7 @@
 /**
- * OIR-102 INTERIM — Buscas sheet skip and social-handle row skip.
+ * INTERIM — Buscas sheet skip and social-handle row skip.
  *
- * (OIR-217/MANT-7: this file covers row-skipping fixes distinct from — and
+ * (MANT-7: this file covers row-skipping fixes distinct from — and
  * unrelated to — the multi-sheet phone-merge regression tests in
  * `spreadsheet-import-oir102-multisheet.test.ts`.)
  *
@@ -150,9 +150,9 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
 // B. Social-handle row skip (isSocialHandle)
 // ---------------------------------------------------------------------------
 
-describe("Social-handle row import (OIR-131: social rows are first-class contacts)", () => {
+describe("Social-handle row import (social rows are first-class contacts)", () => {
   it("imports a social-handle row as a contact with the handle as a social method", () => {
-    // OIR-131 removed the old isSocialHandle skip. Social rows are now imported
+    // The old isSocialHandle skip was removed. Social rows are now imported
     // as first-class contacts. The parser resolves "hospitaldrnegrin" as the
     // label (first cell is ALL-CAPS excluded; fallback finds the all-lowercase
     // token in col 1). The platform is inferred from the row cells (INSTAGRAM).
@@ -175,7 +175,7 @@ describe("Social-handle row import (OIR-131: social rows are first-class contact
     const result = normalizeWorkbookRowsFromFile(filePath);
     const names = result.rows.map((r) => r.displayName);
 
-    // Social handle IS now imported as a contact (OIR-131).
+    // Social handle IS now imported as a contact.
     expect(names).toContain("hospitaldrnegrin");
     // Verify social fields are set on the imported contact.
     const socialRow = result.rows.find((r) => r.displayName === "hospitaldrnegrin");
@@ -251,12 +251,12 @@ describe("Social-handle row import (OIR-131: social rows are first-class contact
 });
 
 // ---------------------------------------------------------------------------
-// C. buscasSkippedRowCount / socialHandleSkippedRowCount surface (OIR-102 / OIR-134)
+// C. buscasSkippedRowCount / socialHandleSkippedRowCount surface
 // ---------------------------------------------------------------------------
 
 describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
-  it("OIR-130: buscasSkippedRowCount counts genuinely-unparseable buscas rows only (empty/comment rows)", () => {
-    // OIR-130: buscas sheets are now parsed into buscasParseResult, not simply skipped.
+  it("buscasSkippedRowCount counts genuinely-unparseable buscas rows only (empty/comment rows)", () => {
+    // Buscas sheets are now parsed into buscasParseResult, not simply skipped.
     // buscasSkippedRowCount reflects only rows that yielded no pager record
     // (empty department label or all holder cells empty/non-numeric).
     // Buscas_Celadores: 2 data rows, both have pager numbers → 0 skipped buscas rows.
@@ -286,8 +286,8 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
   });
 
-  it("OIR-131: social-handle rows are now imported as contacts (socialHandleSkippedRowCount stays 0)", () => {
-    // OIR-131: social rows are no longer skipped — they are mapped to social contacts.
+  it("social-handle rows are now imported as contacts (socialHandleSkippedRowCount stays 0)", () => {
+    // Social rows are no longer skipped — they are mapped to social contacts.
     // Previously this test asserted socialHandleSkippedRowCount === 1 and that
     // "hospitaldrnegrin" was NOT in the result. Now the row becomes a contact
     // with social1Handle = "hospitaldrnegrin" and socialHandleSkippedRowCount === 0.
@@ -323,10 +323,10 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(socialRow?.social1IsPrimary).toBe("true");
   });
 
-  it("OIR-130: buscas rows are parsed into buscasParseResult; social rows are imported as contacts", () => {
-    // OIR-130: Buscas_Varios data rows are parsed into buscasParseResult.records,
+  it("buscas rows are parsed into buscasParseResult; social rows are imported as contacts", () => {
+    // Buscas_Varios data rows are parsed into buscasParseResult.records,
     // not counted in buscasSkippedRowCount (which is now empty/comment-only rows).
-    // OIR-131: social-handle row is imported as a contact.
+    // Social-handle row is imported as a contact.
     const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
       {
         name: "Buscas_Varios",
@@ -377,8 +377,8 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(result.rows).toHaveLength(2);
   });
 
-  it("OIR-130: buildSpreadsheetImportPreview returns buscasParseResult with parsed records", async () => {
-    // OIR-130: buildSpreadsheetImportPreview now returns buscasParseResult alongside the preview.
+  it("buildSpreadsheetImportPreview returns buscasParseResult with parsed records", async () => {
+    // buildSpreadsheetImportPreview now returns buscasParseResult alongside the preview.
     // The preview.buscasSkippedRowCount reflects genuinely-unparseable buscas rows only.
     // Buscas_Enfermería: 2 data rows both have pager numbers → 0 skipped.
     const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");

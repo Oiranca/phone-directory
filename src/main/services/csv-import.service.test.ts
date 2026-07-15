@@ -86,8 +86,8 @@ describe("buildCsvImportPreview", () => {
     );
   });
 
-  // OIR-214 / ARQ-3 — the row-count ceiling itself has been enforced since
-  // OIR-67 (MAX_CSV_IMPORT_ROWS), but had zero direct test coverage. This
+  // ARQ-3 — the row-count ceiling itself has been enforced since
+  // MAX_CSV_IMPORT_ROWS was introduced, but had zero direct test coverage. This
   // confirms it triggers a clear "file too large" message right past the
   // threshold, and does NOT trigger exactly at the threshold.
   it("throws a clear 'file too large' message when the CSV exceeds the 5000-row cap", async () => {
@@ -257,7 +257,7 @@ describe("buildCsvImportPreview", () => {
     expect(dataset.records).toHaveLength(0);
   });
 
-  // OIR-222: role/schedule/sector/section CSV columns (mirrors ODS Categoría/
+  // Role/schedule/sector/section CSV columns (mirrors ODS Categoría/
   // Horario/Sector/Sección) map to organization.role/schedule and
   // location.sector/section.
   it("maps role/schedule/sector/section columns to organization/location fields", async () => {
@@ -296,7 +296,7 @@ describe("buildCsvImportPreview", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-227 — "Principal" must never be auto-assigned to the first phone
+// "Principal" must never be auto-assigned to the first phone
 // ---------------------------------------------------------------------------
 //
 // buildPhones() has two branches: the `phones` JSON branch (used by the
@@ -305,7 +305,7 @@ describe("buildCsvImportPreview", () => {
 // used to force index 0 to isPrimary=true whenever nothing was explicitly
 // marked primary. These tests lock in that neither branch invents a primary
 // phone anymore.
-describe("buildImportPreviewFromRows — isPrimary is never auto-assigned (OIR-227)", () => {
+describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () => {
   let isPrimaryTestRoot: string;
 
   beforeEach(async () => {

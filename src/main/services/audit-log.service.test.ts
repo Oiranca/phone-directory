@@ -240,7 +240,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-111: CSV formula injection neutralization (CWE-1236)
+  // CSV formula injection neutralization (CWE-1236)
   // ---------------------------------------------------------------------------
 
   describe("toCsv — formula injection neutralization", () => {
@@ -377,7 +377,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-104: fail-closed on corruption
+  // Fail-closed on corruption
   // ---------------------------------------------------------------------------
 
   describe("corruption handling — query", () => {
@@ -789,7 +789,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-206 / ARQ-7: entry-count based rotation
+  // ARQ-7: entry-count based rotation
   // ---------------------------------------------------------------------------
 
   describe("rotation — append()", () => {
@@ -928,7 +928,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-206 follow-up (security review, 2026-07-14): archived-history visibility
+  // Follow-up (security review, 2026-07-14): archived-history visibility
   // ---------------------------------------------------------------------------
 
   describe("query() — archived-history visibility", () => {

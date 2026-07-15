@@ -67,11 +67,11 @@ describe("directoryDatasetSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-118: Serialization parity — derived types must round-trip identically
+// Serialization parity — derived types must round-trip identically
 // through their Zod schema (parse → JSON.stringify → JSON.parse → parse).
 // ---------------------------------------------------------------------------
 
-describe("OIR-118 serialization parity — derived types round-trip identically", () => {
+describe("serialization parity — derived types round-trip identically", () => {
   const phoneFixture = defaultContacts.records[0]!.contactMethods.phones[0]!;
   const recordFixture = defaultContacts.records[0]!;
 
@@ -170,7 +170,7 @@ describe("OIR-118 serialization parity — derived types round-trip identically"
 });
 
 // ---------------------------------------------------------------------------
-// OIR-232: custom key-value fields — schema validation.
+// Custom key-value fields — schema validation.
 // ---------------------------------------------------------------------------
 
 describe("customFieldSchema", () => {

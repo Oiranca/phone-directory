@@ -10,13 +10,13 @@ import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { normalizeDisplayName } from "../../shared/utils/matching";
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
-// OIR-218: CSS custom property tracking the rendered height of the sticky
+// CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
 // APP_HEADER_HEIGHT_CSS_VAR to bound the list/detail columns to the actually
 // available viewport height instead of a hardcoded per-breakpoint guess.
 const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
 
-// OIR-218 (residual page-scroll fix): the vertical "chrome" left over once the
+// Residual page-scroll fix: the vertical "chrome" left over once the
 // header and filter bar heights are subtracted from 100vh — i.e. <main>'s own
 // top+bottom padding (py-5/sm:py-6/lg:py-8 in AppShell) plus the gap-5 this
 // page's root <section> puts between the filter bar and the list/detail row.
@@ -31,7 +31,7 @@ const FILTER_BAR_HEIGHT_CSS_VAR = "--directory-filterbar-height";
 // padding — instead of a JS media-query guess that could fall out of sync.
 const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
 
-// OIR-233: a service/area value is only worth its own line when it adds
+// A service/area value is only worth its own line when it adds
 // information beyond the displayName already shown above it — several real
 // records (e.g. "Helipuerto (Secretaría)") have a `service` value that is a
 // verbatim duplicate of displayName, which otherwise renders as a redundant
@@ -41,7 +41,7 @@ const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
 const isDuplicateOfDisplayName = (value: string | null | undefined, displayName: string): boolean =>
   typeof value === "string" && value.trim().toLowerCase() === displayName.trim().toLowerCase();
 
-// OIR-233: derives the list card's secondary "service" line, skipping it
+// Derives the list card's secondary "service" line, skipping it
 // entirely when it would just repeat the displayName shown in the title.
 const getListServiceLine = (
   organization: { service?: string; area?: AreaType },
@@ -63,7 +63,7 @@ const getListServiceLine = (
   return areaLabels[area ?? "none"];
 };
 
-// OIR-238: exact equality (isDuplicateOfDisplayName) isn't enough to catch
+// Exact equality (isDuplicateOfDisplayName) isn't enough to catch
 // cases like service="Cocina Francisco Artíles" / displayName="Francisco
 // Artíles" — service already contains the full name as a substring, so
 // composing "{service} - {displayName}" still renders a visible duplication
@@ -75,14 +75,14 @@ const serviceContainsDisplayName = (service: string, displayName: string): boole
   return normalizedDisplayName.length > 0 && normalizeDisplayName(service).includes(normalizedDisplayName);
 };
 
-// OIR-234: the service alone (e.g. "Alergia") is often the detail that makes
+// The service alone (e.g. "Alergia") is often the detail that makes
 // a contact identifiable at a glance, but it was buried inside the card body
 // instead of the title. Compose "{service} - {displayName}" when the service
 // adds real context beyond what it already states.
 //
-// OIR-238: "adds real context" means service does NOT already contain
+// "Adds real context" means service does NOT already contain
 // displayName as a substring (case/accent-insensitive) — a strict superset
-// of the OIR-233 exact-equality case, so "Helipuerto (Secretaría)" (whose
+// of the exact-equality case above, so "Helipuerto (Secretaría)" (whose
 // service exactly duplicates displayName) still keeps its title unchanged,
 // and "Cocina Francisco Artíles" (whose service merely contains displayName)
 // now renders as just "Cocina Francisco Artíles" instead of duplicating the
@@ -121,8 +121,8 @@ const privacyInlineRiskText = {
   "No facilitar a pacientes": "No compartir con pacientes."
 } as const;
 
-// OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets that
-// OIR-230 already tags via `organization.department` (an indexed, weight-5
+// Quick-search shortcuts for the 8 known ODS "book" sheets that are
+// already tagged via `organization.department` (an indexed, weight-5
 // Fuse.js search key — see search.service.ts). These are plain shortcuts
 // that set the SAME `query` state the free-text search input controls; no
 // new filter mechanism is introduced. Order matches the source ODS sheets.
@@ -173,7 +173,7 @@ const socialPlatformLabels: Record<SocialPlatform, string> = {
 };
 
 /**
- * Derives a safe external URL for a social contact (OIR-131).
+ * Derives a safe external URL for a social contact.
  * XSS-safe approach: only `http:` and `https:` schemes are allowed.
  * For handle-only entries, a platform-specific base URL is used.
  * Returns null when no safe URL can be derived.
@@ -224,7 +224,7 @@ const getSafeSocialUrl = (social: SocialContact): string | null => {
   return null;
 };
 
-// OIR-218 (fix): the list-card "Privacidad sensible" badge must reflect ANY
+// The list-card "Privacidad sensible" badge must reflect ANY
 // sensitive phone on the record, not just the single "preferred" phone whose
 // number is shown (getPreferredResultPhone intentionally favors a non-sensitive
 // number for display, so a record's ONLY sensitive phone can be a secondary one
@@ -266,7 +266,7 @@ export const DirectoryPage = () => {
     void ensureBootstrapLoaded();
   }, []);
   const deferredQuery = useDeferredValue(query);
-  // OIR-231: filters removed from the UI — only free-text search remains.
+  // Filters removed from the UI — only free-text search remains.
   // `showInactive: true` keeps every record (active + inactive) visible since
   // there is no longer any UI control to distinguish or hide by status.
   const visibleRecords = useMemo(
@@ -313,7 +313,7 @@ export const DirectoryPage = () => {
   const detailRef = useRef<HTMLElement>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
 
-  // OIR-218: keep --directory-filterbar-height in sync with the sticky filter
+  // Keep --directory-filterbar-height in sync with the sticky filter
   // bar's real rendered height (it grows when active-filter chips appear).
   // Guarded for environments without ResizeObserver (e.g. jsdom in tests).
   useLayoutEffect(() => {
@@ -399,14 +399,14 @@ export const DirectoryPage = () => {
   return (
     <section
       aria-labelledby="directory-page-title"
-      // OIR-218: --directory-page-chrome mirrors AppShell's <main> vertical
+      // --directory-page-chrome mirrors AppShell's <main> vertical
       // padding (py-5 / sm:py-6 / lg:py-8) plus this section's own gap-5,
       // breakpoint-for-breakpoint, so BOUNDED_CONTENT_MAX_HEIGHT's 100vh
       // subtraction always matches the real rendered chrome — see the
       // PAGE_CHROME_CSS_VAR comment above for the exact math.
       className="flex flex-col gap-5 [--directory-page-chrome:3.75rem] sm:[--directory-page-chrome:4.25rem] lg:[--directory-page-chrome:5.25rem]"
     >
-      {/* Search Header — sticky (OIR-218): stays visible below the app header while
+      {/* Search Header — sticky: stays visible below the app header while
           the results list/detail panel scroll. */}
       <div
         ref={filterBarRef}
@@ -415,7 +415,7 @@ export const DirectoryPage = () => {
       >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
-          {/* OIR-231: filters removed — only the free-text search remains. */}
+          {/* Filters removed — only the free-text search remains. */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
               <label htmlFor="directory-search" className="sr-only">
@@ -433,7 +433,7 @@ export const DirectoryPage = () => {
               />
             </div>
           </div>
-          {/* OIR-237: quick-search shortcuts for the 8 known ODS "book" sheets.
+          {/* Quick-search shortcuts for the 8 known ODS "book" sheets.
               Clicking a chip sets `query` (the same state the search input above
               controls) to the exact department name, reusing the existing
               free-text search — no new filter mechanism. Clicking the active
@@ -474,7 +474,7 @@ export const DirectoryPage = () => {
       <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
         
         {/* Left Column: Results List */}
-        {/* OIR-218 (fix): the height budget is bounded on THIS column, not just the
+        {/* The height budget is bounded on THIS column, not just the
             <ul>, so the pagination nav below is always part of the same bounded
             box and never pushed below the fold. The <ul> is a flex child
             (flex-1 min-h-0) that only shrinks and scrolls internally for the
@@ -487,7 +487,7 @@ export const DirectoryPage = () => {
             ref={listRef}
             onKeyDown={handleListKeyDown}
             aria-label="Resultados del directorio"
-            // OIR-218 (fix): overflow-y-auto turns this into a scroll container, which
+            // overflow-y-auto turns this into a scroll container, which
             // also computes overflow-x to "auto" per spec and clips any ink outside the
             // padding box — including the selected card's `ring-1 ring-scs-blue` box
             // shadow, which was getting cut off on the left/right edges since the list
@@ -496,7 +496,7 @@ export const DirectoryPage = () => {
             // that padding back out at the box level so the cards stay visually flush
             // with the pagination nav and other siblings below (same rendered width).
             //
-            // OIR-218 (follow-up): the same clipping happens on the TOP/BOTTOM edges
+            // Follow-up: the same clipping happens on the TOP/BOTTOM edges
             // — the scroll container's padding-box boundary (where scrolling starts
             // and ends) clips the ring's box-shadow there too, most visibly on the
             // first/last card. `py-1 -my-1` mirrors the horizontal fix vertically.
@@ -536,19 +536,19 @@ export const DirectoryPage = () => {
                   ].join(" ")}
                 >
                   <div className="min-w-0">
-                    {/* OIR-234: prefix the title with the service when it adds context
+                    {/* Prefix the title with the service when it adds context
                         beyond displayName (see buildDisplayTitle). */}
                     <h3 className="truncate font-semibold text-scs-blueDark">
                       {buildDisplayTitle(record.displayName, record.organization)}
                     </h3>
-                    {/* OIR-229: role/job title (ODS "Categoría") is the only thing that
+                    {/* Role/job title (ODS "Categoría") is the only thing that
                         distinguishes same-department contacts in the list — shown on its
                         own line directly under the title. */}
                     {record.organization.role ? (
                       <p className="truncate text-xs font-medium text-slate-600">{record.organization.role}</p>
                     ) : null}
                   </div>
-                  {/* OIR-233: skip this line entirely when the service value is just a
+                  {/* Skip this line entirely when the service value is just a
                       duplicate of the displayName above (see getListServiceLine). */}
                   {serviceLine ? <p className="mt-2 truncate text-sm text-slate-600">{serviceLine}</p> : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -642,7 +642,7 @@ export const DirectoryPage = () => {
           style={{ top: STICKY_CONTENT_TOP }}
           className="lg:sticky"
         >
-          {/* OIR-218: bounded to the available viewport height with overflow-y-auto
+          {/* Bounded to the available viewport height with overflow-y-auto
               — no scrollbar appears while content fits; it only scrolls internally
               (never growing the page) when a record has enough phones/emails/socials
               to genuinely overflow. */}
@@ -656,7 +656,7 @@ export const DirectoryPage = () => {
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      {/* OIR-233: the type pill (e.g. "SERVICIO") was removed as noise —
+                      {/* The type pill (e.g. "SERVICIO") was removed as noise —
                           only render this row (and its top margin to the title below)
                           when there's an actual privacy-flag pill to show. */}
                       {selectedRecordPrivacyFlags.length > 0 && (
@@ -671,12 +671,12 @@ export const DirectoryPage = () => {
                           ))}
                         </div>
                       )}
-                      {/* OIR-234: prefix the title with the service when it adds context
+                      {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
                       <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
                         {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization)}
                       </h4>
-                      {/* OIR-229: role/job title (ODS "Categoría") shown alongside the
+                      {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
                       {selectedRecord.organization.role ? (
                         <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
@@ -692,19 +692,19 @@ export const DirectoryPage = () => {
                   </div>
                 </div>
 
-                {/* OIR-238: promoted from a conditional inline subtitle (OIR-236) to its
+                {/* Promoted from a conditional inline subtitle to its
                     own always-visible card, matching Ubicación below — the composed
                     title (buildDisplayTitle) can obscure or reshape the raw name, so the
                     canonical displayName should always be visible on its own, not just
                     when the title happens to be composed.
 
-                    OIR-240 regression fix: OIR-238 rendered selectedRecord.displayName
+                    Regression fix: an earlier version rendered selectedRecord.displayName
                     unconditionally, which duplicates the Servicio value whenever
                     displayName is not a genuinely distinct name (e.g. a blank ODS
                     "Nombre" column falls back to the service label itself — see
                     normalizeServiceSheet).
 
-                    OIR-241 correction: OIR-240 gated this on serviceContainsDisplayName
+                    Follow-up correction: that regression fix gated this on serviceContainsDisplayName
                     (the broader substring check meant only for title-composition
                     dedup in buildDisplayTitle), which wrongly hid genuine names whose
                     service happens to contain them as a substring for unrelated
@@ -713,7 +713,7 @@ export const DirectoryPage = () => {
                     fallback copy). The "blank Nombre column falls back to service
                     verbatim" case always produces an EXACT match, never a partial
                     one, so the correct check here is isDuplicateOfDisplayName
-                    (OIR-233's exact-equality helper), not serviceContainsDisplayName.
+                    (the exact-equality helper above), not serviceContainsDisplayName.
                     buildDisplayTitle's use of serviceContainsDisplayName for title
                     composition is a separate concern and is unaffected. */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">

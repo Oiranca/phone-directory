@@ -1,12 +1,12 @@
 /**
- * matching.parity.test.ts — OIR-119 / OIR-134 shared fixture matrix.
+ * matching.parity.test.ts — shared fixture matrix.
  *
  * Two purposes:
  *   1. Prove that the shared helpers produce the same output as the original
  *      inline logic in each consumer (import / conflict-detection / duplicate-
  *      detection).
- *   2. Pin the canonical NFKD display-name normalizer behavior introduced by
- *      OIR-134, which superseded the OIR-119 intentional divergence between
+ *   2. Pin the canonical NFKD display-name normalizer behavior, which
+ *      superseded an earlier intentional divergence between
  *      `normalizeDisplayName` (NFD + char-range) in duplicate-detection and
  *      `normalizeDisplayNameForMerge` (NFKD + \p{Diacritic}) in
  *      spreadsheet-normalize. Both callers now use the single canonical NFKD
@@ -210,7 +210,7 @@ describe("computeMetadataCounts", () => {
 
   it("parity: matches original counting loop from csv-import.service.ts buildDataset", () => {
     /**
-     * Original loop (verbatim from csv-import.service.ts before OIR-119):
+     * Original loop (verbatim from csv-import.service.ts before extraction):
      *   const typeCounts: Partial<Record<RecordType, number>> = {};
      *   const areaCounts: Partial<Record<AreaType, number>> = {};
      *   for (const record of records) {
@@ -247,7 +247,7 @@ describe("computeMetadataCounts", () => {
 
   it("parity: matches original counting loop from app-data.service.ts buildNextDataset", () => {
     /**
-     * Original loop (verbatim from app-data.service.ts before OIR-119):
+     * Original loop (verbatim from app-data.service.ts before extraction):
      *   const typeCounts: Partial<Record<RecordType, number>> = {};
      *   const areaCounts: Partial<Record<AreaType, number>> = {};
      *   for (const record of records) {
@@ -284,12 +284,12 @@ describe("computeMetadataCounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// normalizeDisplayName — canonical NFKD behavior (OIR-134)
+// normalizeDisplayName — canonical NFKD behavior
 // ---------------------------------------------------------------------------
 
 describe("normalizeDisplayName — canonical NFKD form", () => {
   /**
-   * OIR-134 unified the two formerly-separate display-name normalizers:
+   * Unified the two formerly-separate display-name normalizers:
    *   - duplicate-detection.service.ts used NFD + char-range [̀-ͯ]
    *   - spreadsheet-normalize.ts used NFKD + \p{Diacritic}
    *

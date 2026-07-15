@@ -38,7 +38,7 @@ describe('StatePanel', () => {
 
   it('exposes a polite status region for assistive tech', () => {
     render(<StatePanel title="Loading" message="Please wait..." />);
-    // OIR-199: the live region moved off the visible panel wrapper (whose
+    // The live region moved off the visible panel wrapper (whose
     // content is already present at mount and therefore never announced) and
     // onto a dedicated visually hidden status region — see StatePanel.tsx.
     const statusRegion = screen.getByRole('status');
@@ -46,7 +46,7 @@ describe('StatePanel', () => {
     expect(statusRegion).toHaveClass('sr-only');
   });
 
-  it('announces the title and message to screen readers shortly after mount (OIR-199)', async () => {
+  it('announces the title and message to screen readers shortly after mount', async () => {
     render(<StatePanel title="Loading" message="Please wait..." />);
     const statusRegion = screen.getByRole('status');
 
@@ -87,7 +87,7 @@ describe('StatePanel', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
   });
 
-  it('forwards titleRef to the title element and makes it programmatically focusable (OIR-209)', () => {
+  it('forwards titleRef to the title element and makes it programmatically focusable', () => {
     const titleRef = createRef<HTMLHeadingElement>();
     render(<StatePanel title="Sin resultados" message="No hay nada que mostrar." titleRef={titleRef} />);
 

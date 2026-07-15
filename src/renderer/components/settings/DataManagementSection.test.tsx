@@ -93,7 +93,7 @@ const renderPage = () =>
     </ToastProvider>
   );
 
-// OIR-219: the "Importar" card is now a single button. Clicking it opens the
+// The "Importar" card is now a single button. Clicking it opens the
 // pre-selection safety confirmation (generic — covers both the JSON
 // full-replace and the CSV preview outcomes) before pickAndImportDataset()
 // is actually invoked. Tests drive that two-click sequence through this helper.
@@ -169,7 +169,7 @@ const defaultJsonImportResult = {
   recordCount: 1
 };
 
-describe("DataManagementSection (OIR-219 — Configuración data section)", () => {
+describe("DataManagementSection (Configuración data section)", () => {
   beforeEach(() => {
     resetStore();
     Object.defineProperty(window, "hospitalDirectory", {
@@ -212,7 +212,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
           exportedAt: defaultContacts.exportedAt,
           recordCount: defaultContacts.records.length
         }),
-        // OIR-219: the component only calls pickAndImportDataset() — default to
+        // The component only calls pickAndImportDataset() — default to
         // the CSV-preview flow since most tests exercise it. Tests that need the
         // JSON full-replace flow override this per-test with a "json-import" kind.
         pickAndImportDataset: vi.fn().mockResolvedValue({
@@ -251,7 +251,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    // OIR-223: the fetched backup inventory now only drives the single
+    // The fetched backup inventory now only drives the single
     // "Última copia de seguridad" date indicator — no per-backup list.
     expect(await screen.findByText(/Última copia de seguridad:/)).toBeInTheDocument();
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
@@ -270,21 +270,21 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("OIR-224/OIR-245: shows the shortened Import card copy (accurate format list including JSON, no full outcome explainer)", async () => {
+  it("shows the shortened Import card copy (accurate format list including JSON, no full outcome explainer)", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
       screen.getByText("Selecciona un archivo para importar. Se generará una copia de seguridad automática.")
     ).toBeInTheDocument();
-    // OIR-245: pickAndImportDataset's native dialog filter also accepts .json
+    // pickAndImportDataset's native dialog filter also accepts .json
     // (it doubles as the backup-restore entry point) — the visible format
     // list must say so, otherwise the restore path looks unsupported.
     expect(screen.getByText("Formatos admitidos: JSON, CSV, ODS, XLS, XLSX")).toBeInTheDocument();
     expect(screen.queryByText(/reemplaza los datos/)).not.toBeInTheDocument();
   });
 
-  it("OIR-224: removes the 'Guardar la copia en otra carpeta' secondary link from the backup card", async () => {
+  it("removes the 'Guardar la copia en otra carpeta' secondary link from the backup card", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
@@ -498,7 +498,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
     expect(screen.getByText("directory.csv")).toBeInTheDocument();
     expect(screen.getByText(/Formato detectado: exportación cruda de hoja de servicios/)).toBeInTheDocument();
-    // OIR-188: confidence note is shown in the preview panel (not in the toast)
+    // Confidence note is shown in the preview panel (not in the toast)
     expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)).toBeInTheDocument();
     expect(screen.getByText("El área \"urgencias\" no está soportada y se omitirá.")).toBeInTheDocument();
 
@@ -728,7 +728,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  it("OIR-200: allows a partial import when the preview contains some invalid rows alongside valid rows", async () => {
+  it("allows a partial import when the preview contains some invalid rows alongside valid rows", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "csv-preview",
       preview: {
@@ -828,7 +828,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     ).toBeInTheDocument();
   });
 
-  it("OIR-200: still blocks import confirmation when the preview has zero valid rows", async () => {
+  it("still blocks import confirmation when the preview has zero valid rows", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "csv-preview",
       preview: {
@@ -932,7 +932,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
   });
 
-  // OIR-223 priority 5: the dedicated "Restaurar esta copia de seguridad"
+  // The dedicated "Restaurar esta copia de seguridad"
   // button/list and its restoreBackup() IPC call site were removed from this
   // component — restoring an old backup is now done via the unified
   // "Importar" picker (a .json pick already performs a full replace, which
@@ -1047,10 +1047,10 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-182 — import P1 UX fixes
+  // Import P1 UX fixes
   // ---------------------------------------------------------------------------
 
-  it("OIR-182 item 1 / OIR-219: shows analysis spinner while pickAndImportDataset is pending", async () => {
+  it("shows analysis spinner while pickAndImportDataset is pending", async () => {
     // Intercept with a never-resolving promise so the "processing" status region stays visible
     let resolvePick!: (value: unknown) => void;
     const pendingPick = new Promise((resolve) => { resolvePick = resolve; });
@@ -1070,7 +1070,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     resolvePick({ kind: "cancelled" });
   });
 
-  it("OIR-182 item 10: shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
+  it("shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "csv-preview",
       preview: {
@@ -1133,9 +1133,9 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
   });
 
-  it("OIR-182 item 9 / OIR-188: confidence note shown in panel, not in toast, when detectionConfidence is not 'high'", async () => {
+  it("confidence note shown in panel, not in toast, when detectionConfidence is not 'high'", async () => {
     // Default mock already has detectionConfidence="medium" and conflictCount=0.
-    // OIR-188: confidence note moved from toast to panel.
+    // Confidence note moved from toast to panel.
     renderPage();
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
@@ -1143,7 +1143,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     // Wait for panel to appear (preview received)
     expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
 
-    // OIR-188: confidence note appears in the panel (amber paragraph).
+    // Confidence note appears in the panel (amber paragraph).
     expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)
     ).toBeInTheDocument();
 
@@ -1156,7 +1156,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-223 priority 5 — the backups list (with OIR-221's "Mostrar más"
+  // The backups list (with the earlier "Mostrar más"
   // bounded-list toggle) is REMOVED. It is replaced with a single "Última
   // copia de seguridad: <fecha>" indicator derived client-side from the same
   // listBackups() data. No per-backup filename/size/restore row is rendered
@@ -1171,7 +1171,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
       sizeBytes: 1024 * (index + 1)
     }));
 
-  it("OIR-223: shows a single 'Última copia de seguridad' date indicator, no per-backup list rows", async () => {
+  it("shows a single 'Última copia de seguridad' date indicator, no per-backup list rows", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
@@ -1183,7 +1183,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(screen.queryByRole("button", { name: /Mostrar \d+ más/ })).not.toBeInTheDocument();
   });
 
-  it("OIR-223: the date shown is the MOST RECENT backup's createdAt, regardless of list order", async () => {
+  it("the date shown is the MOST RECENT backup's createdAt, regardless of list order", async () => {
     window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue([
       { fileName: "contacts-old.json", filePath: "/tmp/backups/contacts-old.json", createdAt: "2026-01-01T00:00:00.000Z", sizeBytes: 100 },
       { fileName: "contacts-newest.json", filePath: "/tmp/backups/contacts-newest.json", createdAt: "2026-06-01T00:00:00.000Z", sizeBytes: 100 },
@@ -1197,7 +1197,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(indicator.textContent).toContain("jun");
   });
 
-  it("OIR-223: shows an empty-state message when there are no backups yet", async () => {
+  it("shows an empty-state message when there are no backups yet", async () => {
     window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue(buildBackupList(0));
 
     renderPage();
@@ -1207,7 +1207,7 @@ describe("DataManagementSection (OIR-219 — Configuración data section)", () =
     expect(screen.queryByText(/Última copia de seguridad:/)).not.toBeInTheDocument();
   });
 
-  it("OIR-223: mentions the Importar picker as the way to restore an old backup", async () => {
+  it("mentions the Importar picker as the way to restore an old backup", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();

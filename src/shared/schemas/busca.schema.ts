@@ -26,7 +26,7 @@ export const editableBuscaRecordSchema = z.object({
 });
 
 /**
- * OIR-130 — Imported buscas record.
+ * Imported buscas record.
  *
  * ODS buscas sheets (Buscas_Facultativos, Buscas_Enfermería, etc.) use a
  * column-per-holder-type layout. Each cell in a data row holds a 4-digit pager

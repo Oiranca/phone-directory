@@ -186,7 +186,7 @@ describe("CsvImportPreviewPanel", () => {
     it("shows type and area counts", () => {
       renderPanel(allValidPreview);
 
-      // OIR-223 priority 2: "Tipos detectados" chips show the Spanish
+      // "Tipos detectados" chips show the Spanish
       // RECORD_TYPE_LABELS mapping, not the raw internal enum value. The
       // stored/internal typeCounts keys (service/person) are unchanged —
       // only the rendered label is translated.
@@ -271,7 +271,7 @@ describe("CsvImportPreviewPanel", () => {
       ]
     };
 
-    it("renders an informational (non-blocking) notice about rejected rows (OIR-200)", () => {
+    it("renders an informational (non-blocking) notice about rejected rows", () => {
       renderPanel(mixedPreview);
 
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -280,13 +280,13 @@ describe("CsvImportPreviewPanel", () => {
       expect(status).toHaveTextContent("2 filas rechazadas");
     });
 
-    it("enables the confirm button when at least one row is valid, even with rejected rows present (OIR-200)", () => {
+    it("enables the confirm button when at least one row is valid, even with rejected rows present", () => {
       renderPanel(mixedPreview);
 
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
 
-    it("calls onConfirm for a partial import when confirm is clicked (OIR-200)", () => {
+    it("calls onConfirm for a partial import when confirm is clicked", () => {
       const { onConfirm } = renderPanel(mixedPreview);
 
       fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
@@ -522,9 +522,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-132 — field-level diff display in conflict cards
+  // Field-level diff display in conflict cards
   // ---------------------------------------------------------------------------
-  describe("conflict field-level diff (OIR-132)", () => {
+  describe("conflict field-level diff", () => {
     const phoneConflictPreview: CsvImportPreviewWithConflicts = {
       ...basePreview,
       fileName: "phone-conflict.csv",
@@ -650,7 +650,7 @@ describe("CsvImportPreviewPanel", () => {
     });
 
     it("does NOT show 'Sin teléfonos ni correos' when the record has socials but no phones or emails (Bug-3)", () => {
-      // Regression guard for OIR-132 Bug-3: a record with socials only was showing
+      // Regression guard for Bug-3: a record with socials only was showing
       // both the social list AND the empty-state note simultaneously.  The note must
       // only appear when phones, emails AND socials are all empty.
       renderPanel({
@@ -1093,8 +1093,8 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
-  describe("deferred-skip informational notes (OIR-102 / OIR-130 / OIR-134)", () => {
-    it("shows the buscas note when buscasSkippedRowCount > 0 (OIR-130: empty/comment buscas rows)", () => {
+  describe("deferred-skip informational notes", () => {
+    it("shows the buscas note when buscasSkippedRowCount > 0 (empty/comment buscas rows)", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 3,
@@ -1135,7 +1135,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(notes).toHaveLength(2);
     });
 
-    it("uses singular 'fila de buscas sin número' when exactly one buscas row is skipped (OIR-130)", () => {
+    it("uses singular 'fila de buscas sin número' when exactly one buscas row is skipped", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 1,
@@ -1179,7 +1179,7 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
-  describe("buscas-only workbook confirm gate (OIR-130)", () => {
+  describe("buscas-only workbook confirm gate", () => {
     it("enables the confirm button when parsedBuscasCellCount > 0 and validRowCount === 0", () => {
       // A buscas-only ODS: no contact rows but valid buscas content was parsed.
       renderPanel({
@@ -1206,9 +1206,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-133 — multi-select and bulk-apply conflict resolution
+  // Multi-select and bulk-apply conflict resolution
   // ---------------------------------------------------------------------------
-  describe("conflict multi-select and bulk-apply (OIR-133)", () => {
+  describe("conflict multi-select and bulk-apply", () => {
     /** Two-conflict preview — provides the surface needed for all multi-select tests. */
     const twoConflictPreview: CsvImportPreviewWithConflicts = {
       ...basePreview,
@@ -1487,9 +1487,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-122 — preview row pagination
+  // Preview row pagination
   // ---------------------------------------------------------------------------
-  describe("preview row pagination (OIR-122)", () => {
+  describe("preview row pagination", () => {
     /** Build a preview with N accepted rows, rowNumber 2..N+1. */
     const makeRowsPreview = (count: number): CsvImportPreviewWithConflicts => ({
       ...basePreview,
@@ -1700,9 +1700,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-176 — conflict record pagination
+  // Conflict record pagination
   // ---------------------------------------------------------------------------
-  describe("conflict pagination (OIR-176)", () => {
+  describe("conflict pagination", () => {
     /** Build a preview with N conflict records, each with a distinct recordIndex. */
     const makeConflictsPreview = (count: number): CsvImportPreviewWithConflicts => ({
       ...basePreview,
@@ -1817,9 +1817,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-178 — policy option consequence descriptions and aria-describedby
+  // Policy option consequence descriptions and aria-describedby
   // ---------------------------------------------------------------------------
-  describe("policy option descriptions (OIR-178)", () => {
+  describe("policy option descriptions", () => {
     const conflictWithPoliciesPreview: CsvImportPreviewWithConflicts = {
       ...basePreview,
       fileName: "policy-desc.csv",
@@ -1924,9 +1924,9 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Privacy + copy policy assertions (OIR-181)
+  // Privacy + copy policy assertions
   // ---------------------------------------------------------------------------
-  describe("privacy and jargon policy (OIR-181)", () => {
+  describe("privacy and jargon policy", () => {
     it("does not render the raw external ID value for external_id conflicts", () => {
       // The matchingFieldValue for external-id-match must never surface to the user.
       // Even if the payload still contains one (e.g., older IPC version), the renderer
@@ -1976,9 +1976,9 @@ describe("CsvImportPreviewPanel", () => {
       expect(document.body.textContent).not.toContain("ID-RAW-12345");
     });
 
-    it("rendered conflict panel does not contain jargon terms banned by OIR-181", () => {
+    it("rendered conflict panel does not contain jargon terms banned by the copy policy", () => {
       // Regression guard: ensure no banned anglicisms or internal jargon surface
-      // in the conflict-resolution UI after the OIR-181 copy pass.
+      // in the conflict-resolution UI after the copy pass.
       renderPanel({
         ...basePreview,
         fileName: "jargon-check.csv",
@@ -2023,10 +2023,10 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-182 — UX and a11y improvements (P1 batch)
+  // UX and a11y improvements (P1 batch)
   // ---------------------------------------------------------------------------
-  describe("OIR-182 UX and a11y improvements", () => {
-    /** One unresolved conflict — used for most OIR-182 item tests. */
+  describe("UX and a11y improvements", () => {
+    /** One unresolved conflict — used for most of the tests below. */
     const oneConflictPreview: CsvImportPreviewWithConflicts = {
       ...basePreview,
       fileName: "oir182.csv",

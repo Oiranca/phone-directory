@@ -68,7 +68,7 @@ export const closeElectronApp = async (electronApp: ElectronApplication) => {
 };
 
 export const waitForDirectory = async (page: Page) => {
-  // OIR-218 removed the visible "Agenda"/"Directorio" heading from the app
+  // The visible "Agenda"/"Directorio" heading was removed from the app
   // header by design, so we wait on the search input instead — it is a
   // stable, always-present element on the Directory page.
   await expect(page.getByPlaceholder("Buscar contacto o servicio")).toBeVisible();

@@ -37,7 +37,7 @@ function translateReason(reason: string): string {
 }
 
 /**
- * OIR-189 P3 (Finding C) — the two records in a dedup pair frequently share the
+ * Finding C — the two records in a dedup pair frequently share the
  * same displayName (that's often why they were flagged as duplicates), which
  * previously produced two "Conservar" radios with IDENTICAL accessible names —
  * a screen reader user could not tell them apart.
@@ -137,7 +137,7 @@ export function writeDismissedPairId(storageKey: string, id: string): void {
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const applyMergeResult = useAppStore((s) => s.applyMergeResult);
-  // OIR-225: the full ContactRecord list is already loaded into the store at
+  // The full ContactRecord list is already loaded into the store at
   // bootstrap (needed for the merge-fields editor, which requires fields —
   // e.g. `type`, full phone metadata — that the lightweight
   // DuplicateRecordSummary payload deliberately omits for payload-size reasons).
@@ -148,7 +148,7 @@ export const DeduplicatePage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
   const [mergingId, setMergingId] = useState<string | null>(null);
-  // OIR-195 item 3: total pairs found in this session, fixed at the first successful
+  // Total pairs found in this session, fixed at the first successful
   // load so the "X de Y revisados" counter tracks progress against a stable baseline
   // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
   // The baseline is tagged with the storageKey it was computed for, so switching the
@@ -166,13 +166,13 @@ export const DeduplicatePage = () => {
     pairId: string;
     keepRecord: { id: string; displayName: string };
     discardRecord: { id: string; displayName: string };
-    // OIR-225: full records (when available in the store) used to build the
+    // Full records (when available in the store) used to build the
     // optional merge-fields editor. Null when not found — the fast/default
     // keep-one-wholesale path always works regardless of these being present.
     keepFull: ContactRecord | null;
     discardFull: ContactRecord | null;
   } | null>(null);
-  // OIR-225: null until the user opts into editing surviving-record fields
+  // Null until the user opts into editing surviving-record fields
   // before confirming ("Editar antes de fusionar"). Stays null on the default
   // fast path, so handleConfirmMerge sends no `overrides` — behaves exactly
   // like the pre-existing keep/discard-only merge.
@@ -223,7 +223,7 @@ export const DeduplicatePage = () => {
       const dismissed = readDismissedPairIds(storageKey);
       const filtered = result.pairs.filter((pair) => !dismissed.includes(pair.id));
       setPairStates(filtered.map((pair) => ({ pair, keepId: null })));
-      // OIR-195 item 3: capture the baseline only once per storageKey, on the first
+      // Capture the baseline only once per storageKey, on the first
       // successful load after that key is seen — later refreshes for the SAME dataset
       // (e.g. "Reintentar" or post-merge) must not reset the denominator, but switching
       // to a DIFFERENT dataset (storageKey changes) must recompute it (PR #116 review).
@@ -315,7 +315,7 @@ export const DeduplicatePage = () => {
     });
   };
 
-  // OIR-225 — lazily opens the merge-fields editor, seeded from the keep
+  // Lazily opens the merge-fields editor, seeded from the keep
   // record + the same phone union the backend's automatic merge produces.
   const handleStartEditingFields = () => {
     if (!confirmState?.keepFull || !confirmState.discardFull) return;
@@ -331,7 +331,7 @@ export const DeduplicatePage = () => {
     const mergedPairId = confirmState.pairId;
     const discardId = confirmState.discardRecord.id;
 
-    // OIR-225 — only send `overrides` when the user actually opened the editor
+    // Only send `overrides` when the user actually opened the editor
     // AND changed something relative to the default merge result. Otherwise
     // this is `undefined` and the call below is byte-identical to the
     // pre-existing keep/discard-only request.
@@ -477,7 +477,7 @@ export const DeduplicatePage = () => {
           {pairStates.length} {pairStates.length === 1 ? "par encontrado" : "pares encontrados"}.
           Selecciona el registro a conservar y fusiona.
         </p>
-        {/* OIR-195 item 3: reviewed-pairs progress counter */}
+        {/* Reviewed-pairs progress counter */}
         {initialPairTotal !== null && initialPairTotal > 0 && (
           <p aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-slate-500">
             {Math.max(0, initialPairTotal - pairStates.length)} de {initialPairTotal} pares revisados
@@ -493,7 +493,7 @@ export const DeduplicatePage = () => {
           return (
             <article key={pair.id} className="rounded-3xl bg-white p-6 shadow-panel">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                {/* OIR-195 item 4: ids referenced by the radiogroup's aria-describedby below,
+                {/* Ids referenced by the radiogroup's aria-describedby below,
                     so screen readers announce similarity/reasons as context for this pair's choice. */}
                 <span
                   id={`pair-score-${pair.id}`}
@@ -657,7 +657,7 @@ export const DeduplicatePage = () => {
         onCancel={handleCancelDialog}
         isDestructive={true}
       >
-        {/* OIR-225 — additive: editing is opt-in, the default merge (no fields
+        {/* Additive: editing is opt-in, the default merge (no fields
             touched) behaves exactly as before. Only offered when the full
             records are available in the store (needed to prefill the editor). */}
         {confirmState?.keepFull && confirmState.discardFull && (
