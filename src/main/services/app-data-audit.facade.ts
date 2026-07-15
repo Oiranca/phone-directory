@@ -43,7 +43,12 @@ export class AppDataAuditFacade {
     return {
       filePath: targetFilePath,
       exportedAt: new Date().toISOString(),
-      entryCount: result.entries.length
+      entryCount: result.entries.length,
+      // OIR-206 follow-up (security review): propagate archived-history
+      // visibility from the underlying query result so an export never
+      // silently omits older, rotated-out entries with no indication.
+      hasArchivedHistory: result.hasArchivedHistory,
+      archivedFileCount: result.archivedFileCount
     };
   }
 
