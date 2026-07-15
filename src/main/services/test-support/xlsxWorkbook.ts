@@ -7,7 +7,7 @@
  * definition shared by all spreadsheet-import test suites.
  */
 import path from "node:path";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 
 /** Write a multi-sheet workbook to disk as .xlsx and return the file path. */
 export const writeWorkbook = (
