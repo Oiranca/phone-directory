@@ -10,27 +10,13 @@ import fs from "node:fs";
 import path from "node:path";
 import XLSX from "xlsx";
 
-/** Options for {@link writeWorkbook}. */
-export interface WriteWorkbookOptions {
-  /**
-   * When true, creates `dir` (recursively) before writing the workbook.
-   * Needed by callers that write into a nested/not-yet-existing directory
-   * (e.g. `<testRoot>/incoming/...`), as opposed to callers whose `dir` is
-   * already guaranteed to exist (e.g. a `mkdtemp` root used directly).
-   */
-  mkdir?: boolean;
-}
-
 /** Write a multi-sheet workbook to disk as .xlsx and return the file path. */
 export const writeWorkbook = (
   dir: string,
   fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>,
-  options?: WriteWorkbookOptions
+  sheets: Array<{ name: string; data: string[][] }>
 ): string => {
-  if (options?.mkdir) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  fs.mkdirSync(dir, { recursive: true });
 
   const wb = XLSX.utils.book_new();
 

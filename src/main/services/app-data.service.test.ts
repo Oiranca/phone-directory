@@ -2709,8 +2709,7 @@ describe("AppDataService", () => {
             ["Control boxes", "55556", "No pasar llamadas externas"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
@@ -2750,8 +2749,7 @@ describe("AppDataService", () => {
             ["Mostrador", "55555", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const before = Date.now();
@@ -2782,8 +2780,7 @@ describe("AppDataService", () => {
             ["INGENIO c/ Principal", "ADM.", "928304114", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
     const secondPath = writeWorkbook(
       path.join(testRoot, "incoming"),
@@ -2834,8 +2831,7 @@ describe("AppDataService", () => {
             ["INGENIO c/ Principal", "ADM.", "928 30 41 14 /15", "(84114 /84115)"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
@@ -2869,8 +2865,7 @@ describe("AppDataService", () => {
             ["INGENIO c/ Principal", "ADM.", "928 30 41 14", "84114"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
@@ -2903,8 +2898,7 @@ describe("AppDataService", () => {
             ["", "Adm. 2", "928 30 41 15", "84115"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const result = await service.importCsvDataset(sourceFilePath);
@@ -3008,8 +3002,7 @@ describe("AppDataService", () => {
             ["Control boxes", "55556", "No pasar llamadas externas"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
@@ -3040,8 +3033,7 @@ describe("AppDataService", () => {
             ["Mostrador", "55555", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
@@ -3070,8 +3062,7 @@ describe("AppDataService", () => {
             ["2026-04-25", "4567", "89"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
@@ -3097,8 +3088,7 @@ describe("AppDataService", () => {
             ["Control", "2026-04-25", "89"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
@@ -3123,8 +3113,7 @@ describe("AppDataService", () => {
             ["Mostrador", "55555", "12"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
@@ -3149,8 +3138,7 @@ describe("AppDataService", () => {
             ["Mostrador", "55555", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
@@ -3176,8 +3164,7 @@ describe("AppDataService", () => {
             ["Control", "55556", "18"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
@@ -3204,8 +3191,7 @@ describe("AppDataService", () => {
             ["Control boxes", "55556", "No pasar llamadas externas"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
     await service.importCsvDataset(canonicalPath);
 
@@ -3249,8 +3235,7 @@ describe("AppDataService", () => {
             ["", "Urgencias", "928 30 41 21", "(84121)"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
     await service.importCsvDataset(canonicalPath);
 
@@ -3317,8 +3302,7 @@ describe("AppDataService", () => {
             ["", "79145", "Auxiliar Enfermería", "79230"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     const result = await service.importCsvDataset(sourceFilePath);
@@ -4669,8 +4653,7 @@ describe("AppDataService", () => {
             ["ANESTESIA", "7321", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     // Run preview only — do NOT call importCsvDataset.
@@ -4715,8 +4698,7 @@ describe("AppDataService", () => {
             ["ANESTESIA", "7321", "7322", ""]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     await service.previewCsvImport(sourceFilePath);
@@ -4764,8 +4746,7 @@ describe("AppDataService", () => {
             ["ANESTESIA", "7321"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     // importCsvDataset must NOT throw even though buscas persist throws.
@@ -4795,8 +4776,7 @@ describe("AppDataService", () => {
             ["NEUROLOGIA", "8803", "", "guardia"]
           ]
         }
-      ],
-      { mkdir: true }
+      ]
     );
 
     // Preview must succeed (buscas-only is a valid, confirmable workbook).
