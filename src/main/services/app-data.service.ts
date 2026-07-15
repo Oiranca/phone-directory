@@ -1935,9 +1935,28 @@ export class AppDataService {
       }
     }
 
-    // Check each imported record for a collision with an existing record
+    // Check each imported record for a collision with an existing record.
+    //
+    // OIR-226: a "conflict" is only ever reported to the user when it matches a
+    // PRE-EXISTING record (source: "existing"). Earlier this loop also indexed
+    // every previously-processed imported record into the very same lookup
+    // maps used for existing-record matching, so a later row in the same batch
+    // that merely collided with an EARLIER row of the same import (an
+    // "intra-batch" match, source: "import") was pushed into `conflicts`
+    // exactly like a real conflict. The renderer surfaces that count with copy
+    // like "Hay N registros que ya existen en la agenda" (CsvImportPreviewPanel),
+    // which is simply false for an intra-batch match — the record does not
+    // already exist anywhere. Against an empty/near-empty database this could
+    // make the vast majority (or all) of a large import look like it was
+    // colliding with existing data when nothing did. Intra-batch rows are still
+    // tracked (`importOnlyMatch`) purely so later rows in the batch can still
+    // resolve transitively back to a real existing record (see below), and so
+    // `mergeImportedDataset` — which has its own independent index and is
+    // unaffected by this method — keeps consolidating duplicate rows within a
+    // single import file exactly as it always has.
     importedDataset.records.forEach((importedRecord, importRecordIndex) => {
-      let match: ConflictIndexEntry | undefined;
+      let existingMatch: ConflictIndexEntry | undefined;
+      let importOnlyMatch: ConflictIndexEntry | undefined;
       let conflictReasonKey = "";
       let matchingFieldValue: string | undefined;
 
@@ -1947,39 +1966,51 @@ export class AppDataService {
       if (importedRecord.externalId) {
         const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
         if (indexed !== undefined) {
-          match = indexed;
-          conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
-        }
-      }
-
-      // Fall back to stable-key match when no externalId match was found
-      if (match === undefined) {
-        for (const key of this.buildStableMergeKeys(importedRecord)) {
-          const indexed = currentIndexesByStableKey.get(key);
-          if (indexed !== undefined) {
-            match = indexed;
-            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
-            matchingFieldValue = extractMatchingFieldValue(indexed.conflictType, importedRecord, indexed.record);
-            break;
+          if (indexed.source === "existing") {
+            existingMatch = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
+          } else {
+            importOnlyMatch = indexed;
           }
         }
       }
 
-      if (match !== undefined) {
+      // Fall back to stable-key match when no genuine existing-record match was
+      // found yet — an intra-batch externalId match must not shadow a real
+      // phone/email collision against pre-existing data on a different key.
+      if (existingMatch === undefined) {
+        for (const key of this.buildStableMergeKeys(importedRecord)) {
+          const indexed = currentIndexesByStableKey.get(key);
+          if (indexed === undefined) {
+            continue;
+          }
+          if (indexed.source === "existing") {
+            existingMatch = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
+            matchingFieldValue = extractMatchingFieldValue(indexed.conflictType, importedRecord, indexed.record);
+            break;
+          }
+          if (importOnlyMatch === undefined) {
+            importOnlyMatch = indexed;
+          }
+        }
+      }
+
+      if (existingMatch !== undefined) {
         conflicts.push({
           recordIndex: importRecordIndex,
           importedRecord: this.toConflictRecordSummary(importedRecord),
-          matchingRecord: match.record,
-          matchingRecordIndex: match.recordIndex,
-          matchingRecordSource: match.source,
-          conflictType: match.conflictType,
+          matchingRecord: existingMatch.record,
+          matchingRecordIndex: existingMatch.recordIndex,
+          matchingRecordSource: existingMatch.source,
+          conflictType: existingMatch.conflictType,
           conflictReasonKey,
           matchingFieldValue,
           selectedPolicy: undefined
         });
       }
 
-      const importedIndexEntry = match ?? {
+      const importedIndexEntry = existingMatch ?? importOnlyMatch ?? {
         recordIndex: importRecordIndex,
         conflictType: "external-id-match" as const,
         record: this.toConflictRecordSummary(importedRecord),
