@@ -4,7 +4,9 @@ import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";
+import { StatusBanner } from "../components/feedback/StatusBanner";
 import { useToast } from "../components/feedback/ToastRegion";
+import { SelectField } from "../components/inputs/SelectField";
 import { useFocusOnMount } from "../hooks/useFocusOnMount";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -12,6 +14,11 @@ const SHIFT_LABELS: Record<string, string> = {
   "tarde": "Tarde",
   "noche": "Noche"
 };
+
+// MANT-12: options for the accessible SelectField combobox used below,
+// replacing the previous plain native <select>. Same values/order as
+// BUSCA_SHIFTS.
+const SHIFT_OPTIONS = BUSCA_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));
 
 const emptyForm = (): EditableBuscaRecord => ({
   deviceNumber: "",
@@ -171,7 +178,7 @@ export const BuscasPage = () => {
   };
 
   if (isLoading) {
-    return <LoadingStatus message="Cargando buscas…" />;
+    return <LoadingStatus message="Cargando buscas…" busy />;
   }
 
   if (loadError) {
@@ -256,11 +263,7 @@ export const BuscasPage = () => {
           <h3 className="mb-5 text-lg font-semibold text-scs-blueDark">
             {editingId ? "Editar busca" : "Nueva busca"}
           </h3>
-          {formError && (
-            <div role="alert" className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-              {formError}
-            </div>
-          )}
+          {formError && <StatusBanner type="error" message={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="form-device-number" className="mb-2 block text-sm font-medium text-slate-700">
@@ -316,22 +319,13 @@ export const BuscasPage = () => {
               />
             </div>
             <div>
-              <label htmlFor="form-shift" className="mb-2 block text-sm font-medium text-slate-700">
-                Turno <span aria-hidden="true" className="text-red-600">*</span>
-              </label>
-              <select
+              <SelectField
                 id="form-shift"
-                required
+                label="Turno"
                 value={formData.shift}
-                onChange={(e) => setField("shift", e.target.value as EditableBuscaRecord["shift"])}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
-              >
-                {BUSCA_SHIFTS.map((shift) => (
-                  <option key={shift} value={shift}>
-                    {SHIFT_LABELS[shift]}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setField("shift", value as EditableBuscaRecord["shift"])}
+                options={SHIFT_OPTIONS}
+              />
             </div>
             <div>
               <label htmlFor="form-group" className="mb-2 block text-sm font-medium text-slate-700">

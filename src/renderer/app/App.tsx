@@ -3,8 +3,10 @@ import { Outlet } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { ErrorBoundary } from "../components/feedback/ErrorBoundary";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { PathDisplay } from "../components/feedback/PathDisplay";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { AppShell } from "../components/layout/AppShell";
 import { useToast } from "../components/feedback/ToastRegion";
 import { useAppStore } from "../store/useAppStore";
@@ -167,6 +169,7 @@ export const App = () => {
     ensureBootstrapLoaded
   } = useAppStore();
   const { pushToast } = useToast();
+  const bootstrapErrorTitleRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     void ensureBootstrapLoaded();
@@ -185,23 +188,38 @@ export const App = () => {
     });
   }, [pushToast]);
 
+  // Moves focus to the boot error heading as soon as it mounts — this is the
+  // most critical error screen in the app (nothing else can render without a
+  // successful bootstrap), so it should not rely on the user noticing it visually.
+  useEffect(() => {
+    if (bootstrapError) {
+      bootstrapErrorTitleRef.current?.focus();
+    }
+  }, [bootstrapError]);
+
   if (bootstrapError) {
     return (
       <AppShell>
-        <section role="alert" className="rounded-3xl bg-white p-8 shadow-panel">
-          <h2 className="text-xl font-semibold text-scs-blueDark">No se pudieron cargar los datos</h2>
-          <p className="mt-2 text-sm text-slate-600">{bootstrapError}</p>
-          {bootstrapHelp ? <p className="mt-2 text-sm text-slate-500">{bootstrapHelp}</p> : null}
-          <button
-            type="button"
-            onClick={() => {
-              void ensureBootstrapLoaded();
-            }}
-            className="mt-6 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-          >
-            Reintentar
-          </button>
-        </section>
+        <StatePanel
+          role="alert"
+          title="No se pudieron cargar los datos"
+          titleRef={bootstrapErrorTitleRef}
+          message={bootstrapError}
+          action={
+            <>
+              {bootstrapHelp ? <p className="mb-4 text-sm text-slate-500">{bootstrapHelp}</p> : null}
+              <button
+                type="button"
+                onClick={() => {
+                  void ensureBootstrapLoaded();
+                }}
+                className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+              >
+                Reintentar
+              </button>
+            </>
+          }
+        />
       </AppShell>
     );
   }
@@ -224,7 +242,9 @@ export const App = () => {
 
   return (
     <AppShell>
-      <Outlet />
+      <ErrorBoundary>
+        <Outlet />
+      </ErrorBoundary>
     </AppShell>
   );
 };

@@ -33,7 +33,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import {
   normalizeWorkbookRowsFromFile,
   buildSpreadsheetImportPreview,
@@ -612,7 +612,15 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
 // ---------------------------------------------------------------------------
 // 4. Cross-sheet merge (mergeRecordsByDisplayName)
 // ---------------------------------------------------------------------------
-
+//
+// NOTE (OIR-235): these fixtures use "urgencias" and "rayos"/"admision-central"
+// — two of the six CURATED CANONICAL_SHARED_DEPARTMENTS (see
+// buildMergeIdentityKey) — so cross-department merging here remains
+// unaffected by the OIR-235 fix (which only blocks cross-department merging
+// for arbitrary, per-sheet "book" departments). This preserves the original
+// OIR-102 behavior (verified against real hospital data) where the same real
+// desk legitimately listed across multiple canonical department books merges
+// into one combined-extension contact.
 describe("golden: cross-sheet merge by displayName", () => {
   it("merges two sheets with same contact name into one record with combined phones", () => {
     const filePath = writeWorkbook(testRoot, "merge.xlsx", [
@@ -809,12 +817,71 @@ describe("golden: OIR-224 merge discriminator (service+location) fix", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. OIR-235 — merge identity key now includes department
+// ---------------------------------------------------------------------------
+//
+// Root cause: since OIR-230, 8+ per-department "book" sheets (Corporativos,
+// Sindicatos, UMI, etc.) are routed through the tabular Agenda parser, and
+// each one tags every row with department = its own sheet name. Two rows
+// from DIFFERENT book-sheets sharing displayName+Servicio with
+// blank/matching Edificio/Planta/Sector/Sección (plausible for generic
+// roles like "Secretaría"/"Recepción" repeated across multiple books) used
+// to silently merge into one record via buildMergeIdentityKey, losing the
+// second sheet's department attribution (the survivor keeps only
+// group[0]'s scalar fields, including department).
+describe("golden: OIR-235 merge identity key includes department", () => {
+  it("does NOT merge two book-sheet rows that share displayName/Servicio but come from different department sheets", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-cross-department-secretaria.xlsx", [
+      makeAgendaSheet("Corporativos", [
+        ["", "", "Secretaría", "81001", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+      makeAgendaSheet("Sindicatos", [
+        ["", "", "Secretaría", "81002", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const secretaria = result.rows.filter((r) => r.displayName === "Secretaría");
+
+    // Must remain TWO separate records — one per department — never merged.
+    expect(secretaria).toHaveLength(2);
+
+    const corporativos = secretaria.find((r) => r.department === "Corporativos")!;
+    const sindicatos = secretaria.find((r) => r.department === "Sindicatos")!;
+    expect(corporativos).toBeDefined();
+    expect(sindicatos).toBeDefined();
+    expect(corporativos.phone1Number).toBe("81001");
+    expect(sindicatos.phone1Number).toBe("81002");
+  });
+
+  it("still merges two rows sharing displayName/Servicio AND the same department book-sheet (regression — same-department merging is unaffected)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-same-department-recepcion.xlsx", [
+      makeAgendaSheet("Corporativos", [
+        ["", "", "Recepción", "82001", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "Recepción", "82002", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const recepcion = result.rows.filter((r) => r.displayName === "Recepción");
+
+    // Same department, same displayName/Servicio, blank discriminators —
+    // must still merge into a single record with both extensions.
+    expect(recepcion).toHaveLength(1);
+    expect(recepcion[0]!.department).toBe("Corporativos");
+
+    const phones = JSON.parse(recepcion[0]!.phones ?? "[]") as SerializedPhoneEntry[];
+    expect(phones.map((p) => p.number)).toEqual(expect.arrayContaining(["82001", "82002"]));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Error paths and boundary conditions
 // ---------------------------------------------------------------------------
 
 describe("golden: error paths", () => {
   it("throws a localized error for a file that cannot be parsed as a workbook", () => {
-    // xlsx-republish can parse arbitrary text as a CSV-like sheet, so a plain text
+    // xlsx can parse arbitrary text as a CSV-like sheet, so a plain text
     // file with no recognizable structure produces "no supported sheets" rather
     // than a parse error. Both error messages are considered localized / valid.
     // This golden test documents the actual runtime behavior.
@@ -1008,6 +1075,47 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.externalId).toBe("a-001");  // first record's id kept
 
+    const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
+    expect(merged.map((p) => p.number)).toContain("11111");
+    expect(merged.map((p) => p.number)).toContain("22222");
+  });
+
+  it("does NOT merge two tabular-Agenda-book-sheet records (area blank) with the same normalized displayName but different department (OIR-235)", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);
+    // area: "" simulates a row parsed by the tabular Agenda parser (the only
+    // parser that always leaves area blank — see buildMergeIdentityKey),
+    // which is the discriminator this fix keys off.
+    const r1 = makeRow({
+      externalId: "a-001",
+      displayName: "Secretaría",
+      department: "Corporativos",
+      area: "",
+      phones: phones1,
+    });
+    const r2 = makeRow({
+      externalId: "b-001",
+      displayName: "Secretaría",
+      department: "Sindicatos",
+      area: "",
+      phones: phones2,
+    });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+    // Different department => never merged, even with identical displayName
+    // and blank/matching service+building+floor+sector+section.
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.department).sort()).toEqual(["Corporativos", "Sindicatos"]);
+  });
+
+  it("still merges two service-sheet records (non-blank area) with the same displayName even when department differs (OIR-235 — department is not a discriminator outside the tabular book-sheet parser)", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);
+    const r1 = makeRow({ externalId: "a-001", displayName: "Banco de Sangre", department: "Urgencias", phones: phones1 });
+    const r2 = makeRow({ externalId: "b-001", displayName: "Banco de Sangre", department: "Rayos", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+    expect(result).toHaveLength(1);
     const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
     expect(merged.map((p) => p.number)).toContain("11111");
     expect(merged.map((p) => p.number)).toContain("22222");

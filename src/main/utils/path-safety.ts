@@ -12,8 +12,34 @@ const getErrnoException = (error: unknown) => {
 const isAllowedSystemAliasRoot = (currentPath: string, index: number) =>
   index === 0 && process.platform !== "win32" && ["/tmp", "/var"].includes(currentPath);
 
+/**
+ * Reduces an absolute filesystem path to its basename before it is
+ * interpolated into an error message that may cross the IPC boundary.
+ * Mirrors the sanitization AppDataService.toFilesystemError() applies to
+ * fs-callback errors (OIR-115) so hand-built `new Error(...)` messages in
+ * this module and in path-validation guards never leak absolute realpaths
+ * (which typically embed the OS username/home directory) to the renderer.
+ */
+export const formatPathForError = (targetPath: string) => path.basename(targetPath) || "<raíz>";
+
+/**
+ * Node's fs errno errors (e.g. `ENOENT: no such file or directory, lstat
+ * '/abs/path'`) embed the absolute path they operated on directly in
+ * `error.message`. Rewrapping that message verbatim (as a "detail" suffix)
+ * would silently reintroduce the same absolute-path leak that
+ * formatPathForError() sanitizes out of the "Ruta afectada" segment. Strip
+ * any literal occurrence of the known sensitive path before it is surfaced.
+ */
+const sanitizeErrorDetailMessage = (rawMessage: string, sensitivePath: string) => {
+  if (sensitivePath.trim() === "") {
+    return rawMessage;
+  }
+
+  return rawMessage.split(sensitivePath).join(formatPathForError(sensitivePath));
+};
+
 const buildPathSafetyError = (message: string, currentPath: string, detail: string) =>
-  new Error(`${message} Ruta afectada: ${currentPath}. ${detail}`);
+  new Error(`${message} Ruta afectada: ${formatPathForError(currentPath)}. ${detail}`);
 
 export const assertPathChainIsNotSymlink = async (
   targetPath: string,
@@ -54,7 +80,7 @@ export const assertPathChainIsNotSymlink = async (
       throw buildPathSafetyError(
         message,
         currentPath,
-        `Error al verificar la ruta: ${errorMessage}`
+        `Error al verificar la ruta: ${sanitizeErrorDetailMessage(errorMessage, currentPath)}`
       );
     }
   }
