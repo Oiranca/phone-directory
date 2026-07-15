@@ -252,8 +252,8 @@ export const SettingsPage = () => {
   );
 
   return (
-    <section className="space-y-6">
-      <h2 className="sr-only">Configuración</h2>
+    <section aria-labelledby="settings-page-title" className="space-y-6">
+      <h2 id="settings-page-title" className="sr-only">Configuración</h2>
       <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
           <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
