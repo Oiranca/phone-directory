@@ -17,7 +17,7 @@
  * when IS_VITEST_RUNTIME is true) and buildImportPreviewFromRows to exercise
  * the full pipeline end-to-end.
  *
- * Fixtures are built programmatically with xlsx-republish and written to a
+ * Fixtures are built programmatically with xlsx and written to a
  * temporary directory so no binary fixture files need to be committed.
  */
 import nodeFs from "node:fs";
@@ -25,7 +25,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
 import { writeWorkbook } from "./test-support/xlsxWorkbook.js";

@@ -226,7 +226,10 @@ describe("BuscasPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     // "Rol" uniquely matches the label (table header is "Rol" too — use id)
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
-    fireEvent.change(screen.getByLabelText(/turno/i), { target: { value: "noche" } });
+    // MANT-12: "Turno" is now an accessible SelectField combobox, not a native
+    // <select> — open it and click the "Noche" option.
+    fireEvent.click(screen.getByLabelText(/turno/i));
+    fireEvent.click(screen.getByRole("option", { name: "Noche" }));
 
     fireEvent.submit(form);
 
@@ -236,6 +239,36 @@ describe("BuscasPage", () => {
       );
       expect(screen.getByText("B-003")).toBeInTheDocument();
     });
+  });
+
+  it("OIR-213: sanitizes IPC error boilerplate when addBusca rejects", async () => {
+    setupWindowApi({
+      addBusca: vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            "Error invoking remote method 'busca:add': Error: El número de busca ya existe."
+          )
+        )
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+
+    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.change(screen.getByLabelText(/turno/i), { target: { value: "noche" } });
+
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("El número de busca ya existe.");
+    });
+    // The raw Electron IPC boilerplate must never reach the user
+    expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
   });
 
   it("opens edit form pre-populated with record data", async () => {

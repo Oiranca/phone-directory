@@ -25,12 +25,12 @@ The repository currently includes:
 
 Planning and migration reference files:
 
-- [HANDOFF.md](./docs/HANDOFF.md)
-- [REMAINING_WORK_PLAN.md](./docs/REMAINING_WORK_PLAN.md)
+- [CLAUDE.md — Current Handoff](./CLAUDE.md#current-handoff) (MANT-17: replaces the removed `docs/HANDOFF.md` / `docs/REMAINING_WORK_PLAN.md` — this is where current branch/scope status now lives)
 - [CSV_IMPORT_TEMPLATE.md](./docs/CSV_IMPORT_TEMPLATE.md)
 - [ODS_TO_CSV_MAPPING.md](./docs/ODS_TO_CSV_MAPPING.md)
 - [USB_RELEASE_HANDOFF_CHECKLIST.md](./docs/USB_RELEASE_HANDOFF_CHECKLIST.md)
 - [KEYBOARD_SHORTCUTS.md](./docs/KEYBOARD_SHORTCUTS.md)
+- [IPC_CONTRACT.md](./docs/IPC_CONTRACT.md)
 - [scripts/README.md](./scripts/README.md)
 
 ## Tech Stack

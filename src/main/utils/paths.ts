@@ -10,7 +10,8 @@ export const getManagedPaths = (appDataRoot: string) => ({
   contactsFilePath: path.join(appDataRoot, "data", "contacts.json"),
   settingsFilePath: path.join(appDataRoot, "data", "settings.json"),
   auditLogFilePath: path.join(appDataRoot, "data", "audit-log.json"),
-  buscasFilePath: path.join(appDataRoot, "data", "buscas.json")
+  buscasFilePath: path.join(appDataRoot, "data", "buscas.json"),
+  crashLogFilePath: path.join(appDataRoot, "data", "crash-log.jsonl")
 });
 
 export const getManagedDataDirectory = () => getManagedPaths(getAppDataRoot()).dataDirectory;
@@ -24,3 +25,5 @@ export const getContactsFilePath = () => getManagedPaths(getAppDataRoot()).conta
 export const getBuscasFilePath = () => getManagedPaths(getAppDataRoot()).buscasFilePath;
 
 export const getSettingsFilePath = () => getManagedPaths(getAppDataRoot()).settingsFilePath;
+
+export const getCrashLogFilePath = () => getManagedPaths(getAppDataRoot()).crashLogFilePath;

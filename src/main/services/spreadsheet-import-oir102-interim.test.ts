@@ -21,14 +21,14 @@
  *      has no phone numbers on the same row.
  *
  * These tests call normalizeWorkbookRowsFromFile (the sync path active when
- * VITEST=true) and write temporary workbook fixtures via xlsx-republish.
+ * VITEST=true) and write temporary workbook fixtures via xlsx.
  */
 import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 

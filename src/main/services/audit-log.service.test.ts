@@ -787,4 +787,223 @@ describe("AuditLogService", () => {
       expect(sidecars).toHaveLength(1);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // OIR-206 / ARQ-7: entry-count based rotation
+  // ---------------------------------------------------------------------------
+
+  describe("rotation — append()", () => {
+    const makeEntry = (i: number) => ({
+      timestamp: `2026-05-01T${String(i % 24).padStart(2, "0")}:00:00.000Z`,
+      editor: "Admin",
+      action: "create" as const,
+      recordId: `cnt_${i}`,
+      recordName: `Record ${i}`
+    });
+
+    it("does NOT rotate while the active log is below the configured threshold", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 3 });
+      await service.ensureInitialized();
+
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+      const contents = JSON.parse(await fs.readFile(auditLogPath, "utf-8")) as unknown[];
+      expect(contents).toHaveLength(2);
+
+      const archives = (await fs.readdir(dataDir)).filter((f) => f.includes(".archived-"));
+      expect(archives).toHaveLength(0);
+    });
+
+    it("rotates exactly at the configured threshold: archives prior entries and restarts the active log", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 3 });
+      await service.ensureInitialized();
+
+      // 3 appends fill the active log to the threshold, without triggering rotation yet.
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+      await service.append(makeEntry(3));
+
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+
+      let archives = (await fs.readdir(dataDir)).filter((f) => f.includes(".archived-"));
+      expect(archives).toHaveLength(0);
+
+      // The 4th append crosses the threshold and must trigger rotation.
+      await service.append(makeEntry(4));
+
+      archives = (await fs.readdir(dataDir)).filter((f) => f.includes(".archived-"));
+      expect(archives).toHaveLength(1);
+
+      // Archived file contains exactly the 3 prior entries (record 1-3).
+      const archivedContents = JSON.parse(
+        await fs.readFile(path.join(dataDir, archives[0]!), "utf-8")
+      ) as Array<{ recordName: string }>;
+      expect(archivedContents).toHaveLength(3);
+      expect(archivedContents.map((e) => e.recordName)).toEqual(["Record 1", "Record 2", "Record 3"]);
+
+      // Active log after rotation contains ONLY the entry that triggered rotation.
+      const activeContents = JSON.parse(await fs.readFile(auditLogPath, "utf-8")) as Array<{
+        recordName: string;
+      }>;
+      expect(activeContents).toHaveLength(1);
+      expect(activeContents[0]!.recordName).toBe("Record 4");
+    });
+
+    it("archived filename follows the audit-log.archived-<timestamp>.json pattern", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 1 });
+      await service.ensureInitialized();
+
+      await service.append(makeEntry(1));
+      // Second append crosses the threshold of 1.
+      await service.append(makeEntry(2));
+
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+      const archives = (await fs.readdir(dataDir)).filter((f) => f.includes(".archived-"));
+      expect(archives).toHaveLength(1);
+      expect(archives[0]).toMatch(/^audit-log\.archived-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/);
+    });
+
+    it("does not collide when rotation is triggered more than once — each archive gets a unique filename", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 2 });
+      await service.ensureInitialized();
+
+      // First rotation cycle: fills to 2, 3rd append rotates.
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+      await service.append(makeEntry(3));
+
+      // Second rotation cycle: active log has [3], filling with 4 hits threshold,
+      // 5th append rotates again.
+      await service.append(makeEntry(4));
+      await service.append(makeEntry(5));
+
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+      const archives = (await fs.readdir(dataDir)).filter((f) => f.includes(".archived-"));
+      expect(archives).toHaveLength(2);
+      // Both filenames must be unique.
+      expect(new Set(archives).size).toBe(2);
+
+      const activeContents = JSON.parse(await fs.readFile(auditLogPath, "utf-8")) as Array<{
+        recordName: string;
+      }>;
+      expect(activeContents).toHaveLength(1);
+      expect(activeContents[0]!.recordName).toBe("Record 5");
+    });
+
+    it("query() after rotation only returns entries from the active (post-rotation) log", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 2 });
+      await service.ensureInitialized();
+
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+      // Triggers rotation — archives entries 1-2, active log restarts with entry 3.
+      await service.append(makeEntry(3));
+
+      const result = await service.query({});
+      expect(result.totalCount).toBe(1);
+      expect(result.entries[0]!.recordName).toBe("Record 3");
+    });
+
+    it("defaults to the documented rotation threshold (5000) when no override is supplied", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      await service.ensureInitialized();
+
+      // Accessing the private field via bracket notation keeps this test tied to
+      // the documented default without requiring thousands of real appends.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((service as any).rotationThresholdEntries).toBe(5000);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // OIR-206 follow-up (security review, 2026-07-14): archived-history visibility
+  // ---------------------------------------------------------------------------
+
+  describe("query() — archived-history visibility", () => {
+    const makeEntry = (i: number) => ({
+      timestamp: `2026-05-01T${String(i % 24).padStart(2, "0")}:00:00.000Z`,
+      editor: "Admin",
+      action: "create" as const,
+      recordId: `cnt_${i}`,
+      recordName: `Record ${i}`
+    });
+
+    it("reports hasArchivedHistory: false and archivedFileCount: 0 when no rotation has occurred", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      await service.ensureInitialized();
+
+      await service.append(makeEntry(1));
+
+      const result = await service.query({});
+      expect(result.hasArchivedHistory).toBe(false);
+      expect(result.archivedFileCount).toBe(0);
+    });
+
+    it("reports hasArchivedHistory: true and archivedFileCount: 1 after a single rotation", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 2 });
+      await service.ensureInitialized();
+
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+      // Triggers rotation — archives entries 1-2, active log restarts with entry 3.
+      await service.append(makeEntry(3));
+
+      const result = await service.query({});
+      expect(result.hasArchivedHistory).toBe(true);
+      expect(result.archivedFileCount).toBe(1);
+      // The active log's own entry count must remain unaffected by archived files.
+      expect(result.totalCount).toBe(1);
+    });
+
+    it("archivedFileCount correctly reflects multiple rotations, not just presence", async () => {
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService({ rotationThresholdEntries: 2 });
+      await service.ensureInitialized();
+
+      // First rotation cycle: fills to 2, 3rd append rotates.
+      await service.append(makeEntry(1));
+      await service.append(makeEntry(2));
+      await service.append(makeEntry(3));
+
+      // Second rotation cycle: active log has [3], filling with 4 hits threshold,
+      // 5th append rotates again.
+      await service.append(makeEntry(4));
+      await service.append(makeEntry(5));
+
+      const result = await service.query({});
+      expect(result.hasArchivedHistory).toBe(true);
+      expect(result.archivedFileCount).toBe(2);
+    });
+
+    it("does NOT count the quarantine sidecar (audit-log.corrupt-*.json) as archived history", async () => {
+      // Regression guard: countArchivedFiles must filter specifically on the
+      // `.archived-` naming convention, not any sidecar file next to the log.
+      const { AuditLogService } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      await service.ensureInitialized();
+
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      const dataDir = path.dirname(auditLogPath);
+      // Simulate a quarantine sidecar sitting in the same directory.
+      await fs.writeFile(path.join(dataDir, "audit-log.corrupt-2026-01-01T00-00-00-000Z.json"), "garbage", "utf-8");
+
+      const result = await service.query({});
+      expect(result.hasArchivedHistory).toBe(false);
+      expect(result.archivedFileCount).toBe(0);
+    });
+  });
 });

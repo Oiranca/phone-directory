@@ -775,6 +775,29 @@ describe("DeduplicatePage", () => {
       // Success toast must NOT appear
       expect(screen.queryByText("Duplicado fusionado correctamente")).not.toBeInTheDocument();
     });
+
+    it("OIR-213: sanitizes IPC error boilerplate before showing the merge-failure toast", async () => {
+      mergeContactsMock.mockRejectedValueOnce(
+        new Error("Error invoking remote method 'contacts:merge': Error: No se pudo fusionar: conflicto de datos.")
+      );
+
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      await waitFor(() => {
+        expect(screen.getByText("No se pudo fusionar: conflicto de datos.")).toBeInTheDocument();
+      });
+      // The raw Electron IPC boilerplate must never reach the user
+      expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
+    });
   });
 
   // ── OIR-183 P1 fixes ─────────────────────────────────────────────────────────
