@@ -463,7 +463,11 @@ describe("DuplicateDetectionService", () => {
 
     it("2,001-record fixture completes and returns a valid result", async () => {
       // 2001 records crosses exactly one CHUNK_SIZE=2000 outer-loop boundary,
-      // proving the cooperative yield fires. Runtime is well under the 60s timeout.
+      // proving the cooperative yield fires. This is a full, un-aborted O(n²) scan
+      // (documented/intended complexity — see detectDuplicates docstring), so its
+      // runtime scales with the square of the fixture size. Measured locally at
+      // ~35s; the 120s timeout below leaves comfortable headroom for slower CI
+      // runners without masking an actual complexity regression.
       const records = buildLargeFixture(2001);
       const result = await service.detectDuplicates(records);
 
@@ -473,7 +477,7 @@ describe("DuplicateDetectionService", () => {
       expect(Object.keys(result.records).length).toBe(
         new Set(result.pairs.flatMap((p) => [p.recordA.id, p.recordB.id])).size
       );
-    }, 60_000);
+    }, 120_000);
 
     // OIR-107 acceptance: 5 000-record scale — abort early (before first chunk boundary)
     // rather than running the full O(n²) scan so the test stays fast on CI.
@@ -569,7 +573,11 @@ describe("DuplicateDetectionService", () => {
 
       expect(threw).toBe(true);
       expect(partial).toBeUndefined();
-    }, 60_000);
+      // NOTE: aborting at the i=2000 yield still means outer rows i=0..1999 ran to
+      // completion first — effectively the full O(n²) scan (see docstring on
+      // detectDuplicates). Same "measured ~35s locally" rationale as the 2,001-record
+      // test above applies to the 120s timeout below.
+    }, 120_000);
 
     it("inner-loop abort: mid-scan abort during a single outer iteration is honored within INNER_ABORT_INTERVAL steps", async () => {
       // This test locks the THIRD abort surface: the abort check added inside the inner
@@ -682,6 +690,12 @@ describe("DuplicateDetectionService", () => {
     it("bounded memory: pair count is proportional to input, not n²", async () => {
       // 2001-record fixture: unique phone per record, names are "First Last i" with i suffix.
       // Pair count must be bounded well below n²=4_004_001.
+      //
+      // Note: this test asserts the *output pair count* stays sub-quadratic (memory
+      // bound), not the scan's time complexity — detectDuplicates itself is a
+      // documented O(n²) comparison scan (see its docstring), so this is another
+      // full, un-aborted scan like the "2,001-record fixture" test above. Same
+      // "measured ~35s locally" rationale applies to the 120s timeout below.
       const N = 2001;
       const records = buildLargeFixture(N);
       const result = await service.detectDuplicates(records);
@@ -693,6 +707,6 @@ describe("DuplicateDetectionService", () => {
 
       // The records map size is bounded by 2 * pairCount (at most one entry per unique record in pairs)
       expect(Object.keys(result.records).length).toBeLessThanOrEqual(result.pairCount * 2);
-    }, 60_000);
+    }, 120_000);
   });
 });

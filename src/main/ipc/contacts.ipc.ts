@@ -1,5 +1,6 @@
-import type { CsvImportPolicySelection, EditableContactRecord, MergePolicy } from "../../shared/types/contact.js";
+import type { EditableContactRecord } from "../../shared/types/contact.js";
 import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.js";
+import { csvImportPolicySelectionListSchema } from "../../shared/schemas/csv-import-policy.schema.js";
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -11,7 +12,9 @@ import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
-const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
+// Defensive global cap on concurrent pending CSV imports (SEC-4) — see
+// pendingCsvImports below.
+const MAX_PENDING_CSV_IMPORTS = 30;
 // OIR-219: extensions accepted by the unified pickAndImportDataset dialog filter.
 const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
 
@@ -161,6 +164,21 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     event.sender.on("did-start-navigation", navListener);
 
+    // SEC-4: defensive global cap on concurrent pending CSV imports. Normal
+    // desktop single-window usage never approaches this (each sender's
+    // previous token is already invalidated above), but nothing previously
+    // bounded the map across ALL senders — a renderer bug or a future
+    // multi-window feature repeatedly calling previewCsvImport could grow it
+    // until TTLs expire. Evict the oldest pending entry (Map iteration order
+    // is insertion order) before admitting a new one once the cap is hit.
+    if (pendingCsvImports.size >= MAX_PENDING_CSV_IMPORTS) {
+      const oldestImportToken = pendingCsvImports.keys().next().value;
+
+      if (oldestImportToken) {
+        clearPendingCsvImport(oldestImportToken);
+      }
+    }
+
     pendingCsvImports.set(importToken, {
       sourceFilePath,
       senderId,
@@ -296,22 +314,16 @@ export const registerContactsIpc = (service: AppDataService) => {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
-    if (!Array.isArray(rawPolicies)) {
+    // SEC-5: validated via Zod (csvImportPolicySelectionListSchema) instead of
+    // hand-rolled typeof/Number.isInteger/Set.has checks, consistent with
+    // every other IPC input in this codebase.
+    let policies;
+
+    try {
+      policies = csvImportPolicySelectionListSchema.parse(rawPolicies);
+    } catch {
       throw new Error("Las políticas de conflicto no tienen un formato válido.");
     }
-
-    const policies = rawPolicies.map((item) => {
-      if (
-        typeof item !== "object" ||
-        item === null ||
-        !Number.isInteger((item as CsvImportPolicySelection).recordIndex) ||
-        !MERGE_POLICIES.has((item as CsvImportPolicySelection).policy)
-      ) {
-        throw new Error("Las políticas de conflicto no tienen un formato válido.");
-      }
-
-      return item as CsvImportPolicySelection;
-    });
 
     // Synchronously consume the token before the first await so concurrent
     // confirmations cannot race past this point with the same token.

@@ -266,6 +266,23 @@ describe("RecordFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("OIR-209: shows the record-not-found state and moves focus to its heading when editing a missing record", async () => {
+    renderWithRoute("/contacts/cnt_does_not_exist/edit");
+
+    const heading = await screen.findByRole("heading", { name: "Registro no encontrado" });
+    expect(heading).toBeInTheDocument();
+    expect(
+      screen.getByText("El registro solicitado ya no está disponible o fue eliminado.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver al directorio" })).toBeInTheDocument();
+
+    // Focus moves to the heading on mount since this state can be reached via
+    // direct navigation (e.g. a stale link) with no prior focus context.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(heading);
+    });
+  });
+
   it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
     // OIR-222 metadata fields (role/schedule/sector/section) have no form
     // control of their own yet. Editing an unrelated field (displayName) and
