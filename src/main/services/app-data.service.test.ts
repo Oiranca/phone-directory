@@ -4820,10 +4820,10 @@ describe("AppDataService", () => {
     expect(message).toContain("Ya existe un archivo en esa ruta");
   });
 
-  // Real-file regression test for the "Confidencial" flag misassignment
-  // bug reported by the operator (a non-confidential row like "Admisión Central"
-  // showed the privacy badge after import, while a genuinely confidential row lost
-  // it). Root cause: `mergeImportedRecordFields` (the "Combinar" / merge-fields
+  // Regression test for the "Confidencial" flag misassignment bug reported by
+  // the operator (a non-confidential row like "Admisión Central" showed the
+  // privacy badge after import, while a genuinely confidential row lost it).
+  // Root cause: `mergeImportedRecordFields` (the "Combinar" / merge-fields
   // conflict policy, used when re-importing a file whose rows already exist)
   // appended only genuinely NEW phone numbers and left EXISTING phone numbers
   // completely untouched — so a phone's confidential/noPatientSharing markers,
@@ -4831,27 +4831,27 @@ describe("AppDataService", () => {
   // existed, or a manual slip), could never be corrected by re-importing the
   // (now-correct) source file. The row-level parser itself (spreadsheet-parsers.ts
   // normalizeTabularAgendaSheet) was already verified correct against this same
-  // real file — see the "fresh import" assertions below — so the merge-policy
-  // layer was the actual defect.
+  // fixture shape — see the "fresh import" assertions below — so the
+  // merge-policy layer was the actual defect.
   //
-  // Runs against the REAL hospital ODS export (not a synthetic fixture) per the
-  // investigation mandate: synthetic data could accidentally avoid the exact
-  // mechanism that reproduced this bug. Skipped automatically when the file is
-  // not present on the current machine (it is operator-provided data, never
-  // committed to the repo).
-  describe("Confidencial flag correctness against the real Agenda ODS", () => {
-    const REAL_ODS_CANDIDATE_PATHS = [
-      "/Users/samuelromeroarbelo/Documents/Telefonista/Buscas y Agenda normalizados/Agenda Normalizada.ods",
-      "/private/tmp/claude-501/-Users-samuelromeroarbelo-Projects-phone-directory/282c1726-23ec-42ee-8849-5ae5acc7508e/scratchpad/ods_inspect/agenda.ods"
-    ];
+  // Runs against a small, committed, anonymized fixture (see
+  // __fixtures__/agenda-confidencial.ods) that reproduces the exact 17-column
+  // tabular Agenda header/row shape (AGENDA_TABULAR_HEADER_MARKERS in
+  // spreadsheet-parsers.ts), instead of the operator-provided real export, so
+  // the tests always run — in CI and on every machine — rather than silently
+  // skipping (OIR-255).
+  //
+  // The fixture is 100% synthetic — no real operator/hospital/patient data
+  // was used. Its two phone numbers ("1000" / "1001") are deliberately
+  // short, internal-extension-shaped placeholder values, not real routable
+  // Spanish phone numbers — chosen only to satisfy extractNumbers' >=4-digit
+  // minimum (spreadsheet-normalize.ts) while being unambiguously non-real.
+  // Regenerate via scripts/generate-agenda-confidencial-fixture.cjs.
+  describe("Confidencial flag correctness against the tabular Agenda fixture", () => {
+    const fixtureOdsPath = path.join(__dirname, "__fixtures__", "agenda-confidencial.ods");
 
-    const findRealOdsPath = (): string | undefined =>
-      REAL_ODS_CANDIDATE_PATHS.find((candidate) => nodeFs.existsSync(candidate));
-
-    const realOdsPath = findRealOdsPath();
-
-    it.skipIf(!realOdsPath)(
-      "fresh import: 'Admisión Central' is NOT confidential and 'Admisión Central (Interno)' IS, matching the real source rows",
+    it(
+      "fresh import: 'Admisión Central' is NOT confidential and 'Admisión Central (Interno)' IS, matching the source rows",
       async () => {
         const { AppDataService } = await import("./app-data.service.js");
 
@@ -4859,24 +4859,12 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        // Merge-discriminator fix: correctly splitting rows that used to
-        // wrongly collapse by displayName alone (see spreadsheet-parsers.ts
-        // mergeRecordsByDisplayName) surfaces a small number of genuine intra-batch
-        // duplicate-phone matches even on a FRESH import (e.g. two real rows for the
-        // same person "Malena" under two different Servicio headings, both with the
-        // same extension). AppDataService's conflict-detection layer
-        // (buildStableMergeKeys / detectConflicts) no longer reports those purely
-        // intra-batch matches as user-facing conflicts (there is nothing pre-existing
-        // for them to conflict with) — they are consolidated automatically by
-        // mergeImportedDataset instead. Any policySelections computed here are only
-        // for conflicts against genuinely pre-existing records, if any; this test can
-        // then assert on the unrelated Admisión Central rows below regardless.
-        const preview = await service.previewCsvImport(realOdsPath!);
+        const preview = await service.previewCsvImport(fixtureOdsPath);
         const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
           recordIndex: conflict.recordIndex,
           policy: "merge-fields" as const
         }));
-        const result = await service.importCsvDataset(realOdsPath!, policySelections);
+        const result = await service.importCsvDataset(fixtureOdsPath, policySelections);
 
         const notConfidential = result.contacts.records.find(
           (record) => record.displayName.trim() === "Admisión Central"
@@ -4893,8 +4881,8 @@ describe("AppDataService", () => {
       }
     );
 
-    it.skipIf(!realOdsPath)(
-      "re-import with the 'Combinar' (merge-fields) conflict policy CORRECTS stale confidential flags to match the real source rows",
+    it(
+      "re-import with the 'Combinar' (merge-fields) conflict policy CORRECTS stale confidential flags to match the source rows",
       async () => {
         const { AppDataService } = await import("./app-data.service.js");
 
@@ -4902,16 +4890,12 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        // Merge-discriminator fix: see the "fresh import" test above — any
-        // intra-batch duplicate-phone matches are consolidated automatically
-        // and are not part of conflictedRecords, so this only needs to resolve
-        // genuine conflicts against pre-existing records (if any).
-        const firstPreview = await service.previewCsvImport(realOdsPath!);
+        const firstPreview = await service.previewCsvImport(fixtureOdsPath);
         const firstPolicySelections = (firstPreview.conflictedRecords ?? []).map((conflict) => ({
           recordIndex: conflict.recordIndex,
           policy: "merge-fields" as const
         }));
-        const first = await service.importCsvDataset(realOdsPath!, firstPolicySelections);
+        const first = await service.importCsvDataset(fixtureOdsPath, firstPolicySelections);
 
         // Simulate stale/legacy data: flip both flags so they are WRONG relative
         // to the real source — mirrors a record imported before the
@@ -4929,12 +4913,12 @@ describe("AppDataService", () => {
           JSON.stringify(first.contacts, null, 2)
         );
 
-        const preview = await service.previewCsvImport(realOdsPath!);
+        const preview = await service.previewCsvImport(fixtureOdsPath);
         const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
           recordIndex: conflict.recordIndex,
           policy: "merge-fields" as const
         }));
-        const result = await service.importCsvDataset(realOdsPath!, policySelections);
+        const result = await service.importCsvDataset(fixtureOdsPath, policySelections);
 
         const correctedNotConfidential = result.contacts.records.find(
           (record) => record.displayName.trim() === "Admisión Central"
