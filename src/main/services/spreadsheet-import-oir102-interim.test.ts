@@ -1,6 +1,10 @@
 /**
  * OIR-102 INTERIM — Buscas sheet skip and social-handle row skip.
  *
+ * (OIR-217/MANT-7: this file covers row-skipping fixes distinct from — and
+ * unrelated to — the multi-sheet phone-merge regression tests in
+ * `spreadsheet-import-oir102-multisheet.test.ts`.)
+ *
  * Two categories of non-phone-contact rows were blocking the all-or-nothing
  * import preview:
  *
@@ -26,27 +30,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import XLSX from "xlsx";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 /** Minimal service-sheet: header row + data rows. Name must be canonical. */
 const makeServiceSheet = (

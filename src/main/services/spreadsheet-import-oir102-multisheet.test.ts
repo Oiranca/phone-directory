@@ -1,6 +1,12 @@
 /**
  * OIR-102 — ODS multi-sheet phone-number data-loss regression tests.
  *
+ * (OIR-217/MANT-7: renamed from `spreadsheet-import-oir102.test.ts` to
+ * `spreadsheet-import-oir102-multisheet.test.ts` to disambiguate from the
+ * separate, unrelated fixes covered in `spreadsheet-import-oir102-interim.test.ts`
+ * — both files previously carried the same bare "OIR-102" label despite
+ * testing different root causes.)
+ *
  * Two root causes fixed:
  *   1. 2-phone cap: normalizeServiceSheet only emitted phone1/phone2; 3rd+
  *      numbers were silently dropped.
@@ -22,30 +28,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import XLSX from "xlsx";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Write a multi-sheet workbook to disk as .xlsx and return the file path. */
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 /**
  * Minimal service-sheet layout understood by the parser:
