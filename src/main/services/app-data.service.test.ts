@@ -4840,6 +4840,13 @@ describe("AppDataService", () => {
   // spreadsheet-parsers.ts), instead of the operator-provided real export, so
   // the tests always run — in CI and on every machine — rather than silently
   // skipping (OIR-255).
+  //
+  // The fixture is 100% synthetic — no real operator/hospital/patient data
+  // was used. Its two phone numbers ("1000" / "1001") are deliberately
+  // short, internal-extension-shaped placeholder values, not real routable
+  // Spanish phone numbers — chosen only to satisfy extractNumbers' >=4-digit
+  // minimum (spreadsheet-normalize.ts) while being unambiguously non-real.
+  // Regenerate via scripts/generate-agenda-confidencial-fixture.cjs.
   describe("Confidencial flag correctness against the tabular Agenda fixture", () => {
     const fixtureOdsPath = path.join(__dirname, "__fixtures__", "agenda-confidencial.ods");
 
