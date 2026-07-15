@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
+import { LoadingStatus } from "../feedback/LoadingStatus";
 import { useToast } from "../feedback/ToastRegion";
 import { useAppStore } from "../../store/useAppStore";
 import { toCompactToastMessage } from "../../utils/toastMessage";
+import { useFocusOnMount } from "../../hooks/useFocusOnMount";
 
 const formatTimestamp = (value: string) => {
   const date = new Date(value);
@@ -117,11 +119,7 @@ export const DataManagementSection = () => {
     void ensureBootstrapLoaded();
   }, []);
 
-  useLayoutEffect(() => {
-    if (isPanelOpen) {
-      panelHeadingRef.current?.focus();
-    }
-  }, [isPanelOpen]);
+  useFocusOnMount(panelHeadingRef, isPanelOpen);
 
   useEffect(() => {
     if (storeIsLoading) return;
@@ -434,7 +432,13 @@ export const DataManagementSection = () => {
   }
 
   if (isLoading || storeIsLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y copias de seguridad…</section>;
+    return (
+      <LoadingStatus
+        message="Cargando importación y copias de seguridad…"
+        className="rounded-3xl bg-white p-6 shadow-panel"
+        busy
+      />
+    );
   }
 
   // Derive the most recent backup's date client-side from
@@ -611,20 +615,22 @@ export const DataManagementSection = () => {
         </aside>
       </div>
 
-      {confirmationContent ? (
-        <ConfirmDialog
-          isOpen={true}
-          title={confirmationContent.title}
-          message={confirmationContent.message}
-          confirmLabel={confirmationContent.confirmLabel}
-          cancelLabel="Cancelar"
-          isDestructive={true}
-          onConfirm={() => {
-            void handleConfirmAction();
-          }}
-          onCancel={() => setPendingConfirmation(null)}
-        />
-      ) : null}
+      {/* MANT-13: always rendered with `isOpen` toggled (idiom A), matching the
+          other ConfirmDialog call sites (BuscasPage, DeduplicatePage,
+          ContactFormPage, App) instead of conditionally mounting/unmounting
+          the dialog with `isOpen` hardcoded to `true`. */}
+      <ConfirmDialog
+        isOpen={confirmationContent !== null}
+        title={confirmationContent?.title ?? ""}
+        message={confirmationContent?.message ?? ""}
+        confirmLabel={confirmationContent?.confirmLabel ?? "Confirmar"}
+        cancelLabel="Cancelar"
+        isDestructive={true}
+        onConfirm={() => {
+          void handleConfirmAction();
+        }}
+        onCancel={() => setPendingConfirmation(null)}
+      />
     </section>
   );
 };

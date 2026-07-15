@@ -2,7 +2,7 @@ import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import * as XLSX from "xlsx-republish";
+import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
@@ -103,17 +103,21 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          backupDirectoryPath: missingBackupDirectory
-        })
-      )
-    ).rejects.toThrow(
-      new RegExp(
-        `No se pudo validar la carpeta de copias de seguridad\\. Ruta afectada: (?:\\/private)?${missingBackupDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\.`
-      )
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        backupDirectoryPath: missingBackupDirectory
+      })
     );
+
+    // SEC-3 regression guard: the error must surface a sanitized, basename-only
+    // path (never the absolute realpath, which embeds the OS username/home dir)
+    // across the IPC boundary.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo validar la carpeta de copias de seguridad\. Ruta afectada: missing-backups\./
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(missingBackupDirectory);
   });
 
   it("rejects custom backup directories that resolve through symlinks", async () => {
@@ -145,15 +149,98 @@ describe("AppDataService", () => {
     const existingDataFilePath = path.join(customDataDirectory, "already-here.json");
     await fs.writeFile(existingDataFilePath, "{}", "utf-8");
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          dataFilePath: existingDataFilePath
-        })
-      )
-    ).rejects.toThrow(
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: existingDataFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
       "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
     );
+
+    // SEC-3 regression guard: assertDataFilePathAvailable must not leak the
+    // absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(existingDataFilePath);
+    expect(error.message).toContain("Ruta afectada: already-here.json");
+  });
+
+  it("rejects a custom data path that points to an existing directory without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const directoryAsDataPath = path.join(testRoot, "already-a-directory.json");
+    await fs.mkdir(directoryAsDataPath, { recursive: true });
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: directoryAsDataPath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
+      "La ruta de datos debe apuntar a un archivo JSON, no a una carpeta."
+    );
+
+    // SEC-3 regression guard: assertDataFilePathAvailable's is-directory branch
+    // must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(directoryAsDataPath);
+    expect(error.message).toContain("Ruta afectada: already-a-directory.json");
+  });
+
+  it("rejects a custom data path that points to the settings file without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const settingsFilePath = path.join(currentUserDataRoot, "data", "settings.json");
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: settingsFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow(
+      "La ruta de datos no puede apuntar al archivo de configuración."
+    );
+
+    // SEC-3 regression guard: validateEditableSettings' settings-file-collision
+    // branch must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(settingsFilePath);
+    expect(error.message).toContain("Ruta afectada: settings.json");
+  });
+
+  it("rejects a custom data path without a .json extension without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const customDataDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDataDirectory, { recursive: true });
+    const nonJsonDataFilePath = path.join(customDataDirectory, "contacts-custom.txt");
+
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: nonJsonDataFilePath
+      })
+    );
+
+    await expect(rejection).rejects.toThrow("La ruta de datos debe terminar en .json.");
+
+    // SEC-3 regression guard: validateEditableSettings' extension-check branch
+    // must not leak the absolute path into the IPC-facing error message.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(nonJsonDataFilePath);
+    expect(error.message).toContain("Ruta afectada: contacts-custom.txt");
   });
 
   it("rejects relative custom data paths", async () => {
@@ -243,15 +330,19 @@ describe("AppDataService", () => {
         return actualFs.lstat(filePath);
       });
 
-    await expect(
-      service.saveSettings(
-        buildEditableSettings({
-          dataFilePath: customDataFilePath
-        })
-      )
-    ).rejects.toThrow(
-      new RegExp(`No se pudo validar la ruta del archivo de datos\\. Ruta afectada: ${customDataDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\. Error al verificar la ruta: EACCES: permission denied`)
+    const rejection = service.saveSettings(
+      buildEditableSettings({
+        dataFilePath: customDataFilePath
+      })
     );
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo validar la ruta del archivo de datos\. Ruta afectada: custom-data\. Error al verificar la ruta: EACCES: permission denied/
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(customDataDirectory);
 
     lstatSpy.mockRestore();
   });
@@ -645,7 +736,7 @@ describe("AppDataService", () => {
     expect(files).toHaveLength(2);
     expect(files.at(-1)).toMatch(/^auto-backup-/);
     // Drain any in-flight write-queue entries before the afterEach removes the
-    // temp dir, preventing an ENOTEMPTY race between pruneAutoBackups and fs.rm.
+    // temp dir, preventing an ENOTEMPTY race between pruneBackupsByPrefix and fs.rm.
     await service.dispose();
   });
 
@@ -1896,11 +1987,63 @@ describe("AppDataService", () => {
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
 
-    await expect(service.restoreBackup(sourceFilePath)).rejects.toThrow(
-      new RegExp(
-        `No se pudo restaurar la copia de seguridad seleccionada\\. Ruta afectada: (?:\\/private)?${sourceFilePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^\\\/var/, "\\/var")}\\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\\.`
-      )
+    const rejection = service.restoreBackup(sourceFilePath);
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    await expect(rejection).rejects.toThrow(
+      /No se pudo restaurar la copia de seguridad seleccionada\. Ruta afectada: replacement\.json\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\./
     );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(sourceFilePath);
+  });
+
+  it("rejects restoreBackup when the backup file is swapped for a symlink mid-validation (TOCTOU), without leaking the absolute path", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const backupPath = await service.createBackup();
+
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    // The initial resolveCanonicalDataFilePath() validation pass (via
+    // assertPathChainIsNotSymlink) must see a real file, otherwise it rejects
+    // before restoreBackup's own later TOCTOU re-check ever runs. Only report
+    // a symlink on the *second* lstat of the leaf — simulating a swap that
+    // happens after the first validation pass but before restoreBackup's
+    // own defense-in-depth re-check.
+    let leafLstatCalls = 0;
+    const lstatSpy = vi.spyOn(fs, "lstat").mockImplementation(async (filePath) => {
+      const isLeaf = typeof filePath === "string" && path.basename(filePath) === path.basename(backupPath);
+
+      if (isLeaf) {
+        leafLstatCalls += 1;
+      }
+
+      const realStats = await actualFs.lstat(filePath);
+
+      if (isLeaf && leafLstatCalls > 1) {
+        return Object.assign(Object.create(Object.getPrototypeOf(realStats)) as typeof realStats, realStats, {
+          isSymbolicLink: () => true
+        });
+      }
+
+      return realStats;
+    });
+
+    const rejection = service.restoreBackup(backupPath);
+
+    // SEC-3 regression guard: the symlink-swap/TOCTOU guard in restoreBackup
+    // must not leak the absolute canonical path into the IPC-facing error.
+    await expect(rejection).rejects.toThrow(
+      /El archivo cambió mientras se validaba y ya no es seguro restaurarlo\./
+    );
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(backupPath);
+    expect(error.message).toContain(`Ruta afectada: ${path.basename(backupPath)}.`);
+
+    lstatSpy.mockRestore();
   });
 
   it("previews a normalized CSV with counts, warnings, and row issues", async () => {
@@ -2106,7 +2249,15 @@ describe("AppDataService", () => {
     expect(merged.contactMethods.phones.every((phone) => !phone.isPrimary)).toBe(true);
   });
 
-  it("previews conflicts created by duplicate rows inside the same import file", async () => {
+  // Duplicate rows *within the same import file* must NOT be counted
+  // as "conflicts" against the existing directory — that label (and the
+  // "ya existen en la agenda" copy it drives in CsvImportPreviewPanel) is only
+  // true for a real pre-existing record. Before the fix, this exact scenario
+  // (two rows sharing an externalId, no existing record involved) was pushed
+  // into `conflictedRecords`/`conflictCount` with `matchingRecordSource:
+  // "import"`, which is what made conflictCount wildly inflated/misleading
+  // when importing a large file against an empty or near-empty database.
+  it("does not count duplicate rows inside the same import file as conflicts when nothing pre-existing matches", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -2125,15 +2276,60 @@ describe("AppDataService", () => {
     );
 
     const preview = await service.previewCsvImport(sourceFilePath);
-    const conflict = preview.conflictedRecords[0]!;
+
+    expect(preview.conflictCount).toBe(0);
+    expect(preview.conflictedRecords).toEqual([]);
+    // The duplicate rows must still be consolidated correctly by the merge
+    // step (unaffected by this fix, it has its own independent index): one
+    // record created, then updated in place by the second row — not two
+    // separate records.
+    expect(preview.createdCount).toBe(1);
+    expect(preview.updatedCount).toBe(1);
+
+    const result = await service.importCsvDataset(sourceFilePath);
+    const created = result.contacts.records.filter((record) => record.externalId === "batch-1");
+    expect(created).toHaveLength(1);
+    expect(created[0]!.displayName).toBe("Mostrador B");
+  });
+
+  // Regression: a mix of a real conflict against pre-existing data and
+  // a purely intra-batch match (different rows, different keys) must only
+  // surface the real one. This also guards the externalId-match-first lookup:
+  // an intra-batch externalId collision must never shadow a genuine
+  // phone-based conflict against an existing record found on a later row.
+  it("only counts the real pre-existing conflict when the same import batch also contains an unrelated intra-batch duplicate", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+    const initial = await service.getBootstrapData();
+    const existing = initial.contacts.records[0]!;
+
+    const sourceFilePath = path.join(testRoot, "incoming", "mixed-batch-conflict.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    await fs.writeFile(
+      sourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        // Two brand-new rows that only collide with EACH OTHER (intra-batch) —
+        // must not be reported as conflicts.
+        "batch-2,service,Mostrador C,Recepción,66665,active",
+        "batch-2,service,Mostrador D,Recepción,66666,active",
+        // A genuinely conflicting row against a pre-existing record.
+        `${existing.externalId},service,${existing.displayName} Importada,${existing.organization.department},99999,active`
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourceFilePath);
 
     expect(preview.conflictCount).toBe(1);
-    expect(conflict.recordIndex).toBe(1);
-    expect(conflict.matchingRecordSource).toBe("import");
+    expect(preview.conflictedRecords).toHaveLength(1);
+    const conflict = preview.conflictedRecords[0]!;
+    expect(conflict.recordIndex).toBe(2);
+    expect(conflict.matchingRecordSource).toBe("existing");
     expect(conflict.matchingRecordIndex).toBe(0);
-    expect(conflict.conflictType).toBe("external-id-match");
-    expect(conflict.importedRecord.displayName).toBe("Mostrador B");
-    expect(conflict.matchingRecord.displayName).toBe("Mostrador A");
   });
 
   it("keeps duplicate rows matched to the existing record when an earlier import row updates it", async () => {
@@ -2290,25 +2486,32 @@ describe("AppDataService", () => {
     it("sets matchingFieldValue to the shared phone number for phone-match conflicts", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
-      // Two CSV rows with NO externalId — shared phone number triggers phone-match
+      // No externalId — shared phone number (against a genuinely pre-existing
+      // record; intra-batch-only matches are no longer reported as
+      // conflicts) triggers phone-match.
       const service = new AppDataService();
       await service.ensureInitialFiles();
 
+      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-existing.csv");
+      await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
+      await fs.writeFile(
+        existingSourceFilePath,
+        ["type,displayName,department,phone1Number,status", "service,Mostrador A,Recepción,88801,active"].join("\n") + "\n",
+        "utf-8"
+      );
+      await service.importCsvDataset(existingSourceFilePath);
+
       const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match.csv");
-      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
-        [
-          "type,displayName,department,phone1Number,status",
-          "service,Mostrador A,Recepción,88801,active",
-          "service,Mostrador B,Recepción,88801,active"
-        ].join("\n") + "\n",
+        ["type,displayName,department,phone1Number,status", "service,Mostrador B,Recepción,88801,active"].join("\n") + "\n",
         "utf-8"
       );
 
       const preview = await service.previewCsvImport(sourceFilePath);
       const conflict = preview.conflictedRecords[0]!;
 
+      expect(conflict.matchingRecordSource).toBe("existing");
       expect(conflict.conflictType).toBe("phone-match");
       expect(conflict.matchingFieldValue).toBe("88801");
     });
@@ -2331,15 +2534,27 @@ describe("AppDataService", () => {
       const service = new AppDataService();
       await service.ensureInitialFiles();
 
+      // Row 1 (existing side, imported first so it becomes a genuinely
+      // pre-existing record — intra-batch-only matches are no longer
+      // reported as conflicts): phones listed 99999 first, then 12345 (lex-later)
+      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-lex-existing.csv");
+      await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
+      await fs.writeFile(
+        existingSourceFilePath,
+        [
+          "type,displayName,department,phone1Number,phone2Number,status",
+          "service,Mostrador A,Recepción,99999,12345,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+      await service.importCsvDataset(existingSourceFilePath);
+
       const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-lex.csv");
-      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
         [
           "type,displayName,department,phone1Number,phone2Number,status",
-          // Row 1 (existing side): phones listed 99999 first, then 12345 (lex-later)
-          "service,Mostrador A,Recepción,99999,12345,active",
-          // Row 2 (imported side): same phone set, different display name → conflict
+          // Row (imported side): same phone set, different display name → conflict
           "service,Mostrador B,Recepción,99999,12345,active"
         ].join("\n") + "\n",
         "utf-8"
@@ -2348,6 +2563,7 @@ describe("AppDataService", () => {
       const preview = await service.previewCsvImport(sourceFilePath);
       const conflict = preview.conflictedRecords[0]!;
 
+      expect(conflict.matchingRecordSource).toBe("existing");
       expect(conflict.conflictType).toBe("phone-match");
       // extractMatchingFieldValue walks the imported record's phones in CSV order.
       // The first intersecting phone is "99999", NOT the lex-first "12345".
@@ -2364,15 +2580,24 @@ describe("AppDataService", () => {
       const service = new AppDataService();
       await service.ensureInitialFiles();
 
+      // Row 1 (existing side, imported first so it becomes a genuinely
+      // pre-existing record — intra-batch-only matches are no longer
+      // reported as conflicts): formatted phone with spaces.
+      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-fmt-existing.csv");
+      await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
+      await fs.writeFile(
+        existingSourceFilePath,
+        ["type,displayName,department,phone1Number,status", "service,Servicio A,Recepción,600 111 222,active"].join("\n") + "\n",
+        "utf-8"
+      );
+      await service.importCsvDataset(existingSourceFilePath);
+
       const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-fmt.csv");
-      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
         [
           "type,displayName,department,phone1Number,status",
-          // Row 1 (existing side): formatted phone with spaces
-          "service,Servicio A,Recepción,600 111 222,active",
-          // Row 2 (imported side): digits-only form of the same number
+          // Row (imported side): digits-only form of the same number
           "service,Servicio B,Recepción,600111222,active"
         ].join("\n") + "\n",
         "utf-8"
@@ -2381,6 +2606,7 @@ describe("AppDataService", () => {
       const preview = await service.previewCsvImport(sourceFilePath);
       const conflict = preview.conflictedRecords[0]!;
 
+      expect(conflict.matchingRecordSource).toBe("existing");
       expect(conflict.conflictType).toBe("phone-match");
       // The imported record's phone is "600111222" — that is the formatted value that
       // should appear in the badge (not the normalized "600111222" stripped differently,
@@ -3775,6 +4001,169 @@ describe("AppDataService", () => {
   });
 
   // -------------------------------------------------------------------------
+  // createBackup (manual/import/restore/reset) prunes old contacts-*
+  // backups using the same retentionCount cap as auto-backups, so repeated
+  // import/export/reset cycles cannot accumulate unlimited PII-bearing files.
+  // -------------------------------------------------------------------------
+
+  it("prunes old contacts-* backups down to the configured retentionCount", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 2
+          }
+        }
+      })
+    );
+
+    const firstPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const secondPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const thirdPath = await service.createBackup();
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = (await fs.readdir(backupDir)).filter(
+      (file) => file.startsWith("contacts-") && file.endsWith(".json")
+    );
+
+    // Only the retentionCount (2) most recent contacts-* backups survive.
+    expect(files).toHaveLength(2);
+    await expect(fs.access(firstPath)).rejects.toThrow();
+    await expect(fs.access(secondPath)).resolves.toBeUndefined();
+    await expect(fs.access(thirdPath)).resolves.toBeUndefined();
+  });
+
+  it("prunes old contacts-* backups created via importDataset/restoreBackup/resetDataset, not just createBackup", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 1
+          }
+        }
+      })
+    );
+
+    const sourceFilePath = path.join(testRoot, "import-source.json");
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    // Each of these call sites delegates to the same createBackupInner primitive.
+    await service.importDataset(sourceFilePath);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const backupPath = await service.createBackup();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await service.restoreBackup(backupPath);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await service.resetDataset();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const backupDir = path.join(testRoot, "backups");
+    const files = (await fs.readdir(backupDir)).filter(
+      (file) => file.startsWith("contacts-") && file.endsWith(".json")
+    );
+
+    // retentionCount=1: only the single most recent contacts-* backup remains
+    // even though 4 backup-producing operations ran.
+    expect(files).toHaveLength(1);
+  });
+
+  it("does not prune auto-backup-* files when pruning contacts-* backups, and vice versa", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(
+      buildEditableSettings({
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 1
+          }
+        }
+      })
+    );
+
+    const backupDir = path.join(testRoot, "backups");
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.writeFile(path.join(backupDir, "auto-backup-2026-01-01T00-00-00-000Z.json"), "{}\n", "utf-8");
+
+    await service.createBackup();
+
+    const files = await fs.readdir(backupDir);
+    expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
+    expect(files.filter((file) => file.startsWith("contacts-"))).toHaveLength(1);
+  });
+
+  // QA follow-up: a pruning failure (e.g. EACCES/EBUSY on a locked
+  // backup file) must not fail the calling operation — the backup file itself
+  // was already created successfully by the time pruning runs.
+  it("importDataset/restoreBackup/resetDataset still succeed when pruneBackupsByPrefix throws", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // Force the fs.readdir call inside pruneBackupsByPrefix to throw. This is
+    // the first readdir invoked in each of the flows exercised below.
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" })
+    );
+
+    const sourceFilePath = path.join(testRoot, "import-source.json");
+    await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
+
+    const importResult = await service.importDataset(sourceFilePath);
+    expect(importResult.recordCount).toBe(defaultContacts.records.length);
+    // The backup file itself was created before pruning ran and failed.
+    await expect(fs.access(importResult.backupPath)).resolves.toBeUndefined();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+
+    consoleErrorSpy.mockClear();
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EBUSY: resource busy or locked"), { code: "EBUSY" })
+    );
+    const restoreResult = await service.restoreBackup(importResult.backupPath);
+    expect(restoreResult.recordCount).toBe(defaultContacts.records.length);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+
+    consoleErrorSpy.mockClear();
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" })
+    );
+    const resetResult = await service.resetDataset();
+    expect(resetResult.contacts.records).toHaveLength(0);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+  });
+
+  // -------------------------------------------------------------------------
   // Characterization tests — lock observable behavior before extraction
   // -------------------------------------------------------------------------
 
@@ -4185,9 +4574,17 @@ describe("AppDataService", () => {
     const emptyBackupPath = path.join(backupDir, "contacts-empty-crash.json");
     await fs.writeFile(emptyBackupPath, "", "utf-8");
 
-    await expect(service.restoreBackup(emptyBackupPath)).rejects.toThrow(
+    const rejection = service.restoreBackup(emptyBackupPath);
+
+    await expect(rejection).rejects.toThrow(
       /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
+
+    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    const error = await rejection.catch((e: unknown) => e as Error);
+    expect(error.message).not.toContain(testRoot);
+    expect(error.message).not.toContain(emptyBackupPath);
+    expect(error.message).toContain("Ruta afectada: contacts-empty-crash.json");
   });
 
   it("still lists and restores valid backups after the 0-byte filter is applied", async () => {
@@ -4467,12 +4864,13 @@ describe("AppDataService", () => {
         // mergeRecordsByDisplayName) surfaces a small number of genuine intra-batch
         // duplicate-phone matches even on a FRESH import (e.g. two real rows for the
         // same person "Malena" under two different Servicio headings, both with the
-        // same extension) — AppDataService's own conflict-detection layer
-        // (buildStableMergeKeys / detectConflicts) treats those as resolvable
-        // conflicts requiring an explicit policy, same as it always has for any
-        // duplicate phone number. Resolve them all with "merge-fields" (the least
-        // lossy policy) so this test can assert on the unrelated Admisión Central
-        // rows below.
+        // same extension). AppDataService's conflict-detection layer
+        // (buildStableMergeKeys / detectConflicts) no longer reports those purely
+        // intra-batch matches as user-facing conflicts (there is nothing pre-existing
+        // for them to conflict with) — they are consolidated automatically by
+        // mergeImportedDataset instead. Any policySelections computed here are only
+        // for conflicts against genuinely pre-existing records, if any; this test can
+        // then assert on the unrelated Admisión Central rows below regardless.
         const preview = await service.previewCsvImport(realOdsPath!);
         const policySelections = (preview.conflictedRecords ?? []).map((conflict) => ({
           recordIndex: conflict.recordIndex,
@@ -4504,9 +4902,10 @@ describe("AppDataService", () => {
         await service.ensureInitialFiles();
         await service.saveSettings(buildEditableSettings());
 
-        // Merge-discriminator fix: see the "fresh import" test above for
-        // why the initial import also needs its (now correctly-surfaced) intra-batch
-        // duplicate-phone conflicts resolved before it can proceed.
+        // Merge-discriminator fix: see the "fresh import" test above — any
+        // intra-batch duplicate-phone matches are consolidated automatically
+        // and are not part of conflictedRecords, so this only needs to resolve
+        // genuine conflicts against pre-existing records (if any).
         const firstPreview = await service.previewCsvImport(realOdsPath!);
         const firstPolicySelections = (firstPreview.conflictedRecords ?? []).map((conflict) => ({
           recordIndex: conflict.recordIndex,

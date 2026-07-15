@@ -86,6 +86,29 @@ describe("buildCsvImportPreview", () => {
     );
   });
 
+  // ARQ-3 — the row-count ceiling itself has been enforced since
+  // MAX_CSV_IMPORT_ROWS was introduced, but had zero direct test coverage. This
+  // confirms it triggers a clear "file too large" message right past the
+  // threshold, and does NOT trigger exactly at the threshold.
+  it("throws a clear 'file too large' message when the CSV exceeds the 5000-row cap", async () => {
+    const header = "type,displayName,phone1Number";
+    const rows = Array.from({ length: 5001 }, (_, i) => `person,Persona ${i},${10000 + i}`);
+    const filePath = await writeFile("too-many-rows.csv", [header, ...rows].join("\n") + "\n");
+
+    await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "El CSV supera el límite máximo de 5000 filas. Divide el archivo e importa en lotes."
+    );
+  }, 15000);
+
+  it("accepts a CSV at exactly the 5000-row cap", async () => {
+    const header = "type,displayName,phone1Number";
+    const rows = Array.from({ length: 5000 }, (_, i) => `person,Persona ${i},${10000 + i}`);
+    const filePath = await writeFile("at-cap-rows.csv", [header, ...rows].join("\n") + "\n");
+
+    const { preview } = await buildCsvImportPreview(filePath, "TestEditor");
+    expect(preview.totalRowCount).toBe(5000);
+  }, 15000);
+
   it("skips row and adds issue when displayName is missing", async () => {
     const filePath = await writeFile(
       "no-displayname.csv",

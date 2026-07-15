@@ -212,11 +212,18 @@ export interface CsvImportPreviewRow {
   warningMessages?: string[];
 }
 
+/**
+ * Confidence level reported by the spreadsheet/CSV import format-detection
+ * heuristics (see spreadsheet-parsers.ts / spreadsheet-import.service.ts).
+ * MANT-5: single canonical declaration — previously redeclared in 4 places.
+ */
+export type DetectionConfidence = "high" | "medium" | "low";
+
 export interface CsvImportPreview {
   importToken: string;
   fileName: string;
   detectedFormat?: string;
-  detectionConfidence?: "high" | "medium" | "low";
+  detectionConfidence?: DetectionConfidence;
   totalRowCount: number;
   validRowCount: number;
   invalidRowCount: number;
@@ -371,8 +378,6 @@ export interface CsvImportResult extends ImportContactsResult {
  *   - "csv-preview"           → reuse the existing CsvImportPreviewPanel/confirm flow
  *   - "unsupported-extension" → the OS dialog filter was somehow bypassed
  *   - "cancelled"             → the user closed the dialog without picking a file
- *
- * See src/shared/schemas/pick-and-import.schema.ts for the runtime envelope schema.
  */
 export type PickAndImportDatasetResult =
   | { kind: "json-import"; result: ImportContactsResult }
@@ -380,13 +385,29 @@ export type PickAndImportDatasetResult =
   | { kind: "unsupported-extension"; extension: string }
   | { kind: "cancelled" };
 
+/**
+ * Follow-up (security review, 2026-07-14): the active audit log is
+ * rotated once it grows past a threshold (see `AuditLogService.append`), and
+ * the archived (pre-rotation) history lives in sidecar files that
+ * `query()`/`exportAuditLog()` intentionally do NOT read — see the
+ * `audit-log.service.ts` class-level doc comment for why. `hasArchivedHistory`
+ * and `archivedFileCount` surface the *existence* of that older history to
+ * callers so an "audit log" read/export never silently omits it with zero
+ * indication — without requiring `query()`/`exportAuditLog()` to actually
+ * read/parse the archived files' contents (cheap: computed from a directory
+ * listing only).
+ */
 export interface AuditLogResult {
   entries: AuditLogEntry[];
   totalCount: number;
+  hasArchivedHistory: boolean;
+  archivedFileCount: number;
 }
 
 export interface ExportAuditLogResult {
   filePath: string;
   exportedAt: string;
   entryCount: number;
+  hasArchivedHistory: boolean;
+  archivedFileCount: number;
 }

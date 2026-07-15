@@ -16,7 +16,7 @@ import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import * as XLSX from "xlsx-republish";
+import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getPathMock = vi.fn();
@@ -112,6 +112,54 @@ describe("AppDataAuditFacade", () => {
 
     const stat = await fs.stat(exportPath);
     expect(stat.isFile()).toBe(true);
+  });
+
+  it("getAuditLog reports hasArchivedHistory: false and archivedFileCount: 0 when no rotation has occurred (OIR-206 follow-up)", async () => {
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const facade = new AppDataAuditFacade();
+    const result = await facade.getAuditLog({ page: 1, pageSize: 20 });
+
+    expect(result.hasArchivedHistory).toBe(false);
+    expect(result.archivedFileCount).toBe(0);
+  });
+
+  it("getAuditLog and exportAuditLog surface archived-history visibility after a rotation (OIR-206 follow-up)", async () => {
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+    const { AuditLogService } = await import("./audit-log.service.js");
+
+    await fs.mkdir(path.join(testRoot, "data"), { recursive: true });
+
+    // Force a rotation directly via a low-threshold AuditLogService instance
+    // writing to the same on-disk location the facade will subsequently read.
+    const rotatingService = new AuditLogService({ rotationThresholdEntries: 1 });
+    await rotatingService.ensureInitialized();
+    await rotatingService.append({
+      timestamp: "2026-05-01T00:00:00.000Z",
+      editor: "Editor A",
+      action: "create",
+      recordId: "cnt_001",
+      recordName: "Alice"
+    });
+    // Second append crosses the threshold of 1 and triggers rotation.
+    await rotatingService.append({
+      timestamp: "2026-05-01T01:00:00.000Z",
+      editor: "Editor B",
+      action: "create",
+      recordId: "cnt_002",
+      recordName: "Bob"
+    });
+
+    const facade = new AppDataAuditFacade();
+
+    const queryResult = await facade.getAuditLog({ page: 1, pageSize: 20 });
+    expect(queryResult.hasArchivedHistory).toBe(true);
+    expect(queryResult.archivedFileCount).toBe(1);
+
+    const exportPath = path.join(testRoot, "exports", "audit.csv");
+    const exportResult = await facade.exportAuditLog(exportPath, { page: 1, pageSize: 100 });
+    expect(exportResult.hasArchivedHistory).toBe(true);
+    expect(exportResult.archivedFileCount).toBe(1);
   });
 
   it("appendEntry swallows AuditLogIntegrityError and logs to console (non-fatal)", async () => {
@@ -292,7 +340,7 @@ describe("AppDataService → AppDataAuditFacade delegation", () => {
     const { AppDataService } = await import("./app-data.service.js");
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
 
-    const mockResult = { entries: [], totalCount: 0 };
+    const mockResult = { entries: [], totalCount: 0, hasArchivedHistory: false, archivedFileCount: 0 };
     const querySpy = vi.spyOn(AppDataAuditFacade.prototype, "getAuditLog").mockResolvedValueOnce(mockResult);
 
     const service = new AppDataService();
@@ -311,7 +359,9 @@ describe("AppDataService → AppDataAuditFacade delegation", () => {
     const mockResult = {
       filePath: exportPath,
       exportedAt: new Date().toISOString(),
-      entryCount: 0
+      entryCount: 0,
+      hasArchivedHistory: false,
+      archivedFileCount: 0
     };
     const exportSpy = vi.spyOn(AppDataAuditFacade.prototype, "exportAuditLog").mockResolvedValueOnce(mockResult);
 

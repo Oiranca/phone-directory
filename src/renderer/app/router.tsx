@@ -2,10 +2,30 @@ import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
 import { BuscasPage } from "../pages/BuscasPage";
 import { RecordFormPage } from "../pages/RecordFormPage";
-import { DeduplicatePage } from "../pages/DeduplicatePage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
-import { SettingsPage } from "../pages/SettingsPage";
+import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
+
+// ARQ-10 — code-splitting: previously every route (including
+// SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
+// DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
+// all 7 pages shipped in the single initial bundle chunk regardless of
+// whether the operator ever visits them. These two are the highest-leverage
+// routes to split off since neither is the landing page and both pull in
+// sizeable, only-conditionally-used UI. DirectoryPage stays a static/eager
+// import since it's the index route and the first thing users see.
+//
+// PR review follow-up — `withSuspense` originally only handled the pending
+// state. `withLazyRouteBoundary` additionally catches a rejected dynamic
+// import (missing/corrupt chunk file) and shows recoverable UI instead of
+// crashing to a blank screen.
+//
+// PR review follow-up #2 — `withLazyRouteBoundary` takes the dynamic-import
+// *factory* here, not a pre-built `React.lazy()` element: the boundary needs
+// to be able to call `React.lazy(factory)` again on retry to actually
+// re-attempt the import (a rejected `React.lazy()` call caches its promise
+// forever otherwise). See LazyRouteBoundary.tsx for details.
+const withSuspense = withLazyRouteBoundary;
 
 export const router = createHashRouter([
   {
@@ -32,7 +52,7 @@ export const router = createHashRouter([
       },
       {
         path: "settings",
-        element: <SettingsPage />
+        element: withSuspense(() => import("../pages/SettingsPage").then((mod) => ({ default: mod.SettingsPage })))
       },
       {
         path: "buscas",
@@ -40,7 +60,9 @@ export const router = createHashRouter([
       },
       {
         path: "deduplicate",
-        element: <DeduplicatePage />
+        element: withSuspense(() =>
+          import("../pages/DeduplicatePage").then((mod) => ({ default: mod.DeduplicatePage }))
+        )
       },
       {
         path: "*",

@@ -1,4 +1,4 @@
-import { renderHook, act, cleanup } from "@testing-library/react";
+import { renderHook, act, cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { createElement } from "react";
@@ -496,7 +496,7 @@ describe("useContactForm", () => {
         await result.current.handleSubmit(fakeEvent);
       });
 
-      expect(result.current.fieldErrors["displayName"]).toBeTruthy();
+      expect(result.current.fieldErrors["displayName"]).toBe("Falta el nombre del contacto.");
       expect(window.hospitalDirectory.createRecord).not.toHaveBeenCalled();
     });
 
@@ -652,6 +652,63 @@ describe("useContactForm", () => {
       });
 
       expect(result.current.isSubmitting).toBe(false);
+    });
+  });
+
+  describe("submit failure", () => {
+    it("OIR-213: sanitizes IPC error boilerplate before showing the save-failure toast", async () => {
+      useAppStore.setState({
+        contacts: defaultContacts,
+        settings: editableSettings,
+        isLoading: false,
+        bootstrapStatus: "success",
+        bootstrapError: "",
+        bootstrapHelp: ""
+      });
+      Object.defineProperty(window, "hospitalDirectory", {
+        configurable: true,
+        value: {
+          getBootstrapData: vi.fn().mockResolvedValue({
+            contacts: defaultContacts,
+            settings: editableSettings
+          }),
+          createRecord: vi
+            .fn()
+            .mockRejectedValue(
+              new Error("Error invoking remote method 'contacts:create': Error: El registro ya existe.")
+            ),
+          updateRecord: vi.fn(),
+          saveSettings: vi.fn(),
+          createBackup: vi.fn()
+        }
+      });
+
+      const { result } = renderFormHook("/contacts/new");
+
+      act(() => {
+        result.current.setFormState((current) => ({
+          ...current,
+          displayName: "Test Contact",
+          contactMethods: {
+            ...current.contactMethods,
+            phones: [{ ...current.contactMethods.phones[0]!, number: "123456" }]
+          }
+        }));
+      });
+
+      const fakeEvent = {
+        preventDefault: vi.fn()
+      } as unknown as React.FormEvent<HTMLFormElement>;
+
+      await act(async () => {
+        await result.current.handleSubmit(fakeEvent);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("El registro ya existe.")).toBeInTheDocument();
+      });
+      // The raw Electron IPC boilerplate must never reach the user
+      expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
     });
   });
 

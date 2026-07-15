@@ -15,7 +15,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { z } from "zod";
 import {
   socialContactSchema,
@@ -25,27 +25,13 @@ import {
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import type { NormalizedImportRow } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 const makeServiceSheet = (
   name: string,
@@ -719,7 +705,7 @@ describe("editableSocialContactSchema — url scheme validation (L-01)", () => {
 // ---------------------------------------------------------------------------
 
 import nodeFs_h01 from "node:fs";
-import * as XLSX_h01 from "xlsx-republish";
+import * as XLSX_h01 from "xlsx";
 import { vi } from "vitest";
 
 XLSX_h01.set_fs(nodeFs_h01);

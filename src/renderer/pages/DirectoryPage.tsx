@@ -6,7 +6,9 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { normalizeDisplayName } from "../../shared/utils/matching";
+import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -331,101 +333,49 @@ export const DirectoryPage = () => {
     return () => observer.disconnect();
   }, []);
 
+  // MANT-4: focuses (and smooth-scrolls into view) the list item button for
+  // `recordId`, deferred to the next animation frame so the DOM has settled
+  // after the selection state update that precedes this call.
+  const focusRecordButton = (recordId: string) => {
+    requestAnimationFrame(() => {
+      const button = listRef.current?.querySelector<HTMLButtonElement>(
+        `[data-record-id="${CSS.escape(recordId)}"]`
+      );
+      button?.focus();
+      if (button && typeof button.scrollIntoView === "function") {
+        button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    });
+  };
+
+  const handleRovingKeyDown = useRovingTabIndex({ enableHomeEnd: true });
+
   const handleListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
-    if (currentPageRecords.length === 0) {
-      return;
-    }
-
-    // Derive starting index from the focused button (event.target) so Arrow keys move
-    // from the element the user actually has focused, not from the last clicked record.
-    let safeIndex: number;
-    if (event.target instanceof HTMLElement && event.target.hasAttribute("data-record-id")) {
-      const focusedId = event.target.getAttribute("data-record-id");
-      const focusedIndex = currentPageRecords.findIndex((r) => r.id === focusedId);
-      if (focusedIndex !== -1) {
-        safeIndex = focusedIndex;
-      } else {
-        // Focused button's ID not in current page — fall back to selectedRecordId.
-        const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
-        safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
+    handleRovingKeyDown(event, {
+      itemIds: currentPageRecords.map((record) => record.id),
+      fallbackId: selectedRecordId,
+      onNavigate: (id) => {
+        setSelectedRecordId(id);
+        focusRecordButton(id);
+      },
+      onEnter: () => {
+        // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
+        // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
+        setTimeout(() => {
+          if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
+            detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        }, 0);
+      },
+      onEscape: () => {
+        if (selectedRecordId !== null) {
+          const activeButton = listRef.current?.querySelector<HTMLButtonElement>(
+            `[data-record-id="${CSS.escape(selectedRecordId)}"]`
+          );
+          activeButton?.focus();
+        }
       }
-    } else {
-      // event.target is not a record button — fall back to selectedRecordId.
-      const selectedIndex = currentPageRecords.findIndex((r) => r.id === selectedRecordId);
-      safeIndex = selectedIndex === -1 ? 0 : selectedIndex;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      const nextIndex = (safeIndex + 1) % currentPageRecords.length;
-      const nextRecord = currentPageRecords[nextIndex]!;
-      setSelectedRecordId(nextRecord.id);
-      requestAnimationFrame(() => {
-        const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${CSS.escape(nextRecord.id)}"]`
-        );
-        button?.focus();
-        if (button && typeof button.scrollIntoView === "function") {
-          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      });
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      const prevIndex = (safeIndex - 1 + currentPageRecords.length) % currentPageRecords.length;
-      const prevRecord = currentPageRecords[prevIndex]!;
-      setSelectedRecordId(prevRecord.id);
-      requestAnimationFrame(() => {
-        const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${CSS.escape(prevRecord.id)}"]`
-        );
-        button?.focus();
-        if (button && typeof button.scrollIntoView === "function") {
-          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      });
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      const firstRecord = currentPageRecords[0]!;
-      setSelectedRecordId(firstRecord.id);
-      requestAnimationFrame(() => {
-        const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${CSS.escape(firstRecord.id)}"]`
-        );
-        button?.focus();
-        if (button && typeof button.scrollIntoView === "function") {
-          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      });
-    } else if (event.key === "End") {
-      event.preventDefault();
-      const lastRecord = currentPageRecords[currentPageRecords.length - 1]!;
-      setSelectedRecordId(lastRecord.id);
-      requestAnimationFrame(() => {
-        const button = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${CSS.escape(lastRecord.id)}"]`
-        );
-        button?.focus();
-        if (button && typeof button.scrollIntoView === "function") {
-          button.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      });
-    } else if (event.key === "Enter") {
-      // Do not call preventDefault() here — let native button activation (Enter/Space) proceed.
-      // Schedule scroll via setTimeout macrotask to execute after the button click handler completes.
-      setTimeout(() => {
-        if (detailRef.current && typeof detailRef.current.scrollIntoView === "function") {
-          detailRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      }, 0);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      if (selectedRecordId !== null) {
-        const activeButton = listRef.current?.querySelector<HTMLButtonElement>(
-          `[data-record-id="${CSS.escape(selectedRecordId)}"]`
-        );
-        activeButton?.focus();
-      }
-    }
+    });
   };
 
   const handleDetailKeyDown = (event: React.KeyboardEvent) => {
@@ -439,7 +389,7 @@ export const DirectoryPage = () => {
   };
 
   if (isLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
+    return <LoadingStatus message="Cargando datos locales…" busy />;
   }
 
   const selectedRecord =
