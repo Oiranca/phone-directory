@@ -10,8 +10,9 @@ The app supports a small global shortcut set for fixed-workstation use.
 | `Escape` | Cancel the active record form when focus is not inside a text field |
 | `Alt+1` | Go to Directory |
 | `Alt+2` | Go to New record |
-| `Alt+3` | Go to Import/Export |
-| `Alt+4` | Go to Settings |
+| `Alt+3` | Go to Settings |
+| `Alt+4` | Go to Buscas |
+| `Alt+5` | Go to Duplicados |
 
 Shortcuts that use plain printable keys are ignored while focus is inside text inputs, textareas, selects, or editable content so native typing and editing behavior is preserved.
 
