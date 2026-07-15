@@ -12,16 +12,22 @@
  *   4. Flat-sheet (Bug A fix)   (low-confidence service path)
  *   5. Multi-sheet workbook     (mergeRecordsByDisplayName cross-sheet)
  *
- * Pure-function unit golden tests (in this file):
- *   - extractNumbers (compact range, compact suffix, dedup)
- *   - detectPrivacy
- *   - buildCenterPhones
+ * Golden/characterization tests (in this file):
  *   - normalizeDisplayNameForMerge (via mergeRecordsByDisplayName)
  *   - mergeRecordsByDisplayName (phone union, order, empty key passthrough)
- *   - isSerializedPhoneEntry (type guard)
+ *   - isSerializedPhoneEntry (type guard, imported and called directly)
  *   - normalizeWorkbookRowsFromFile error paths (unsupported format, no rows)
  *   - 5000-row cap (both the normalization-layer non-cap and the
  *     buildSpreadsheetImportPreview enforcement point, OIR-214)
+ *
+ * NOTE: extractNumbers, detectPrivacy, and buildCenterPhones are exercised
+ * only INDIRECTLY here, as a side effect of running full ODS/XLSX fixtures
+ * through normalizeWorkbookRowsFromFile — this file does not import or call
+ * them directly, so it does not by itself pin down their behavior in
+ * isolation (e.g. edge cases in compact-range/compact-suffix expansion).
+ * Direct, isolated unit coverage for every exported helper in
+ * spreadsheet-normalize.ts (including extractNumbers, detectPrivacy, and the
+ * label/area classification helpers) lives in spreadsheet-normalize.test.ts.
  *
  * Unit tests in spreadsheet-parsers.test.ts:
  *   - blankRecord (full shape assertion, key set lock)
