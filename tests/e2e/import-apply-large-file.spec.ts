@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import nodeFs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import * as XLSX from "xlsx-republish";
+import * as XLSX from "xlsx";
 import {
   closeElectronApp,
   createWorkspace,
