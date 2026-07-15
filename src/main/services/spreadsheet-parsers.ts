@@ -1119,6 +1119,44 @@ export const normalizeTabularAgendaSheet = (
  * displayName itself, so trivial accent/case differences between sheets (see
  * the "accent-normalizes displayName" cross-sheet golden test) do not cause
  * spurious over-splitting of genuinely-same-entity rows.
+ *
+ * OIR-235: department is now also PART OF the discriminator, but ONLY for
+ * rows that came from the tabular Agenda parser's per-department "book"
+ * sheets introduced by OIR-230 (Corporativos, Sindicatos, Almacenes, etc. —
+ * every non-canonical sheet sharing the Agenda tabular header, tagged with
+ * `department = <its own sheet name>`). Two rows from DIFFERENT book sheets
+ * can share the same displayName+service with blank/matching
+ * building/floor/sector/section (plausible for generic roles like
+ * "Secretaría"/"Recepción" repeated across multiple books) — without this,
+ * they would silently merge into one record, losing the second sheet's
+ * department attribution (the survivor keeps only group[0]'s scalar fields,
+ * including department).
+ *
+ * This must NOT regress two older, deliberately-designed cross-department/
+ * cross-sheet merge behaviors that predate OIR-230 and remain fully
+ * intentional:
+ *  - OIR-102 (verified against real hospital data): the same real desk (e.g.
+ *    "Banco de Sangre") is legitimately listed in more than one CANONICAL
+ *    service department's phone book (Urgencias, Rayos, UMI, ...) with a
+ *    different extension in each — these must keep merging into one
+ *    combined-extension contact.
+ *  - Bug A (flat/derived-department sheets, e.g. alphabetic index pages
+ *    "Hoja_A"/"Hoja_B"/"Hoja_S"): department here is just a label derived
+ *    from the sheet's own name/content, not a genuine organizational
+ *    department — these must also keep merging across sheets.
+ *
+ * Rather than re-deriving parser origin from department content (fragile —
+ * both book-sheets and flat/derived sheets tag department from the sheet
+ * name), this reuses `area`: the tabular Agenda parser is the ONLY parser
+ * that always leaves `area` blank ("" — the real Agenda ODS has no genuine
+ * Área column, see normalizeTabularAgendaSheet); every other parser
+ * (canonical/derived service-sheet, flat-sheet, centers-sheet) always
+ * assigns a non-blank area (falling back to "otros"/inferred area when
+ * nothing more specific matches). So `area === ""` reliably identifies rows
+ * parsed by the tabular Agenda parser (main "Agenda" sheet + book sheets)
+ * and only those rows get department folded into the identity key. The main
+ * "Agenda" sheet itself has a blank department too, so it is unaffected
+ * either way.
  */
 const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
   const displayNameKey = normalizeDisplayNameForMerge(record.displayName);
@@ -1127,26 +1165,36 @@ const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
     return "";
   }
 
+  const isTabularAgendaRow = record.area === "";
+  const departmentKey = isTabularAgendaRow ? normalizeDisplayNameForMerge(record.department ?? "") : "";
   const serviceKey = normalizeDisplayNameForMerge(record.service ?? "");
   const buildingKey = normalizeDisplayNameForMerge(record.building ?? "");
   const floorKey = normalizeDisplayNameForMerge(record.floor ?? "");
   const sectorKey = normalizeDisplayNameForMerge(record.sector ?? "");
   const sectionKey = normalizeDisplayNameForMerge(record.section ?? "");
 
-  return [displayNameKey, serviceKey, buildingKey, floorKey, sectorKey, sectionKey].join("::");
+  return [displayNameKey, departmentKey, serviceKey, buildingKey, floorKey, sectorKey, sectionKey].join(
+    "::"
+  );
 };
 
 /**
  * Merges service-sheet NormalizedImportRows that share the same normalized
  * displayName (trim + lowercase + strip diacritics) AND the same
- * service/location discriminator (OIR-224 — see buildMergeIdentityKey) into
- * a single row.
+ * department/service/location discriminator (OIR-224, OIR-235 — see
+ * buildMergeIdentityKey) into a single row.
  *
- * Merge rules (confirmed with operator; refined OIR-224):
+ * Merge rules (confirmed with operator; refined OIR-224, OIR-235):
  * - Identity key: normalized displayName equality AND normalized
- *   service+building+floor+sector+location equality (no fuzzy match).
- *   Rows with the same displayName but a different discriminator remain
- *   separate records — see buildMergeIdentityKey for why this matters.
+ *   department+service+building+floor+sector+location equality (no fuzzy
+ *   match). Rows with the same displayName but a different discriminator
+ *   remain separate records. For rows parsed by the tabular Agenda "book"
+ *   sheet parser (OIR-230), a different department now also counts as a
+ *   different discriminator (OIR-235). Rows from every other parser (the
+ *   canonical/derived service-sheet parser, flat-sheet parser) keep merging
+ *   across departments exactly as before (OIR-102 — e.g. the same real
+ *   "Banco de Sangre" desk deliberately listed in multiple canonical
+ *   department books). See buildMergeIdentityKey for the full rationale.
  * - Phones: combine all SerializedPhoneEntry lists; deduplicate by normalized
  *   digit string; keep first occurrence's position, but OR the
  *   confidential/noPatientSharing flags across every duplicate occurrence of
