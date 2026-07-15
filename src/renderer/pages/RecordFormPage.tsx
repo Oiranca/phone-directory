@@ -1,6 +1,7 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Link, useBlocker } from "react-router-dom";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { CustomFieldsSection } from "../components/contact-form/CustomFieldsSection";
 import { EmailsSection } from "../components/contact-form/EmailsSection";
 import { IdentitySection } from "../components/contact-form/IdentitySection";
@@ -53,6 +54,7 @@ export const RecordFormPage = () => {
    */
   const shouldBlock = useCallback(() => isDirtyRef.current, [isDirtyRef]);
   const blocker = useBlocker(shouldBlock);
+  const notFoundTitleRef = useRef<HTMLHeadingElement>(null);
 
   /**
    * Guard window close / reload / browser unload when the form is dirty.
@@ -73,6 +75,14 @@ export const RecordFormPage = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirtyRef]);
 
+  // Moves focus to the "record not found" heading as soon as it mounts, since
+  // this can be reached via direct navigation (e.g. a stale link) with no
+  // prior focus context to fall back on.
+  useEffect(() => {
+    if (existingRecordMissing) {
+      notFoundTitleRef.current?.focus();
+    }
+  }, [existingRecordMissing]);
 
   if (isLoading || !hasContacts || !hasSettings) {
     return (
@@ -84,18 +94,19 @@ export const RecordFormPage = () => {
 
   if (existingRecordMissing) {
     return (
-      <section aria-labelledby="record-form-page-title" className="rounded-3xl bg-white p-6 shadow-panel">
-        <h2 id="record-form-page-title" className="text-2xl font-semibold text-scs-blueDark">Registro no encontrado</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          El registro solicitado ya no está disponible o fue eliminado.
-        </p>
-        <Link
-          to="/"
-          className="mt-6 inline-flex rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-        >
-          Volver al directorio
-        </Link>
-      </section>
+      <StatePanel
+        title="Registro no encontrado"
+        titleRef={notFoundTitleRef}
+        message="El registro solicitado ya no está disponible o fue eliminado."
+        action={
+          <Link
+            to="/"
+            className="inline-flex rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+          >
+            Volver al directorio
+          </Link>
+        }
+      />
     );
   }
 
