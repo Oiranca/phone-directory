@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
 import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 const getPathMock = vi.fn();
 
@@ -2695,18 +2696,21 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    const workbook = XLSX.utils.book_new();
-    const urgenciasSheet = XLSX.utils.aoa_to_sheet([
-      ["Servicio", "Número", "Notas"],
-      ["Urgencias", "", ""],
-      ["Mostrador", "55555", ""],
-      ["Control boxes", "55556", "No pasar llamadas externas"]
-    ]);
-    XLSX.utils.book_append_sheet(workbook, urgenciasSheet, "Urgencias");
-
-    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "agenda.ods",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Urgencias", "", ""],
+            ["Mostrador", "55555", ""],
+            ["Control boxes", "55556", "No pasar llamadas externas"]
+          ]
+        }
+      ]
+    );
 
     const preview = await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(sourceFilePath);
@@ -2733,17 +2737,20 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    const workbook = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([
-      ["Servicio", "Número", "Notas"],
-      ["Urgencias", "", ""],
-      ["Mostrador", "55555", ""]
-    ]);
-    XLSX.utils.book_append_sheet(workbook, sheet, "Urgencias");
-
-    const sourceFilePath = path.join(testRoot, "incoming", "agenda.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "agenda.ods",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Urgencias", "", ""],
+            ["Mostrador", "55555", ""]
+          ]
+        }
+      ]
+    );
 
     const before = Date.now();
     const result = await service.importCsvDataset(sourceFilePath);
@@ -2762,32 +2769,33 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    const firstWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      firstWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Centro", "Servicio", "Largo", "Corto"],
-        ["INGENIO c/ Principal", "ADM.", "928304114", ""]
-      ]),
-      "Centros de salud"
+    const firstPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "centers-first.ods",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["Centro", "Servicio", "Largo", "Corto"],
+            ["INGENIO c/ Principal", "ADM.", "928304114", ""]
+          ]
+        }
+      ]
     );
-
-    const secondWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      secondWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Centro", "Servicio", "Largo", "Corto"],
-        ["OTRO c/ Secundaria", "URG.", "928304121", ""],
-        ["INGENIO A c/ Principal", "ADM.", "928304114", ""]
-      ]),
-      "Centros de salud"
+    const secondPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "centers-second.ods",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["Centro", "Servicio", "Largo", "Corto"],
+            ["OTRO c/ Secundaria", "URG.", "928304121", ""],
+            ["INGENIO A c/ Principal", "ADM.", "928304114", ""]
+          ]
+        }
+      ]
     );
-
-    const firstPath = path.join(testRoot, "incoming", "centers-first.ods");
-    const secondPath = path.join(testRoot, "incoming", "centers-second.ods");
-    await fs.mkdir(path.dirname(firstPath), { recursive: true });
-    XLSX.writeFile(firstWorkbook, firstPath);
-    XLSX.writeFile(secondWorkbook, secondPath);
 
     const firstImport = await service.importCsvDataset(firstPath);
     const secondPreview = await service.previewCsvImport(secondPath);
@@ -2812,19 +2820,19 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Centro", "Servicio", "Largo", "Corto"],
-        ["INGENIO c/ Principal", "ADM.", "928 30 41 14 /15", "(84114 /84115)"]
-      ]),
-      "Centros de salud"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "compact-suffix.ods",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["Centro", "Servicio", "Largo", "Corto"],
+            ["INGENIO c/ Principal", "ADM.", "928 30 41 14 /15", "(84114 /84115)"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "compact-suffix.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const preview = await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(
@@ -2846,19 +2854,19 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Centro", "Servicio", "Largo", "Corto"],
-        ["INGENIO c/ Principal", "ADM.", "928 30 41 14", "84114"]
-      ]),
-      "Centros de salud"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "single-extension.ods",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["Centro", "Servicio", "Largo", "Corto"],
+            ["INGENIO c/ Principal", "ADM.", "928 30 41 14", "84114"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "single-extension.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const preview = await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(
@@ -2878,20 +2886,20 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Centro", "Servicio", "Largo", "Corto"],
-        ["INGENIO c/ Principal", "Adm.", "928 30 41 14", "84114"],
-        ["", "Adm. 2", "928 30 41 15", "84115"]
-      ]),
-      "Centros de salud"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "center-children.ods",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["Centro", "Servicio", "Largo", "Corto"],
+            ["INGENIO c/ Principal", "Adm.", "928 30 41 14", "84114"],
+            ["", "Adm. 2", "928 30 41 15", "84115"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "center-children.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const result = await service.importCsvDataset(sourceFilePath);
     const ingenioRecords = result.contacts.records.filter((record) => record.displayName.startsWith("Ingenio -"));
@@ -2981,21 +2989,21 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Urgencias", "", ""],
-        ["Mostrador", "55555", ""],
-        ["Control boxes", "55556", "No pasar llamadas externas"]
-      ]),
-      "Sheet1"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "custom-export.xlsx",
+      [
+        {
+          name: "Sheet1",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Urgencias", "", ""],
+            ["Mostrador", "55555", ""],
+            ["Control boxes", "55556", "No pasar llamadas externas"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "custom-export.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const preview = await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(sourceFilePath);
@@ -3014,19 +3022,19 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Mostrador", "55555", ""]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "urgencias-single-row.xlsx",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Mostrador", "55555", ""]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-single-row.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const preview = await service.previewCsvImport(sourceFilePath);
 
@@ -3042,20 +3050,20 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Fecha", "ID", "Valor"],
-        ["2026-04-24", "1234", "55"],
-        ["2026-04-25", "4567", "89"]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "bad-urgencias.xlsx",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Fecha", "ID", "Valor"],
+            ["2026-04-24", "1234", "55"],
+            ["2026-04-25", "4567", "89"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "bad-urgencias.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "No se encontraron hojas soportadas para importar."
@@ -3068,20 +3076,20 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Valor"],
-        ["Mostrador", "2026-04-24", "55"],
-        ["Control", "2026-04-25", "89"]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "alias-header-junk.xlsx",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Valor"],
+            ["Mostrador", "2026-04-24", "55"],
+            ["Control", "2026-04-25", "89"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "alias-header-junk.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "No se encontraron hojas soportadas para importar."
@@ -3094,19 +3102,19 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Nombre", "Extensión", "Valor"],
-        ["Mostrador", "55555", "12"]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "urgencias-name-extension.xlsx",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Nombre", "Extensión", "Valor"],
+            ["Mostrador", "55555", "12"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "urgencias-name-extension.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "No se encontraron hojas soportadas para importar."
@@ -3119,19 +3127,19 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Mostrador", "55555", ""]
-      ]),
-      "Agenda abril"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "generic-single-row.xlsx",
+      [
+        {
+          name: "Agenda abril",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Mostrador", "55555", ""]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "generic-single-row.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "No se encontraron hojas soportadas para importar."
@@ -3144,20 +3152,20 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Valor"],
-        ["Mostrador", "55555", "12"],
-        ["Control", "55556", "18"]
-      ]),
-      "Agenda abril"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "generic-two-row-junk.xlsx",
+      [
+        {
+          name: "Agenda abril",
+          data: [
+            ["Servicio", "Número", "Valor"],
+            ["Mostrador", "55555", "12"],
+            ["Control", "55556", "18"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "generic-two-row-junk.xlsx");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await expect(service.previewCsvImport(sourceFilePath)).rejects.toThrow(
       "No se encontraron hojas soportadas para importar."
@@ -3170,37 +3178,38 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const canonicalWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      canonicalWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Urgencias", "", ""],
-        ["Mostrador", "55555", ""],
-        ["Control boxes", "55556", "No pasar llamadas externas"]
-      ]),
-      "Sheet1"
+    const canonicalPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "service-canonical.xlsx",
+      [
+        {
+          name: "Sheet1",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Urgencias", "", ""],
+            ["Mostrador", "55555", ""],
+            ["Control boxes", "55556", "No pasar llamadas externas"]
+          ]
+        }
+      ]
     );
-
-    const canonicalPath = path.join(testRoot, "incoming", "service-canonical.xlsx");
-    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
-    XLSX.writeFile(canonicalWorkbook, canonicalPath);
     await service.importCsvDataset(canonicalPath);
 
-    const customWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      customWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Urgencias", "", ""],
-        ["Mostrador", "55555", ""],
-        ["Control boxes", "55556", "No pasar llamadas externas"]
-      ]),
-      "Agenda abril"
+    const customPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "service-custom-title.xlsx",
+      [
+        {
+          name: "Agenda abril",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Urgencias", "", ""],
+            ["Mostrador", "55555", ""],
+            ["Control boxes", "55556", "No pasar llamadas externas"]
+          ]
+        }
+      ]
     );
-
-    const customPath = path.join(testRoot, "incoming", "service-custom-title.xlsx");
-    XLSX.writeFile(customWorkbook, customPath);
 
     const preview = await service.previewCsvImport(customPath);
 
@@ -3214,35 +3223,36 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const canonicalWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      canonicalWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
-        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
-        ["", "Urgencias", "928 30 41 21", "(84121)"]
-      ]),
-      "Centros de salud"
+    const canonicalPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "centers-canonical.xlsx",
+      [
+        {
+          name: "Centros de salud",
+          data: [
+            ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+            ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+            ["", "Urgencias", "928 30 41 21", "(84121)"]
+          ]
+        }
+      ]
     );
-
-    const canonicalPath = path.join(testRoot, "incoming", "centers-canonical.xlsx");
-    await fs.mkdir(path.dirname(canonicalPath), { recursive: true });
-    XLSX.writeFile(canonicalWorkbook, canonicalPath);
     await service.importCsvDataset(canonicalPath);
 
-    const customWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      customWorkbook,
-      XLSX.utils.aoa_to_sheet([
-        ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
-        ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
-        ["", "Urgencias", "928 30 41 21", "(84121)"]
-      ]),
-      "Agenda abril"
+    const customPath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "centers-custom-title.xlsx",
+      [
+        {
+          name: "Agenda abril",
+          data: [
+            ["CENTROS DE SALUD", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+            ["INGENIO\nAv. de los Artesanos, 8", "Adm.", "928 30 41 14 /15", "(84114 /84115)"],
+            ["", "Urgencias", "928 30 41 21", "(84121)"]
+          ]
+        }
+      ]
     );
-
-    const customPath = path.join(testRoot, "incoming", "centers-custom-title.xlsx");
-    XLSX.writeFile(customWorkbook, customPath);
 
     const preview = await service.previewCsvImport(customPath);
 
@@ -3279,21 +3289,21 @@ describe("AppDataService", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["col1", "col2", "col3", "col4"],
-        ["HOSPITAL DE DÍA RADIOTERÁPIA", "", "", ""],
-        ["Citas 08:00 – 14:00", "79530", "Mostrador (Auxiliar Adm)", "79246"],
-        ["", "79145", "Auxiliar Enfermería", "79230"]
-      ]),
-      "Hospitales_de_día"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "service-continuation.ods",
+      [
+        {
+          name: "Hospitales_de_día",
+          data: [
+            ["col1", "col2", "col3", "col4"],
+            ["HOSPITAL DE DÍA RADIOTERÁPIA", "", "", ""],
+            ["Citas 08:00 – 14:00", "79530", "Mostrador (Auxiliar Adm)", "79246"],
+            ["", "79145", "Auxiliar Enfermería", "79230"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "service-continuation.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     const result = await service.importCsvDataset(sourceFilePath);
     const imported = result.contacts.records.find((record) => record.displayName === "Auxiliar Enfermería");
@@ -4625,27 +4635,26 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     // Build an ODS with a contacts sheet + a buscas sheet.
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Mostrador", "55555", ""]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "agenda-buscas.ods",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Mostrador", "55555", ""]
+          ]
+        },
+        {
+          name: "Buscas_Facultativos",
+          data: [
+            ["SERVICIO", "PRINCIPAL", "COMENTARIOS"],
+            ["ANESTESIA", "7321", ""]
+          ]
+        }
+      ]
     );
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["SERVICIO", "PRINCIPAL", "COMENTARIOS"],
-        ["ANESTESIA", "7321", ""]
-      ]),
-      "Buscas_Facultativos"
-    );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     // Run preview only — do NOT call importCsvDataset.
     await service.previewCsvImport(sourceFilePath);
@@ -4671,27 +4680,26 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Mostrador", "55555", ""]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "agenda-buscas-confirm.ods",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Mostrador", "55555", ""]
+          ]
+        },
+        {
+          name: "Buscas_Facultativos",
+          data: [
+            ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
+            ["ANESTESIA", "7321", "7322", ""]
+          ]
+        }
+      ]
     );
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
-        ["ANESTESIA", "7321", "7322", ""]
-      ]),
-      "Buscas_Facultativos"
-    );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas-confirm.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     await service.previewCsvImport(sourceFilePath);
     const result = await service.importCsvDataset(sourceFilePath);
@@ -4720,27 +4728,26 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["Servicio", "Número", "Notas"],
-        ["Mostrador", "55555", ""]
-      ]),
-      "Urgencias"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "agenda-buscas-error.ods",
+      [
+        {
+          name: "Urgencias",
+          data: [
+            ["Servicio", "Número", "Notas"],
+            ["Mostrador", "55555", ""]
+          ]
+        },
+        {
+          name: "Buscas_Facultativos",
+          data: [
+            ["SERVICIO", "PRINCIPAL"],
+            ["ANESTESIA", "7321"]
+          ]
+        }
+      ]
     );
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["SERVICIO", "PRINCIPAL"],
-        ["ANESTESIA", "7321"]
-      ]),
-      "Buscas_Facultativos"
-    );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "agenda-buscas-error.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     // importCsvDataset must NOT throw even though buscas persist throws.
     const result = await service.importCsvDataset(sourceFilePath);
@@ -4757,20 +4764,20 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     // Build a workbook with ONLY a buscas sheet — no contact sheet at all.
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      XLSX.utils.aoa_to_sheet([
-        ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
-        ["CARDIOLOGIA", "8801", "8802", ""],
-        ["NEUROLOGIA", "8803", "", "guardia"]
-      ]),
-      "Buscas_Facultativos"
+    const sourceFilePath = writeWorkbook(
+      path.join(testRoot, "incoming"),
+      "buscas-only.ods",
+      [
+        {
+          name: "Buscas_Facultativos",
+          data: [
+            ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
+            ["CARDIOLOGIA", "8801", "8802", ""],
+            ["NEUROLOGIA", "8803", "", "guardia"]
+          ]
+        }
+      ]
     );
-
-    const sourceFilePath = path.join(testRoot, "incoming", "buscas-only.ods");
-    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
-    XLSX.writeFile(workbook, sourceFilePath);
 
     // Preview must succeed (buscas-only is a valid, confirmable workbook).
     await service.previewCsvImport(sourceFilePath);

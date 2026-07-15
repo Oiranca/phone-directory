@@ -6,6 +6,7 @@
  * and social-contact-oir131.test.ts. Extracted here so it has a single
  * definition shared by all spreadsheet-import test suites.
  */
+import fs from "node:fs";
 import path from "node:path";
 import XLSX from "xlsx";
 
@@ -15,6 +16,8 @@ export const writeWorkbook = (
   fileName: string,
   sheets: Array<{ name: string; data: string[][] }>
 ): string => {
+  fs.mkdirSync(dir, { recursive: true });
+
   const wb = XLSX.utils.book_new();
 
   for (const { name, data } of sheets) {
