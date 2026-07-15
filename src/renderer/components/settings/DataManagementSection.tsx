@@ -611,20 +611,22 @@ export const DataManagementSection = () => {
         </aside>
       </div>
 
-      {confirmationContent ? (
-        <ConfirmDialog
-          isOpen={true}
-          title={confirmationContent.title}
-          message={confirmationContent.message}
-          confirmLabel={confirmationContent.confirmLabel}
-          cancelLabel="Cancelar"
-          isDestructive={true}
-          onConfirm={() => {
-            void handleConfirmAction();
-          }}
-          onCancel={() => setPendingConfirmation(null)}
-        />
-      ) : null}
+      {/* MANT-13: always rendered with `isOpen` toggled (idiom A), matching the
+          other ConfirmDialog call sites (BuscasPage, DeduplicatePage,
+          ContactFormPage, App) instead of conditionally mounting/unmounting
+          the dialog with `isOpen` hardcoded to `true`. */}
+      <ConfirmDialog
+        isOpen={confirmationContent !== null}
+        title={confirmationContent?.title ?? ""}
+        message={confirmationContent?.message ?? ""}
+        confirmLabel={confirmationContent?.confirmLabel ?? "Confirmar"}
+        cancelLabel="Cancelar"
+        isDestructive={true}
+        onConfirm={() => {
+          void handleConfirmAction();
+        }}
+        onCancel={() => setPendingConfirmation(null)}
+      />
     </section>
   );
 };

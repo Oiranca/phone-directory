@@ -111,10 +111,10 @@ export const RecordFormPage = () => {
   }
 
   return (
-    <section className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
+    <section aria-labelledby="record-form-page-title" className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-scs-blueDark">
+          <h2 id="record-form-page-title" className="text-2xl font-semibold text-scs-blueDark">
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">

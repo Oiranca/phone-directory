@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
+import { ErrorBoundary } from "../components/feedback/ErrorBoundary";
 import { PathDisplay } from "../components/feedback/PathDisplay";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { AppShell } from "../components/layout/AppShell";
@@ -240,7 +241,9 @@ export const App = () => {
 
   return (
     <AppShell>
-      <Outlet />
+      <ErrorBoundary>
+        <Outlet />
+      </ErrorBoundary>
     </AppShell>
   );
 };

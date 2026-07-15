@@ -28,5 +28,35 @@
     "expires": "2026-12-13",
     "cve": null,
     "remediationPath": "Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking Node 20.11.1 compatibility."
+  },
+  {
+    "id": "GHSA-hmw2-7cc7-3qxx",
+    "package": "form-data",
+    "severity": "high",
+    "reason": "form-data is a transitive dependency via electron-builder > app-builder-lib > electron-publish > form-data, used only by electron-builder's release-publishing tooling at build time. It is never bundled into the shipped Electron application or executed at runtime. The vulnerable CRLF injection surface requires attacker-controlled multipart field names/filenames reaching form-data's encoder; in this build toolchain the only caller is electron-publish's internal upload logic operating on fixed, developer-controlled artifact paths — no attacker-influenced input reaches the vulnerable code path. Deployment model: local USB install on a controlled workstation with no external network attack surface.",
+    "reviewDate": "2026-07-14",
+    "expires": "2027-01-14",
+    "cve": null,
+    "remediationPath": "Monitor electron-builder for an update that pulls in form-data >=4.0.6."
+  },
+  {
+    "id": "GHSA-vxpw-j846-p89q",
+    "package": "undici",
+    "severity": "high",
+    "reason": "undici is a transitive dependency via electron-builder > app-builder-lib > @electron/rebuild > node-gyp > undici, used only during native-module rebuild steps in the local/CI build toolchain. It is never bundled into the shipped Electron application or executed at runtime. The vulnerable WebSocket fragment-count DoS requires a malicious/compromised WebSocket peer; node-gyp's use of undici is for outbound HTTP(S) downloads of prebuilt binaries, not for accepting inbound WebSocket connections, so the vulnerable code path is not exercised. Deployment model: local USB install on a controlled workstation with no external network attack surface.",
+    "reviewDate": "2026-07-14",
+    "expires": "2027-01-14",
+    "cve": null,
+    "remediationPath": "Monitor electron-builder for an update that pulls in node-gyp/undici >=6.27.0."
+  },
+  {
+    "id": "GHSA-96hv-2xvq-fx4p",
+    "package": "ws",
+    "severity": "high",
+    "reason": "ws is a transitive dependency of jsdom, a devDependency used only to provide a DOM environment for Vitest unit tests. It is never bundled into the shipped Electron application or executed at runtime. The vulnerable memory-exhaustion DoS requires a malicious WebSocket peer sending crafted tiny fragments; jsdom's use of ws (if any is even reachable) is confined to the local test process and never accepts external network connections in this project's test suite. Deployment model: local USB install on a controlled workstation with no external network attack surface.",
+    "reviewDate": "2026-07-14",
+    "expires": "2027-01-14",
+    "cve": null,
+    "remediationPath": "Monitor jsdom for an update that pulls in ws >=8.21.0."
   }
 ]

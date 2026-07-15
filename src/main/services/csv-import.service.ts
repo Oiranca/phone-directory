@@ -10,6 +10,7 @@ import type {
   CsvImportPreview,
   CsvImportPreviewRow,
   CsvImportWarning,
+  DetectionConfidence,
   DirectoryDataset,
   PhoneContact,
   EmailContact,
@@ -494,7 +495,7 @@ export const buildImportPreviewFromRows = async (
     fileName: string;
     editorName: string;
     detectedFormat?: string;
-    detectionConfidence?: "high" | "medium" | "low";
+    detectionConfidence?: DetectionConfidence;
     /** INTERIM (OIR-102/OIR-134): Buscas-sheet rows silently skipped. Default 0 (CSV path). */
     buscasSkippedRowCount?: number;
     /** INTERIM (OIR-102/OIR-134): Social-handle rows silently skipped. Default 0 (CSV path). */
