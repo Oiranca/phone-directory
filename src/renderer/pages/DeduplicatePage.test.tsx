@@ -156,7 +156,7 @@ describe("DeduplicatePage", () => {
     expect(await screen.findByRole("button", { name: "Fusionar" })).toBeInTheDocument();
   });
 
-  describe("OIR-189 P3 follow-up — distinct accessible names for 'Conservar' radios (Finding C)", () => {
+  describe("distinct accessible names for 'Conservar' radios (Finding C)", () => {
     it("gives the two 'Conservar' radios distinct accessible names even when displayName matches", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -215,7 +215,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-189 P2 follow-up — radiogroup arrow-key navigation (roving tabindex)", () => {
+  describe("radiogroup arrow-key navigation (roving tabindex)", () => {
     it("ArrowDown moves focus and selection from the first radio to the second", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -445,7 +445,7 @@ describe("DeduplicatePage", () => {
       expect(screen.queryByText(/No se pudo fusionar/)).not.toBeInTheDocument();
     });
 
-    it("shows the warning toast and preserves the pair in the UI when refresh fails (OIR-134: no optimistic filter)", async () => {
+    it("shows the warning toast and preserves the pair in the UI when refresh fails (no optimistic filter)", async () => {
       await triggerMerge();
       // Success toast must appear first (merge committed before refresh was attempted)
       expect(await screen.findByText("Duplicado fusionado correctamente")).toBeInTheDocument();
@@ -453,7 +453,7 @@ describe("DeduplicatePage", () => {
       expect(
         await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/)
       ).toBeInTheDocument();
-      // OIR-134: the optimistic filter was removed to avoid a misleading partial state.
+      // The optimistic filter was removed to avoid a misleading partial state.
       // The pair remains visible in the UI; the operator must reload to see the updated list.
       // (The warning toast instructs them to do so.)
       expect(screen.queryByText("Similitud 90%")).toBeInTheDocument();
@@ -470,7 +470,7 @@ describe("DeduplicatePage", () => {
       });
     });
 
-    it("closes the confirm dialog and restores focus after merge-success + refresh-failure (OIR-183)", async () => {
+    it("closes the confirm dialog and restores focus after merge-success + refresh-failure", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
 
@@ -775,11 +775,34 @@ describe("DeduplicatePage", () => {
       // Success toast must NOT appear
       expect(screen.queryByText("Duplicado fusionado correctamente")).not.toBeInTheDocument();
     });
+
+    it("sanitizes IPC error boilerplate before showing the merge-failure toast", async () => {
+      mergeContactsMock.mockRejectedValueOnce(
+        new Error("Error invoking remote method 'contacts:merge': Error: No se pudo fusionar: conflicto de datos.")
+      );
+
+      renderPage();
+      await screen.findAllByText("Admisión General");
+
+      const keepButtons = screen.getAllByRole("radio", { name: /Conservar/ });
+      fireEvent.click(keepButtons[0]!);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Fusionar" }));
+
+      const allFusionar = await screen.findAllByRole("button", { name: "Fusionar" });
+      fireEvent.click(allFusionar[allFusionar.length - 1]!);
+
+      await waitFor(() => {
+        expect(screen.getByText("No se pudo fusionar: conflicto de datos.")).toBeInTheDocument();
+      });
+      // The raw Electron IPC boilerplate must never reach the user
+      expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
+    });
   });
 
-  // ── OIR-183 P1 fixes ─────────────────────────────────────────────────────────
+  // ── P1 fixes ─────────────────────────────────────────────────────────
 
-  describe("OIR-183 Fix 1 — Fusionar button uses amber/warning styling, not primary blue", () => {
+  describe("Fix 1 — Fusionar button uses amber/warning styling, not primary blue", () => {
     it("Fusionar button has amber background class after selecting a record", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -805,7 +828,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-183 Fix 2 — ConfirmDialog explicitly names the contact being deleted", () => {
+  describe("Fix 2 — ConfirmDialog explicitly names the contact being deleted", () => {
     it("dialog message contains 'Se eliminará el contacto' and the discard record name", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -837,7 +860,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-183 Fix 3 — Focus restore after dialog/merge", () => {
+  describe("Fix 3 — Focus restore after dialog/merge", () => {
     it("page heading has tabIndex=-1 to allow programmatic focus after merge", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -857,7 +880,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-183 Fix 4 — Spinner during detectDuplicates", () => {
+  describe("Fix 4 — Spinner during detectDuplicates", () => {
     it("shows aria-busy=true on the loading section", async () => {
       // Override detectDuplicates to never resolve so we can inspect loading state
       let resolve: (v: unknown) => void;
@@ -918,7 +941,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-183 Fix 5 — 'Conservar este' touch target ≥44px", () => {
+  describe("Fix 5 — 'Conservar este' touch target ≥44px", () => {
     it("'Conservar este' buttons have min-h-[44px] class for WCAG 2.5.5", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -941,9 +964,9 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  // ── End OIR-183 P1 fixes ────────────────────────────────────────────────────
+  // ── End P1 fixes ────────────────────────────────────────────────────
 
-  describe("OIR-190 P2 follow-up — radiogroup arrow-key navigation (roving tabindex)", () => {
+  describe("radiogroup arrow-key navigation (roving tabindex) — extended coverage", () => {
     it("only one radio is tabbable at a time, defaulting to the first option", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -1031,7 +1054,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("merge loss preview — OIR-175", () => {
+  describe("merge loss preview", () => {
     it("does not show the preview panel before any keepId is selected", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -1151,7 +1174,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-195 P3 — reviewed-pairs counter", () => {
+  describe("reviewed-pairs counter", () => {
     it("shows '0 de 1 pares revisados' when the single pair has not been actioned yet", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -1188,7 +1211,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-195 P3 — badge aria association", () => {
+  describe("badge aria association", () => {
     it("associates the similarity/reasons badges with the radiogroup via aria-describedby", async () => {
       renderPage();
       await screen.findAllByText("Admisión General");
@@ -1209,7 +1232,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("OIR-195 P3 regression — reviewed-pairs baseline resets when storageKey changes (PR #116)", () => {
+  describe("regression — reviewed-pairs baseline resets when storageKey changes (PR #116)", () => {
     const pathA = "/data/hospital-a/contacts.json";
     const pathB = "/data/hospital-b/contacts.json";
 
@@ -1304,9 +1327,9 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  // ── OIR-225 — merge-fields editor (edit surviving record before confirming) ──
+  // ── Merge-fields editor (edit surviving record before confirming) ──
 
-  describe("OIR-225 — merge-fields editor", () => {
+  describe("merge-fields editor", () => {
     const overridesKeepFull = {
       ...defaultContacts.records[0]!,
       id: "cnt_0001",

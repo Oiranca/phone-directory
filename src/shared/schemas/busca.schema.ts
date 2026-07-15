@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const BUSCA_SHIFTS = ["mañana", "tarde", "noche"] as const;
-export type BuscaShift = (typeof BUSCA_SHIFTS)[number];
 
 export const buscaRecordSchema = z.object({
   id: z.string().regex(/^bsc_[0-9a-f]{8}$/, "ID must be bsc_ prefix + 8 hex chars"),
@@ -27,7 +26,7 @@ export const editableBuscaRecordSchema = z.object({
 });
 
 /**
- * OIR-130 — Imported buscas record.
+ * Imported buscas record.
  *
  * ODS buscas sheets (Buscas_Facultativos, Buscas_Enfermería, etc.) use a
  * column-per-holder-type layout. Each cell in a data row holds a 4-digit pager

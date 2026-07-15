@@ -372,7 +372,7 @@ describe("BuscasService", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-130: importFromOds + listImported
+// importFromOds + listImported
 // ---------------------------------------------------------------------------
 
 describe("BuscasService — importFromOds + listImported", () => {

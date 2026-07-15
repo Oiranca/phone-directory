@@ -148,7 +148,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-225 — field-level overrides applied on top of the keep/discard merge
+// Field-level overrides applied on top of the keep/discard merge
 // ---------------------------------------------------------------------------
 
 describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overrides)", () => {
@@ -409,7 +409,7 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-113 — import token sender binding
+// Import token sender binding
 //
 // Tests for the importCsvDataset handler's sender equality check, token
 // invalidation on navigation/destruction, and concurrency safety.
@@ -458,7 +458,7 @@ function makeWebContentsSender(id: number): {
   };
 }
 
-describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
+describe("contacts:import-csv-dataset — sender binding", () => {
   // Captured handler registry, reset per test so each test gets a fresh
   // registerContactsIpc call with its own token map.
   let handlers: Map<string, (...args: unknown[]) => unknown>;
@@ -645,7 +645,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+  // Root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
   // navigations (hash/fragment changes, pushState/replaceState, same-page history
   // navigation — see Electron's `isSameDocument` event field). This app routes
   // entirely via createHashRouter, so an in-app hash change — or even a macOS
@@ -686,7 +686,7 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
     expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
   });
 
-  it("OIR-115 — sourceFilePath is stripped from the preview payload before reaching the renderer", async () => {
+  it("sourceFilePath is stripped from the preview payload before reaching the renderer", async () => {
     const sender = makeWebContentsSender(10);
     const handler = handlers.get("contacts:preview-csv-import");
     if (!handler) throw new Error("preview handler not registered");
@@ -833,14 +833,14 @@ describe("contacts:import-csv-dataset — OIR-113 sender binding", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-219 — pickAndImportDataset: single unified "Importar" entry point
+// pickAndImportDataset: single unified "Importar" entry point
 //
 // Verifies the extension-based dispatch: main owns the one dialog, and routes
 // to the same underlying pipelines used by the existing importDataset /
 // previewCsvImport channels, without ever accepting a renderer-supplied path.
 // ---------------------------------------------------------------------------
 
-describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch", () => {
+describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     importDataset: ReturnType<typeof vi.fn>;
@@ -959,7 +959,7 @@ describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch",
     expect(serviceMock.previewCsvImport).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
     expect(serviceMock.importDataset).not.toHaveBeenCalled();
     expect(response.kind).toBe("csv-preview");
-    // OIR-115 parity — the absolute source path must never reach the renderer here either.
+    // Parity with previewCsvImport — the absolute source path must never reach the renderer here either.
     expect(Object.prototype.hasOwnProperty.call(response.preview, "sourceFilePath")).toBe(false);
     expect(typeof response.preview.importToken).toBe("string");
     expect(response.preview.fileName).toBe("directory.csv");
@@ -1006,5 +1006,312 @@ describe("contacts:pick-and-import-dataset — OIR-219 unified picker dispatch",
     expect(showOpenDialogMock).toHaveBeenCalledTimes(1);
     const [options] = showOpenDialogMock.mock.calls[0] as [{ filters: Array<{ extensions: string[] }> }];
     expect(options.filters[0]?.extensions.sort()).toEqual(["csv", "json", "ods", "xls", "xlsx"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SEC-4 — global cap on concurrent pending CSV imports
+//
+// pendingCsvImports previously had no upper bound across ALL senders (only a
+// per-sender previous-token invalidation). Verifies the defensive global cap:
+// once the map is full, the oldest pending import is evicted to admit a new
+// preview, rather than letting the map grow unbounded until TTLs expire.
+// ---------------------------------------------------------------------------
+
+describe("contacts:preview-csv-import — SEC-4 global pending-import cap", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let serviceMock: {
+    previewCsvImport: ReturnType<typeof vi.fn>;
+    importCsvDataset: ReturnType<typeof vi.fn>;
+    [key: string]: unknown;
+  };
+  let showOpenDialogMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+
+    handlers = new Map();
+    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/tmp/test.csv"] });
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: showOpenDialogMock,
+        showSaveDialog: vi.fn()
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    serviceMock = {
+      previewCsvImport: vi.fn().mockResolvedValue({
+        sourceFilePath: "/tmp/test.csv",
+        fileName: "test.csv"
+      }),
+      importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn(),
+      resetDataset: vi.fn(),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn(),
+      restoreBackup: vi.fn(),
+      exportDataset: vi.fn(),
+      importDataset: vi.fn(),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    };
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("evicts the oldest pending import once the global cap is exceeded, admitting the newest", async () => {
+    const previewHandler = handlers.get("contacts:preview-csv-import");
+    if (!previewHandler) throw new Error("preview handler not registered");
+    const importHandler = handlers.get("contacts:import-csv-dataset");
+    if (!importHandler) throw new Error("import handler not registered");
+
+    // Each sender is distinct so the per-sender "invalidate my previous token"
+    // logic never kicks in — every preview call is a genuinely new pending
+    // entry, which is what's needed to actually grow the global map.
+    const MAX_PENDING_CSV_IMPORTS = 30;
+    const tokens: string[] = [];
+
+    for (let i = 0; i < MAX_PENDING_CSV_IMPORTS + 1; i += 1) {
+      const sender = makeWebContentsSender(1000 + i);
+      const result = await previewHandler({ sender } as unknown) as { importToken: string };
+      tokens.push(result.importToken);
+    }
+
+    // The very first (oldest) token must have been evicted by the cap...
+    const oldestSender = makeWebContentsSender(1000);
+    await expect(
+      importHandler({ sender: oldestSender } as unknown, tokens[0], [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+
+    // ...while the newest (31st) token is still valid.
+    const newestSender = makeWebContentsSender(1000 + MAX_PENDING_CSV_IMPORTS);
+    await importHandler({ sender: newestSender } as unknown, tokens[tokens.length - 1], []);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SEC-5 — csvImportPolicySelectionSchema (Zod) replaces manual
+// typeof/Number.isInteger/Set.has validation of importCsvDataset's policy
+// array, matching this codebase's "every IPC input goes through Zod"
+// convention (createRecord, updateRecord, mergeDuplicates, busca channels).
+// ---------------------------------------------------------------------------
+
+describe("csvImportPolicySelectionSchema — SEC-5", () => {
+  it("accepts a well-formed policy selection array", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const result = csvImportPolicySelectionListSchema.safeParse([
+      { recordIndex: 0, policy: "overwrite" },
+      { recordIndex: 1, policy: "skip" },
+      { recordIndex: 2, policy: "merge-fields" }
+    ]);
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an empty array (no conflicts to resolve)", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    expect(csvImportPolicySelectionListSchema.safeParse([]).success).toBe(true);
+  });
+
+  it.each([
+    ["not an array", { recordIndex: 0, policy: "overwrite" }],
+    ["null", null],
+    ["undefined", undefined],
+    ["a string", "overwrite"]
+  ])("rejects %s as the top-level value", async (_label, value) => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    expect(csvImportPolicySelectionListSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects a non-integer recordIndex", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const result = csvImportPolicySelectionListSchema.safeParse([{ recordIndex: 1.5, policy: "overwrite" }]);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown policy value", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const result = csvImportPolicySelectionListSchema.safeParse([{ recordIndex: 0, policy: "delete-everything" }]);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an item missing required fields", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    expect(csvImportPolicySelectionListSchema.safeParse([{ policy: "overwrite" }]).success).toBe(false);
+    expect(csvImportPolicySelectionListSchema.safeParse([{ recordIndex: 0 }]).success).toBe(false);
+  });
+
+  // Defensive upper bound (renderer-controlled IPC payload) — mirrors the
+  // 5000-row cap already enforced by csv-import.service.ts /
+  // spreadsheet-import.service.ts, since this list holds at most one entry
+  // per conflicting row of the previewed import.
+  it("accepts a policy selection array at the 5000-entry max", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const value = Array.from({ length: 5000 }, (_, i) => ({
+      recordIndex: i,
+      policy: "overwrite" as const
+    }));
+
+    expect(csvImportPolicySelectionListSchema.safeParse(value).success).toBe(true);
+  });
+
+  it("rejects a policy selection array exceeding the 5000-entry max", async () => {
+    const { csvImportPolicySelectionListSchema } = await import(
+      "../../shared/schemas/csv-import-policy.schema.js"
+    );
+
+    const value = Array.from({ length: 5001 }, (_, i) => ({
+      recordIndex: i,
+      policy: "overwrite" as const
+    }));
+
+    expect(csvImportPolicySelectionListSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe("contacts:import-csv-dataset — SEC-5 IPC handler rejects malformed policies via Zod", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let serviceMock: {
+    previewCsvImport: ReturnType<typeof vi.fn>;
+    importCsvDataset: ReturnType<typeof vi.fn>;
+    [key: string]: unknown;
+  };
+
+  beforeEach(async () => {
+    vi.resetModules();
+
+    handlers = new Map();
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/tmp/test.csv"] }),
+        showSaveDialog: vi.fn()
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    serviceMock = {
+      previewCsvImport: vi.fn().mockResolvedValue({ sourceFilePath: "/tmp/test.csv", fileName: "test.csv" }),
+      importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn(),
+      resetDataset: vi.fn(),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn(),
+      restoreBackup: vi.fn(),
+      exportDataset: vi.fn(),
+      importDataset: vi.fn(),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    };
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("rejects a malformed policies array (invalid policy value) before it ever reaches the service", async () => {
+    const previewHandler = handlers.get("contacts:preview-csv-import");
+    if (!previewHandler) throw new Error("preview handler not registered");
+    const importHandler = handlers.get("contacts:import-csv-dataset");
+    if (!importHandler) throw new Error("import handler not registered");
+
+    const sender = makeWebContentsSender(500);
+    const { importToken } = await previewHandler({ sender } as unknown) as { importToken: string };
+
+    await expect(
+      importHandler({ sender } as unknown, importToken, [{ recordIndex: 0, policy: "not-a-real-policy" }])
+    ).rejects.toThrow("Las políticas de conflicto no tienen un formato válido.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-array policies payload before it ever reaches the service", async () => {
+    const previewHandler = handlers.get("contacts:preview-csv-import");
+    if (!previewHandler) throw new Error("preview handler not registered");
+    const importHandler = handlers.get("contacts:import-csv-dataset");
+    if (!importHandler) throw new Error("import handler not registered");
+
+    const sender = makeWebContentsSender(501);
+    const { importToken } = await previewHandler({ sender } as unknown) as { importToken: string };
+
+    await expect(
+      importHandler({ sender } as unknown, importToken, { recordIndex: 0, policy: "overwrite" })
+    ).rejects.toThrow("Las políticas de conflicto no tienen un formato válido.");
+
+    expect(serviceMock.importCsvDataset).not.toHaveBeenCalled();
+  });
+
+  it("accepts a well-formed policies array and forwards it to the service", async () => {
+    const previewHandler = handlers.get("contacts:preview-csv-import");
+    if (!previewHandler) throw new Error("preview handler not registered");
+    const importHandler = handlers.get("contacts:import-csv-dataset");
+    if (!importHandler) throw new Error("import handler not registered");
+
+    const sender = makeWebContentsSender(502);
+    const { importToken } = await previewHandler({ sender } as unknown) as { importToken: string };
+    const policies = [{ recordIndex: 0, policy: "overwrite" }];
+
+    await importHandler({ sender } as unknown, importToken, policies);
+
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith("/tmp/test.csv", policies);
   });
 });

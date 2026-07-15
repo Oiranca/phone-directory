@@ -10,7 +10,7 @@ const validPhone = {
   noPatientSharing: false
 };
 
-describe("mergeContactsSchema — overrides (OIR-225)", () => {
+describe("mergeContactsSchema — overrides", () => {
   it("accepts a request with no overrides at all (default/fast path)", () => {
     const result = mergeContactsSchema.safeParse({
       keepId: "cnt_a",

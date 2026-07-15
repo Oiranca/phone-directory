@@ -1,5 +1,6 @@
-import type { CsvImportPolicySelection, EditableContactRecord, MergePolicy } from "../../shared/types/contact.js";
+import type { EditableContactRecord } from "../../shared/types/contact.js";
 import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.js";
+import { csvImportPolicySelectionListSchema } from "../../shared/schemas/csv-import-policy.schema.js";
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -11,8 +12,10 @@ import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
-const MERGE_POLICIES = new Set<MergePolicy>(["overwrite", "skip", "merge-fields"]);
-// OIR-219: extensions accepted by the unified pickAndImportDataset dialog filter.
+// Defensive global cap on concurrent pending CSV imports (SEC-4) — see
+// pendingCsvImports below.
+const MAX_PENDING_CSV_IMPORTS = 30;
+// Extensions accepted by the unified pickAndImportDataset dialog filter.
 const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -116,14 +119,14 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return service.importDataset(filePaths[0]!);
   });
-  // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset (OIR-219) —
+  // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset —
   // both dispatch to the same normalize/validate/preview pipeline and the same
   // importToken bookkeeping once a source file path has been resolved.
   const runCsvImportPreview = async (event: Electron.IpcMainInvokeEvent, sourceFilePath: string) => {
     const senderId = event.sender.id;
     // previewCsvImport declares { sourceFilePath: string } in its return type so
     // TypeScript proves the field exists here; we destructure it out before the
-    // renderer payload is assembled (OIR-115 — no cast needed).
+    // renderer payload is assembled (no cast needed).
     const preview = await service.previewCsvImport(sourceFilePath);
     const importToken = randomUUID();
     const previousImportToken = senderTokens.get(senderId);
@@ -139,7 +142,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // Invalidate the token when the sender navigates away — a navigation means the
     // import preview UI is gone and any pending confirmation would be from a stale tab.
     //
-    // OIR-223 root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
+    // Root-cause fix: `did-start-navigation` also fires for SAME-DOCUMENT
     // navigations — reference-fragment (hash) navigations, pushState/replaceState,
     // and same-page history navigation (see Electron's `isSameDocument` docs). This
     // app uses createHashRouter for all in-app routing, so those are routine and do
@@ -148,7 +151,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // A same-document navigation can be triggered by something as innocuous as a
     // macOS trackpad two-finger swipe (Chromium's overscroll history navigation)
     // while the operator scrolls the (currently non-virtualized, horizontally
-    // overflowing per OIR-223 priority 3) preview table — which would silently
+    // overflowing) preview table — which would silently
     // invalidate an otherwise-still-valid, still-visible pending import and only
     // surface as an opaque error on the LATER confirm click. Only invalidate on a
     // real cross-document navigation (the tab actually left the app UI).
@@ -160,6 +163,21 @@ export const registerContactsIpc = (service: AppDataService) => {
     };
 
     event.sender.on("did-start-navigation", navListener);
+
+    // SEC-4: defensive global cap on concurrent pending CSV imports. Normal
+    // desktop single-window usage never approaches this (each sender's
+    // previous token is already invalidated above), but nothing previously
+    // bounded the map across ALL senders — a renderer bug or a future
+    // multi-window feature repeatedly calling previewCsvImport could grow it
+    // until TTLs expire. Evict the oldest pending entry (Map iteration order
+    // is insertion order) before admitting a new one once the cap is hit.
+    if (pendingCsvImports.size >= MAX_PENDING_CSV_IMPORTS) {
+      const oldestImportToken = pendingCsvImports.keys().next().value;
+
+      if (oldestImportToken) {
+        clearPendingCsvImport(oldestImportToken);
+      }
+    }
 
     pendingCsvImports.set(importToken, {
       sourceFilePath,
@@ -184,7 +202,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       });
     }
 
-    // Strip the absolute sourceFilePath before sending to the renderer (OIR-115).
+    // Strip the absolute sourceFilePath before sending to the renderer.
     // The path is retained server-side in pendingCsvImports; the renderer
     // identifies the import by importToken only.
     const { sourceFilePath: _stripped, ...safePreview } = preview;
@@ -223,7 +241,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     return runCsvImportPreview(event, sourceFilePath);
   });
 
-  // OIR-219 — single unified "Importar" entry point. Opens ONE native dialog
+  // Single unified "Importar" entry point. Opens ONE native dialog
   // filtered to .json/.csv/.ods/.xls/.xlsx and internally dispatches, by the
   // extension of whatever file the user picked, to the EXISTING pipelines:
   //   .json                → service.importDataset() (full-replace, unchanged)
@@ -296,22 +314,16 @@ export const registerContactsIpc = (service: AppDataService) => {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
-    if (!Array.isArray(rawPolicies)) {
+    // SEC-5: validated via Zod (csvImportPolicySelectionListSchema) instead of
+    // hand-rolled typeof/Number.isInteger/Set.has checks, consistent with
+    // every other IPC input in this codebase.
+    let policies;
+
+    try {
+      policies = csvImportPolicySelectionListSchema.parse(rawPolicies);
+    } catch {
       throw new Error("Las políticas de conflicto no tienen un formato válido.");
     }
-
-    const policies = rawPolicies.map((item) => {
-      if (
-        typeof item !== "object" ||
-        item === null ||
-        !Number.isInteger((item as CsvImportPolicySelection).recordIndex) ||
-        !MERGE_POLICIES.has((item as CsvImportPolicySelection).policy)
-      ) {
-        throw new Error("Las políticas de conflicto no tienen un formato válido.");
-      }
-
-      return item as CsvImportPolicySelection;
-    });
 
     // Synchronously consume the token before the first await so concurrent
     // confirmations cannot race past this point with the same token.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
+import { toCompactToastMessage } from "../utils/toastMessage";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../components/deduplicate/MergeFieldsEditor";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
+import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
 interface PairState {
   pair: DuplicatePair;
@@ -35,7 +37,7 @@ function translateReason(reason: string): string {
 }
 
 /**
- * OIR-189 P3 (Finding C) — the two records in a dedup pair frequently share the
+ * Finding C — the two records in a dedup pair frequently share the
  * same displayName (that's often why they were flagged as duplicates), which
  * previously produced two "Conservar" radios with IDENTICAL accessible names —
  * a screen reader user could not tell them apart.
@@ -135,7 +137,7 @@ export function writeDismissedPairId(storageKey: string, id: string): void {
 export const DeduplicatePage = () => {
   const { pushToast } = useToast();
   const applyMergeResult = useAppStore((s) => s.applyMergeResult);
-  // OIR-225: the full ContactRecord list is already loaded into the store at
+  // The full ContactRecord list is already loaded into the store at
   // bootstrap (needed for the merge-fields editor, which requires fields —
   // e.g. `type`, full phone metadata — that the lightweight
   // DuplicateRecordSummary payload deliberately omits for payload-size reasons).
@@ -146,7 +148,7 @@ export const DeduplicatePage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pairStates, setPairStates] = useState<PairState[]>([]);
   const [mergingId, setMergingId] = useState<string | null>(null);
-  // OIR-195 item 3: total pairs found in this session, fixed at the first successful
+  // Total pairs found in this session, fixed at the first successful
   // load so the "X de Y revisados" counter tracks progress against a stable baseline
   // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
   // The baseline is tagged with the storageKey it was computed for, so switching the
@@ -164,13 +166,13 @@ export const DeduplicatePage = () => {
     pairId: string;
     keepRecord: { id: string; displayName: string };
     discardRecord: { id: string; displayName: string };
-    // OIR-225: full records (when available in the store) used to build the
+    // Full records (when available in the store) used to build the
     // optional merge-fields editor. Null when not found — the fast/default
     // keep-one-wholesale path always works regardless of these being present.
     keepFull: ContactRecord | null;
     discardFull: ContactRecord | null;
   } | null>(null);
-  // OIR-225: null until the user opts into editing surviving-record fields
+  // Null until the user opts into editing surviving-record fields
   // before confirming ("Editar antes de fusionar"). Stays null on the default
   // fast path, so handleConfirmMerge sends no `overrides` — behaves exactly
   // like the pre-existing keep/discard-only merge.
@@ -189,6 +191,8 @@ export const DeduplicatePage = () => {
   // arrow-key navigation can move DOM focus to the newly-selected option
   // (roving tabindex pattern: only one radio per pair stays in the tab order).
   const radioButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  const handleRovingKeyDown = useRovingTabIndex({ previousKeys: ["ArrowUp", "ArrowLeft"], nextKeys: ["ArrowDown", "ArrowRight"] });
 
   // Restore focus after pairStates changes following a merge confirmation
   useEffect(() => {
@@ -219,7 +223,7 @@ export const DeduplicatePage = () => {
       const dismissed = readDismissedPairIds(storageKey);
       const filtered = result.pairs.filter((pair) => !dismissed.includes(pair.id));
       setPairStates(filtered.map((pair) => ({ pair, keepId: null })));
-      // OIR-195 item 3: capture the baseline only once per storageKey, on the first
+      // Capture the baseline only once per storageKey, on the first
       // successful load after that key is seen — later refreshes for the SAME dataset
       // (e.g. "Reintentar" or post-merge) must not reset the denominator, but switching
       // to a DIFFERENT dataset (storageKey changes) must recompute it (PR #116 review).
@@ -229,9 +233,7 @@ export const DeduplicatePage = () => {
           : current
       );
     } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "No se pudo cargar duplicados"
-      );
+      setLoadError(toCompactToastMessage(error, "No se pudo cargar duplicados"));
     } finally {
       setIsLoading(false);
     }
@@ -251,7 +253,8 @@ export const DeduplicatePage = () => {
     );
   };
 
-  // Roving-tabindex arrow key navigation for the "keep this / keep both" radiogroup.
+  // MANT-4: roving-tabindex arrow key navigation for the "keep this / keep
+  // both" radiogroup, built on the shared useRovingTabIndex hook.
   // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
   // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the
   // WAI-ARIA radiogroup keyboard contract.
@@ -260,23 +263,18 @@ export const DeduplicatePage = () => {
     pairId: string,
     optionIds: string[]
   ) => {
-    const previousKeys = ["ArrowUp", "ArrowLeft"];
-    const nextKeys = ["ArrowDown", "ArrowRight"];
-    if (!previousKeys.includes(event.key) && !nextKeys.includes(event.key)) return;
-
-    event.preventDefault();
-    // Derive the current position from the actually-focused radio (event.target),
-    // not from which option is selected — a radio can have DOM focus without
-    // being checked yet (e.g. before any option has been picked).
-    const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
-    const currentIndex = focusedId ? optionIds.indexOf(focusedId) : -1;
-    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
-    const delta = nextKeys.includes(event.key) ? 1 : -1;
-    const nextIndex = (safeIndex + delta + optionIds.length) % optionIds.length;
-    const nextId = optionIds[nextIndex]!;
-
-    handleKeepSelect(pairId, nextId);
-    radioButtonRefs.current.get(nextId)?.focus();
+    handleRovingKeyDown(event, {
+      itemIds: optionIds,
+      // No fallback id: a radio can have DOM focus without being checked yet
+      // (e.g. before any option has been picked), so — same as before this
+      // extraction — the current position is derived only from the actually
+      // focused radio (event.target), defaulting straight to index 0 when
+      // that can't be resolved (not from `keepId`).
+      onNavigate: (nextId) => {
+        handleKeepSelect(pairId, nextId);
+        radioButtonRefs.current.get(nextId)?.focus();
+      }
+    });
   };
 
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {
@@ -317,7 +315,7 @@ export const DeduplicatePage = () => {
     });
   };
 
-  // OIR-225 — lazily opens the merge-fields editor, seeded from the keep
+  // Lazily opens the merge-fields editor, seeded from the keep
   // record + the same phone union the backend's automatic merge produces.
   const handleStartEditingFields = () => {
     if (!confirmState?.keepFull || !confirmState.discardFull) return;
@@ -333,7 +331,7 @@ export const DeduplicatePage = () => {
     const mergedPairId = confirmState.pairId;
     const discardId = confirmState.discardRecord.id;
 
-    // OIR-225 — only send `overrides` when the user actually opened the editor
+    // Only send `overrides` when the user actually opened the editor
     // AND changed something relative to the default merge result. Otherwise
     // this is `undefined` and the call below is byte-identical to the
     // pre-existing keep/discard-only request.
@@ -356,10 +354,7 @@ export const DeduplicatePage = () => {
       applyMergeResult(survivor, discardId);
     } catch (error) {
       // Merge truly failed — report it and bail out without touching pair state
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No se pudo fusionar el duplicado. Inténtalo de nuevo.";
+      const message = toCompactToastMessage(error, "No se pudo fusionar el duplicado. Inténtalo de nuevo.");
       pushToast({ type: "error", message });
       setMergingId(null);
       setConfirmState(null);
@@ -450,24 +445,19 @@ export const DeduplicatePage = () => {
   // Empty state: no duplicates found (also rendered after the last pair is merged)
   if (pairStates.length === 0) {
     return (
-      <section className="rounded-3xl bg-white p-8 shadow-panel">
-        <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+      <StatePanel
+        icon={
           <div className="rounded-full bg-emerald-50 p-4">
             <svg className="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          {/* Stable focus target for post-merge keyboard flow when 0 pairs remain */}
-          <h2
-            ref={emptyStateHeadingRef}
-            tabIndex={-1}
-            className="text-base font-semibold text-slate-700 focus:outline-none"
-          >
-            No se encontraron duplicados
-          </h2>
-          <p className="text-sm text-slate-500">El directorio no tiene registros con datos coincidentes.</p>
-        </div>
-      </section>
+        }
+        title="No se encontraron duplicados"
+        // Stable focus target for post-merge keyboard flow when 0 pairs remain
+        titleRef={emptyStateHeadingRef}
+        message="El directorio no tiene registros con datos coincidentes."
+      />
     );
   }
 
@@ -487,7 +477,7 @@ export const DeduplicatePage = () => {
           {pairStates.length} {pairStates.length === 1 ? "par encontrado" : "pares encontrados"}.
           Selecciona el registro a conservar y fusiona.
         </p>
-        {/* OIR-195 item 3: reviewed-pairs progress counter */}
+        {/* Reviewed-pairs progress counter */}
         {initialPairTotal !== null && initialPairTotal > 0 && (
           <p aria-live="polite" aria-atomic="true" className="mt-1 text-xs text-slate-500">
             {Math.max(0, initialPairTotal - pairStates.length)} de {initialPairTotal} pares revisados
@@ -503,7 +493,7 @@ export const DeduplicatePage = () => {
           return (
             <article key={pair.id} className="rounded-3xl bg-white p-6 shadow-panel">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                {/* OIR-195 item 4: ids referenced by the radiogroup's aria-describedby below,
+                {/* Ids referenced by the radiogroup's aria-describedby below,
                     so screen readers announce similarity/reasons as context for this pair's choice. */}
                 <span
                   id={`pair-score-${pair.id}`}
@@ -667,7 +657,7 @@ export const DeduplicatePage = () => {
         onCancel={handleCancelDialog}
         isDestructive={true}
       >
-        {/* OIR-225 — additive: editing is opt-in, the default merge (no fields
+        {/* Additive: editing is opt-in, the default merge (no fields
             touched) behaves exactly as before. Only offered when the full
             records are available in the store (needed to prefill the editor). */}
         {confirmState?.keepFull && confirmState.discardFull && (

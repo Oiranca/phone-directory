@@ -266,8 +266,25 @@ describe("RecordFormPage", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("shows the record-not-found state and moves focus to its heading when editing a missing record", async () => {
+    renderWithRoute("/contacts/cnt_does_not_exist/edit");
+
+    const heading = await screen.findByRole("heading", { name: "Registro no encontrado" });
+    expect(heading).toBeInTheDocument();
+    expect(
+      screen.getByText("El registro solicitado ya no está disponible o fue eliminado.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver al directorio" })).toBeInTheDocument();
+
+    // Focus moves to the heading on mount since this state can be reached via
+    // direct navigation (e.g. a stale link) with no prior focus context.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(heading);
+    });
+  });
+
   it("regression: preserves imported organization.role/schedule and location.sector/section when saving an unrelated edit", async () => {
-    // OIR-222 metadata fields (role/schedule/sector/section) have no form
+    // Imported metadata fields (role/schedule/sector/section) have no form
     // control of their own yet. Editing an unrelated field (displayName) and
     // saving must not silently drop them from the persisted record.
     const recordWithImportedMetadata = {
@@ -328,7 +345,7 @@ describe("RecordFormPage", () => {
     expect(primaryCheckboxes[1]).toBeChecked();
   });
 
-  it("OIR-239: unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
+  it("unchecking Principal on the only phone of a new contact stays unchecked and saves isPrimary: false", async () => {
     renderWithRoute("/contacts/new");
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
@@ -460,12 +477,15 @@ describe("RecordFormPage", () => {
     const cancelLink = screen.getByRole("link", { name: "Cancelar sin guardar los cambios" });
     const submitButton = screen.getByRole("button", { name: "Crear registro" });
 
-    // DOM (tab) order: Cancelar precedes the submit button
+    // DOM (tab) order: Cancelar precedes the submit button. This is the behavior
+    // that actually matters for keyboard/tab navigation and screen readers; it is
+    // asserted structurally so the test survives Tailwind class renames/refactors
+    // (QA-7 — a prior version of this test asserted a `flex-col-reverse`
+    // class-name substring, which is an implementation detail unrelated to the
+    // real (unrenderable-in-jsdom) visual layout).
     expect(
       cancelLink.compareDocumentPosition(submitButton) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    // Visual order is no longer reversed relative to DOM order
-    expect(cancelLink.parentElement?.className).not.toContain("flex-col-reverse");
   });
 
   it("calls ensureBootstrapLoaded on mount and shows form after load (direct route entry)", async () => {

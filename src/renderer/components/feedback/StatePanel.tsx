@@ -7,6 +7,15 @@ interface StatePanelProps {
   action?: React.ReactNode;
   titleAs?: 'div' | 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
   /**
+   * Forwards a ref to the rendered title element. Pass this when the caller
+   * needs to programmatically move focus to the title — e.g. moving focus to
+   * a critical error heading on mount, or to an empty-state heading after an
+   * action removes the last visible item and the previous focus target
+   * unmounts. When provided, the title also gets `tabIndex={-1}` so it is
+   * focusable via `.focus()` without joining the regular tab order.
+   */
+  titleRef?: React.Ref<HTMLElement>;
+  /**
    * Overrides the default ARIA role.
    * Use "alert" for error states that require immediate user attention (aria-live="assertive").
    * Defaults to "status" (aria-live="polite") for non-critical states.
@@ -14,7 +23,7 @@ interface StatePanelProps {
   role?: 'status' | 'alert';
 }
 
-export function StatePanel({ title, message, icon, action, titleAs = 'h2', role = 'status' }: StatePanelProps) {
+export function StatePanel({ title, message, icon, action, titleAs = 'h2', titleRef, role = 'status' }: StatePanelProps) {
   const TitleTag = titleAs;
   const ariaLive = role === 'alert' ? 'assertive' : 'polite';
 
@@ -58,7 +67,13 @@ export function StatePanel({ title, message, icon, action, titleAs = 'h2', role 
       aria-live={wrapperAriaLive}
     >
       {icon && <div className="text-slate-400 mb-4" aria-hidden="true">{icon}</div>}
-      <TitleTag className="text-lg font-semibold text-scs-ink mb-2">{title}</TitleTag>
+      <TitleTag
+        ref={titleRef as React.Ref<HTMLHeadingElement>}
+        tabIndex={titleRef ? -1 : undefined}
+        className={`text-lg font-semibold text-scs-ink mb-2${titleRef ? ' focus:outline-none' : ''}`}
+      >
+        {title}
+      </TitleTag>
       <p className="text-sm text-slate-600 max-w-sm mb-6">{message}</p>
       {action && <div>{action}</div>}
       <span className="sr-only" role="status" aria-live="polite">{announcement}</span>

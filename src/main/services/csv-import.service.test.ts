@@ -86,6 +86,29 @@ describe("buildCsvImportPreview", () => {
     );
   });
 
+  // ARQ-3 — the row-count ceiling itself has been enforced since
+  // MAX_CSV_IMPORT_ROWS was introduced, but had zero direct test coverage. This
+  // confirms it triggers a clear "file too large" message right past the
+  // threshold, and does NOT trigger exactly at the threshold.
+  it("throws a clear 'file too large' message when the CSV exceeds the 5000-row cap", async () => {
+    const header = "type,displayName,phone1Number";
+    const rows = Array.from({ length: 5001 }, (_, i) => `person,Persona ${i},${10000 + i}`);
+    const filePath = await writeFile("too-many-rows.csv", [header, ...rows].join("\n") + "\n");
+
+    await expect(buildCsvImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "El CSV supera el límite máximo de 5000 filas. Divide el archivo e importa en lotes."
+    );
+  }, 15000);
+
+  it("accepts a CSV at exactly the 5000-row cap", async () => {
+    const header = "type,displayName,phone1Number";
+    const rows = Array.from({ length: 5000 }, (_, i) => `person,Persona ${i},${10000 + i}`);
+    const filePath = await writeFile("at-cap-rows.csv", [header, ...rows].join("\n") + "\n");
+
+    const { preview } = await buildCsvImportPreview(filePath, "TestEditor");
+    expect(preview.totalRowCount).toBe(5000);
+  }, 15000);
+
   it("skips row and adds issue when displayName is missing", async () => {
     const filePath = await writeFile(
       "no-displayname.csv",
@@ -234,7 +257,7 @@ describe("buildCsvImportPreview", () => {
     expect(dataset.records).toHaveLength(0);
   });
 
-  // OIR-222: role/schedule/sector/section CSV columns (mirrors ODS Categoría/
+  // Role/schedule/sector/section CSV columns (mirrors ODS Categoría/
   // Horario/Sector/Sección) map to organization.role/schedule and
   // location.sector/section.
   it("maps role/schedule/sector/section columns to organization/location fields", async () => {
@@ -273,7 +296,7 @@ describe("buildCsvImportPreview", () => {
 });
 
 // ---------------------------------------------------------------------------
-// OIR-227 — "Principal" must never be auto-assigned to the first phone
+// "Principal" must never be auto-assigned to the first phone
 // ---------------------------------------------------------------------------
 //
 // buildPhones() has two branches: the `phones` JSON branch (used by the
@@ -282,7 +305,7 @@ describe("buildCsvImportPreview", () => {
 // used to force index 0 to isPrimary=true whenever nothing was explicitly
 // marked primary. These tests lock in that neither branch invents a primary
 // phone anymore.
-describe("buildImportPreviewFromRows — isPrimary is never auto-assigned (OIR-227)", () => {
+describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () => {
   let isPrimaryTestRoot: string;
 
   beforeEach(async () => {

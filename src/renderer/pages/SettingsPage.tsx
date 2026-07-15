@@ -1,4 +1,6 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
+import { StatusBanner } from "../components/feedback/StatusBanner";
 import { useToast } from "../components/feedback/ToastRegion";
 import { DataManagementSection } from "../components/settings/DataManagementSection";
 import { useAppStore } from "../store/useAppStore";
@@ -85,7 +87,7 @@ export const SettingsPage = () => {
   }, [managedDefaults, settings]);
 
   if (!settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando configuración…</section>;
+    return <LoadingStatus message="Cargando configuración…" className="rounded-3xl bg-white p-6 shadow-panel" busy />;
   }
 
   const isDirty =
@@ -216,7 +218,7 @@ export const SettingsPage = () => {
         dataFilePath,
         backupDirectoryPath,
         ui: {
-          // OIR-231: the "Mostrar inactivos al iniciar" UI toggle was removed
+          // The "Mostrar inactivos al iniciar" UI toggle was removed
           // along with the Inactivo feature. showInactiveByDefault is left as
           // inert dead config in the schema (see project decision) — preserve
           // whatever value is already persisted rather than exposing it here.
@@ -252,8 +254,8 @@ export const SettingsPage = () => {
   );
 
   return (
-    <section className="space-y-6">
-      <h2 className="sr-only">Configuración</h2>
+    <section aria-labelledby="settings-page-title" className="space-y-6">
+      <h2 id="settings-page-title" className="sr-only">Configuración</h2>
       <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
           <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
@@ -278,7 +280,7 @@ export const SettingsPage = () => {
               </p>
             </div>
 
-            {/* OIR-221: "Copia de seguridad automática" compacted into a single tight
+            {/* "Copia de seguridad automática" compacted into a single tight
                 row-group — the toggle, schedule and retention all share one row on
                 wider screens instead of being spread across separate stacked blocks. */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -376,7 +378,7 @@ export const SettingsPage = () => {
               </div>
             </div>
 
-            {/* OIR-221: the raw data-file/backup-folder path fields are technical
+            {/* The raw data-file/backup-folder path fields are technical
                 and almost never touched day-to-day on this shared workstation, so
                 they are folded away behind a collapsed "Avanzado" disclosure rather
                 than shown prominently. The underlying settings values are untouched
@@ -446,15 +448,18 @@ export const SettingsPage = () => {
           </div>
 
           {saveError ? (
-            <div role="alert" className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-              <p className="font-semibold">No se pudo guardar la configuración</p>
-              <p className="mt-2">{saveError}</p>
+            <div className="mt-6">
+              <StatusBanner
+                type="error"
+                title="No se pudo guardar la configuración"
+                message={saveError}
+              />
               {canOfferManagedReset ? (
                 <button
                   type="button"
                   onClick={() => void handleResetPathsToDefaults()}
                   disabled={isSaving || isResettingPaths}
-                  className="focus-ring mt-4 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isResettingPaths ? "Cargando rutas…" : "Cargar rutas gestionadas"}
                 </button>

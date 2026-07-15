@@ -1,5 +1,5 @@
 /**
- * OIR-130 — Unit tests for spreadsheet-buscas-parser.ts
+ * Unit tests for spreadsheet-buscas-parser.ts
  *
  * Covers:
  *   1. detectBuscasHeaderRowIndex — header detection across first 5 rows
@@ -443,10 +443,10 @@ describe("parseBuscasSheets", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration: interim-skip tests updated for OIR-130
+// Integration: interim-skip tests
 // ---------------------------------------------------------------------------
 
-describe("OIR-130: buscas sheets are parsed, not skipped", () => {
+describe("buscas sheets are parsed, not skipped", () => {
   it("parseBuscasSheets produces records matching real ODS fixture shape", () => {
     // Mirrors the real Buscas_Facultativos + Buscas_Celadores structure
     const result = parseBuscasSheets([

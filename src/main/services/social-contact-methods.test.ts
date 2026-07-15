@@ -1,5 +1,5 @@
 /**
- * OIR-131 — Social media as a first-class contact method.
+ * Social media as a first-class contact method.
  *
  * Tests cover:
  *   1. Schema — socialContactSchema parse, backward-compat default, at-least-one-of handle/url
@@ -15,7 +15,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { z } from "zod";
 import {
   socialContactSchema,
@@ -25,27 +25,13 @@ import {
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import type { NormalizedImportRow } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 const makeServiceSheet = (
   name: string,
@@ -403,7 +389,7 @@ describe("social-only row is accepted (no phone, no email, no location)", () => 
 // 4. ODS import — social-handle rows become valid contacts
 // ---------------------------------------------------------------------------
 
-describe("ODS import — social-handle rows imported as contacts (OIR-131)", () => {
+describe("ODS import — social-handle rows imported as contacts", () => {
   it("social-handle row in urgencias sheet becomes a contact with social1Handle set", () => {
     const filePath = writeWorkbook(testRoot, "social-ods.xlsx", [
       {
@@ -577,7 +563,7 @@ describe("getSafeSocialUrl — scheme allowlist (XSS-safe URL derivation)", () =
 });
 
 // ---------------------------------------------------------------------------
-// 6. L-01 — socialContactSchema url scheme validation (OIR-131)
+// 6. L-01 — socialContactSchema url scheme validation
 // ---------------------------------------------------------------------------
 
 import { editableSocialContactSchema } from "../../shared/schemas/contact.js";
@@ -715,11 +701,11 @@ describe("editableSocialContactSchema — url scheme validation (L-01)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. H-01 regression — socials survive create + updateRecord (OIR-131)
+// 7. H-01 regression — socials survive create + updateRecord
 // ---------------------------------------------------------------------------
 
 import nodeFs_h01 from "node:fs";
-import * as XLSX_h01 from "xlsx-republish";
+import * as XLSX_h01 from "xlsx";
 import { vi } from "vitest";
 
 XLSX_h01.set_fs(nodeFs_h01);
@@ -732,7 +718,7 @@ vi.mock("electron", () => ({
   }
 }));
 
-describe("H-01 regression — socials survive createRecord + updateRecord (OIR-131)", () => {
+describe("H-01 regression — socials survive createRecord + updateRecord", () => {
   let h01TestRoot: string;
 
   beforeEach(async () => {
@@ -828,10 +814,10 @@ describe("H-01 regression — socials survive createRecord + updateRecord (OIR-1
 });
 
 // ---------------------------------------------------------------------------
-// 8. BUG1 regression — socials deduped by content, not positional id (OIR-131)
+// 8. BUG1 regression — socials deduped by content, not positional id
 // ---------------------------------------------------------------------------
 
-describe("BUG1 — social dedup by content key in mergeDuplicates (OIR-131)", () => {
+describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
   let bug1Root: string;
 
   beforeEach(async () => {
@@ -953,10 +939,10 @@ describe("BUG1 — social dedup by content key in mergeDuplicates (OIR-131)", ()
 });
 
 // ---------------------------------------------------------------------------
-// 9. BUG2 — url:"" in persistence schema does not crash parse (OIR-131)
+// 9. BUG2 — url:"" in persistence schema does not crash parse
 // ---------------------------------------------------------------------------
 
-describe("BUG2 — socialContactSchema accepts url:'' (treated as absent) (OIR-131)", () => {
+describe("BUG2 — socialContactSchema accepts url:'' (treated as absent)", () => {
   it("parses a social with url:'' without throwing", () => {
     expect(() =>
       socialContactSchema.parse({
@@ -1020,10 +1006,10 @@ describe("BUG2 — socialContactSchema accepts url:'' (treated as absent) (OIR-1
 });
 
 // ---------------------------------------------------------------------------
-// 10. LOW UX — getSafeSocialUrl: web/other + full-URL handle is clickable (OIR-131)
+// 10. LOW UX — getSafeSocialUrl: web/other + full-URL handle is clickable
 // ---------------------------------------------------------------------------
 
-describe("LOW UX — getSafeSocialUrl: web/other with full-URL handle (OIR-131)", () => {
+describe("LOW UX — getSafeSocialUrl: web/other with full-URL handle", () => {
   // Inline replica kept in sync with DirectoryPage.tsx getSafeSocialUrl (post-fix version)
   const SAFE_SOCIAL_BASE_URLS_LOCAL: Partial<Record<string, string>> = {
     instagram: "https://instagram.com/",

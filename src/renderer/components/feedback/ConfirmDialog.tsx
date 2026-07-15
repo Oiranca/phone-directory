@@ -12,7 +12,7 @@ interface ConfirmDialogProps {
   confirmDisabled?: boolean;
   cancelDisabled?: boolean;
   /**
-   * OIR-225 — optional extra content rendered between the message and the
+   * Optional extra content rendered between the message and the
    * action buttons (e.g. the merge-fields editor on the Deduplicate page).
    * Purely additive: omitting it preserves the exact prior dialog layout.
    */

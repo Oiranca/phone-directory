@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
+import { LoadingStatus } from "../feedback/LoadingStatus";
 import { useToast } from "../feedback/ToastRegion";
 import { useAppStore } from "../../store/useAppStore";
 import { toCompactToastMessage } from "../../utils/toastMessage";
+import { useFocusOnMount } from "../../hooks/useFocusOnMount";
 
 const formatTimestamp = (value: string) => {
   const date = new Date(value);
@@ -24,16 +26,16 @@ type PendingConfirmation =
   | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts };
 
 /**
- * OIR-219 — "Datos e importación" section of the Configuración page.
+ * "Datos e importación" section of the Configuración page.
  *
  * This used to be the standalone "Importar/Exportar" page (see the removed
  * `ImportExportPage`). It now lives as a section inside Configuración.
  *
  * Card consolidation:
  * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
- *   "Exportar JSON" actions into a single card. OIR-223 reduced this to a
+ *   "Exportar JSON" actions into a single card. A later pass reduced this to a
  *   single primary button plus a de-emphasized secondary link for saving to
- *   a different folder; OIR-224 removed that secondary link entirely (the
+ *   a different folder; a subsequent pass removed that secondary link entirely (the
  *   operator confirmed choosing another destination folder is never
  *   needed) — the card is now just a title, one description line and the
  *   single "Crear copia de seguridad" button. The underlying
@@ -57,8 +59,8 @@ type PendingConfirmation =
  *   unchanged). This preserves the original destructive-replace confirmation
  *   semantics while still allowing one unified button/dialog.
  *
- * OIR-223 priority 5 — the "Recuperación / Copias de seguridad locales" list
- * (with its OIR-221 "Mostrar más" bounded-list toggle) is REMOVED entirely,
+ * The "Recuperación / Copias de seguridad locales" list
+ * (with its "Mostrar más" bounded-list toggle) is REMOVED entirely,
  * per updated product direction: an operator only needs to know WHEN the
  * last backup happened, not browse a list. It is replaced with a single
  * "Última copia de seguridad: <fecha>" indicator, derived client-side from
@@ -90,7 +92,7 @@ export const DataManagementSection = () => {
   // Tracks whether the initial backup list load has been requested so the
   // backups effect never issues more than one listBackups IPC call, even when
   // contacts or settings references change after the initial load. The list
-  // itself is no longer rendered (OIR-223 priority 5) — this data is fetched
+  // itself is no longer rendered — this data is fetched
   // only to derive the "Última copia de seguridad" date below.
   const backupsRequestedRef = useRef(false);
   const isMutating =
@@ -117,11 +119,7 @@ export const DataManagementSection = () => {
     void ensureBootstrapLoaded();
   }, []);
 
-  useLayoutEffect(() => {
-    if (isPanelOpen) {
-      panelHeadingRef.current?.focus();
-    }
-  }, [isPanelOpen]);
+  useFocusOnMount(panelHeadingRef, isPanelOpen);
 
   useEffect(() => {
     if (storeIsLoading) return;
@@ -166,7 +164,7 @@ export const DataManagementSection = () => {
     }
   };
 
-  // OIR-219: single unified "Importar" entry point. Opens exactly one native
+  // Single unified "Importar" entry point. Opens exactly one native
   // dialog (via pickAndImportDataset) and renders whichever existing flow
   // matches the returned `kind` — the JSON full-replace result handling
   // (previously handleImport) or the CSV preview handling (previously
@@ -214,7 +212,7 @@ export const DataManagementSection = () => {
 
       setCsvPreview(preview);
 
-      // OIR-200: nothing importable at all is still blocked (no valid contact
+      // Nothing importable at all is still blocked (no valid contact
       // rows and no buscas content) — everything else is a partial import.
       const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
 
@@ -226,11 +224,11 @@ export const DataManagementSection = () => {
         return;
       }
 
-      // OIR-182 items 9+10: single toast per action; gate "Todo listo" when conflicts exist.
-      // OIR-188: confidence note shown in panel — toast covers status/count only.
+      // Single toast per action; gate "Todo listo" when conflicts exist.
+      // Confidence note shown in panel — toast covers status/count only.
       const unresolvedCount = preview.conflictCount ?? 0;
 
-      // OIR-200: a partial import (some rows skipped, rest still importable) takes
+      // A partial import (some rows skipped, rest still importable) takes
       // priority over the conflict/success messaging below — it is the most
       // surprising outcome for the operator, so it gets its own single toast.
       if (preview.invalidRowCount > 0) {
@@ -267,7 +265,7 @@ export const DataManagementSection = () => {
   };
 
   const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
-    // OIR-200: rejected rows no longer block the import — they are skipped. The
+    // Rejected rows no longer block the import — they are skipped. The
     // only remaining hard blocker is having nothing importable at all, mirroring
     // the guard kept in AppDataService.importCsvDataset.
     const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
@@ -400,7 +398,7 @@ export const DataManagementSection = () => {
     {
       const preview = pendingConfirmation.preview;
 
-      // OIR-182 item 8: show the applied conflict policies in the dialog so the
+      // Show the applied conflict policies in the dialog so the
       // user sees what was chosen (not the system defaults) before confirming.
       const conflictedRecords = preview.conflictedRecords ?? [];
       const policyParts: string[] = [];
@@ -434,10 +432,16 @@ export const DataManagementSection = () => {
   }
 
   if (isLoading || storeIsLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-6 shadow-panel">Cargando importación y copias de seguridad…</section>;
+    return (
+      <LoadingStatus
+        message="Cargando importación y copias de seguridad…"
+        className="rounded-3xl bg-white p-6 shadow-panel"
+        busy
+      />
+    );
   }
 
-  // OIR-223 priority 5: derive the most recent backup's date client-side from
+  // Derive the most recent backup's date client-side from
   // the same listBackups() data already fetched above — no new IPC, and no
   // list is rendered. `backups` is not guaranteed to be sorted, so take the
   // max createdAt explicitly rather than assuming index 0 is the newest.
@@ -456,7 +460,7 @@ export const DataManagementSection = () => {
           Copias de seguridad, exportación e importación del directorio, y recuperación desde copias locales.
         </p>
       </div>
-      {/* OIR-224 priority 3: single-column vertical stack — the import/backup
+      {/* Single-column vertical stack — the import/backup
           area previously shared a two-column grid with the "Última copia de
           seguridad" indicator as a sticky sidebar, which squeezed its
           available width (and, with it, the "Filas del archivo" preview
@@ -480,10 +484,10 @@ export const DataManagementSection = () => {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {/* OIR-219/OIR-223/OIR-224: "Copia de seguridad" — a single primary
+          {/* "Copia de seguridad" — a single primary
               action (save to the local backups folder). The former secondary
-              "Guardar la copia en otra carpeta…" link was removed entirely
-              (OIR-224): the operator confirmed choosing another destination
+              "Guardar la copia en otra carpeta…" link was removed entirely:
+              the operator confirmed choosing another destination
               folder is never needed, so this card is now just a title, one
               description line and the single button. The underlying
               exportDataset()/createBackup() IPC mechanism is unchanged. */}
@@ -504,12 +508,12 @@ export const DataManagementSection = () => {
             </div>
           </div>
 
-          {/* OIR-219/OIR-224: "Importar" is a single unified entry point. One
+          {/* "Importar" is a single unified entry point. One
               button opens exactly one native dialog (json/csv/ods/xls/xlsx
               filter) via pickAndImportDataset(); main dispatches by extension
               to the existing JSON full-replace or CSV preview pipelines and
               this component renders whichever existing UI matches the
-              result. OIR-224 shortened the card copy to two short lines (no
+              result. The card copy was shortened to two short lines (no
               "JSON" wording, no full outcome explainer). */}
           <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
@@ -533,7 +537,7 @@ export const DataManagementSection = () => {
           </div>
         </div>
 
-        {/* OIR-182 item 1 / OIR-219: visible spinner while the file is picked and processed */}
+        {/* Visible spinner while the file is picked and processed */}
         {isImporting && (
           <div
             role="status"
@@ -569,13 +573,13 @@ export const DataManagementSection = () => {
         )}
         </article>
 
-        {/* OIR-223 priority 5: replaces the former backups list (with its
-            OIR-221 "Mostrar más" bounded-list toggle) with a single,
+        {/* Replaces the former backups list (with its
+            "Mostrar más" bounded-list toggle) with a single,
             simple date indicator — an operator only needs to know WHEN
             the last backup happened, not browse a list. Restoring an old
             backup file is done via the unified "Importar" picker above
             (importing a .json backup already performs a full replace).
-            OIR-224 priority 3: renders BELOW the import/backup article in
+            Renders BELOW the import/backup article in
             the single-column stack (no longer a sticky sidebar beside it),
             so it never steals width from the article above. */}
         <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel">
@@ -611,20 +615,22 @@ export const DataManagementSection = () => {
         </aside>
       </div>
 
-      {confirmationContent ? (
-        <ConfirmDialog
-          isOpen={true}
-          title={confirmationContent.title}
-          message={confirmationContent.message}
-          confirmLabel={confirmationContent.confirmLabel}
-          cancelLabel="Cancelar"
-          isDestructive={true}
-          onConfirm={() => {
-            void handleConfirmAction();
-          }}
-          onCancel={() => setPendingConfirmation(null)}
-        />
-      ) : null}
+      {/* MANT-13: always rendered with `isOpen` toggled (idiom A), matching the
+          other ConfirmDialog call sites (BuscasPage, DeduplicatePage,
+          ContactFormPage, App) instead of conditionally mounting/unmounting
+          the dialog with `isOpen` hardcoded to `true`. */}
+      <ConfirmDialog
+        isOpen={confirmationContent !== null}
+        title={confirmationContent?.title ?? ""}
+        message={confirmationContent?.message ?? ""}
+        confirmLabel={confirmationContent?.confirmLabel ?? "Confirmar"}
+        cancelLabel="Cancelar"
+        isDestructive={true}
+        onConfirm={() => {
+          void handleConfirmAction();
+        }}
+        onCancel={() => setPendingConfirmation(null)}
+      />
     </section>
   );
 };

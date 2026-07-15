@@ -1,5 +1,11 @@
 /**
- * OIR-102 — ODS multi-sheet phone-number data-loss regression tests.
+ * ODS multi-sheet phone-number data-loss regression tests.
+ *
+ * (OIR-217/MANT-7: renamed from `spreadsheet-import-oir102.test.ts` to
+ * `spreadsheet-import-oir102-multisheet.test.ts` to disambiguate from the
+ * separate, unrelated fixes covered in `spreadsheet-import-oir102-interim.test.ts`
+ * — both files previously carried the same bare "OIR-102" label despite
+ * testing different root causes.)
  *
  * Two root causes fixed:
  *   1. 2-phone cap: normalizeServiceSheet only emitted phone1/phone2; 3rd+
@@ -11,7 +17,7 @@
  * when IS_VITEST_RUNTIME is true) and buildImportPreviewFromRows to exercise
  * the full pipeline end-to-end.
  *
- * Fixtures are built programmatically with xlsx-republish and written to a
+ * Fixtures are built programmatically with xlsx and written to a
  * temporary directory so no binary fixture files need to be committed.
  */
 import nodeFs from "node:fs";
@@ -19,33 +25,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import { normalizeWorkbookRowsFromFile } from "./spreadsheet-import.service.js";
 import { buildImportPreviewFromRows } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Write a multi-sheet workbook to disk as .xlsx and return the file path. */
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 /**
  * Minimal service-sheet layout understood by the parser:
@@ -117,7 +106,7 @@ describe("single-row multi-phone (root cause 1)", () => {
     expect(phones.map((p) => p.number)).toEqual(["10001", "10002", "10003"]);
   });
 
-  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
+  it("does not mark any phone as primary by default ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["55555", "66666", "77777"] }
@@ -206,7 +195,7 @@ describe("cross-sheet merge by normalized displayName (root cause 2)", () => {
     expect(numbers).toHaveLength(3);
   });
 
-  it("does not assign a primary phone on the merged contact (OIR-227 residual fix — 'Principal' is manual-only)", () => {
+  it("does not assign a primary phone on the merged contact ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary-merged.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Banco de Sangre", numbers: ["11111"] }
@@ -345,7 +334,7 @@ describe("full pipeline: normalize → buildImportPreviewFromRows", () => {
     expect(phoneNumbers.filter((n) => n === "22222")).toHaveLength(1);
     expect(phoneNumbers).toHaveLength(4);
 
-    // OIR-227 residual fix: "Principal" is never auto-assigned on import,
+    // "Principal" is never auto-assigned on import,
     // even after a cross-sheet merge — it stays a manual, user-editable
     // choice made on the contact's edit form.
     const primaryCount = record!.contactMethods.phones.filter((p) => p.isPrimary).length;

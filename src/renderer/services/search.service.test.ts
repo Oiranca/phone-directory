@@ -227,7 +227,7 @@ describe("searchRecords", () => {
 
 describe("confidential flags are advisory — flagged records remain searchable", () => {
   it("returns a record whose only phone is confidential when searching by that phone NUMBER", () => {
-    // Advisory policy (OIR-105 / P1-03): confidential/noPatientSharing are presentation markers only.
+    // Advisory policy: confidential/noPatientSharing are presentation markers only.
     // Flagged phone NUMBERS must remain in the Fuse index — the record must be found by querying
     // its phone number directly (not the displayName) to prove the number itself is not stripped.
     // The displayName ("Servicio genérico") contains no digits, so a hit on "99999" can only

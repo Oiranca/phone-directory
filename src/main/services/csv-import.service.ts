@@ -10,6 +10,7 @@ import type {
   CsvImportPreview,
   CsvImportPreviewRow,
   CsvImportWarning,
+  DetectionConfidence,
   DirectoryDataset,
   PhoneContact,
   EmailContact,
@@ -20,7 +21,7 @@ import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
 /**
  * Internal-only extension of CsvImportPreview that carries the absolute
- * sourceFilePath.  This field is stripped at the IPC boundary (OIR-115) and
+ * sourceFilePath.  This field is stripped at the IPC boundary and
  * must never reach the renderer.
  */
 export type CsvImportPreviewInternal = CsvImportPreview & { sourceFilePath: string };
@@ -38,14 +39,14 @@ const SUPPORTED_COLUMNS = [
   "department",
   "service",
   "specialty",
-  // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario" columns).
+  // Role/job title and operating hours (ODS "Categoría"/"Horario" columns).
   "role",
   "schedule",
   "building",
   "floor",
   "room",
   "locationText",
-  // OIR-222: ODS "Sector"/"Sección" columns.
+  // ODS "Sector"/"Sección" columns.
   "sector",
   "section",
   "phone1Label",
@@ -70,7 +71,7 @@ const SUPPORTED_COLUMNS = [
   "email2",
   "email2Label",
   "email2IsPrimary",
-  // Social media columns (OIR-131)
+  // Social media columns
   "social1Platform",
   "social1Handle",
   "social1Url",
@@ -208,7 +209,7 @@ const ensureSinglePrimary = <T extends { isPrimary: boolean }>(
     });
   }
 
-  // OIR-227: only reconcile an actual conflict (more than one entry
+  // Only reconcile an actual conflict (more than one entry
   // explicitly marked primary) by keeping the first and clearing the rest.
   // When zero entries are marked primary, leave them all as-is — "Principal"
   // must never be invented at import time; it stays a manual, user-editable
@@ -260,7 +261,7 @@ const buildPhones = (
           label: entry.label || undefined,
           number: entry.number,
           kind: SUPPORTED_PHONE_KINDS.has(entry.kind) ? entry.kind : "internal",
-          // OIR-227: respect whatever the normalizer computed instead of
+          // Respect whatever the normalizer computed instead of
           // forcing the first phone to be "Principal" — the spreadsheet
           // parsers no longer auto-assign isPrimary on import.
           isPrimary: entry.isPrimary,
@@ -363,7 +364,7 @@ const buildEmails = (
 };
 
 /**
- * Parses social1/social2 flat CSV columns into SocialContact entries (OIR-131).
+ * Parses social1/social2 flat CSV columns into SocialContact entries.
  * Only `instagram`, `twitter`, `facebook`, `linkedin`, `youtube`, `tiktok`, `web`, `other`
  * are valid platforms; unknown values are normalized to "other" with a warning.
  */
@@ -494,10 +495,10 @@ export const buildImportPreviewFromRows = async (
     fileName: string;
     editorName: string;
     detectedFormat?: string;
-    detectionConfidence?: "high" | "medium" | "low";
-    /** INTERIM (OIR-102/OIR-134): Buscas-sheet rows silently skipped. Default 0 (CSV path). */
+    detectionConfidence?: DetectionConfidence;
+    /** INTERIM: Buscas-sheet rows silently skipped. Default 0 (CSV path). */
     buscasSkippedRowCount?: number;
-    /** INTERIM (OIR-102/OIR-134): Social-handle rows silently skipped. Default 0 (CSV path). */
+    /** INTERIM: Social-handle rows silently skipped. Default 0 (CSV path). */
     socialHandleSkippedRowCount?: number;
   }
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
@@ -564,12 +565,12 @@ export const buildImportPreviewFromRows = async (
       floor: maybe(row.floor),
       room: maybe(row.room),
       text: maybe(row.locationText),
-      // OIR-222: ODS "Sector"/"Sección" columns.
+      // ODS "Sector"/"Sección" columns.
       sector: maybe(row.sector),
       section: maybe(row.section)
     });
 
-    // (OIR-131): socials count as a valid contact method — a social-only row is accepted.
+    // Socials count as a valid contact method — a social-only row is accepted.
     if (phones.length === 0 && emails.length === 0 && socials.length === 0 && Object.keys(location).length === 0) {
       issues.push("Cada fila necesita al menos un teléfono, un correo, una red social o un dato de ubicación.");
     }
@@ -619,7 +620,7 @@ export const buildImportPreviewFromRows = async (
           service: maybe(row.service),
           area,
           specialty: maybe(row.specialty),
-          // OIR-222: role/job title and operating hours (ODS "Categoría"/"Horario").
+          // Role/job title and operating hours (ODS "Categoría"/"Horario").
           role: maybe(row.role),
           schedule: maybe(row.schedule)
         }),

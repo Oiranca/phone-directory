@@ -7,7 +7,7 @@ import {
 } from "./contact.js";
 
 /**
- * OIR-225 — optional field-level overrides applied on top of the surviving
+ * Optional field-level overrides applied on top of the surviving
  * ("keep") record after the normal keep/discard merge logic runs, so a user
  * editing the surviving record's fields before confirming a merge (e.g.
  * picking the correct displayName/type/phone from either side) wins over
@@ -66,4 +66,3 @@ export const mergeContactsSchema = z.object({
 });
 
 export type MergeContactsOverrides = z.infer<typeof mergeContactsOverridesSchema>;
-export type MergeContactsRequest = z.infer<typeof mergeContactsSchema>;

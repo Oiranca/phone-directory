@@ -39,7 +39,7 @@ import type {
 } from "../../shared/types/contact.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
-import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
+import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
@@ -49,7 +49,7 @@ import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDe
  * - Every custom field on the kept record is preserved as-is.
  * - Any custom field on the discarded record whose `key` doesn't already
  *   exist on the kept record is appended (union, not replace).
- * - On a `key` conflict, the kept record's value wins (OIR-245).
+ * - On a `key` conflict, the kept record's value wins.
  * - Returns `undefined` when neither record has any custom fields, matching
  *   the optional shape of `contactRecordSchema.customFields`.
  */
@@ -218,6 +218,29 @@ export class AppDataService {
     const settings = await this.readSettings(true);
     const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear la copia de seguridad del directorio.");
     this.autoBackupEditCount = 0;
+    // Cap the number of manual/import/restore/reset backups just like auto-backups.
+    // Without this, repeated import/export/reset cycles accumulate
+    // unlimited "contacts-*" backup files, each a full PII copy, with no cap —
+    // a real risk on the disk-constrained USB deployment this app targets.
+    // Reuses the same retentionCount knob and pruning primitive as auto-backups
+    // so retention behavior stays consistent between the two backup families.
+    //
+    // Follow-up: pruning failures (e.g. EACCES/EBUSY on a locked backup
+    // file on Windows) must NOT fail the calling operation (importDataset /
+    // restoreBackup / resetDataset) — the actual backup file above was already
+    // created successfully. Non-fatal: log so operators can diagnose, matching
+    // the console.error convention used for the non-fatal buscas import failure
+    // in importCsvDataset below.
+    try {
+      await this.pruneBackupsByPrefix(
+        settings,
+        "contacts-",
+        "No se pudo rotar las copias de seguridad del directorio."
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[BackupRetention] Failed to prune contacts-* backups — ${errMsg}`);
+    }
     return backupFilePath;
   }
 
@@ -385,13 +408,13 @@ export class AppDataService {
 
       if (pathLstat.isSymbolicLink()) {
         throw new Error(
-          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+          `${message} Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
         );
       }
 
       if (handleStats.dev !== pathStats.dev || handleStats.ino !== pathStats.ino) {
         throw new Error(
-          `${message} Ruta afectada: ${canonicalSourceFilePath}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
+          `${message} Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}. El archivo cambió mientras se validaba y ya no es seguro restaurarlo.`
         );
       }
 
@@ -401,7 +424,7 @@ export class AppDataService {
       // placeholder never reaches JSON.parse (which would throw SyntaxError).
       if (rawContents.trim().length === 0) {
         throw new Error(
-          `${message} El archivo de copia de seguridad está vacío y no puede restaurarse. Ruta afectada: ${canonicalSourceFilePath}.`
+          `${message} El archivo de copia de seguridad está vacío y no puede restaurarse. Ruta afectada: ${formatPathForError(canonicalSourceFilePath)}.`
         );
       }
 
@@ -463,7 +486,7 @@ export class AppDataService {
   }
 
   // Return type carries sourceFilePath so the IPC handler can destructure it out
-  // at the boundary (OIR-115).  The renderer-facing CsvImportPreviewWithConflicts
+  // at the boundary. The renderer-facing CsvImportPreviewWithConflicts
   // intentionally omits sourceFilePath; this widens it with the internal field.
   async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
     const settings = await this.readSettings(true);
@@ -502,14 +525,14 @@ export class AppDataService {
       editorName
     );
 
-    // OIR-200: A partially-invalid file no longer blocks the whole import. Rejected
+    // A partially-invalid file no longer blocks the whole import. Rejected
     // rows are already excluded from `dataset` — buildImportPreviewFromRows only
     // pushes a row into `dataset.records` after it passes Zod validation via
     // contactRecordSchema.parse — so proceeding here can never persist a rejected
     // row. Rejected rows (and their existing per-row reasons in preview.rowIssues)
     // are simply skipped and reported back in the result below.
 
-    // OIR-130: a buscas-only ODS has validRowCount === 0 (no contact rows) but
+    // A buscas-only ODS has validRowCount === 0 (no contact rows) but
     // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook
     // that has nothing importable at all (no valid contact rows AND no buscas
     // content). This is the one case that must still block the import.
@@ -539,7 +562,7 @@ export class AppDataService {
       }
     });
 
-    // OIR-130: Persist buscas records after contacts are successfully written.
+    // Persist buscas records after contacts are successfully written.
     // A buscas failure must NOT roll back or suppress the contacts import result.
     if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
       try {
@@ -566,7 +589,7 @@ export class AppDataService {
       updatedCount: merged.updatedCount,
       conflictCount: conflicts.length,
       conflictPolicyCounts: merged.conflictPolicyCounts,
-      // OIR-200: surface the same per-row rejection reasons already computed
+      // Surface the same per-row rejection reasons already computed
       // for the preview so the renderer can report exactly what was skipped.
       rowIssues: preview.rowIssues
     };
@@ -586,7 +609,7 @@ export class AppDataService {
       ...parsed,
       id: savedRecordId,
       contactMethods: {
-        // OIR-239: use the non-inventing reconciler — "Principal" must stay a
+        // Use the non-inventing reconciler — "Principal" must stay a
         // manual, user-editable choice; a record with zero phones/emails/
         // socials marked primary must not have one silently forced on save.
         phones: reconcilePrimaryEntries(parsed.contactMethods.phones),
@@ -640,7 +663,7 @@ export class AppDataService {
       id: currentRecord.id,
       source: currentRecord.source,
       contactMethods: {
-        // OIR-239: see createRecord above — never invent a primary here.
+        // See createRecord above — never invent a primary here.
         phones: reconcilePrimaryEntries(parsed.contactMethods.phones),
         emails: reconcilePrimaryEntries(parsed.contactMethods.emails),
         socials: reconcilePrimaryEntries(parsed.contactMethods.socials)
@@ -747,12 +770,12 @@ export class AppDataService {
         service: keepRecord.organization.service || discardRecord.organization.service,
         area: keepRecord.organization.area || discardRecord.organization.area,
         specialty: keepRecord.organization.specialty || discardRecord.organization.specialty,
-        // OIR-245: role/schedule were previously dropped entirely when the
+        // Role/schedule were previously dropped entirely when the
         // keeper lacked them — fill in from the discarded record instead.
         role: keepRecord.organization.role || discardRecord.organization.role,
         schedule: keepRecord.organization.schedule || discardRecord.organization.schedule
       },
-      // OIR-245: merge location field-by-field instead of all-or-nothing —
+      // Merge location field-by-field instead of all-or-nothing —
       // a keeper that already has a location object but is missing a
       // subfield (e.g. sector/section) should still inherit it from the
       // discarded record's location.
@@ -767,12 +790,12 @@ export class AppDataService {
               section: keepRecord.location?.section || discardRecord.location?.section
             }
           : undefined,
-      // OIR-245: union customFields from both records; kept record wins on
+      // Union customFields from both records; kept record wins on
       // key conflicts.
       customFields: mergeCustomFields(keepRecord.customFields, discardRecord.customFields),
       // Merge contact methods with deduplication
       contactMethods: {
-        // OIR-239: never invent a primary when merging duplicates.
+        // Never invent a primary when merging duplicates.
         phones: reconcilePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
         emails: reconcilePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails]),
         socials: reconcilePrimaryEntries([...keepRecord.contactMethods.socials, ...extraSocials])
@@ -795,7 +818,7 @@ export class AppDataService {
       }
     });
 
-    // OIR-225 — apply user-supplied field overrides on top of the automatic
+    // Apply user-supplied field overrides on top of the automatic
     // keep/discard merge result, AFTER the merge logic above has already run.
     // Explicit edits win over whatever the automatic union produced. Only the
     // top-level keys actually present in `overrides` are replaced; anything
@@ -880,7 +903,7 @@ export class AppDataService {
   }
 
   /**
-   * OIR-218: persists the "last import" watermark shown in the app header.
+   * Persists the "last import" watermark shown in the app header.
    * Only called from importDataset / importCsvDataset — restoring an internal
    * backup or editing a single record does not count as "importing a file".
    * Reuses the standard atomic writeJsonFile path (dual-fsync); no parallel
@@ -893,7 +916,7 @@ export class AppDataService {
   }
 
   /**
-   * OIR-218 (item 4): one-time backfill for datasets that were imported before
+   * One-time backfill for datasets that were imported before
    * lastImportedAt existed. If the current settings have no lastImportedAt,
    * check the audit log for a historical "bulk-import" or "dataset-replace"
    * entry (both are written by importCsvDataset / importDataset respectively)
@@ -1163,7 +1186,7 @@ export class AppDataService {
 
     if (this.pathsMatch(settings.dataFilePath, settingsFilePath)) {
       throw new Error(
-        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${settings.dataFilePath}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
+        `La ruta de datos no puede apuntar al archivo de configuración. Ruta afectada: ${formatPathForError(settings.dataFilePath)}. Usa un archivo JSON independiente para los contactos o restablece las rutas gestionadas.`
       );
     }
 
@@ -1179,7 +1202,7 @@ export class AppDataService {
 
     if (path.extname(settings.dataFilePath).toLowerCase() !== ".json") {
       throw new Error(
-        `La ruta de datos debe terminar en .json. Ruta afectada: ${settings.dataFilePath}.`
+        `La ruta de datos debe terminar en .json. Ruta afectada: ${formatPathForError(settings.dataFilePath)}.`
       );
     }
 
@@ -1368,22 +1391,32 @@ export class AppDataService {
     // createBackupFilePathUnique + copyFileWithContext) instead of duplicating
     // that logic here.  This ensures the two code paths can never diverge.
     await this.createBackupCore(settings, "auto-backup", "No se pudo crear la copia de seguridad automática del directorio.");
-    await this.pruneAutoBackups(settings);
+    await this.pruneBackupsByPrefix(
+      settings,
+      "auto-backup-",
+      "No se pudo rotar las copias de seguridad automáticas del directorio."
+    );
   }
 
-  private async pruneAutoBackups(settings: AppSettings) {
+  /**
+   * Shared retention primitive: keeps only the `settings.ui.autoBackup.retentionCount`
+   * most recent backup files whose name starts with `filePrefix`, deleting the rest.
+   * Used both for automatic backups ("auto-backup-") and for manual/import/restore/
+   * reset backups ("contacts-") so the two backup families share a single
+   * retention cap instead of drifting apart.
+   */
+  private async pruneBackupsByPrefix(settings: AppSettings, filePrefix: string, pruneErrorMessage: string) {
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
       "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
-    const pruneErrorMessage = "No se pudo rotar las copias de seguridad automáticas del directorio.";
 
     try {
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
-      const autoBackupFiles = (
+      const prefixedBackupFiles = (
         await Promise.all(
           entries
-            .filter((entry) => entry.isFile() && entry.name.startsWith("auto-backup-") && entry.name.endsWith(".json"))
+            .filter((entry) => entry.isFile() && entry.name.startsWith(filePrefix) && entry.name.endsWith(".json"))
             .map(async (entry) => {
               const filePath = path.join(backupDirectory, entry.name);
 
@@ -1407,10 +1440,10 @@ export class AppDataService {
         )
       ).filter((entry): entry is { filePath: string; createdAt: number } => entry !== null);
 
-      autoBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+      prefixedBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
 
       await Promise.all(
-        autoBackupFiles
+        prefixedBackupFiles
           .slice(settings.ui.autoBackup.retentionCount)
           .map(async (entry) => {
             try {
@@ -1470,7 +1503,7 @@ export class AppDataService {
 
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       throw new Error(
-        `${message} Ruta afectada: ${filePath}. El archivo debe estar dentro de la carpeta de copias de seguridad configurada.`
+        `${message} Ruta afectada: ${formatPathForError(filePath)}. El archivo debe estar dentro de la carpeta de copias de seguridad configurada.`
       );
     }
   }
@@ -1497,13 +1530,13 @@ export class AppDataService {
 
       if (error instanceof Error && error.message === "file-exists") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
+          `${message} Ruta afectada: ${formatPathForError(filePath)}. Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas.`
         );
       }
 
       if (error instanceof Error && error.message === "is-directory") {
         throw new Error(
-          `${message} Ruta afectada: ${filePath}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
+          `${message} Ruta afectada: ${formatPathForError(filePath)}. La ruta de datos debe apuntar a un archivo JSON, no a una carpeta.`
         );
       }
 
@@ -1672,7 +1705,7 @@ export class AppDataService {
       `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
     const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
 
-    // OIR-224: index imported phones by normalized number so phones that
+    // Index imported phones by normalized number so phones that
     // already exist on the current record can have their PRIVACY MARKERS
     // (confidential / noPatientSharing) refreshed from the freshly re-imported
     // source row, instead of silently keeping whatever stale value the current
@@ -1680,7 +1713,7 @@ export class AppDataService {
     // file with the "merge-fields" ("Combinar") conflict policy would append
     // only genuinely NEW phone numbers and leave existing ones completely
     // untouched — so a phone number that was previously imported with the
-    // wrong confidential flag (e.g. from data predating OIR-222's row-level
+    // wrong confidential flag (e.g. from data predating an earlier row-level
     // Confidencial mapping, or a manual mistake) would keep showing the wrong
     // flag forever, no matter how many times the (now-correct) source file was
     // re-imported. The source ODS/CSV row is the authoritative statement of
@@ -1737,13 +1770,13 @@ export class AppDataService {
         service: currentRecord.organization.service ?? importedRecord.organization.service,
         area: currentRecord.organization.area ?? importedRecord.organization.area,
         specialty: currentRecord.organization.specialty ?? importedRecord.organization.specialty,
-        // OIR-245 (import path): role/schedule were previously dropped
+        // Role/schedule were previously dropped
         // entirely whenever the current record lacked them — fill in from
         // the imported record instead, mirroring mergeDuplicates().
         role: currentRecord.organization.role ?? importedRecord.organization.role,
         schedule: currentRecord.organization.schedule ?? importedRecord.organization.schedule
       },
-      // OIR-245 (import path): merge location field-by-field instead of
+      // Merge location field-by-field instead of
       // all-or-nothing — a current record that already has a location object
       // but is missing a subfield (e.g. sector/section) must still inherit it
       // from the imported record's location, mirroring mergeDuplicates().
@@ -1759,7 +1792,7 @@ export class AppDataService {
             }
           : undefined,
       contactMethods: {
-        // OIR-227 (residual gap #3) / OIR-239: normalizePrimaryEntries invents
+        // normalizePrimaryEntries invents
         // a primary when none is marked, which reintroduces the auto-assigned
         // "Principal" bug for any record touched by a merge-fields conflict
         // resolution. Only reconcile a genuine conflict (more than one
@@ -1771,7 +1804,7 @@ export class AppDataService {
       aliases: Array.from(new Set([...currentRecord.aliases, ...importedRecord.aliases])),
       tags: Array.from(new Set([...currentRecord.tags, ...importedRecord.tags])),
       notes: currentRecord.notes ?? importedRecord.notes,
-      // OIR-245 (import path): union customFields from both records instead
+      // Union customFields from both records instead
       // of dropping the imported ones entirely; current record wins on key
       // conflicts, mirroring mergeDuplicates().
       customFields: mergeCustomFields(currentRecord.customFields, importedRecord.customFields),
@@ -1830,7 +1863,7 @@ export class AppDataService {
 
     /**
      * Derive the human-readable match value from the actual intersection between
-     * the imported record and the existing record (OIR-132 Bug-1 + Bug-2).
+     * the imported record and the existing record (Bug-1 + Bug-2).
      *
      * Previously this extracted the first comma-delimited token from the stable key,
      * which was the lexicographically-smallest normalized value — not necessarily
@@ -1902,9 +1935,28 @@ export class AppDataService {
       }
     }
 
-    // Check each imported record for a collision with an existing record
+    // Check each imported record for a collision with an existing record.
+    //
+    // A "conflict" is only ever reported to the user when it matches a
+    // PRE-EXISTING record (source: "existing"). Earlier this loop also indexed
+    // every previously-processed imported record into the very same lookup
+    // maps used for existing-record matching, so a later row in the same batch
+    // that merely collided with an EARLIER row of the same import (an
+    // "intra-batch" match, source: "import") was pushed into `conflicts`
+    // exactly like a real conflict. The renderer surfaces that count with copy
+    // like "Hay N registros que ya existen en la agenda" (CsvImportPreviewPanel),
+    // which is simply false for an intra-batch match — the record does not
+    // already exist anywhere. Against an empty/near-empty database this could
+    // make the vast majority (or all) of a large import look like it was
+    // colliding with existing data when nothing did. Intra-batch rows are still
+    // tracked (`importOnlyMatch`) purely so later rows in the batch can still
+    // resolve transitively back to a real existing record (see below), and so
+    // `mergeImportedDataset` — which has its own independent index and is
+    // unaffected by this method — keeps consolidating duplicate rows within a
+    // single import file exactly as it always has.
     importedDataset.records.forEach((importedRecord, importRecordIndex) => {
-      let match: ConflictIndexEntry | undefined;
+      let existingMatch: ConflictIndexEntry | undefined;
+      let importOnlyMatch: ConflictIndexEntry | undefined;
       let conflictReasonKey = "";
       let matchingFieldValue: string | undefined;
 
@@ -1914,39 +1966,51 @@ export class AppDataService {
       if (importedRecord.externalId) {
         const indexed = currentIndexesByExternalId.get(importedRecord.externalId);
         if (indexed !== undefined) {
-          match = indexed;
-          conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
-        }
-      }
-
-      // Fall back to stable-key match when no externalId match was found
-      if (match === undefined) {
-        for (const key of this.buildStableMergeKeys(importedRecord)) {
-          const indexed = currentIndexesByStableKey.get(key);
-          if (indexed !== undefined) {
-            match = indexed;
-            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
-            matchingFieldValue = extractMatchingFieldValue(indexed.conflictType, importedRecord, indexed.record);
-            break;
+          if (indexed.source === "existing") {
+            existingMatch = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey("external-id-match");
+          } else {
+            importOnlyMatch = indexed;
           }
         }
       }
 
-      if (match !== undefined) {
+      // Fall back to stable-key match when no genuine existing-record match was
+      // found yet — an intra-batch externalId match must not shadow a real
+      // phone/email collision against pre-existing data on a different key.
+      if (existingMatch === undefined) {
+        for (const key of this.buildStableMergeKeys(importedRecord)) {
+          const indexed = currentIndexesByStableKey.get(key);
+          if (indexed === undefined) {
+            continue;
+          }
+          if (indexed.source === "existing") {
+            existingMatch = indexed;
+            conflictReasonKey = this.conflictTypeToReasonKey(indexed.conflictType);
+            matchingFieldValue = extractMatchingFieldValue(indexed.conflictType, importedRecord, indexed.record);
+            break;
+          }
+          if (importOnlyMatch === undefined) {
+            importOnlyMatch = indexed;
+          }
+        }
+      }
+
+      if (existingMatch !== undefined) {
         conflicts.push({
           recordIndex: importRecordIndex,
           importedRecord: this.toConflictRecordSummary(importedRecord),
-          matchingRecord: match.record,
-          matchingRecordIndex: match.recordIndex,
-          matchingRecordSource: match.source,
-          conflictType: match.conflictType,
+          matchingRecord: existingMatch.record,
+          matchingRecordIndex: existingMatch.recordIndex,
+          matchingRecordSource: existingMatch.source,
+          conflictType: existingMatch.conflictType,
           conflictReasonKey,
           matchingFieldValue,
           selectedPolicy: undefined
         });
       }
 
-      const importedIndexEntry = match ?? {
+      const importedIndexEntry = existingMatch ?? importOnlyMatch ?? {
         recordIndex: importRecordIndex,
         conflictType: "external-id-match" as const,
         record: this.toConflictRecordSummary(importedRecord),
@@ -1969,7 +2033,7 @@ export class AppDataService {
   }
 
   private toConflictRecordSummary(record: ContactRecord): ConflictRecordSummary {
-    // Build a compact single-line location summary string (OIR-132).
+    // Build a compact single-line location summary string.
     const loc = record.location;
     const locationParts: string[] = [];
     if (loc?.building) locationParts.push(loc.building);
@@ -1987,7 +2051,7 @@ export class AppDataService {
       service: record.organization.service,
       specialty: record.organization.specialty,
       locationSummary,
-      // Lean contact method lists for field-level diff (OIR-132).
+      // Lean contact method lists for field-level diff.
       phones: record.contactMethods.phones.map((p) => ({
         number: p.number,
         label: p.label,
@@ -2013,7 +2077,7 @@ export class AppDataService {
       return "email-match";
     }
     // If phones: is present (or both), classify as phone-match.
-    // Known limitation (Bug-4 / OIR-132): when a key contains BOTH phones: and emails:,
+    // Known limitation (Bug-4): when a key contains BOTH phones: and emails:,
     // collapsing to "phone-match" means the shared email is not highlighted in the UI.
     // Supporting a "dual-match" conflict type would require extending the ConflictType
     // union and updating the renderer — deferred to avoid scope creep.

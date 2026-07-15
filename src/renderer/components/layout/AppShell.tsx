@@ -4,7 +4,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAppStore } from "../../store/useAppStore";
 
 /**
- * OIR-218: CSS custom property name exposing the app header's rendered height,
+ * CSS custom property name exposing the app header's rendered height,
  * kept in sync via ResizeObserver below. Pages (e.g. DirectoryPage) read this
  * to position their own sticky elements directly below the header without
  * hardcoding a breakpoint-specific offset.
@@ -12,7 +12,7 @@ import { useAppStore } from "../../store/useAppStore";
 export const APP_HEADER_HEIGHT_CSS_VAR = "--app-header-height";
 
 /**
- * OIR-218: renders the last-import watermark as `DD-MM-YYYY HH:mm`.
+ * Renders the last-import watermark as `DD-MM-YYYY HH:mm`.
  * Returns null for an invalid/empty timestamp so the header text is hidden
  * entirely rather than showing a placeholder like "never" or "N/A".
  */
@@ -99,7 +99,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
     }
   }, [location.pathname]);
 
-  // OIR-218: keep --app-header-height in sync with the header's real rendered
+  // Keep --app-header-height in sync with the header's real rendered
   // height (it varies as nav wraps to 2 rows on narrow viewports, or the
   // recovery banner appears/disappears). Consumers (DirectoryPage's sticky
   // filter bar) read this instead of a hardcoded per-breakpoint offset.
@@ -252,10 +252,10 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       <main
         id="main-content"
         tabIndex={-1}
-        // OIR-218 fix: `<main>` receives programmatic focus on every route change
+        // `<main>` receives programmatic focus on every route change
         // (T1, above) purely so assistive tech announces the new page — it must
-        // NOT show the shared `focus-ring` visual treatment. Since OIR-218 bounds
-        // this element's height to (almost exactly) the viewport, that ring's
+        // NOT show the shared `focus-ring` visual treatment. Since this element's
+        // height is bounded to (almost exactly) the viewport, that ring's
         // left/right edges rendered as two full-viewport-height vertical blue
         // lines flanking the page on every load. `focus:outline-none` alone still
         // suppresses the native focus outline without introducing a visible ring.

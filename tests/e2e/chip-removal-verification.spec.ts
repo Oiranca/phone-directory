@@ -1,5 +1,5 @@
 /**
- * OIR-218 — regression coverage for the removal of the redundant
+ * Regression coverage for the removal of the redundant
  * "No facilitar a pacientes" display chip.
  *
  * A phone can still be flagged `noPatientSharing: true` in the data model
@@ -108,7 +108,7 @@ const buildSeededDataset = () => ({
   ]
 });
 
-test.describe("OIR-218 chip removal regression", () => {
+test.describe("chip removal regression", () => {
   test("only the Confidencial marker appears, never No facilitar/No pacientes", async () => {
     await fs.mkdir(screenshotsDir, { recursive: true });
 

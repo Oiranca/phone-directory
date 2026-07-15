@@ -5,7 +5,7 @@
  *   - blankRecord: full shape assertion (all expected fields, correct types)
  *   - buildStableExternalId: determinism, ASCII-fold/join behavior,
  *     accent normalization, order sensitivity, empty/edge inputs
- *   - normalizeServiceSheet: rowHasPhone gating regression tests (OIR-134)
+ *   - normalizeServiceSheet: rowHasPhone gating regression tests
  */
 
 import { describe, expect, it } from "vitest";
@@ -308,7 +308,7 @@ describe("buildStableExternalId", () => {
 });
 
 // ---------------------------------------------------------------------------
-// normalizeServiceSheet — rowHasPhone gating regression (OIR-134)
+// normalizeServiceSheet — rowHasPhone gating regression
 // ---------------------------------------------------------------------------
 
 /**
@@ -329,7 +329,7 @@ const makeSheet = (name: string, rows: string[][]): SheetData => ({
   rows
 });
 
-describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", () => {
+describe("normalizeServiceSheet — rowHasPhone gating regression", () => {
   it("does NOT emit a contact when the only tail cell is a date (dd/mm/yyyy) — date must not gate rowHasPhone", () => {
     // The label must be ALL-CAPS so that isExcludedLabel() returns true, making
     // the rowHasPhone guard (`if (label && isExcludedLabel(label) && !rowHasPhone)`)
@@ -378,11 +378,11 @@ describe("normalizeServiceSheet — rowHasPhone gating (OIR-134 regression)", ()
 });
 
 // ---------------------------------------------------------------------------
-// normalizeServiceSheet — OIR-227 residual gap (Comentarios must not
+// normalizeServiceSheet — residual gap (Comentarios must not
 // duplicate onto phone-level notes)
 // ---------------------------------------------------------------------------
 
-describe("normalizeServiceSheet — OIR-227 residual fix (notes duplication)", () => {
+describe("normalizeServiceSheet — residual fix (notes duplication)", () => {
   it("does NOT duplicate note text onto phone-level notes (record.notes stays the source of truth)", () => {
     const sheet = makeSheet("Guardia", [
       ["Guardia", "928123456", "Turno de tarde"],
@@ -398,7 +398,7 @@ describe("normalizeServiceSheet — OIR-227 residual fix (notes duplication)", (
 });
 
 // ---------------------------------------------------------------------------
-// normalizeTabularAgendaSheet / isAgendaTabularHeader / stripPlantaPrefix (OIR-222)
+// normalizeTabularAgendaSheet / isAgendaTabularHeader / stripPlantaPrefix
 // ---------------------------------------------------------------------------
 
 const AGENDA_HEADER_ROW = [
@@ -520,7 +520,7 @@ describe("parseSiNoFlag", () => {
   });
 });
 
-describe("normalizeTabularAgendaSheet (OIR-222)", () => {
+describe("normalizeTabularAgendaSheet", () => {
   it("maps Servicio -> displayName/service when Nombre is empty", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
@@ -542,7 +542,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records[0]!.service).toBe("Alergia");
   });
 
-  it("maps Categoría -> role and Horario -> schedule (new fields, OIR-222)", () => {
+  it("maps Categoría -> role and Horario -> schedule (new fields)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Admisión Central Secretaría", categoria: "Secretario/a", horario: "8:00-22:00", numero1: "70010" }),
@@ -562,7 +562,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records[0]!.floor).toBe("1");
   });
 
-  it("maps Sector -> location.sector and Sección -> location.section (new fields, OIR-222)", () => {
+  it("maps Sector -> location.sector and Sección -> location.section (new fields)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Anatomía Patológica - Laboratorio", sector: "Laboratorio", numero1: "79543" }),
@@ -588,7 +588,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-227 — Comentarios must not duplicate onto phone-level notes
+  // Comentarios must not duplicate onto phone-level notes
   // ---------------------------------------------------------------------------
 
   it("does NOT duplicate Comentarios onto phone-level notes (record.notes stays the source of truth)", () => {
@@ -611,7 +611,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // OIR-227 — "Principal" must never be auto-assigned on import
+  // "Principal" must never be auto-assigned on import
   // ---------------------------------------------------------------------------
 
   it("does not mark any imported phone as isPrimary by default, even the first one", () => {
@@ -646,7 +646,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(phones.map((p) => p.number)).toEqual(["79543", "79544", "79545"]);
   });
 
-  it("Confidencial 'Si' sets confidential=true on ALL phones for that row, not just the first (OIR-222 Step 3)", () => {
+  it("Confidencial 'Si' sets confidential=true on ALL phones for that row, not just the first", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({
@@ -716,10 +716,10 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
   });
 
   // -------------------------------------------------------------------------
-  // OIR-224 — Categoría -> type mapping (primary, with heuristic fallback)
+  // Categoría -> type mapping (primary, with heuristic fallback)
   // -------------------------------------------------------------------------
 
-  it("maps a known Categoría value ('Enfermero/a') to type 'person' (OIR-224 primary mechanism)", () => {
+  it("maps a known Categoría value ('Enfermero/a') to type 'person' (primary mechanism)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Alergia", categoria: "Enfermero/a", numero1: "79198" }),
@@ -728,7 +728,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
     expect(records[0]!.type).toBe("person");
   });
 
-  it("maps a known leadership Categoría value ('Jefe/a') to type 'supervision' (OIR-224 primary mechanism)", () => {
+  it("maps a known leadership Categoría value ('Jefe/a') to type 'supervision' (primary mechanism)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Almacén", categoria: "Jefe/a", numero1: "70263" }),
@@ -752,7 +752,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
       agendaRow({ servicio: "Supervisión de Enfermería", numero1: "22222" }),
     ]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
-    // OIR-230: no Categoría mapping applies (blank) — type is never guessed
+    // No Categoría mapping applies (blank) — type is never guessed
     // from displayName keywords, so it defaults to the neutral "other".
     expect(records[0]!.type).toBe("other");
   });
@@ -763,12 +763,12 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
       agendaRow({ servicio: "Sala De Espera", categoria: "Un Valor Sin Mapear", numero1: "33333" }),
     ]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
-    // OIR-230: unmapped Categoría — type is never guessed from displayName
+    // Unmapped Categoría — type is never guessed from displayName
     // keywords, so it defaults to the neutral "other".
     expect(records[0]!.type).toBe("other");
   });
 
-  it("still populates role from Categoría even when Categoría also drives type (OIR-222 behavior preserved)", () => {
+  it("still populates role from Categoría even when Categoría also drives type", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Enfermedades Emergentes (Despacho)", categoria: "Auxiliar Administrativo/a", numero1: "75340" }),
@@ -779,7 +779,7 @@ describe("normalizeTabularAgendaSheet (OIR-222)", () => {
   });
 
   // -------------------------------------------------------------------------
-  // OIR-224 — área is left blank for Agenda-imported records
+  // Área is left blank for Agenda-imported records
   // -------------------------------------------------------------------------
 
   it("leaves área blank instead of guessing one from Servicio/displayName (no genuine Área column in the real file)", () => {

@@ -101,7 +101,7 @@ interface MergeFieldsEditorProps {
 }
 
 /**
- * OIR-225 — lets the operator edit the surviving record's key fields
+ * Lets the operator edit the surviving record's key fields
  * (displayName, type, phones) before confirming a duplicate merge, instead
  * of only being able to pick one whole record over the other. Each field
  * offers a "usar de la otra ficha" shortcut to pull in the discarded

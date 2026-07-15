@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatePanel } from './StatePanel';
@@ -37,7 +38,7 @@ describe('StatePanel', () => {
 
   it('exposes a polite status region for assistive tech', () => {
     render(<StatePanel title="Loading" message="Please wait..." />);
-    // OIR-199: the live region moved off the visible panel wrapper (whose
+    // The live region moved off the visible panel wrapper (whose
     // content is already present at mount and therefore never announced) and
     // onto a dedicated visually hidden status region — see StatePanel.tsx.
     const statusRegion = screen.getByRole('status');
@@ -45,7 +46,7 @@ describe('StatePanel', () => {
     expect(statusRegion).toHaveClass('sr-only');
   });
 
-  it('announces the title and message to screen readers shortly after mount (OIR-199)', async () => {
+  it('announces the title and message to screen readers shortly after mount', async () => {
     render(<StatePanel title="Loading" message="Please wait..." />);
     const statusRegion = screen.getByRole('status');
 
@@ -84,5 +85,22 @@ describe('StatePanel', () => {
       />
     );
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+  });
+
+  it('forwards titleRef to the title element and makes it programmatically focusable', () => {
+    const titleRef = createRef<HTMLHeadingElement>();
+    render(<StatePanel title="Sin resultados" message="No hay nada que mostrar." titleRef={titleRef} />);
+
+    const heading = screen.getByRole('heading', { name: 'Sin resultados' });
+    expect(titleRef.current).toBe(heading);
+    expect(heading).toHaveAttribute('tabIndex', '-1');
+
+    heading.focus();
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('does not add tabIndex to the title when no titleRef is given', () => {
+    render(<StatePanel title="Sin resultados" message="No hay nada que mostrar." />);
+    expect(screen.getByRole('heading', { name: 'Sin resultados' })).not.toHaveAttribute('tabIndex');
   });
 });

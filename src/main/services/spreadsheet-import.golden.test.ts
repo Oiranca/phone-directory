@@ -1,5 +1,5 @@
 /**
- * OIR-109 — Golden-fixture characterization tests for spreadsheet-import.service.ts
+ * Golden-fixture characterization tests for spreadsheet-import.service.ts
  *
  * These tests capture the CURRENT output of every accepted format and every
  * pure normalization/parser helper as a parity baseline. They must pass
@@ -12,15 +12,22 @@
  *   4. Flat-sheet (Bug A fix)   (low-confidence service path)
  *   5. Multi-sheet workbook     (mergeRecordsByDisplayName cross-sheet)
  *
- * Pure-function unit golden tests (in this file):
- *   - extractNumbers (compact range, compact suffix, dedup)
- *   - detectPrivacy
- *   - buildCenterPhones
+ * Golden/characterization tests (in this file):
  *   - normalizeDisplayNameForMerge (via mergeRecordsByDisplayName)
  *   - mergeRecordsByDisplayName (phone union, order, empty key passthrough)
- *   - isSerializedPhoneEntry (type guard)
+ *   - isSerializedPhoneEntry (type guard, imported and called directly)
  *   - normalizeWorkbookRowsFromFile error paths (unsupported format, no rows)
- *   - 5000-row cap
+ *   - 5000-row cap (both the normalization-layer non-cap and the
+ *     buildSpreadsheetImportPreview enforcement point)
+ *
+ * NOTE: extractNumbers, detectPrivacy, and buildCenterPhones are exercised
+ * only INDIRECTLY here, as a side effect of running full ODS/XLSX fixtures
+ * through normalizeWorkbookRowsFromFile — this file does not import or call
+ * them directly, so it does not by itself pin down their behavior in
+ * isolation (e.g. edge cases in compact-range/compact-suffix expansion).
+ * Direct, isolated unit coverage for every exported helper in
+ * spreadsheet-normalize.ts (including extractNumbers, detectPrivacy, and the
+ * label/area classification helpers) lives in spreadsheet-normalize.test.ts.
  *
  * Unit tests in spreadsheet-parsers.test.ts:
  *   - blankRecord (full shape assertion, key set lock)
@@ -32,35 +39,22 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import XLSX from "xlsx-republish";
+import XLSX from "xlsx";
 import {
   normalizeWorkbookRowsFromFile,
+  buildSpreadsheetImportPreview,
   mergeRecordsByDisplayName,
   isSerializedPhoneEntry,
   type SerializedPhoneEntry,
 } from "./spreadsheet-import.service.js";
 import type { NormalizedImportRow } from "./csv-import.service.js";
+import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 
 XLSX.set_fs(nodeFs);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const writeWorkbook = (
-  dir: string,
-  fileName: string,
-  sheets: Array<{ name: string; data: string[][] }>
-): string => {
-  const wb = XLSX.utils.book_new();
-  for (const { name, data } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-  const filePath = path.join(dir, fileName);
-  XLSX.writeFile(wb, filePath);
-  return filePath;
-};
 
 /** Minimal canonical service sheet (SERVICIO/NUMERO header). */
 const makeServiceSheet = (
@@ -131,7 +125,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(row.area).toBe("sanitaria-asistencial");
     expect(row.status).toBe("active");
     expect(row.phone1Number).toBe("12345");
-    // OIR-227: "Principal" is never auto-assigned on import.
+    // "Principal" is never auto-assigned on import.
     expect(row.phone1IsPrimary).toBe("false");
     expect(row.phone1Kind).toBe("internal");
     expect(row.phone1Confidential).toBe("false");
@@ -152,14 +146,14 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     const phones = JSON.parse(row.phones!) as SerializedPhoneEntry[];
     expect(phones).toHaveLength(2);
     expect(phones[0]!.number).toBe("11111");
-    // OIR-227: "Principal" is never auto-assigned on import.
+    // "Principal" is never auto-assigned on import.
     expect(phones[0]!.isPrimary).toBe(false);
     expect(phones[0]!.kind).toBe("internal");
     expect(phones[1]!.number).toBe("22222");
     expect(phones[1]!.isPrimary).toBe(false);
   });
 
-  it("does not keyword-guess type from label content (OIR-230 — service sheets always default to 'other')", () => {
+  it("does not keyword-guess type from label content (service sheets always default to 'other')", () => {
     const filePath = writeWorkbook(testRoot, "rooms.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Sala de espera", numbers: ["30001"] },
@@ -172,7 +166,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(result.rows[1]!.type).toBe("other");
   });
 
-  it("does not keyword-guess a supervision type from label content (OIR-230)", () => {
+  it("does not keyword-guess a supervision type from label content", () => {
     const filePath = writeWorkbook(testRoot, "supervision.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Supervisión de guardia", numbers: ["40001"] },
@@ -208,7 +202,7 @@ describe("golden: service-sheet format (urgencias canonical)", () => {
     expect(phones.map((p) => p.number)).toEqual(["55555", "66666"]);
   });
 
-  it("does not mark any phone as primary by default (OIR-227 — 'Principal' is manual-only)", () => {
+  it("does not mark any phone as primary by default ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Mostrador", numbers: ["10001", "10002", "10003"] },
@@ -427,12 +421,12 @@ describe("golden: flat-sheet format (low-confidence service path)", () => {
     }
   });
 
-  it("does not leak the header row's literal 'Nombre' cell into department/displayName/notes (OIR-230 regression)", () => {
+  it("does not leak the header row's literal 'Nombre' cell into department/displayName/notes (regression)", () => {
     // A sheet whose header has an Agenda-style layout ("Nombre, Categoría,
     // Servicio, Número 1..N, ...") but does NOT match the tabular parser's
     // exact/extra-column-tolerant shape (here: missing several trailer
     // columns), so it falls through to the legacy service-sheet heuristics.
-    // Before the OIR-230 fix, "NUMERO1" didn't score as a phone-header alias,
+    // Before this fix, "NUMERO1" didn't score as a phone-header alias,
     // so the header row scored below the skip threshold and its "Nombre"
     // cell leaked into derivedDepartment / row processing as literal text.
     const filePath = writeWorkbook(testRoot, "header-leak.xlsx", [
@@ -454,16 +448,16 @@ describe("golden: flat-sheet format (low-confidence service path)", () => {
       expect(row.displayName).not.toBe("Nombre");
       expect(row.notes).not.toContain("Nombre");
     }
-    // The sheet's own name is used as department (OIR-230), not header text.
+    // The sheet's own name is used as department, not header text.
     expect(result.rows.every((row) => row.department === "Sindicatos")).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3b. Tabular Agenda-sheet format (OIR-222) — end-to-end via detectSheetProfile
+// 3b. Tabular Agenda-sheet format — end-to-end via detectSheetProfile
 // ---------------------------------------------------------------------------
 
-/** The hospital's real 17-column Agenda header (OIR-222). */
+/** The hospital's real 17-column Agenda header. */
 const AGENDA_HEADER = [
   "Nombre", "Categoría", "Servicio",
   "Número 1", "Número 2", "Número 3", "Número 4", "Número 5", "Número 6", "Número 7",
@@ -478,7 +472,7 @@ const makeAgendaSheet = (
   data: [AGENDA_HEADER, ...rows],
 });
 
-describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
+describe("golden: tabular Agenda-sheet format", () => {
   it("is routed to the tabular parser with a blank department for the sheet literally named 'Agenda'", () => {
     const filePath = writeWorkbook(testRoot, "agenda.xlsx", [
       makeAgendaSheet("Agenda", [
@@ -492,7 +486,7 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
     const row = result.rows[0]!;
     expect(row.displayName).toBe("Admisión Central");
     expect(row.schedule).toBe("8:00-22:00");
-    // OIR-230: the main "Agenda" sheet itself gets a blank department (it is
+    // The main "Agenda" sheet itself gets a blank department (it is
     // the general directory, not a per-department "book").
     expect(row.department).toBe("");
     // Horario ("8:00-22:00") must NOT leak into the phones list as a fake number.
@@ -500,7 +494,7 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
     expect(phones.map((p) => p.number)).toEqual(["79649", "79650"]);
   });
 
-  it("routes another sheet sharing the Agenda tabular header to the tabular parser too, tagging every contact with the sheet's own name as department (OIR-230)", () => {
+  it("routes another sheet sharing the Agenda tabular header to the tabular parser too, tagging every contact with the sheet's own name as department", () => {
     const filePath = writeWorkbook(testRoot, "agenda-department-sheet.xlsx", [
       makeAgendaSheet("Almacenes", [
         ["", "", "Farmacia", "79889", "79297", "", "", "", "", "", "", "", "", "", "", "", ""],
@@ -514,7 +508,7 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
     expect(row.department).toBe("Almacenes");
   });
 
-  it("still recognizes a sheet with an extra inserted column (e.g. a 'Fax' column, as in the real 'Sindicatos' sheet) as Agenda-tabular and tags it with the sheet name (OIR-230)", () => {
+  it("still recognizes a sheet with an extra inserted column (e.g. a 'Fax' column, as in the real 'Sindicatos' sheet) as Agenda-tabular and tags it with the sheet name", () => {
     const filePath = writeWorkbook(testRoot, "agenda-sindicatos.xlsx", [
       {
         name: "Sindicatos",
@@ -610,7 +604,15 @@ describe("golden: tabular Agenda-sheet format (OIR-222)", () => {
 // ---------------------------------------------------------------------------
 // 4. Cross-sheet merge (mergeRecordsByDisplayName)
 // ---------------------------------------------------------------------------
-
+//
+// NOTE: these fixtures use "urgencias" and "rayos"/"admision-central"
+// — two of the six CURATED CANONICAL_SHARED_DEPARTMENTS (see
+// buildMergeIdentityKey) — so cross-department merging here remains
+// unaffected by the fix (which only blocks cross-department merging
+// for arbitrary, per-sheet "book" departments). This preserves the original
+// behavior (verified against real hospital data) where the same real
+// desk legitimately listed across multiple canonical department books merges
+// into one combined-extension contact.
 describe("golden: cross-sheet merge by displayName", () => {
   it("merges two sheets with same contact name into one record with combined phones", () => {
     const filePath = writeWorkbook(testRoot, "merge.xlsx", [
@@ -677,7 +679,7 @@ describe("golden: cross-sheet merge by displayName", () => {
     expect(uci.externalId).toMatch(/^urgencias-/);
   });
 
-  it("does not assign a primary phone after cross-sheet merge (OIR-227 residual fix — 'Principal' is manual-only)", () => {
+  it("does not assign a primary phone after cross-sheet merge ('Principal' is manual-only)", () => {
     const filePath = writeWorkbook(testRoot, "merge-primary.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Guardia", numbers: ["60001", "60002"] },
@@ -718,7 +720,7 @@ describe("golden: cross-sheet merge by displayName", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3b. OIR-224 — merge discriminator fix (confidential-flag bleed regression)
+// 3b. Merge discriminator fix (confidential-flag bleed regression)
 // ---------------------------------------------------------------------------
 //
 // Root cause (confirmed against the hospital's real Agenda ODS file): the
@@ -728,7 +730,7 @@ describe("golden: cross-sheet merge by displayName", () => {
 // "Bioquímica" Despacho/office line, which IS marked Confidencial="Si") used
 // to collapse into a single merged card via mergeRecordsByDisplayName,
 // letting the confidential flag from one sub-desk bleed onto the other.
-describe("golden: OIR-224 merge discriminator (service+location) fix", () => {
+describe("golden: merge discriminator (service+location) fix", () => {
   it("does NOT merge two Agenda rows that share displayName/Servicio but differ on Sección (confidential must not bleed across genuinely distinct desks)", () => {
     // Real-file shape: "Bioquímica" (general, non-confidential, ext. 79502)
     // vs "Bioquímica" (Despacho, Confidencial=Si, ext. 79951).
@@ -807,12 +809,71 @@ describe("golden: OIR-224 merge discriminator (service+location) fix", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. Merge identity key now includes department
+// ---------------------------------------------------------------------------
+//
+// Root cause: 8+ per-department "book" sheets (Corporativos,
+// Sindicatos, UMI, etc.) are routed through the tabular Agenda parser, and
+// each one tags every row with department = its own sheet name. Two rows
+// from DIFFERENT book-sheets sharing displayName+Servicio with
+// blank/matching Edificio/Planta/Sector/Sección (plausible for generic
+// roles like "Secretaría"/"Recepción" repeated across multiple books) used
+// to silently merge into one record via buildMergeIdentityKey, losing the
+// second sheet's department attribution (the survivor keeps only
+// group[0]'s scalar fields, including department).
+describe("golden: merge identity key includes department", () => {
+  it("does NOT merge two book-sheet rows that share displayName/Servicio but come from different department sheets", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-cross-department-secretaria.xlsx", [
+      makeAgendaSheet("Corporativos", [
+        ["", "", "Secretaría", "81001", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+      makeAgendaSheet("Sindicatos", [
+        ["", "", "Secretaría", "81002", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const secretaria = result.rows.filter((r) => r.displayName === "Secretaría");
+
+    // Must remain TWO separate records — one per department — never merged.
+    expect(secretaria).toHaveLength(2);
+
+    const corporativos = secretaria.find((r) => r.department === "Corporativos")!;
+    const sindicatos = secretaria.find((r) => r.department === "Sindicatos")!;
+    expect(corporativos).toBeDefined();
+    expect(sindicatos).toBeDefined();
+    expect(corporativos.phone1Number).toBe("81001");
+    expect(sindicatos.phone1Number).toBe("81002");
+  });
+
+  it("still merges two rows sharing displayName/Servicio AND the same department book-sheet (regression — same-department merging is unaffected)", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-same-department-recepcion.xlsx", [
+      makeAgendaSheet("Corporativos", [
+        ["", "", "Recepción", "82001", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "Recepción", "82002", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ]),
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    const recepcion = result.rows.filter((r) => r.displayName === "Recepción");
+
+    // Same department, same displayName/Servicio, blank discriminators —
+    // must still merge into a single record with both extensions.
+    expect(recepcion).toHaveLength(1);
+    expect(recepcion[0]!.department).toBe("Corporativos");
+
+    const phones = JSON.parse(recepcion[0]!.phones ?? "[]") as SerializedPhoneEntry[];
+    expect(phones.map((p) => p.number)).toEqual(expect.arrayContaining(["82001", "82002"]));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Error paths and boundary conditions
 // ---------------------------------------------------------------------------
 
 describe("golden: error paths", () => {
   it("throws a localized error for a file that cannot be parsed as a workbook", () => {
-    // xlsx-republish can parse arbitrary text as a CSV-like sheet, so a plain text
+    // xlsx can parse arbitrary text as a CSV-like sheet, so a plain text
     // file with no recognizable structure produces "no supported sheets" rather
     // than a parse error. Both error messages are considered localized / valid.
     // This golden test documents the actual runtime behavior.
@@ -907,6 +968,23 @@ describe("golden: error paths", () => {
     expect(result.rows.length).toBeGreaterThan(5000);
     // (cap enforcement belongs to buildSpreadsheetImportPreview)
   });
+
+  // ARQ-3 — the enforcement point itself (buildSpreadsheetImportPreview)
+  // previously had zero direct test coverage; the test above only proved the
+  // *normalization* layer does not itself cap. This closes that gap.
+  it("buildSpreadsheetImportPreview throws a clear 'file too large' message beyond 5000 rows", async () => {
+    const data: string[][] = [["SERVICIO", "NUMERO"]];
+    for (let i = 0; i < 5001; i++) {
+      data.push([`Servicio ${i}`, `${10000 + i}`]);
+    }
+    const filePath = writeWorkbook(testRoot, "too-many-rows.xlsx", [
+      { name: "urgencias", data },
+    ]);
+
+    await expect(buildSpreadsheetImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "El archivo supera el límite máximo de 5000 filas. Divide el archivo e importa en lotes."
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -994,7 +1072,48 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(merged.map((p) => p.number)).toContain("22222");
   });
 
-  it("does not invent a primary phone when none of the merged phones were marked primary (OIR-227 residual fix)", () => {
+  it("does NOT merge two tabular-Agenda-book-sheet records (area blank) with the same normalized displayName but different department", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);
+    // area: "" simulates a row parsed by the tabular Agenda parser (the only
+    // parser that always leaves area blank — see buildMergeIdentityKey),
+    // which is the discriminator this fix keys off.
+    const r1 = makeRow({
+      externalId: "a-001",
+      displayName: "Secretaría",
+      department: "Corporativos",
+      area: "",
+      phones: phones1,
+    });
+    const r2 = makeRow({
+      externalId: "b-001",
+      displayName: "Secretaría",
+      department: "Sindicatos",
+      area: "",
+      phones: phones2,
+    });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+    // Different department => never merged, even with identical displayName
+    // and blank/matching service+building+floor+sector+section.
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.department).sort()).toEqual(["Corporativos", "Sindicatos"]);
+  });
+
+  it("still merges two service-sheet records (non-blank area) with the same displayName even when department differs (department is not a discriminator outside the tabular book-sheet parser)", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);
+    const r1 = makeRow({ externalId: "a-001", displayName: "Banco de Sangre", department: "Urgencias", phones: phones1 });
+    const r2 = makeRow({ externalId: "b-001", displayName: "Banco de Sangre", department: "Rayos", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+    expect(result).toHaveLength(1);
+    const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
+    expect(merged.map((p) => p.number)).toContain("11111");
+    expect(merged.map((p) => p.number)).toContain("22222");
+  });
+
+  it("does not invent a primary phone when none of the merged phones were marked primary (residual fix)", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", isPrimary: false })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", isPrimary: false })]);
     const r1 = makeRow({ displayName: "UCI", phones: phones1 });
@@ -1007,7 +1126,7 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(result[0]!.phone1IsPrimary).toBe("false");
   });
 
-  it("does not re-derive isPrimary from array position after merge — preserves each phone's own value (OIR-227 residual fix)", () => {
+  it("does not re-derive isPrimary from array position after merge — preserves each phone's own value", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", isPrimary: true })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", isPrimary: true })]);
     const r1 = makeRow({ displayName: "UCI", phones: phones1 });
@@ -1133,7 +1252,7 @@ describe("golden: isSerializedPhoneEntry type guard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. buscasSkippedRowCount / socialHandleSkippedRowCount aggregation (OIR-134)
+// 8. buscasSkippedRowCount / socialHandleSkippedRowCount aggregation
 // ---------------------------------------------------------------------------
 
 describe("golden: buscasSkippedRowCount / socialHandleSkippedRowCount", () => {

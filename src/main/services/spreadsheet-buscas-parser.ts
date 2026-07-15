@@ -1,5 +1,5 @@
 /**
- * OIR-130 — Buscas sheet parser.
+ * Buscas sheet parser.
  *
  * ODS buscas sheets (Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores,
  * Buscas_Varios) use a column-per-holder-type layout:
