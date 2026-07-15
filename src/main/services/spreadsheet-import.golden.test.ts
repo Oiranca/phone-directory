@@ -20,7 +20,8 @@
  *   - mergeRecordsByDisplayName (phone union, order, empty key passthrough)
  *   - isSerializedPhoneEntry (type guard)
  *   - normalizeWorkbookRowsFromFile error paths (unsupported format, no rows)
- *   - 5000-row cap
+ *   - 5000-row cap (both the normalization-layer non-cap and the
+ *     buildSpreadsheetImportPreview enforcement point, OIR-214)
  *
  * Unit tests in spreadsheet-parsers.test.ts:
  *   - blankRecord (full shape assertion, key set lock)
@@ -35,6 +36,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import XLSX from "xlsx";
 import {
   normalizeWorkbookRowsFromFile,
+  buildSpreadsheetImportPreview,
   mergeRecordsByDisplayName,
   isSerializedPhoneEntry,
   type SerializedPhoneEntry,
@@ -973,6 +975,23 @@ describe("golden: error paths", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     expect(result.rows.length).toBeGreaterThan(5000);
     // (cap enforcement belongs to buildSpreadsheetImportPreview)
+  });
+
+  // OIR-214 / ARQ-3 — the enforcement point itself (buildSpreadsheetImportPreview)
+  // previously had zero direct test coverage; the test above only proved the
+  // *normalization* layer does not itself cap. This closes that gap.
+  it("buildSpreadsheetImportPreview throws a clear 'file too large' message beyond 5000 rows", async () => {
+    const data: string[][] = [["SERVICIO", "NUMERO"]];
+    for (let i = 0; i < 5001; i++) {
+      data.push([`Servicio ${i}`, `${10000 + i}`]);
+    }
+    const filePath = writeWorkbook(testRoot, "too-many-rows.xlsx", [
+      { name: "urgencias", data },
+    ]);
+
+    await expect(buildSpreadsheetImportPreview(filePath, "TestEditor")).rejects.toThrow(
+      "El archivo supera el límite máximo de 5000 filas. Divide el archivo e importa en lotes."
+    );
   });
 });
 

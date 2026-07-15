@@ -6,6 +6,7 @@ import type { PrivacyFlag } from "../services/search.service";
 import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { normalizeDisplayName } from "../../shared/utils/matching";
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
@@ -388,7 +389,7 @@ export const DirectoryPage = () => {
   };
 
   if (isLoading || !contacts || !settings) {
-    return <section role="status" aria-live="polite" aria-busy="true" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>;
+    return <LoadingStatus message="Cargando datos locales…" busy />;
   }
 
   const selectedRecord =

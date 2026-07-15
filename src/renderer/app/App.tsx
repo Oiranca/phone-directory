@@ -4,6 +4,7 @@ import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { ErrorBoundary } from "../components/feedback/ErrorBoundary";
+import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { PathDisplay } from "../components/feedback/PathDisplay";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { AppShell } from "../components/layout/AppShell";
@@ -226,7 +227,7 @@ export const App = () => {
   if (isLoading) {
     return (
       <AppShell>
-        <section role="status" aria-live="polite" className="rounded-3xl bg-white p-8 shadow-panel">Cargando datos locales…</section>
+        <LoadingStatus message="Cargando datos locales…" />
       </AppShell>
     );
   }
