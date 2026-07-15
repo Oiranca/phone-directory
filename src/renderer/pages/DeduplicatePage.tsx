@@ -12,6 +12,7 @@ import {
 } from "../components/deduplicate/MergeFieldsEditor";
 import { StatePanel } from "../components/feedback/StatePanel";
 import { useAppStore } from "../store/useAppStore";
+import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
 interface PairState {
   pair: DuplicatePair;
@@ -190,6 +191,8 @@ export const DeduplicatePage = () => {
   // (roving tabindex pattern: only one radio per pair stays in the tab order).
   const radioButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
+  const handleRovingKeyDown = useRovingTabIndex({ previousKeys: ["ArrowUp", "ArrowLeft"], nextKeys: ["ArrowDown", "ArrowRight"] });
+
   // Restore focus after pairStates changes following a merge confirmation
   useEffect(() => {
     if (!pendingFocusRef.current) return;
@@ -251,7 +254,8 @@ export const DeduplicatePage = () => {
     );
   };
 
-  // Roving-tabindex arrow key navigation for the "keep this / keep both" radiogroup.
+  // MANT-4: roving-tabindex arrow key navigation for the "keep this / keep
+  // both" radiogroup, built on the shared useRovingTabIndex hook.
   // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
   // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the
   // WAI-ARIA radiogroup keyboard contract.
@@ -260,23 +264,18 @@ export const DeduplicatePage = () => {
     pairId: string,
     optionIds: string[]
   ) => {
-    const previousKeys = ["ArrowUp", "ArrowLeft"];
-    const nextKeys = ["ArrowDown", "ArrowRight"];
-    if (!previousKeys.includes(event.key) && !nextKeys.includes(event.key)) return;
-
-    event.preventDefault();
-    // Derive the current position from the actually-focused radio (event.target),
-    // not from which option is selected — a radio can have DOM focus without
-    // being checked yet (e.g. before any option has been picked).
-    const focusedId = (event.target as HTMLElement).getAttribute("data-record-id");
-    const currentIndex = focusedId ? optionIds.indexOf(focusedId) : -1;
-    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
-    const delta = nextKeys.includes(event.key) ? 1 : -1;
-    const nextIndex = (safeIndex + delta + optionIds.length) % optionIds.length;
-    const nextId = optionIds[nextIndex]!;
-
-    handleKeepSelect(pairId, nextId);
-    radioButtonRefs.current.get(nextId)?.focus();
+    handleRovingKeyDown(event, {
+      itemIds: optionIds,
+      // No fallback id: a radio can have DOM focus without being checked yet
+      // (e.g. before any option has been picked), so — same as before this
+      // extraction — the current position is derived only from the actually
+      // focused radio (event.target), defaulting straight to index 0 when
+      // that can't be resolved (not from `keepId`).
+      onNavigate: (nextId) => {
+        handleKeepSelect(pairId, nextId);
+        radioButtonRefs.current.get(nextId)?.focus();
+      }
+    });
   };
 
   const handleMergeClick = (pairState: PairState, triggerEl: HTMLButtonElement) => {

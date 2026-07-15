@@ -226,7 +226,10 @@ describe("BuscasPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     // "Rol" uniquely matches the label (table header is "Rol" too — use id)
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
-    fireEvent.change(screen.getByLabelText(/turno/i), { target: { value: "noche" } });
+    // MANT-12: "Turno" is now an accessible SelectField combobox, not a native
+    // <select> — open it and click the "Noche" option.
+    fireEvent.click(screen.getByLabelText(/turno/i));
+    fireEvent.click(screen.getByRole("option", { name: "Noche" }));
 
     fireEvent.submit(form);
 

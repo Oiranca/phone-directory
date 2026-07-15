@@ -18,6 +18,7 @@
  */
 
 import type { NormalizedImportRow } from "./csv-import.service.js";
+import type { DetectionConfidence } from "../../shared/types/contact.js";
 import {
   clean,
   hasLetters,
@@ -122,8 +123,6 @@ export type SheetData = {
   slug: string;
   rows: string[][];
 };
-
-export type DetectionConfidence = "high" | "medium" | "low";
 
 export type SheetProfile = {
   parser: "centers" | "service" | "tabular";

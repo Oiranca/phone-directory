@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import Papa from "papaparse";
 import XLSX from "xlsx";
 import { buildCsvImportPreview, buildImportPreviewFromRows, type CsvImportPreviewInternal, type NormalizedImportRow } from "./csv-import.service.js";
-import type { DirectoryDataset } from "../../shared/types/contact.js";
+import type { DetectionConfidence, DirectoryDataset } from "../../shared/types/contact.js";
 import {
   clean,
   stripBom,
@@ -114,8 +114,6 @@ type SheetData = {
   slug: string;
   rows: string[][];
 };
-
-type DetectionConfidence = "high" | "medium" | "low";
 
 export type SpreadsheetImportNormalizationResult = {
   rows: NormalizedImportRow[];
