@@ -7,6 +7,7 @@ import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
+import { StatePanel } from "../components/feedback/StatePanel";
 import { normalizeDisplayName } from "../../shared/utils/matching";
 import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/contacts";
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
@@ -567,14 +568,10 @@ export const DirectoryPage = () => {
           })}
           </ul>
           {visibleRecords.length === 0 && contacts.records.length === 0 && (
-            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
-              La agenda está vacía. Añade el primer contacto para empezar.
-            </div>
+            <StatePanel title="Sin contactos" message="La agenda está vacía. Añade el primer contacto para empezar." />
           )}
           {visibleRecords.length === 0 && contacts.records.length > 0 && (
-            <div role="status" aria-live="polite" className="shrink-0 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-panel">
-              No se han encontrado resultados para esta búsqueda.
-            </div>
+            <StatePanel title="Sin resultados" message="No se han encontrado resultados para esta búsqueda." />
           )}
           {visibleRecords.length > RESULTS_PER_PAGE && (
             <nav aria-label="Paginación de resultados" className="shrink-0 rounded-2xl border border-slate-200 bg-white p-2">
