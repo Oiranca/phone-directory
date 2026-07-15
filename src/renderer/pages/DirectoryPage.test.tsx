@@ -862,16 +862,28 @@ describe("DirectoryPage", () => {
       target: { value: "sin-coincidencias" }
     });
 
-    expect(await screen.findByText("No se han encontrado resultados para esta búsqueda.")).toHaveAttribute("role", "status");
+    expect(await screen.findByText("No se han encontrado resultados para esta búsqueda.")).toBeInTheDocument();
 
     // The result count stays a polite live region even at zero results so
-    // "0 resultados" is announced alongside the empty-state panel.
+    // "0 resultados" is announced alongside the empty-state panel (StatePanel
+    // drives its own announcement via a separate sr-only status region — see
+    // StatePanel.tsx).
     const statusRegions = screen.getAllByRole("status");
     expect(statusRegions).toHaveLength(2);
     const countRegion = statusRegions.find((region) => region.textContent?.includes("0 resultados"));
     expect(countRegion).toBeDefined();
     expect(countRegion).toHaveAttribute("aria-live", "polite");
     expect(countRegion).toHaveAttribute("aria-atomic", "true");
+
+    // StatePanel's own sr-only status region announces the empty-state title
+    // and message together, shortly after mount.
+    const announcementRegion = statusRegions.find((region) => region !== countRegion);
+    expect(announcementRegion).toBeDefined();
+    await waitFor(() => {
+      expect(announcementRegion).toHaveTextContent(
+        "Sin resultados. No se han encontrado resultados para esta búsqueda."
+      );
+    });
   });
 
   it("moves selection to the new page when pagination changes", async () => {
