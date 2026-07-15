@@ -44,6 +44,27 @@ export const normalizePrimaryEntries = <T extends { isPrimary: boolean }>(entrie
 };
 
 /**
+ * Formats a location's floor value with its Spanish "Planta " prefix (e.g.
+ * "6" -> "Planta 6"). ODS parsing intentionally strips this prefix at parse
+ * time and stores only the bare value (see spreadsheet-parsers.ts
+ * `stripPlantaPrefix`), so every display site must reconstruct it via this
+ * helper instead of rendering `location.floor` raw (OIR-247: a raw `.join`
+ * in DirectoryPage's Ubicación card rendered a bare "6" because it wasn't
+ * using this reconstruction, while AppDataService's conflict-preview
+ * locationSummary already did it correctly and had silently drifted from
+ * the renderer).
+ */
+export const formatLocationFloor = (floor: string | undefined): string | undefined =>
+  floor ? `Planta ${floor}` : undefined;
+
+/**
+ * Formats a location's room value with its Spanish "Hab " prefix (e.g. "301"
+ * -> "Hab 301"). Same rationale as `formatLocationFloor` — see OIR-247.
+ */
+export const formatLocationRoom = (room: string | undefined): string | undefined =>
+  room ? `Hab ${room}` : undefined;
+
+/**
  * Like `normalizePrimaryEntries`, but never invents a primary when none is
  * marked — "Principal" must stay a manual, user-editable choice.
  * Only reconciles a genuine conflict (more than one entry

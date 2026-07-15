@@ -8,6 +8,7 @@ import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/t
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { normalizeDisplayName } from "../../shared/utils/matching";
+import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/contacts";
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 
 // CSS custom property tracking the rendered height of the sticky
@@ -730,8 +731,8 @@ export const DirectoryPage = () => {
                   <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
                     {[
                       selectedRecord.location?.building,
-                      selectedRecord.location?.floor,
-                      selectedRecord.location?.room,
+                      formatLocationFloor(selectedRecord.location?.floor),
+                      formatLocationRoom(selectedRecord.location?.room),
                       selectedRecord.location?.text
                     ]
                       .filter(Boolean)

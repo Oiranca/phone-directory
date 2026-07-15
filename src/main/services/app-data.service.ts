@@ -40,7 +40,7 @@ import type {
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
-import { reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
+import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
 /**
@@ -2037,8 +2037,10 @@ export class AppDataService {
     const loc = record.location;
     const locationParts: string[] = [];
     if (loc?.building) locationParts.push(loc.building);
-    if (loc?.floor) locationParts.push(`Planta ${loc.floor}`);
-    if (loc?.room) locationParts.push(`Hab ${loc.room}`);
+    const floorLabel = formatLocationFloor(loc?.floor);
+    if (floorLabel) locationParts.push(floorLabel);
+    const roomLabel = formatLocationRoom(loc?.room);
+    if (roomLabel) locationParts.push(roomLabel);
     if (loc?.text && locationParts.length === 0) locationParts.push(loc.text);
     const locationSummary = locationParts.length > 0 ? locationParts.join(" · ") : undefined;
 
