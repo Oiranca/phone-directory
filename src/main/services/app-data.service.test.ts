@@ -110,7 +110,7 @@ describe("AppDataService", () => {
       })
     );
 
-    //  regression guard: the error must surface a sanitized, basename-only
+    // Regression guard: the error must surface a sanitized, basename-only
     // path (never the absolute realpath, which embeds the OS username/home dir)
     // across the IPC boundary.
     await expect(rejection).rejects.toThrow(
@@ -160,7 +160,7 @@ describe("AppDataService", () => {
       "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
     );
 
-    //  regression guard: assertDataFilePathAvailable must not leak the
+    // Regression guard: assertDataFilePathAvailable must not leak the
     // absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -186,7 +186,7 @@ describe("AppDataService", () => {
       "La ruta de datos debe apuntar a un archivo JSON, no a una carpeta."
     );
 
-    //  regression guard: assertDataFilePathAvailable's is-directory branch
+    // Regression guard: assertDataFilePathAvailable's is-directory branch
     // must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -211,7 +211,7 @@ describe("AppDataService", () => {
       "La ruta de datos no puede apuntar al archivo de configuración."
     );
 
-    //  regression guard: validateEditableSettings' settings-file-collision
+    // Regression guard: validateEditableSettings' settings-file-collision
     // branch must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -236,7 +236,7 @@ describe("AppDataService", () => {
 
     await expect(rejection).rejects.toThrow("La ruta de datos debe terminar en .json.");
 
-    //  regression guard: validateEditableSettings' extension-check branch
+    // Regression guard: validateEditableSettings' extension-check branch
     // must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -337,7 +337,7 @@ describe("AppDataService", () => {
       })
     );
 
-    //  regression guard: sanitized basename-only path, no absolute leak.
+    // Regression guard: sanitized basename-only path, no absolute leak.
     await expect(rejection).rejects.toThrow(
       /No se pudo validar la ruta del archivo de datos\. Ruta afectada: custom-data\. Error al verificar la ruta: EACCES: permission denied/
     );
@@ -1990,7 +1990,7 @@ describe("AppDataService", () => {
 
     const rejection = service.restoreBackup(sourceFilePath);
 
-    //  regression guard: sanitized basename-only path, no absolute leak.
+    // Regression guard: sanitized basename-only path, no absolute leak.
     await expect(rejection).rejects.toThrow(
       /No se pudo restaurar la copia de seguridad seleccionada\. Ruta afectada: replacement\.json\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\./
     );
@@ -2034,7 +2034,7 @@ describe("AppDataService", () => {
 
     const rejection = service.restoreBackup(backupPath);
 
-    //  regression guard: the symlink-swap/TOCTOU guard in restoreBackup
+    // Regression guard: the symlink-swap/TOCTOU guard in restoreBackup
     // must not leak the absolute canonical path into the IPC-facing error.
     await expect(rejection).rejects.toThrow(
       /El archivo cambió mientras se validaba y ya no es seguro restaurarlo\./
@@ -4129,9 +4129,8 @@ describe("AppDataService", () => {
     expect(files.filter((file) => file.startsWith("contacts-"))).toHaveLength(1);
   });
 
-  // QA follow-up: a pruning failure (e.g. EACCES/EBUSY on a locked
-  // backup file) must not fail the calling operation — the backup file itself
-  // was already created successfully by the time pruning runs.
+  // A pruning failure (e.g. EACCES/EBUSY on a locked backup file) must not fail
+  // the calling operation because the backup file itself was already created.
   it("importDataset/restoreBackup/resetDataset still succeed when pruneBackupsByPrefix throws", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -4590,7 +4589,7 @@ describe("AppDataService", () => {
       /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
 
-    //  regression guard: sanitized basename-only path, no absolute leak.
+    // Regression guard: sanitized basename-only path, no absolute leak.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
     expect(error.message).not.toContain(emptyBackupPath);

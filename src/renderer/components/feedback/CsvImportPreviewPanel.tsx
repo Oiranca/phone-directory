@@ -287,7 +287,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // Count how many conflicts already have a policy selected.
   const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
 
-  //  review: replace window.confirm with the shared accessible ConfirmDialog.
+  // Use the shared accessible ConfirmDialog instead of window.confirm.
   // closeButtonRef lets us restore focus to the trigger button when the operator
   // cancels the discard-warning dialog (same convention as other ConfirmDialog usages).
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -986,7 +986,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       </div>
 
-      {/*  review: shared accessible ConfirmDialog replaces window.confirm for the
+      {/* Shared accessible ConfirmDialog replaces window.confirm for the
           discard-warning prompt shown when closing with unsaved conflict resolutions. */}
       <ConfirmDialog
         isOpen={showDiscardConfirm}

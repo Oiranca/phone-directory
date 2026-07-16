@@ -844,7 +844,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByText("unrelated@other.com").closest("li")).not.toHaveClass("bg-amber-100");
     });
 
-    //  review: content-composed keys like `${phone.number}|${label}` collide when
+    // Content-composed keys like `${phone.number}|${label}` collide when
     // two contact methods share the same value, causing a React duplicate-key warning and
     // risking the highlight state being applied to the wrong row on reconciliation.
     it("renders duplicate phone entries with identical number and label without a React key collision, keeping the correct highlight on every row", () => {

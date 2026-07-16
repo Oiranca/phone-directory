@@ -44,8 +44,8 @@ export class AppDataAuditFacade {
       filePath: targetFilePath,
       exportedAt: new Date().toISOString(),
       entryCount: result.entries.length,
-      //  follow-up (security review): propagate archived-history
-      // visibility from the underlying query result so an export never
+      // Propagate archived-history visibility from the underlying query result
+      // so an export never
       // silently omits older, rotated-out entries with no indication.
       hasArchivedHistory: result.hasArchivedHistory,
       archivedFileCount: result.archivedFileCount
