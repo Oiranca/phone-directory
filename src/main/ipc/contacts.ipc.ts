@@ -12,7 +12,7 @@ import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
-// Defensive global cap on concurrent pending CSV imports (SEC-4) — see
+// Defensive global cap on concurrent pending CSV imports; see
 // pendingCsvImports below.
 const MAX_PENDING_CSV_IMPORTS = 30;
 // Extensions accepted by the unified pickAndImportDataset dialog filter.
@@ -164,7 +164,7 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     event.sender.on("did-start-navigation", navListener);
 
-    // SEC-4: defensive global cap on concurrent pending CSV imports. Normal
+    // Defensive global cap on concurrent pending CSV imports. Normal
     // desktop single-window usage never approaches this (each sender's
     // previous token is already invalidated above), but nothing previously
     // bounded the map across ALL senders — a renderer bug or a future
@@ -314,7 +314,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
-    // SEC-5: validated via Zod (csvImportPolicySelectionListSchema) instead of
+    // Validated via Zod (csvImportPolicySelectionListSchema) instead of
     // hand-rolled typeof/Number.isInteger/Set.has checks, consistent with
     // every other IPC input in this codebase.
     let policies;

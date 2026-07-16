@@ -470,7 +470,7 @@ describe("App recovery flow", () => {
     const errorHeading = await screen.findByText("No se pudieron cargar los datos");
     expect(errorHeading).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
-    // OIR-209: focus moves to the boot error heading on mount so the most
+    // Focus moves to the boot error heading on mount so the most
     // critical error screen in the app is not missed visually.
     await waitFor(() => {
       expect(document.activeElement).toBe(errorHeading);

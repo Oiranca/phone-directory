@@ -6,7 +6,7 @@ import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
 
-// ARQ-10 — code-splitting: previously every route (including
+// Code-splitting: previously every route (including
 // SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
 // DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
 // all 7 pages shipped in the single initial bundle chunk regardless of

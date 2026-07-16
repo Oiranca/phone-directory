@@ -1,5 +1,5 @@
 /**
- * OIR-213 (QA-4) — Dedicated, best-effort crash log for main-process-level
+ * Dedicated, best-effort crash log for main-process-level
  * failures (uncaughtException / unhandledRejection / render-process-gone).
  *
  * This deliberately does NOT reuse AuditLogService:

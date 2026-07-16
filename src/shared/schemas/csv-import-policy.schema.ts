@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * OIR-212 (SEC-5) — validates the per-row conflict-policy selections the
+ * Validates the per-row conflict-policy selections the
  * renderer submits when confirming a CSV/ODS/XLS/XLSX bulk import
  * (`importCsvDataset`). Previously this array was validated by hand
  * (typeof/Number.isInteger/Set.has checks in contacts.ipc.ts) instead of

@@ -20,11 +20,11 @@ interface ErrorBoundaryState {
 }
 
 /**
- * OIR-205: top-level render-error boundary.
+ * : top-level render-error boundary.
  *
  * Without this, an uncaught render exception anywhere in the wrapped subtree
  * unmounts the entire React app, leaving the user with a blank white screen
- * and no recovery path (see docs/AUDITORIA_INTEGRAL.md §2.2, QA-1).
+ * and no recovery path (see docs/AUDITORIA_INTEGRAL.md §2.2, ).
  *
  * This mirrors the visual/structural convention already used by App.tsx's
  * `bootstrapError` panel: a `StatePanel` with role="alert" and a single

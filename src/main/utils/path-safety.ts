@@ -16,7 +16,7 @@ const isAllowedSystemAliasRoot = (currentPath: string, index: number) =>
  * Reduces an absolute filesystem path to its basename before it is
  * interpolated into an error message that may cross the IPC boundary.
  * Mirrors the sanitization AppDataService.toFilesystemError() applies to
- * fs-callback errors (OIR-115) so hand-built `new Error(...)` messages in
+ * fs-callback errors so hand-built `new Error(...)` messages in
  * this module and in path-validation guards never leak absolute realpaths
  * (which typically embed the OS username/home directory) to the renderer.
  */

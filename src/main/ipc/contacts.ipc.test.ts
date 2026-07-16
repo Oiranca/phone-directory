@@ -729,7 +729,7 @@ describe("contacts:import-csv-dataset — sender binding", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Bounded wrong-sender attempt counter (PR #62 review finding)
+  // Bounded wrong-sender attempt counter
   // ---------------------------------------------------------------------------
 
   it("wrong sender — token survives the first wrong-sender attempt; legitimate sender can still confirm", async () => {
@@ -1010,7 +1010,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SEC-4 — global cap on concurrent pending CSV imports
+// Global cap on concurrent pending CSV imports
 //
 // pendingCsvImports previously had no upper bound across ALL senders (only a
 // per-sender previous-token invalidation). Verifies the defensive global cap:
@@ -1018,7 +1018,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 // preview, rather than letting the map grow unbounded until TTLs expire.
 // ---------------------------------------------------------------------------
 
-describe("contacts:preview-csv-import — SEC-4 global pending-import cap", () => {
+describe("contacts:preview-csv-import — global pending-import cap", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;
@@ -1112,13 +1112,13 @@ describe("contacts:preview-csv-import — SEC-4 global pending-import cap", () =
 });
 
 // ---------------------------------------------------------------------------
-// SEC-5 — csvImportPolicySelectionSchema (Zod) replaces manual
+// csvImportPolicySelectionSchema (Zod) replaces manual
 // typeof/Number.isInteger/Set.has validation of importCsvDataset's policy
 // array, matching this codebase's "every IPC input goes through Zod"
 // convention (createRecord, updateRecord, mergeDuplicates, busca channels).
 // ---------------------------------------------------------------------------
 
-describe("csvImportPolicySelectionSchema — SEC-5", () => {
+describe("csvImportPolicySelectionSchema", () => {
   it("accepts a well-formed policy selection array", async () => {
     const { csvImportPolicySelectionListSchema } = await import(
       "../../shared/schemas/csv-import-policy.schema.js"
@@ -1212,7 +1212,7 @@ describe("csvImportPolicySelectionSchema — SEC-5", () => {
   });
 });
 
-describe("contacts:import-csv-dataset — SEC-5 IPC handler rejects malformed policies via Zod", () => {
+describe("contacts:import-csv-dataset — IPC handler rejects malformed policies via Zod", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;

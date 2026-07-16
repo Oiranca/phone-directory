@@ -21,7 +21,7 @@ interface LazyRouteBoundaryState {
 }
 
 /**
- * OIR-214 review follow-up — a rejected `React.lazy()` dynamic import throws
+ * A rejected `React.lazy()` dynamic import throws
  * synchronously during render (React re-throws the promise rejection), and
  * `Suspense` only handles the *pending* state, not a rejection — an
  * uncaught error there unmounts the whole app to a blank white screen.
@@ -32,12 +32,10 @@ interface LazyRouteBoundaryState {
  * real, not hypothetical, failure mode for the lazy-loaded routes below.
  *
  * This is a small, self-contained class error boundary scoped to the lazy
- * routes so this PR doesn't depend on the top-level `ErrorBoundary` being
- * added in a separate, not-yet-merged PR (OIR-205). If/when that top-level
- * boundary lands, this one simply catches the error first — no conflict,
- * since React error boundaries can be nested.
+ * routes. It catches chunk-load failures before the top-level
+ * `ErrorBoundary`; nested React error boundaries are safe.
  *
- * OIR-214 review follow-up #2 — `React.lazy(factory)` memoizes the promise
+ * Retry handling: `React.lazy(factory)` memoizes the promise
  * returned by `factory` per call: once that promise has rejected, every
  * subsequent render of the *same* lazy component reference just re-throws
  * the same cached rejection, it never re-invokes `factory`. A naive retry

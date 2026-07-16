@@ -90,7 +90,7 @@ describe("reconcilePrimaryEntries (never invents a primary)", () => {
   });
 });
 
-// OIR-247: ODS parsing (stripPlantaPrefix in spreadsheet-parsers.ts) intentionally
+// : ODS parsing (stripPlantaPrefix in spreadsheet-parsers.ts) intentionally
 // stores the bare floor/room value, relying on display-time reconstruction of the
 // "Planta "/"Hab " prefix. These helpers are the single source of truth for that
 // reconstruction, shared by AppDataService's locationSummary and DirectoryPage's

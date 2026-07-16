@@ -25,7 +25,7 @@ import {
   waitForDirectory
 } from "./helpers/electron";
 
-const DISPLAY_NAME = "Consulta Confidencial OIR-218";
+const DISPLAY_NAME = "Consulta Confidencial ";
 
 /**
  * Portable screenshot output directory. Screenshots are purely diagnostic
@@ -41,7 +41,7 @@ const buildSeededDataset = () => ({
   exportedAt: "2026-04-13T00:00:00Z",
   metadata: {
     recordCount: 1,
-    generatedFrom: "oir-218-chip-removal-verification",
+    generatedFrom: "chip-removal-verification",
     generatedBy: "tests/e2e/chip-removal-verification.spec.ts",
     editorName: "System",
     typeCounts: {
@@ -66,8 +66,8 @@ const buildSeededDataset = () => ({
   },
   records: [
     {
-      id: "cnt_oir218_1",
-      externalId: "oir218-chip-removal-1",
+      id: "cnt_chip_1",
+      externalId: "chip-removal-1",
       type: "service",
       displayName: DISPLAY_NAME,
       organization: {
@@ -78,7 +78,7 @@ const buildSeededDataset = () => ({
       contactMethods: {
         phones: [
           {
-            id: "ph_oir218_1",
+            id: "ph_chip_1",
             label: "Directo",
             number: "80099",
             kind: "internal",
@@ -94,8 +94,8 @@ const buildSeededDataset = () => ({
       tags: [],
       status: "active",
       source: {
-        externalId: "oir218-chip-removal-1",
-        sheetSlug: "oir-218",
+        externalId: "chip-removal-1",
+        sheetSlug: "chip-removal",
         sheetRow: "1"
       },
       audit: {
@@ -112,7 +112,7 @@ test.describe("chip removal regression", () => {
   test("only the Confidencial marker appears, never No facilitar/No pacientes", async () => {
     await fs.mkdir(screenshotsDir, { recursive: true });
 
-    const workspace = await createWorkspace("oir218-chip-removal");
+    const workspace = await createWorkspace("chip-removal");
     const dataDir = path.join(workspace.userDataPath, "data");
     await fs.mkdir(dataDir, { recursive: true });
     await fs.writeFile(
@@ -156,9 +156,9 @@ test.describe("chip removal regression", () => {
       await page.getByRole("link", { name: `Editar registro: ${DISPLAY_NAME}` }).click();
       await expect(page.getByRole("heading", { name: DISPLAY_NAME })).toBeVisible();
 
-      const phoneSection = page.locator("li", { has: page.locator("#phone-number-ph_oir218_1") });
+      const phoneSection = page.locator("li", { has: page.locator("#phone-number-ph_chip_1") });
       await expect(phoneSection.getByText("Confidencial", { exact: true })).toBeVisible();
-      await expect(phoneSection.locator("input#phone-number-ph_oir218_1")).toHaveValue("80099");
+      await expect(phoneSection.locator("input#phone-number-ph_chip_1")).toHaveValue("80099");
       await expect(phoneSection.getByText("No facilitar a pacientes")).toHaveCount(0);
       await expect(phoneSection.getByText(/No pacientes/i)).toHaveCount(0);
 

@@ -18,7 +18,7 @@ import {
   WINDOW_WEB_PREFERENCES
 } from "./security.js";
 
-// OIR-213 (QA-4) — registered as early as possible so an uncaught exception
+// Registered as early as possible so an uncaught exception
 // or unhandled rejection during startup (before the window even exists) is
 // still logged and surfaced instead of silently killing the process.
 registerCrashHandlers({ targetApp: app });

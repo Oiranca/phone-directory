@@ -1,5 +1,5 @@
 /**
- * OIR-214 / ARQ-12 — shared primitive for the `role="status" aria-live="polite"`
+ * Shared primitive for the `role="status" aria-live="polite"`
  * + "Cargando…" loading pattern that was hand-rewritten independently across
  * App.tsx, DirectoryPage.tsx, RecordFormPage.tsx, BuscasPage.tsx,
  * SettingsPage.tsx and DataManagementSection.tsx.

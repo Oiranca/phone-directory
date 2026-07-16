@@ -2,7 +2,7 @@ import { useLayoutEffect } from "react";
 import type { RefObject } from "react";
 
 /**
- * OIR-214 / ARQ-12 — shared primitive for the "focus this element when a
+ * Shared primitive for the "focus this element when a
  * panel/form opens" pattern that was hand-rewritten independently in
  * DataManagementSection.tsx (focus the import-preview panel heading when it
  * opens) and BuscasPage.tsx (focus the first form field when the

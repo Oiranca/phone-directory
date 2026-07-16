@@ -2277,7 +2277,7 @@ export class AppDataService {
   }
 
   private async appendAuditEntry(entry: AuditLogEntry): Promise<void> {
-    // FIX 3 (PR #67): use await so this frame appears in async stack traces and
+    // Use await so this frame appears in async stack traces and
     // a future throw is caught by this method's own context rather than silently
     // escaping as an unhandled promise rejection.
     await this.auditFacade.appendEntry(entry);

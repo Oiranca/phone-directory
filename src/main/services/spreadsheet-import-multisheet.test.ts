@@ -1,11 +1,8 @@
 /**
  * ODS multi-sheet phone-number data-loss regression tests.
  *
- * (OIR-217/MANT-7: renamed from `spreadsheet-import-oir102.test.ts` to
- * `spreadsheet-import-oir102-multisheet.test.ts` to disambiguate from the
- * separate, unrelated fixes covered in `spreadsheet-import-oir102-interim.test.ts`
- * — both files previously carried the same bare "OIR-102" label despite
- * testing different root causes.)
+ * This file covers multi-sheet phone merge regressions. Row-skipping
+ * regressions live in `spreadsheet-import-row-skips.test.ts`.
  *
  * Two root causes fixed:
  *   1. 2-phone cap: normalizeServiceSheet only emitted phone1/phone2; 3rd+
@@ -62,7 +59,7 @@ const makeServiceSheet = (
 let testRoot: string;
 
 beforeEach(async () => {
-  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir102-test-"));
+  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "spreadsheet-multisheet-"));
 });
 
 afterEach(async () => {

@@ -1,5 +1,5 @@
 /**
- * OIR-213 (QA-3) — Direct unit tests for spreadsheet-normalize.ts.
+ * Direct unit tests for spreadsheet-normalize.ts.
  *
  * spreadsheet-import.golden.test.ts exercises several of these helpers only
  * INDIRECTLY (as a side effect of running full ODS/XLSX fixtures through

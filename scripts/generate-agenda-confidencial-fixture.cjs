@@ -10,8 +10,7 @@
  * AGENDA_TABULAR_HEADER_MARKERS in src/main/services/spreadsheet-parsers.ts)
  * with one confidential and one non-confidential row, so the row-level
  * Confidencial-flag tests always run (in CI and on every machine) instead of
- * silently skipping when a real, operator-provided export isn't present
- * (OIR-255).
+ * silently skipping when a real, operator-provided export isn't present.
  *
  * The phone numbers below (1000 / 1001) are deliberately short,
  * internal-extension-shaped placeholder values — NOT real, routable Spanish

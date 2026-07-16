@@ -656,7 +656,7 @@ describe("useContactForm", () => {
   });
 
   describe("submit failure", () => {
-    it("OIR-213: sanitizes IPC error boilerplate before showing the save-failure toast", async () => {
+    it("sanitizes IPC error boilerplate before showing the save-failure toast", async () => {
       useAppStore.setState({
         contacts: defaultContacts,
         settings: editableSettings,

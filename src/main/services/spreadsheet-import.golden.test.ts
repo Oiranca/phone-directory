@@ -92,7 +92,7 @@ const makeBlankPhoneEntry = (overrides: Partial<SerializedPhoneEntry> = {}): Ser
 let testRoot: string;
 
 beforeEach(async () => {
-  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir109-golden-"));
+  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "spreadsheet-golden-"));
 });
 
 afterEach(async () => {
@@ -969,7 +969,7 @@ describe("golden: error paths", () => {
     // (cap enforcement belongs to buildSpreadsheetImportPreview)
   });
 
-  // ARQ-3 — the enforcement point itself (buildSpreadsheetImportPreview)
+  // The enforcement point itself (buildSpreadsheetImportPreview)
   // previously had zero direct test coverage; the test above only proved the
   // *normalization* layer does not itself cap. This closes that gap.
   it("buildSpreadsheetImportPreview throws a clear 'file too large' message beyond 5000 rows", async () => {

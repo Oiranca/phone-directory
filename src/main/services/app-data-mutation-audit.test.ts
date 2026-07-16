@@ -90,7 +90,7 @@ describe("AppDataService — mutation audit coverage", () => {
   let testRoot: string;
 
   beforeEach(async () => {
-    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-audit-oir112-"));
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-audit-"));
     getPathMock.mockImplementation(() => testRoot);
   });
 
@@ -436,7 +436,7 @@ describe("AppDataService — mutation audit coverage", () => {
     expect(result.savedRecordId).toBeTruthy();
 
     // The facade must have logged the error (non-blocking, not silent).
-    // PR #67 changed the log to a single concatenated string (code+message) to
+    // The log uses a single concatenated string (code+message) to
     // avoid leaking absolute filesystem paths — assert the new single-string form,
     // and that the error detail (message text) is included in that string.
     expect(consoleErrorSpy).toHaveBeenCalledWith(

@@ -6,7 +6,7 @@ import { ToastProvider } from "../components/feedback/ToastRegion";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
 
-// OIR-214 / ARQ-10 — smoke test that the lazily-loaded routes (settings,
+// Smoke test that the lazily-loaded routes (settings,
 // deduplicate) still resolve and render their real page content through the
 // Suspense boundary, not just the "Cargando…" fallback forever.
 

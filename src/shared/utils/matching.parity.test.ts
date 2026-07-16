@@ -12,7 +12,7 @@
  *      spreadsheet-normalize. Both callers now use the single canonical NFKD
  *      form exported from this module.
  *
- * MANT-16: this file must never import from `src/main/**` — shared code is a
+ * This file must never import from `src/main/**` — shared code is a
  * dependency of main, never the other way around. It previously imported
  * `normalizeDisplayNameForMerge` / `normalizeNumberForDedup` from
  * `main/services/spreadsheet-normalize.ts` solely to assert they equal the

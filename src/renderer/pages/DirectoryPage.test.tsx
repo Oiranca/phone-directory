@@ -675,7 +675,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Sin ubicación detallada")).toBeInTheDocument();
   });
 
-  // OIR-247: ODS parsing intentionally stores the bare floor/room value (e.g.
+  // ODS parsing intentionally stores the bare floor/room value (e.g.
   // "6"), relying on display-time reconstruction of the "Planta "/"Hab "
   // prefixes (see stripPlantaPrefix in spreadsheet-parsers.ts and
   // formatLocationFloor/formatLocationRoom in shared/utils/contacts.ts). The
@@ -1082,15 +1082,15 @@ describe("DirectoryPage", () => {
     expect(firstButton).toHaveAttribute("aria-pressed", "false");
   });
 
-  // PR #136 review: the arrow/Home/End tests above only assert aria-pressed
+  // The arrow/Home/End tests above only assert aria-pressed
   // (selection state) — they never assert that DOM focus actually followed.
   // focusRecordButton() moves focus via requestAnimationFrame, which is the
-  // genuinely risky part of the MANT-4 roving-tabindex extraction (wiring the
+  // genuinely risky part of the roving-tabindex extraction (wiring the
   // hook's abstract index arithmetic to real DOM focus); useRovingTabIndex's
   // own unit tests only cover the arithmetic. These regression tests assert
   // that DOM focus AND aria-pressed selection move together for real keydown
   // events, using waitFor to await the deferred rAF focus call.
-  describe("keyboard navigation moves DOM focus together with selection (PR #136 regression)", () => {
+  describe("keyboard navigation moves DOM focus together with selection", () => {
     const bootstrap = () => {
       window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
         contacts: defaultContacts,

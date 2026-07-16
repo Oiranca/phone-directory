@@ -153,7 +153,7 @@ export const DeduplicatePage = () => {
   // (subsequent refreshes after a merge intentionally shrink pairStates, not the total).
   // The baseline is tagged with the storageKey it was computed for, so switching the
   // active data file (which changes storageKey) invalidates the stale baseline instead
-  // of leaving the previous dataset's total stuck as the denominator (PR #116 review).
+  // of leaving the previous dataset's total stuck as the denominator.
   const [pairTotalBaseline, setPairTotalBaseline] = useState<{
     key: string;
     total: number;
@@ -226,7 +226,7 @@ export const DeduplicatePage = () => {
       // Capture the baseline only once per storageKey, on the first
       // successful load after that key is seen — later refreshes for the SAME dataset
       // (e.g. "Reintentar" or post-merge) must not reset the denominator, but switching
-      // to a DIFFERENT dataset (storageKey changes) must recompute it (PR #116 review).
+      // to a DIFFERENT dataset (storageKey changes) must recompute it.
       setPairTotalBaseline((current) =>
         current === null || current.key !== storageKey
           ? { key: storageKey, total: filtered.length }
@@ -253,7 +253,7 @@ export const DeduplicatePage = () => {
     );
   };
 
-  // MANT-4: roving-tabindex arrow key navigation for the "keep this / keep
+  // Roving-tabindex arrow key navigation for the "keep this / keep
   // both" radiogroup, built on the shared useRovingTabIndex hook.
   // ArrowUp/ArrowLeft moves to the previous option, ArrowDown/ArrowRight to the
   // next one, wrapping at both ends. Moves BOTH selection and DOM focus, per the

@@ -1,9 +1,9 @@
 /**
- * Shared spreadsheet-import test helper (OIR-217/MANT-6).
+ * Shared spreadsheet-import test helper.
  *
  * Previously copy-pasted verbatim across spreadsheet-import.golden.test.ts,
- * spreadsheet-import-oir102-multisheet.test.ts, spreadsheet-import-oir102-interim.test.ts
- * and social-contact-oir131.test.ts. Extracted here so it has a single
+ * spreadsheet-import-multisheet.test.ts, spreadsheet-import-row-skips.test.ts,
+ * and social-contact-methods.test.ts. Extracted here so it has a single
  * definition shared by all spreadsheet-import test suites.
  */
 import fs from "node:fs";
