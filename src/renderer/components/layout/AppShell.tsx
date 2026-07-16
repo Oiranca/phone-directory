@@ -1,7 +1,8 @@
 import type { PropsWithChildren } from "react";
 import { useEffect, useRef } from "react";
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAppStore } from "../../store/useAppStore";
+import { NavRail } from "./NavRail";
 
 /**
  * CSS custom property name exposing the app header's rendered height,
@@ -36,14 +37,9 @@ const formatLastImportedAt = (value: string | undefined): string | null => {
   return `${day}-${month}-${year} ${hours}:${minutes}`;
 };
 
-const navItems = [
-  { to: "/", label: "Directorio", title: "Directorio — Alt+1" },
-  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2" },
-  { to: "/settings", label: "Configuración", title: "Configuración — Alt+3" },
-  { to: "/buscas", label: "Buscas", title: "Buscas — Alt+4" },
-  { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+5" }
-];
-
+// Alt+N shortcut → route mapping. Documented in docs/KEYBOARD_SHORTCUTS.md;
+// intentionally decoupled from NavRail's visual item order (Configuración is
+// pinned to the bottom of the rail but keeps its historical Alt+3 binding).
 const shortcutRoutes: Record<string, string> = {
   Digit1: "/",
   Numpad1: "/",
@@ -206,63 +202,52 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       >
         Saltar al contenido principal
       </a>
-      <header ref={headerRef} className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-scs-blue">Agenda Hospitalaria</p>
-            </div>
-            {isRecoveryMode ? (
-              <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
-                Recuperación
+      <div className="flex min-h-screen">
+        {/* Primary navigation lives in the icon rail, docked to the left. It
+            is hidden in recovery mode, matching the previous top-nav's
+            behavior (the directory is locked and there's nowhere to
+            navigate to until recovery completes). */}
+        {!isRecoveryMode && <NavRail />}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+            <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-scs-blue">Agenda Hospitalaria</p>
+                </div>
+                {isRecoveryMode ? (
+                  <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
+                    Recuperación
+                  </div>
+                ) : lastImportedAtLabel ? (
+                  <p className="w-fit text-xs font-medium text-slate-500">
+                    Última actualización: {lastImportedAtLabel}
+                  </p>
+                ) : null}
               </div>
-            ) : lastImportedAtLabel ? (
-              <p className="w-fit text-xs font-medium text-slate-500">
-                Última actualización: {lastImportedAtLabel}
-              </p>
-            ) : null}
-          </div>
-          {isRecoveryMode ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              El directorio está bloqueado hasta importar una copia JSON válida o restablecer el directorio vacío.
+              {isRecoveryMode ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                  El directorio está bloqueado hasta importar una copia JSON válida o restablecer el directorio vacío.
+                </div>
+              ) : null}
             </div>
-          ) : (
-            <nav aria-label="Navegación principal" className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap md:gap-3">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  title={item.title}
-                  className={({ isActive }) =>
-                    [
-                      "focus-ring rounded-2xl px-4 py-3 text-center text-sm font-medium transition-colors md:rounded-full md:px-4 md:py-2.5",
-                      isActive
-                        ? "bg-scs-blue text-white shadow-sm"
-                        : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                    ].join(" ")
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-          )}
+          </header>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            // `<main>` receives programmatic focus on every route change
+            // (T1, above) purely so assistive tech announces the new page — it must
+            // NOT show the shared `focus-ring` visual treatment. Since this element's
+            // height is bounded to (almost exactly) the viewport, that ring's
+            // left/right edges rendered as two full-viewport-height vertical blue
+            // lines flanking the page on every load. `focus:outline-none` alone still
+            // suppresses the native focus outline without introducing a visible ring.
+            className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+          >
+            {children}
+          </main>
         </div>
-      </header>
-      <main
-        id="main-content"
-        tabIndex={-1}
-        // `<main>` receives programmatic focus on every route change
-        // (T1, above) purely so assistive tech announces the new page — it must
-        // NOT show the shared `focus-ring` visual treatment. Since this element's
-        // height is bounded to (almost exactly) the viewport, that ring's
-        // left/right edges rendered as two full-viewport-height vertical blue
-        // lines flanking the page on every load. `focus:outline-none` alone still
-        // suppresses the native focus outline without introducing a visible ring.
-        className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
-      >
-        {children}
-      </main>
+      </div>
     </div>
   );
 };
