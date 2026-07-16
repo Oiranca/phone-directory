@@ -114,7 +114,7 @@ describe("AppDataAuditFacade", () => {
     expect(stat.isFile()).toBe(true);
   });
 
-  it("getAuditLog reports hasArchivedHistory: false and archivedFileCount: 0 when no rotation has occurred (OIR-206 follow-up)", async () => {
+  it("getAuditLog reports hasArchivedHistory: false and archivedFileCount: 0 when no rotation has occurred ( follow-up)", async () => {
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
 
     const facade = new AppDataAuditFacade();
@@ -124,7 +124,7 @@ describe("AppDataAuditFacade", () => {
     expect(result.archivedFileCount).toBe(0);
   });
 
-  it("getAuditLog and exportAuditLog surface archived-history visibility after a rotation (OIR-206 follow-up)", async () => {
+  it("getAuditLog and exportAuditLog surface archived-history visibility after a rotation ( follow-up)", async () => {
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
     const { AuditLogService } = await import("./audit-log.service.js");
 

@@ -233,7 +233,7 @@ test.describe("bulk import preview UI", () => {
       csvPath,
       [
         "externalId,type,displayName,department,area,phone1Number,phone1Kind,status",
-        "oir57-confirm-1,service,Servicio E2E Preview,Recepción,gestion-administracion,55501,internal,active"
+        "bulk-preview-confirm-1,service,Servicio E2E Preview,Recepción,gestion-administracion,55501,internal,active"
       ].join("\n") + "\n",
       "utf-8"
     );

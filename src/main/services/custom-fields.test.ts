@@ -28,7 +28,7 @@ describe("customFields survive createRecord + updateRecord", () => {
   let testRoot: string;
 
   beforeEach(async () => {
-    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir232-customfields-"));
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "customfields-"));
     getPathMock.mockImplementation(() => testRoot);
   });
 

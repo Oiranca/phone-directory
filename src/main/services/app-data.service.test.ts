@@ -110,7 +110,7 @@ describe("AppDataService", () => {
       })
     );
 
-    // SEC-3 regression guard: the error must surface a sanitized, basename-only
+    //  regression guard: the error must surface a sanitized, basename-only
     // path (never the absolute realpath, which embeds the OS username/home dir)
     // across the IPC boundary.
     await expect(rejection).rejects.toThrow(
@@ -160,7 +160,7 @@ describe("AppDataService", () => {
       "Ya existe un archivo en esa ruta. Usa una ruta nueva para copiar el directorio actual o restablece las rutas gestionadas."
     );
 
-    // SEC-3 regression guard: assertDataFilePathAvailable must not leak the
+    //  regression guard: assertDataFilePathAvailable must not leak the
     // absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -186,7 +186,7 @@ describe("AppDataService", () => {
       "La ruta de datos debe apuntar a un archivo JSON, no a una carpeta."
     );
 
-    // SEC-3 regression guard: assertDataFilePathAvailable's is-directory branch
+    //  regression guard: assertDataFilePathAvailable's is-directory branch
     // must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -211,7 +211,7 @@ describe("AppDataService", () => {
       "La ruta de datos no puede apuntar al archivo de configuración."
     );
 
-    // SEC-3 regression guard: validateEditableSettings' settings-file-collision
+    //  regression guard: validateEditableSettings' settings-file-collision
     // branch must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -236,7 +236,7 @@ describe("AppDataService", () => {
 
     await expect(rejection).rejects.toThrow("La ruta de datos debe terminar en .json.");
 
-    // SEC-3 regression guard: validateEditableSettings' extension-check branch
+    //  regression guard: validateEditableSettings' extension-check branch
     // must not leak the absolute path into the IPC-facing error message.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
@@ -337,7 +337,7 @@ describe("AppDataService", () => {
       })
     );
 
-    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    //  regression guard: sanitized basename-only path, no absolute leak.
     await expect(rejection).rejects.toThrow(
       /No se pudo validar la ruta del archivo de datos\. Ruta afectada: custom-data\. Error al verificar la ruta: EACCES: permission denied/
     );
@@ -1990,7 +1990,7 @@ describe("AppDataService", () => {
 
     const rejection = service.restoreBackup(sourceFilePath);
 
-    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    //  regression guard: sanitized basename-only path, no absolute leak.
     await expect(rejection).rejects.toThrow(
       /No se pudo restaurar la copia de seguridad seleccionada\. Ruta afectada: replacement\.json\. El archivo debe estar dentro de la carpeta de copias de seguridad configurada\./
     );
@@ -2034,7 +2034,7 @@ describe("AppDataService", () => {
 
     const rejection = service.restoreBackup(backupPath);
 
-    // SEC-3 regression guard: the symlink-swap/TOCTOU guard in restoreBackup
+    //  regression guard: the symlink-swap/TOCTOU guard in restoreBackup
     // must not leak the absolute canonical path into the IPC-facing error.
     await expect(rejection).rejects.toThrow(
       /El archivo cambió mientras se validaba y ya no es seguro restaurarlo\./
@@ -2379,7 +2379,7 @@ describe("AppDataService", () => {
       const existing = initial.contacts.records[0]!;
 
       // Use externalId match so the conflict is deterministic
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phones.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-phones.csv");
       await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
@@ -2410,7 +2410,7 @@ describe("AppDataService", () => {
       const initial = await service.getBootstrapData();
       const existing = initial.contacts.records[0]!;
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-emails.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-emails.csv");
       await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
@@ -2437,7 +2437,7 @@ describe("AppDataService", () => {
       const initial = await service.getBootstrapData();
       const existing = initial.contacts.records[0]!;
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-socials.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-socials.csv");
       await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
@@ -2465,7 +2465,7 @@ describe("AppDataService", () => {
       const initial = await service.getBootstrapData();
       const existing = initial.contacts.records[0]!;
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-extid-match.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-extid-match.csv");
       await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
       await fs.writeFile(
         sourceFilePath,
@@ -2493,7 +2493,7 @@ describe("AppDataService", () => {
       const service = new AppDataService();
       await service.ensureInitialFiles();
 
-      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-existing.csv");
+      const existingSourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match-existing.csv");
       await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
       await fs.writeFile(
         existingSourceFilePath,
@@ -2502,7 +2502,7 @@ describe("AppDataService", () => {
       );
       await service.importCsvDataset(existingSourceFilePath);
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match.csv");
       await fs.writeFile(
         sourceFilePath,
         ["type,displayName,department,phone1Number,status", "service,Mostrador B,Recepción,88801,active"].join("\n") + "\n",
@@ -2538,7 +2538,7 @@ describe("AppDataService", () => {
       // Row 1 (existing side, imported first so it becomes a genuinely
       // pre-existing record — intra-batch-only matches are no longer
       // reported as conflicts): phones listed 99999 first, then 12345 (lex-later)
-      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-lex-existing.csv");
+      const existingSourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match-lex-existing.csv");
       await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
       await fs.writeFile(
         existingSourceFilePath,
@@ -2550,7 +2550,7 @@ describe("AppDataService", () => {
       );
       await service.importCsvDataset(existingSourceFilePath);
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-lex.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match-lex.csv");
       await fs.writeFile(
         sourceFilePath,
         [
@@ -2584,7 +2584,7 @@ describe("AppDataService", () => {
       // Row 1 (existing side, imported first so it becomes a genuinely
       // pre-existing record — intra-batch-only matches are no longer
       // reported as conflicts): formatted phone with spaces.
-      const existingSourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-fmt-existing.csv");
+      const existingSourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match-fmt-existing.csv");
       await fs.mkdir(path.dirname(existingSourceFilePath), { recursive: true });
       await fs.writeFile(
         existingSourceFilePath,
@@ -2593,7 +2593,7 @@ describe("AppDataService", () => {
       );
       await service.importCsvDataset(existingSourceFilePath);
 
-      const sourceFilePath = path.join(testRoot, "incoming", "oir132-phone-match-fmt.csv");
+      const sourceFilePath = path.join(testRoot, "incoming", "csv-merge-phone-match-fmt.csv");
       await fs.writeFile(
         sourceFilePath,
         [
@@ -4590,7 +4590,7 @@ describe("AppDataService", () => {
       /El archivo de copia de seguridad está vacío y no puede restaurarse/
     );
 
-    // SEC-3 regression guard: sanitized basename-only path, no absolute leak.
+    //  regression guard: sanitized basename-only path, no absolute leak.
     const error = await rejection.catch((e: unknown) => e as Error);
     expect(error.message).not.toContain(testRoot);
     expect(error.message).not.toContain(emptyBackupPath);
@@ -4846,7 +4846,7 @@ describe("AppDataService", () => {
   // tabular Agenda header/row shape (AGENDA_TABULAR_HEADER_MARKERS in
   // spreadsheet-parsers.ts), instead of the operator-provided real export, so
   // the tests always run — in CI and on every machine — rather than silently
-  // skipping (OIR-255).
+  // skipping.
   //
   // The fixture is 100% synthetic — no real operator/hospital/patient data
   // was used. Its two phone numbers ("1000" / "1001") are deliberately

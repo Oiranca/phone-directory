@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withLazyRouteBoundary } from "./LazyRouteBoundary";
 
-// Review follow-up on PR #135 (OIR-214): a rejected `React.lazy()` dynamic
+// A rejected `React.lazy()` dynamic
 // import throws synchronously during render once the rejection resolves —
 // `Suspense` alone only covers the *pending* state, not a rejection. On this
 // USB-distributed, manually-updated app a missing/corrupt chunk file after
@@ -42,7 +42,7 @@ describe("withLazyRouteBoundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  // OIR-214 review follow-up #2: `React.lazy()` memoizes the promise
+  // `React.lazy()` memoizes the promise
   // returned by its factory *per call* — once that promise has rejected,
   // re-rendering the *same* lazy component reference just re-throws the
   // same cached rejection, it never re-invokes the factory. A retry button

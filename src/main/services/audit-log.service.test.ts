@@ -789,7 +789,7 @@ describe("AuditLogService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // ARQ-7: entry-count based rotation
+  // Entry-count based rotation
   // ---------------------------------------------------------------------------
 
   describe("rotation — append()", () => {

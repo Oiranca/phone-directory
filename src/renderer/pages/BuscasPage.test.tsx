@@ -226,7 +226,7 @@ describe("BuscasPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     // "Rol" uniquely matches the label (table header is "Rol" too — use id)
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
-    // MANT-12: "Turno" is now an accessible SelectField combobox, not a native
+    // : "Turno" is now an accessible SelectField combobox, not a native
     // <select> — open it and click the "Noche" option.
     fireEvent.click(screen.getByLabelText(/turno/i));
     fireEvent.click(screen.getByRole("option", { name: "Noche" }));
@@ -241,7 +241,7 @@ describe("BuscasPage", () => {
     });
   });
 
-  it("OIR-213: sanitizes IPC error boilerplate when addBusca rejects", async () => {
+  it(": sanitizes IPC error boilerplate when addBusca rejects", async () => {
     setupWindowApi({
       addBusca: vi
         .fn()

@@ -86,7 +86,7 @@ describe("buildCsvImportPreview", () => {
     );
   });
 
-  // ARQ-3 — the row-count ceiling itself has been enforced since
+  // The row-count ceiling itself has been enforced since
   // MAX_CSV_IMPORT_ROWS was introduced, but had zero direct test coverage. This
   // confirms it triggers a clear "file too large" message right past the
   // threshold, and does NOT trigger exactly at the threshold.
@@ -262,7 +262,7 @@ describe("buildCsvImportPreview", () => {
   // location.sector/section.
   it("maps role/schedule/sector/section columns to organization/location fields", async () => {
     const filePath = await writeFile(
-      "oir222-fields.csv",
+      "custom-fields.csv.csv",
       [
         "type,displayName,phone1Number,role,schedule,building,floor,sector,section",
         "service,Alergia,79196,Doctora/or,8:00-22:00,Hospital Polivalente,4,Enfermería,Consulta"

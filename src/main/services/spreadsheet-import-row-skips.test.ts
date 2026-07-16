@@ -1,9 +1,8 @@
 /**
  * INTERIM — Buscas sheet skip and social-handle row skip.
  *
- * (MANT-7: this file covers row-skipping fixes distinct from — and
- * unrelated to — the multi-sheet phone-merge regression tests in
- * `spreadsheet-import-oir102-multisheet.test.ts`.)
+ * This file covers row-skipping fixes distinct from the multi-sheet phone
+ * merge tests in `spreadsheet-import-multisheet.test.ts`.
  *
  * Two categories of non-phone-contact rows were blocking the all-or-nothing
  * import preview:
@@ -53,7 +52,7 @@ const makeServiceSheet = (
 let testRoot: string;
 
 beforeEach(async () => {
-  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir102-interim-"));
+  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "spreadsheet-row-skips-"));
 });
 
 afterEach(async () => {

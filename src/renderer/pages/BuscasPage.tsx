@@ -16,7 +16,7 @@ const SHIFT_LABELS: Record<string, string> = {
   "noche": "Noche"
 };
 
-// MANT-12: options for the accessible SelectField combobox used below,
+// Options for the accessible SelectField combobox used below,
 // replacing the previous plain native <select>. Same values/order as
 // BUSCA_SHIFTS.
 const SHIFT_OPTIONS = BUSCA_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));

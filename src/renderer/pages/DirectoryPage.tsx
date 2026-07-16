@@ -335,7 +335,7 @@ export const DirectoryPage = () => {
     return () => observer.disconnect();
   }, []);
 
-  // MANT-4: focuses (and smooth-scrolls into view) the list item button for
+  // Focuses (and smooth-scrolls into view) the list item button for
   // `recordId`, deferred to the next animation frame so the DOM has settled
   // after the selection state update that precedes this call.
   const focusRecordButton = (recordId: string) => {

@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import type { KeyboardEvent } from "react";
 
 /**
- * MANT-4 — shared roving-tabindex / arrow-key navigation logic, extracted
+ * Shared roving-tabindex / arrow-key navigation logic, extracted
  * from the near-identical implementations that used to live independently in
  * DirectoryPage.tsx (`handleListKeyDown`, list semantics) and
  * DeduplicatePage.tsx (`handleRadioGroupKeyDown`, radiogroup semantics).

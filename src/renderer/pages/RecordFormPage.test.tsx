@@ -480,7 +480,7 @@ describe("RecordFormPage", () => {
     // DOM (tab) order: Cancelar precedes the submit button. This is the behavior
     // that actually matters for keyboard/tab navigation and screen readers; it is
     // asserted structurally so the test survives Tailwind class renames/refactors
-    // (QA-7 — a prior version of this test asserted a `flex-col-reverse`
+    // (a prior version of this test asserted a `flex-col-reverse`
     // class-name substring, which is an implementation detail unrelated to the
     // real (unrenderable-in-jsdom) visual layout).
     expect(

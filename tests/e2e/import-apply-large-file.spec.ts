@@ -128,7 +128,7 @@ test.describe("bulk ODS import survives a same-document navigation between previ
       csvPath,
       [
         "externalId,type,displayName,phone1Number,phone1Kind,status",
-        "oir223-crossdoc-1,service,Servicio Cross Doc,12345,internal,active"
+        "large-import-crossdoc-1,service,Servicio Cross Doc,12345,internal,active"
       ].join("\n") + "\n",
       "utf-8"
     );

@@ -1,5 +1,5 @@
 /**
- * Unit tests for src/main/crash-handlers.ts (OIR-213 / QA-4).
+ * Unit tests for src/main/crash-handlers.ts.
  *
  * These verify the handlers are registered on the injected process/app
  * instances, and that a simulated crash records via the crash log, shows a

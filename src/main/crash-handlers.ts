@@ -1,7 +1,7 @@
 /**
- * OIR-213 (QA-4) — Main-process crash safety net.
+ * Main-process crash safety net.
  *
- * Complements OIR-205 (renderer ErrorBoundary, PR #131) which only covers
+ * Complements the renderer ErrorBoundary, which only covers
  * exceptions thrown while rendering React. Before this, an unhandled
  * rejection or synchronous throw outside a try/catch anywhere in the main
  * process (IPC handlers, the auto-backup scheduler, bootstrap, ...) would
@@ -73,7 +73,7 @@ const ABSOLUTE_PATH_PATTERN = /(?:[A-Za-z]:)?[/\\][^\s"'<>]+/gu;
 /**
  * Redacts absolute filesystem paths from a crash message before it is shown
  * in a user-facing dialog. Mirrors the diagnostic-suffix stripping already
- * used for renderer toasts (src/renderer/utils/toastMessage.ts, OIR-213) —
+ * used for renderer toasts (src/renderer/utils/toastMessage.ts) —
  * which exists specifically to avoid leaking "Ruta afectada:"/"Archivo
  * afectado:" suffixes that can embed absolute paths (and thus the OS
  * username) — plus a generic absolute-path redaction, since a raw

@@ -56,7 +56,7 @@ describe("assertPathChainIsNotSymlink", () => {
       /portable root Ruta afectada: nested\. Error al verificar la ruta: EACCES: permission denied/
     );
 
-    // SEC-3 regression guard: the absolute realpath (which typically embeds
+    // Regression guard: the absolute realpath (which typically embeds
     // the OS username/home directory) must never cross the IPC boundary —
     // neither via the "Ruta afectada" segment nor via a rewrapped raw fs
     // error message.

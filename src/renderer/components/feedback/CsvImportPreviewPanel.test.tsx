@@ -5,7 +5,7 @@ import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
 
 // Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
 // Required because the discard-warning prompt now renders via the shared
-// ConfirmDialog component (native <dialog>) instead of window.confirm (PR #106 review).
+// ConfirmDialog component (native <dialog>) instead of window.confirm ( review).
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
 let originalShowModal: (() => void) | undefined;
 let originalClose: (() => void) | undefined;
@@ -844,7 +844,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByText("unrelated@other.com").closest("li")).not.toHaveClass("bg-amber-100");
     });
 
-    // PR #115 review: content-composed keys like `${phone.number}|${label}` collide when
+    //  review: content-composed keys like `${phone.number}|${label}` collide when
     // two contact methods share the same value, causing a React duplicate-key warning and
     // risking the highlight state being applied to the wrong row on reconciliation.
     it("renders duplicate phone entries with identical number and label without a React key collision, keeping the correct highlight on every row", () => {
@@ -2029,7 +2029,7 @@ describe("CsvImportPreviewPanel", () => {
     /** One unresolved conflict — used for most of the tests below. */
     const oneConflictPreview: CsvImportPreviewWithConflicts = {
       ...basePreview,
-      fileName: "oir182.csv",
+      fileName: "conflict-ux.csv",
       totalRowCount: 1,
       validRowCount: 1,
       recordCount: 1,
@@ -2041,15 +2041,15 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            id: "import-oir182-0",
-            displayName: "Registro OIR-182",
+            id: "import-conflict-ux-0",
+            displayName: "Registro ",
             phones: [],
             emails: [],
             socials: []
           },
           matchingRecord: {
-            id: "existing-oir182-0",
-            displayName: "Registro existente OIR-182",
+            id: "existing-conflict-ux-0",
+            displayName: "Registro existente ",
             phones: [],
             emails: [],
             socials: []
@@ -2099,7 +2099,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(btns).toHaveLength(1);
     });
 
-    // Item 4 — close guard (PR #106 review: window.confirm replaced with shared ConfirmDialog)
+    // Item 4 — close guard ( review: window.confirm replaced with shared ConfirmDialog)
 
     /** Preview with two conflicts, one resolved — used by the partial-resolution guard tests. */
     const twoConflictsOneResolvedPreview: CsvImportPreviewWithConflicts = {
@@ -2114,15 +2114,15 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 1,
           importedRecord: {
-            id: "import-oir182-1",
-            displayName: "Registro OIR-182 B",
+            id: "import-conflict-ux-1",
+            displayName: "Registro  B",
             phones: [],
             emails: [],
             socials: []
           },
           matchingRecord: {
-            id: "existing-oir182-1",
-            displayName: "Existente OIR-182 B",
+            id: "existing-conflict-ux-1",
+            displayName: "Existente  B",
             phones: [],
             emails: [],
             socials: []
@@ -2243,15 +2243,15 @@ describe("CsvImportPreviewPanel", () => {
         conflictedRecords: Array.from({ length: 21 }, (_, i) => ({
           recordIndex: i,
           importedRecord: {
-            id: `imp-oir182-${i}`,
-            displayName: `Importado OIR-182 ${i + 1}`,
+            id: `imp-conflict-ux-${i}`,
+            displayName: `Importado  ${i + 1}`,
             phones: [],
             emails: [],
             socials: []
           },
           matchingRecord: {
-            id: `ex-oir182-${i}`,
-            displayName: `Existente OIR-182 ${i + 1}`,
+            id: `ex-conflict-ux-${i}`,
+            displayName: `Existente  ${i + 1}`,
             phones: [],
             emails: [],
             socials: []
@@ -2281,7 +2281,7 @@ describe("CsvImportPreviewPanel", () => {
         previewRows: Array.from({ length: 101 }, (_, i) => ({
           rowNumber: i + 2,
           status: "accepted" as const,
-          displayName: `Fila OIR-182 ${i + 1}`
+          displayName: `Fila  ${i + 1}`
         }))
       };
       renderPanel(manyRows);

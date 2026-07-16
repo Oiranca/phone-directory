@@ -9,7 +9,7 @@
  * The integrityError latch remains deliberately fail-closed: once set, all
  * appends are blocked until an explicit recoverFromIntegrityError() call clears it.
  *
- * ARQ-7 (2026-07-14): the active log file has no size bound on its
+ * Rotation decision (2026-07-14): the active log file has no size bound on its
  * own, so `append()` now rotates it once it accumulates
  * `DEFAULT_ROTATION_THRESHOLD_ENTRIES` entries — the full active history is
  * archived to a timestamped `audit-log.archived-<ISO timestamp>.json`
@@ -76,7 +76,7 @@ export interface AuditLogServiceOptions {
 
 export class AuditLogService {
   /**
-   * ARQ-7: rotation threshold for the active audit log.
+   * Rotation threshold for the active audit log.
    *
    * Once the active log accumulates this many entries, the NEXT append
    * archives the full active history to a uniquely named, timestamped
@@ -323,7 +323,7 @@ export class AuditLogService {
 
       let activeEntries = entries;
       if (activeEntries.length >= this.rotationThresholdEntries) {
-        // ARQ-7: bound the cost of every future append by archiving
+        // Bound the cost of every future append by archiving
         // the accumulated history now and continuing with a clean active log.
         //
         // Security review follow-up (2026-07-14) — accepted non-atomicity:

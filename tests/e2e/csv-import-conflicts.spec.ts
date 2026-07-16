@@ -29,8 +29,8 @@ import {
 /** CSV with two brand-new records — no collisions with the seed dataset. */
 const noConflictCsv = [
   "externalId,type,displayName,department,area,phone1Number,phone1Kind,status",
-  "oir103-nc-1,service,Servicio Sin Conflicto A,Admisión,gestion-administracion,19901,internal,active",
-  "oir103-nc-2,service,Servicio Sin Conflicto B,Urgencias,sanitaria-asistencial,19902,internal,active"
+  "conflict-nc-1,service,Servicio Sin Conflicto A,Admisión,gestion-administracion,19901,internal,active",
+  "conflict-nc-2,service,Servicio Sin Conflicto B,Urgencias,sanitaria-asistencial,19902,internal,active"
 ].join("\n") + "\n";
 
 /**
@@ -65,7 +65,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // No-conflict import
   // -------------------------------------------------------------------------
   test("no-conflict import: all rows accepted, confirm succeeds without policy step", async () => {
-    const workspace = await createWorkspace("oir103-no-conflict");
+    const workspace = await createWorkspace("conflict-no-conflict");
     const csvPath = path.join(workspace.incomingDir, "no-conflict.csv");
     await fs.writeFile(csvPath, noConflictCsv, "utf-8");
 
@@ -102,7 +102,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Conflict — overwrite policy
   // -------------------------------------------------------------------------
   test("conflict with overwrite policy: existing record replaced by imported data", async () => {
-    const workspace = await createWorkspace("oir103-overwrite");
+    const workspace = await createWorkspace("conflict-overwrite");
     const csvPath = path.join(workspace.incomingDir, "conflict.csv");
     await fs.writeFile(csvPath, conflictCsv("Admisión Sobrescrita", "19910"), "utf-8");
 
@@ -150,7 +150,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Conflict — skip policy
   // -------------------------------------------------------------------------
   test("conflict with skip policy: existing record is preserved unchanged", async () => {
-    const workspace = await createWorkspace("oir103-skip");
+    const workspace = await createWorkspace("conflict-skip");
     const csvPath = path.join(workspace.incomingDir, "conflict.csv");
     await fs.writeFile(csvPath, conflictCsv("Admisión Omitida", "19911"), "utf-8");
 
@@ -192,7 +192,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Conflict — merge-fields policy
   // -------------------------------------------------------------------------
   test("conflict with merge-fields policy: import completes without error", async () => {
-    const workspace = await createWorkspace("oir103-merge-fields");
+    const workspace = await createWorkspace("conflict-merge-fields");
     const csvPath = path.join(workspace.incomingDir, "conflict.csv");
     await fs.writeFile(csvPath, conflictCsv("Admisión Combinada", "19912"), "utf-8");
 
@@ -229,7 +229,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Bulk-apply: apply policy to all conflicts at once
   // -------------------------------------------------------------------------
   test("bulk-apply applies policy to all conflicts and enables confirm", async () => {
-    const workspace = await createWorkspace("oir103-bulk-apply");
+    const workspace = await createWorkspace("conflict-bulk-apply");
     const csvPath = path.join(workspace.incomingDir, "multi-conflict.csv");
     // Two rows that both conflict with seed data via externalId
     await fs.writeFile(
@@ -275,7 +275,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Cancel — close preview without importing
   // -------------------------------------------------------------------------
   test("cancel: closing preview does not import any records", async () => {
-    const workspace = await createWorkspace("oir103-cancel");
+    const workspace = await createWorkspace("conflict-cancel");
     const csvPath = path.join(workspace.incomingDir, "cancel.csv");
     await fs.writeFile(csvPath, noConflictCsv, "utf-8");
 
@@ -295,7 +295,7 @@ test.describe("CSV import conflict-resolution flows", () => {
       // Contacts file should still contain only the original seed records
       const contacts = await readContactsFile(workspace.userDataPath);
       const hasImported = contacts.records.some(
-        (r) => r.externalId === "oir103-nc-1" || r.externalId === "oir103-nc-2"
+        (r) => r.externalId === "conflict-nc-1" || r.externalId === "conflict-nc-2"
       );
       expect(hasImported).toBe(false);
     } finally {
@@ -310,7 +310,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   test("expired or invalid import token: importCsvDataset rejects with an error", async () => {
     // Drive the "token not found" error path directly via the preload bridge.
     // This avoids the 5-minute TTL wait while still exercising the real code path.
-    const workspace = await createWorkspace("oir103-expired-token");
+    const workspace = await createWorkspace("conflict-expired-token");
     const csvPath = path.join(workspace.incomingDir, "dummy.csv");
     await fs.writeFile(csvPath, noConflictCsv, "utf-8");
 
@@ -328,7 +328,7 @@ test.describe("CSV import conflict-resolution flows", () => {
       // reject because no pending import exists for that token.
       const errorMessage = await page.evaluate(async () => {
         try {
-          await window.hospitalDirectory.importCsvDataset("bogus-token-oir103", []);
+          await window.hospitalDirectory.importCsvDataset("bogus-token-conflict", []);
           return null; // Should not reach here
         } catch (err) {
           return err instanceof Error ? err.message : String(err);
@@ -349,7 +349,7 @@ test.describe("CSV import conflict-resolution flows", () => {
   // Malformed / unparseable input
   // -------------------------------------------------------------------------
   test("malformed CSV: preview shows rejected rows and blocks confirm", async () => {
-    const workspace = await createWorkspace("oir103-malformed");
+    const workspace = await createWorkspace("conflict-malformed");
     const csvPath = path.join(workspace.incomingDir, "malformed.csv");
 
     // Rows missing required fields (type is empty, displayName is empty)

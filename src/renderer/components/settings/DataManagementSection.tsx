@@ -615,7 +615,7 @@ export const DataManagementSection = () => {
         </aside>
       </div>
 
-      {/* MANT-13: always rendered with `isOpen` toggled (idiom A), matching the
+      {/* Always rendered with `isOpen` toggled (idiom A), matching the
           other ConfirmDialog call sites (BuscasPage, DeduplicatePage,
           ContactFormPage, App) instead of conditionally mounting/unmounting
           the dialog with `isOpen` hardcoded to `true`. */}

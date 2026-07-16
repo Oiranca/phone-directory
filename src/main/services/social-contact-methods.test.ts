@@ -104,7 +104,7 @@ const baseRow = (overrides: Partial<NormalizedImportRow> = {}): NormalizedImport
 let testRoot: string;
 
 beforeEach(async () => {
-  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir131-test-"));
+  testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "social-contact-methods-"));
 });
 
 afterEach(async () => {
@@ -722,7 +722,7 @@ describe("H-01 regression — socials survive createRecord + updateRecord", () =
   let h01TestRoot: string;
 
   beforeEach(async () => {
-    h01TestRoot = await fs.mkdtemp(path.join(os.tmpdir(), "oir131-h01-"));
+    h01TestRoot = await fs.mkdtemp(path.join(os.tmpdir(), "social-contact-h01-"));
     getPathMock_h01.mockImplementation(() => h01TestRoot);
   });
 
@@ -821,7 +821,7 @@ describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
   let bug1Root: string;
 
   beforeEach(async () => {
-    bug1Root = await fs.mkdtemp(path.join(os.tmpdir(), "oir131-bug1-merge-"));
+    bug1Root = await fs.mkdtemp(path.join(os.tmpdir(), "social-contact-merge-"));
     getPathMock_h01.mockImplementation(() => bug1Root);
   });
 
