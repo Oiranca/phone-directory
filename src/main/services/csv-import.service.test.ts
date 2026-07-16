@@ -262,7 +262,7 @@ describe("buildCsvImportPreview", () => {
   // location.sector/section.
   it("maps role/schedule/sector/section columns to organization/location fields", async () => {
     const filePath = await writeFile(
-      "custom-fields.csv.csv",
+      "custom-fields.csv",
       [
         "type,displayName,phone1Number,role,schedule,building,floor,sector,section",
         "service,Alergia,79196,Doctora/or,8:00-22:00,Hospital Polivalente,4,Enfermería,Consulta"

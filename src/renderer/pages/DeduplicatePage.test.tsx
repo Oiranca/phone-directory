@@ -1232,7 +1232,7 @@ describe("DeduplicatePage", () => {
     });
   });
 
-  describe("regression — reviewed-pairs baseline resets when storageKey changes ()", () => {
+  describe("regression — reviewed-pairs baseline resets when storageKey changes", () => {
     const pathA = "/data/hospital-a/contacts.json";
     const pathB = "/data/hospital-b/contacts.json";
 
@@ -1315,7 +1315,7 @@ describe("DeduplicatePage", () => {
       // Switch to dataset B — a different data file with a different pair count.
       // This changes storageKey, which must re-trigger loadPairs and recompute the
       // baseline instead of leaving the denominator stuck at dataset A's total
-      // ( review — initialPairTotal was only reset while null).
+      // initialPairTotal was only reset while null.
       detectDuplicatesMock.mockResolvedValueOnce(twoPairsResultB);
       act(() => {
         useAppStore.setState({ settings: { ...defaultSettings(pathB, "/backups") } });
