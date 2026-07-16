@@ -1,5 +1,5 @@
 /**
- * import-boundaries.test.ts —  dependency-direction guard.
+ * import-boundaries.test.ts — dependency-direction guard.
  *
  * `src/shared/**` is imported BY `src/main/**` and `src/renderer/**`; it must
  * never import FROM `src/main/**` (or `src/renderer/**`) itself, or the
@@ -74,12 +74,12 @@ const ALLOWED_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   ],
   [
     "ipc/api.contract.test.ts",
-    ": uses `await import(\"../../main/ipc/*.ipc.js\")` (dynamic, behind a " +
+    "Uses `await import(\"../../main/ipc/*.ipc.js\")` (dynamic, behind a " +
       'mocked "electron" module) to assert every renderer-invokable channel has a ' +
       "registered ipcMain handler. This is a dev-time-only contract test — it is never " +
       "bundled into the shipped renderer or main output — so it does not create the " +
       "runtime circular-dependency problem this guard exists to prevent. Broadening " +
-      "FORBIDDEN_IMPORT_PATTERN to catch dynamic import() ( review) surfaced this " +
+      "FORBIDDEN_IMPORT_PATTERN to catch dynamic import() surfaced this " +
       "pre-existing, intentional case; see that file's module doc-comment for the full " +
       "rationale for why it must reach into src/main at all."
   ]

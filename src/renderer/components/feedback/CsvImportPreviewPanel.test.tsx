@@ -5,7 +5,7 @@ import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
 
 // Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
 // Required because the discard-warning prompt now renders via the shared
-// ConfirmDialog component (native <dialog>) instead of window.confirm ( review).
+// ConfirmDialog component (native <dialog>) instead of window.confirm.
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
 let originalShowModal: (() => void) | undefined;
 let originalClose: (() => void) | undefined;
@@ -2099,7 +2099,7 @@ describe("CsvImportPreviewPanel", () => {
       expect(btns).toHaveLength(1);
     });
 
-    // Item 4 — close guard ( review: window.confirm replaced with shared ConfirmDialog)
+    // Close guard: window.confirm replaced with shared ConfirmDialog.
 
     /** Preview with two conflicts, one resolved — used by the partial-resolution guard tests. */
     const twoConflictsOneResolvedPreview: CsvImportPreviewWithConflicts = {
