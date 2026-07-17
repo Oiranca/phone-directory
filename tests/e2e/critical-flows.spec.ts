@@ -231,4 +231,68 @@ test.describe("critical MVP flows", () => {
       await removeWorkspace(workspace);
     }
   });
+
+  test("Directory page avoids horizontal and vertical page-level scroll at narrow viewport widths", async () => {
+    // Regression guard for the icon rail nav (replacing the old top nav):
+    // the rail is a fixed-width shell element sitting beside the page
+    // content via flexbox, so a narrow window could either force the
+    // content column to overflow horizontally (page-level scrollbar) or,
+    // like the desktop scenario above, reintroduce document-level vertical
+    // scroll. Neither the rail nor the directory content may cause the
+    // document itself to exceed the viewport at small widths.
+    //
+    // "Narrow" here is anchored to what this Electron app can actually be
+    // resized to, not generic mobile breakpoints: `src/main/index.ts` sets
+    // `minWidth: 1080` / `minHeight: 720` on the BrowserWindow, so no real
+    // user session can ever produce a viewport below that floor. Testing
+    // arbitrary phone-sized widths (e.g. 320-390px) would exercise a state
+    // that is unreachable in production and would just be measuring a
+    // pre-existing, unrelated CSS min-content quirk instead of this PR's
+    // shell-geometry change.
+    const workspace = await createWorkspace("narrow-viewport-scroll");
+    const { electronApp, page } = await launchElectronApp({
+      userDataPath: workspace.userDataPath
+    });
+
+    try {
+      await waitForDirectory(page);
+
+      const viewportsToCheck = [
+        { width: 1080, height: 720 },
+        { width: 1100, height: 750 },
+        { width: 1200, height: 800 }
+      ];
+
+      for (const viewport of viewportsToCheck) {
+        await page.setViewportSize(viewport);
+        // Let the ResizeObserver-driven --app-header-height /
+        // --directory-filterbar-height CSS custom properties settle after
+        // the resize before measuring.
+        await page.waitForTimeout(150);
+
+        const measurement = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight
+        }));
+
+        // 1px epsilon for sub-pixel rounding across browser engines.
+        expect(
+          measurement.scrollWidth,
+          `Directory page produced horizontal page-level scroll at ${viewport.width}x${viewport.height}: ` +
+            `scrollWidth=${measurement.scrollWidth} innerWidth=${measurement.innerWidth}`
+        ).toBeLessThanOrEqual(measurement.innerWidth + 1);
+
+        expect(
+          measurement.scrollHeight,
+          `Directory page produced vertical page-level scroll at ${viewport.width}x${viewport.height}: ` +
+            `scrollHeight=${measurement.scrollHeight} innerHeight=${measurement.innerHeight}`
+        ).toBeLessThanOrEqual(measurement.innerHeight + 1);
+      }
+    } finally {
+      await closeElectronApp(electronApp);
+      await removeWorkspace(workspace);
+    }
+  });
 });
