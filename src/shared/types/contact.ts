@@ -233,6 +233,17 @@ export interface CsvImportPreview {
   createdCount: number;
   updatedCount: number;
   /**
+   * Rows that matched an existing record (via externalId or the stable-key
+   * heuristics — see AppDataService.buildStableMergeKeys) but are already
+   * field-for-field identical to it (ignoring id/audit bookkeeping fields).
+   * These are neither surfaced as a conflict requiring manual resolution nor
+   * counted in `updatedCount` — importing them would be a genuine no-op.
+   * Reported separately so the preview can tell the operator "N records
+   * already match, nothing will change" instead of silently folding them
+   * into `updatedCount` or (worse) `conflictCount`.
+   */
+  unchangedCount: number;
+  /**
    * INTERIM: Rows silently skipped because they belong to
    * Buscas (pager) sheets — a deferred import path. Always 0 for the CSV path.
    */

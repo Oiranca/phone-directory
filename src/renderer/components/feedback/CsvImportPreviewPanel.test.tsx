@@ -52,6 +52,7 @@ const basePreview: CsvImportPreviewWithConflicts = {
   mergedRecordCount: 0,
   createdCount: 0,
   updatedCount: 0,
+  unchangedCount: 0,
   buscasSkippedRowCount: 0,
   socialHandleSkippedRowCount: 0,
   parsedBuscasCellCount: 0,

@@ -2117,6 +2117,113 @@ describe("AppDataService", () => {
     expect(preview.policiesResolved).toBe(false);
   });
 
+  // Re-importing an already-imported file (e.g. an operator re-running the
+  // same ODS export) matches every row against its own existing record via
+  // buildStableMergeKeys/externalId, but when the row is byte-for-byte
+  // identical to what's already stored, surfacing it as a "conflict"
+  // requiring manual resolution is confusing and pointless — nothing would
+  // actually change. It must be counted separately (unchangedCount) instead.
+  describe("identical re-import — matched rows with no meaningful differences", () => {
+    const buildIdenticalCsvContent = () =>
+      [
+        "externalId,type,displayName,department,service,phone1Number,email1,status,tags,notes",
+        "identical-1,service,Mostrador Central,Recepción,Atención al público,55511,central@example.com,active,vip|urgente,Nota original"
+      ].join("\n") + "\n";
+
+    it("does not surface a conflict, does not bump updatedCount, and counts the row as unchanged when the imported row is field-for-field identical to the existing record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+
+      const firstImport = await service.importCsvDataset(sourceFilePath);
+      expect(firstImport.createdCount).toBe(1);
+      const createdRecord = firstImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+
+      // Re-import the exact same file: the row matches the record it created,
+      // but nothing about it actually differs.
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.conflictCount).toBe(0);
+      expect(preview.conflictedRecords).toEqual([]);
+      expect(preview.createdCount).toBe(0);
+      expect(preview.updatedCount).toBe(0);
+      expect(preview.unchangedCount).toBe(1);
+
+      const secondImport = await service.importCsvDataset(sourceFilePath);
+      expect(secondImport.createdCount).toBe(0);
+      expect(secondImport.updatedCount).toBe(0);
+      expect(secondImport.conflictCount).toBe(0);
+
+      const unchangedRecord = secondImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+      expect(unchangedRecord.id).toBe(createdRecord.id);
+      // No write should have happened for this record — audit timestamps
+      // (and editor) must stay exactly as they were after the first import.
+      expect(unchangedRecord.audit.updatedAt).toBe(createdRecord.audit.updatedAt);
+      expect(unchangedRecord.audit.updatedBy).toBe(createdRecord.audit.updatedBy);
+    });
+
+    it("still reports a real conflict (and does not count it as unchanged) when the matched row differs in a meaningful field", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport-diff.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+      await service.importCsvDataset(sourceFilePath);
+
+      // Re-import with a single meaningfully different field (notes changed).
+      const changedContent = buildIdenticalCsvContent().replace("Nota original", "Nota actualizada");
+      const changedSourceFilePath = path.join(testRoot, "incoming", "identical-reimport-changed.csv");
+      await fs.writeFile(changedSourceFilePath, changedContent, "utf-8");
+
+      const preview = await service.previewCsvImport(changedSourceFilePath);
+      expect(preview.conflictCount).toBe(1);
+      expect(preview.conflictedRecords).toHaveLength(1);
+      expect(preview.unchangedCount).toBe(0);
+
+      const result = await service.importCsvDataset(changedSourceFilePath, [
+        { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "overwrite" }
+      ]);
+      expect(result.updatedCount).toBe(1);
+      expect(result.createdCount).toBe(0);
+      const updated = result.contacts.records.find((record) => record.externalId === "identical-1")!;
+      expect(updated.notes).toBe("Nota actualizada");
+    });
+
+    it("still counts a genuinely new (no-match) row as created, unaffected by the unchanged-row check", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "new-record.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,phone1Number,status",
+          "brand-new-1,service,Registro Nuevo,Recepción,99999,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.createdCount).toBe(1);
+      expect(preview.updatedCount).toBe(0);
+      expect(preview.unchangedCount).toBe(0);
+      expect(preview.conflictCount).toBe(0);
+    });
+  });
+
   it("rejects conflicted CSV imports until every conflict has a policy", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -3256,8 +3363,18 @@ describe("AppDataService", () => {
 
     const preview = await service.previewCsvImport(customPath);
 
+    // Merge-id stability is what's actually under test here: re-importing
+    // under a different (arbitrary) sheet title must still match these rows
+    // back to the SAME existing records rather than creating duplicates —
+    // createdCount staying at 0 proves that. These health-center rows carry
+    // no externalId, and every other meaningful field is byte-for-byte
+    // identical between the canonical and custom-title imports, so the
+    // matched rows are also genuine no-ops: unchangedCount (not
+    // updatedCount) is the correct signal now that identical matches are no
+    // longer counted as updates.
     expect(preview.createdCount).toBe(0);
-    expect(preview.updatedCount).toBe(2);
+    expect(preview.updatedCount).toBe(0);
+    expect(preview.unchangedCount).toBe(2);
   });
 
   it("labels normalized template previews with detected format metadata", async () => {

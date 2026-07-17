@@ -462,6 +462,22 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
+      {/* Unchanged-record notice: rows that matched an existing record but are
+          already field-for-field identical to it. These never require manual
+          conflict resolution and are never counted as "actualizaciones" — kept
+          deliberately separate (and non-alarming) from both blocks above. */}
+      {hasImportableContent && (preview.unchangedCount ?? 0) > 0 && (
+        <div
+          role="status"
+          className="mt-5 rounded-2xl border border-emerald-200 bg-white/70 px-4 py-3 text-sm text-emerald-950"
+        >
+          <span className="font-semibold">
+            {preview.unchangedCount} {preview.unchangedCount === 1 ? "registro sin cambios" : "registros sin cambios"}
+          </span>{" "}
+          (ya están actualizados en la agenda, no se tocarán).
+        </div>
+      )}
+
       {/* Buscas rows are now parsed and imported into the Buscas section. */}
       {(preview.buscasSkippedRowCount ?? 0) > 0 && (
         <div
