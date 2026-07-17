@@ -1911,7 +1911,8 @@ export class AppDataService {
       },
       aliases: [...record.aliases].map((alias) => alias.trim()).filter(Boolean).sort(),
       tags: [...record.tags].map((tag) => tag.trim()).filter(Boolean).sort(),
-      notes: this.canonicalizeValueForComparison(record.notes)
+      notes: this.canonicalizeValueForComparison(record.notes),
+      customFields: this.canonicalizeEntryListForComparison(record.customFields ?? [])
     };
   }
 

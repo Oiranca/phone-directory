@@ -2198,6 +2198,55 @@ describe("AppDataService", () => {
       expect(updated.notes).toBe("Nota actualizada");
     });
 
+    // Regression: buildComparableRecordSnapshot() must include customFields
+    // in the identical-match comparison. No import parser currently
+    // populates customFields, so a matched row's imported customFields is
+    // always empty/undefined — if the existing record has a non-empty
+    // customFields value, re-importing an otherwise byte-for-byte-identical
+    // row must still surface a real conflict (not be silently swallowed as
+    // "unchanged"), since the customFields difference would otherwise be
+    // lost with no audit trace.
+    it("still reports a real conflict when only customFields differs between the matched row and the existing record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport-customfields.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+
+      const firstImport = await service.importCsvDataset(sourceFilePath);
+      const createdRecord = firstImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+
+      // Give the existing record a customFields entry the CSV import cannot
+      // produce — the imported row's customFields stays empty/undefined.
+      await service.updateRecord(createdRecord.id, {
+        id: createdRecord.id,
+        externalId: createdRecord.externalId,
+        type: createdRecord.type,
+        displayName: createdRecord.displayName,
+        person: createdRecord.person,
+        organization: createdRecord.organization,
+        location: createdRecord.location,
+        contactMethods: createdRecord.contactMethods,
+        aliases: createdRecord.aliases,
+        tags: createdRecord.tags,
+        notes: createdRecord.notes,
+        status: createdRecord.status,
+        customFields: [{ id: "cf_reimport_1", key: "Extensión", value: "9876" }]
+      });
+
+      // Re-import the exact same file: every meaningful field still matches
+      // except customFields, which the existing record now has and the
+      // imported row does not.
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.unchangedCount).toBe(0);
+      expect(preview.conflictCount).toBe(1);
+      expect(preview.conflictedRecords).toHaveLength(1);
+    });
+
     it("still counts a genuinely new (no-match) row as created, unaffected by the unchanged-row check", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
