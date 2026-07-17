@@ -139,9 +139,10 @@ export const NavRail = () => {
     <div
       className={[
         "sticky top-0 flex h-screen shrink-0 flex-col overflow-hidden bg-scs-ink px-[10px] py-[14px]",
+        "motion-safe:transition-[width] motion-safe:duration-150 motion-safe:ease-in-out motion-reduce:transition-none",
         collapsed ? "w-[60px] items-center" : "w-[192px] items-stretch"
       ].join(" ")}
-      style={{ transition: "width .15s ease", gap: "6px" }}
+      style={{ gap: "6px" }}
     >
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-scs-blue text-[11px] font-bold text-white">
         HA
