@@ -236,7 +236,10 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
-    expect(within(list).getByText("Jefe/a de Servicio")).toBeInTheDocument();
+    // The subtitle now combines the name and role/category with " · " —
+    // record[0]'s displayName ("Admisión General") is not a duplicate of its
+    // service ("Información"), so both segments render.
+    expect(within(list).getByText("Admisión General · Jefe/a de Servicio")).toBeInTheDocument();
   });
 
   it("does not render a role line in the list card when organization.role is absent", async () => {
@@ -256,11 +259,45 @@ describe("DirectoryPage", () => {
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // The title is composed as "{service} - {displayName}" when the
     // service adds context, so match with a regex instead of the exact name.
-    const heading = within(list).getByText(/admisión general/i);
+    // Scoped to the heading role since the subtitle now also shows the raw
+    // name ("Admisión General") on its own line.
+    const heading = within(list).getByRole("heading", { name: /admisión general/i });
     const card = heading.closest("div.min-w-0");
     // The Tipo/Unidad subtitle line was removed entirely, so with no
-    // role set the title's wrapper div renders no <p> at all.
+    // role set the title's wrapper div renders no <p> at all (the new
+    // name/category subtitle line renders as a sibling of this div, not inside it).
     expect(card?.querySelectorAll("p")).toHaveLength(0);
+  });
+
+  it("still renders an empty subtitle <p> when both the name and role lines are suppressed", async () => {
+    const contacts = structuredClone(defaultContacts);
+    // displayName duplicates organization.service, so the name line is
+    // suppressed, and organization.role is absent, so the category line is
+    // also empty — the subtitle string is "". The <p> element must still
+    // render (empty) so the layout slot/gap stays consistent across rows.
+    contacts.records[0]!.displayName = contacts.records[0]!.organization.service;
+    contacts.records[0]!.organization.role = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const heading = within(list).getByRole("heading", { name: contacts.records[0]!.displayName });
+    const card = heading.closest("button");
+    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
+    expect(subtitle).toBeInTheDocument();
+    expect(subtitle).toHaveClass("mt-2", "truncate", "text-sm", "text-slate-600");
+    expect(subtitle).toHaveTextContent("");
   });
 
   it("does not render the Tipo/Unidad subtitle line in list cards", async () => {
@@ -307,7 +344,7 @@ describe("DirectoryPage", () => {
     expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
   });
 
-  it("still renders the service line in a list card when it genuinely differs from the displayName", async () => {
+  it("shows the name in the list card subtitle when it genuinely differs from organization.service", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: {
@@ -323,13 +360,14 @@ describe("DirectoryPage", () => {
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // defaultContacts.records[0].organization.service === "Información", distinct
-    // from displayName "Admisión General" — it must still render. (Both fixture
-    // records happen to share this service value, so scope to record[0]'s card.)
-    // The title itself is now composed as "Información - Admisión
-    // General" for this same reason, so match with a regex.
-    const heading = within(list).getByText(/admisión general/i);
+    // from displayName "Admisión General" — the subtitle shows the name itself
+    // (not the raw service value, which the list card no longer renders on its
+    // own line). The title itself is composed as "Información - Admisión
+    // General" for this same reason, so match with a regex, scoped to the
+    // heading role since the subtitle also shows the raw name.
+    const heading = within(list).getByRole("heading", { name: /admisión general/i });
     const card = heading.closest("button");
-    expect(within(card as HTMLElement).getAllByText("Información").length).toBeGreaterThan(0);
+    expect(within(card as HTMLElement).getByText("Admisión General")).toBeInTheDocument();
   });
 
   it("shows organization.role in the detail view when present", async () => {
@@ -472,8 +510,8 @@ describe("DirectoryPage", () => {
     // Service already contains the full name — must NOT render as
     // "Cocina Francisco Artíles - Francisco Artíles". The title (h3) itself
     // must be exactly "Cocina Francisco Artíles" with no appended name — the
-    // getListServiceLine secondary line (untouched by this fix) may
-    // still separately repeat the service value, which is pre-existing behavior.
+    // subtitle's name line (not an exact duplicate of the service, only a
+    // substring match) may still separately show "Francisco Artíles".
     expect(
       within(list).queryByText(/Cocina Francisco Artíles - Francisco Artíles/)
     ).not.toBeInTheDocument();
@@ -580,7 +618,11 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
-    expect(within(list).getByText("Recepción Central")).toBeInTheDocument();
+    // "Recepción Central" now appears twice in the list card too — once as
+    // the (uncomposed, no-service) title, and once as the subtitle's name
+    // line (organization.service is absent, so it isn't treated as a
+    // duplicate and the name still renders).
+    expect(within(list).getAllByText("Recepción Central").length).toBe(2);
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     // "Recepción Central" now appears twice in the detail view — once as
@@ -1514,7 +1556,9 @@ describe("DirectoryPage", () => {
 
     expect(screen.getByLabelText("Buscar contactos")).toHaveValue("Sindicatos");
     expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
-    expect(screen.getByText("Delegado Sindical")).toBeInTheDocument();
+    // "Delegado Sindical" now appears twice — once as the list card's
+    // subtitle name line, once in the detail view's "Nombre y Apellidos" card.
+    expect(screen.getAllByText("Delegado Sindical").length).toBe(2);
     expect(screen.queryByText("Admisión General")).not.toBeInTheDocument();
     expect(sindicatosButton).toHaveAttribute("aria-pressed", "true");
   });

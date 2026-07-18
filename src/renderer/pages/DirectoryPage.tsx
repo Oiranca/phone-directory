@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
-import type { AreaType } from "../../shared/constants/catalogs";
 import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -42,28 +41,6 @@ const PAGE_CHROME_CSS_VAR = "--directory-page-chrome";
 // literal duplicates, not near-misses.
 const isDuplicateOfDisplayName = (value: string | null | undefined, displayName: string): boolean =>
   typeof value === "string" && value.trim().toLowerCase() === displayName.trim().toLowerCase();
-
-// Derives the list card's secondary "service" line, skipping it
-// entirely when it would just repeat the displayName shown in the title.
-const getListServiceLine = (
-  organization: { service?: string; area?: AreaType },
-  displayName: string
-): string | null => {
-  const { service, area } = organization;
-
-  if (service) {
-    if (!isDuplicateOfDisplayName(service, displayName)) {
-      return service;
-    }
-    // Service duplicates the title — only fall back to the area label when
-    // an area is actually set and its label isn't itself a duplicate.
-    return area && !isDuplicateOfDisplayName(areaLabels[area], displayName) ? areaLabels[area] : null;
-  }
-
-  // No service value at all — preserve the original area-label fallback,
-  // including the "Sin área" placeholder when no area is set.
-  return areaLabels[area ?? "none"];
-};
 
 // Exact equality (isDuplicateOfDisplayName) isn't enough to catch
 // cases like service="Cocina Francisco Artíles" / displayName="Francisco
@@ -108,15 +85,6 @@ const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
 // bounding their max-height.
 const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
 const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - var(${PAGE_CHROME_CSS_VAR}, 3.75rem))`;
-
-const areaLabels = {
-  all: "Todas las áreas",
-  none: "Sin área",
-  "sanitaria-asistencial": "Sanitaria asistencial",
-  "gestion-administracion": "Gestión y administración",
-  especialidades: "Especialidades",
-  otros: "Otros"
-} as const satisfies Record<AreaType | "all" | "none", string>;
 
 const privacyInlineRiskText = {
   Confidencial: "Número interno confidencial.",
@@ -521,7 +489,17 @@ export const DirectoryPage = () => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
-            const serviceLine = getListServiceLine(record.organization, record.displayName);
+            // Subtitle combines the contact's name (unless it's just a
+            // duplicate of organization.service, which happens for ODS-imported
+            // records whose blank "Nombre" column fell back to the service
+            // value) and their role/job title (ODS "Categoría"), joined with
+            // " · " when both are present. Degrades gracefully to nothing when
+            // neither is set.
+            const nameLine = isDuplicateOfDisplayName(record.organization.service, record.displayName)
+              ? null
+              : record.displayName;
+            const categoryLine = record.organization.role || null;
+            const subtitle = [nameLine, categoryLine].filter(Boolean).join(" · ");
 
             return (
               <li key={record.id}>
@@ -543,16 +521,11 @@ export const DirectoryPage = () => {
                     <h3 className="truncate font-semibold text-scs-blueDark">
                       {buildDisplayTitle(record.displayName, record.organization)}
                     </h3>
-                    {/* Role/job title (ODS "Categoría") is the only thing that
-                        distinguishes same-department contacts in the list — shown on its
-                        own line directly under the title. */}
-                    {record.organization.role ? (
-                      <p className="truncate text-xs font-medium text-slate-600">{record.organization.role}</p>
-                    ) : null}
                   </div>
-                  {/* Skip this line entirely when the service value is just a
-                      duplicate of the displayName above (see getListServiceLine). */}
-                  {serviceLine ? <p className="mt-2 truncate text-sm text-slate-600">{serviceLine}</p> : null}
+                  {/* Subtitle: name (unless duplicate of service) and role,
+                      joined with " · ". Always renders — even empty — so the
+                      layout slot/gap stays consistent across rows. */}
+                  <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
                     {privacyFlags.length > 0 && (
