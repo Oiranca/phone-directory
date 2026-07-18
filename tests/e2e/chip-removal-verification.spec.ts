@@ -153,7 +153,7 @@ test.describe("chip removal regression", () => {
       await page.screenshot({ path: path.join(screenshotsDir, "02-phone-card.png") });
 
       // --- 3. Edit form phone-section checkboxes ----------------------------
-      await page.getByRole("link", { name: `Editar registro: ${DISPLAY_NAME}` }).click();
+      await page.getByRole("link", { name: `Editar: ${DISPLAY_NAME}` }).click();
       await expect(page.getByRole("heading", { name: DISPLAY_NAME })).toBeVisible();
 
       const phoneSection = page.locator("li", { has: page.locator("#phone-number-ph_chip_1") });
