@@ -682,10 +682,10 @@ export const DirectoryPage = () => {
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
-                      aria-label={`Editar registro: ${selectedRecord.displayName}`}
-                      className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      aria-label={`Editar: ${selectedRecord.displayName}`}
+                      className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      Editar registro
+                      Editar
                     </Link>
                   </div>
                 </div>
@@ -737,80 +737,78 @@ export const DirectoryPage = () => {
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
-                    <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.phones.length}{" "}
-                      {selectedRecord.contactMethods.phones.length === 1 ? "disponible" : "disponibles"}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 xl:grid-cols-2">
-                    {selectedRecord.contactMethods.phones.map((phone) => (
-                      <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
-                          <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
-                          {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
-                          {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
-                        </div>
-                          <div className="flex flex-wrap gap-2 shrink-0">
-                            {phone.isPrimary && (
-                              <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
-                                Principal
+                {selectedRecord.contactMethods.phones.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Teléfonos</p>
+                      <p className="text-xs font-medium text-slate-600">
+                        {selectedRecord.contactMethods.phones.length}{" "}
+                        {selectedRecord.contactMethods.phones.length === 1 ? "disponible" : "disponibles"}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {selectedRecord.contactMethods.phones.map((phone) => (
+                        <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
+                            <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
+                            {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
+                            {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
+                          </div>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                              {phone.isPrimary && (
+                                <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                  Principal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {phone.confidential && (
+                              <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
+                                Confidencial
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {phone.confidential && (
-                            <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
-                              Confidencial
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                  {selectedRecord.contactMethods.phones.length === 0 && (
-                    <p className="text-sm text-slate-500 italic">No hay teléfonos registrados.</p>
-                  )}
-                </div>
+                )}
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
-                    <p className="text-xs font-medium text-slate-600">
-                      {selectedRecord.contactMethods.emails.length}{" "}
-                      {selectedRecord.contactMethods.emails.length === 1 ? "disponible" : "disponibles"}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 xl:grid-cols-2">
-                    {selectedRecord.contactMethods.emails.map((email) => (
-                      <div key={email.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{email.label ?? "Correo electrónico"}</p>
-                            <p className="mt-2 break-words text-lg font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
-                              {email.address}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2 shrink-0">
-                            {email.isPrimary ? (
-                              <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
-                                Principal
-                              </span>
-                            ) : null}
+                {selectedRecord.contactMethods.emails.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Correos electrónicos</p>
+                      <p className="text-xs font-medium text-slate-600">
+                        {selectedRecord.contactMethods.emails.length}{" "}
+                        {selectedRecord.contactMethods.emails.length === 1 ? "disponible" : "disponibles"}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {selectedRecord.contactMethods.emails.map((email) => (
+                        <div key={email.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{email.label ?? "Correo electrónico"}</p>
+                              <p className="mt-2 break-words text-lg font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
+                                {email.address}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                              {email.isPrimary ? (
+                                <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                  Principal
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                  {selectedRecord.contactMethods.emails.length === 0 && (
-                    <p className="text-sm text-slate-500 italic">No hay correos registrados.</p>
-                  )}
-                </div>
+                )}
 
                 {(selectedRecord.contactMethods.socials ?? []).length > 0 && (
                   <div className="space-y-3">

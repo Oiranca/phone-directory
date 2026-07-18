@@ -1287,9 +1287,9 @@ describe("DirectoryPage", () => {
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     const firstRecord = defaultContacts.records[0]!;
-    const editLink = screen.getByRole("link", { name: `Editar registro: ${firstRecord.displayName}` });
+    const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
-    expect(editLink).toHaveTextContent("Editar registro");
+    expect(editLink).toHaveTextContent("Editar");
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
