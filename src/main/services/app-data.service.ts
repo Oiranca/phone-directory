@@ -499,14 +499,42 @@ export class AppDataService {
     // Buscas are persisted only when the user confirms via importCsvDataset.
 
     const currentContacts = await this.readContacts(settings);
-    const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
-    const conflictedRecords = this.detectConflicts(currentContacts, dataset);
+    const { conflicts: conflictedRecords } = this.detectConflicts(currentContacts, dataset);
+
+    // Preview has no user-selected policies yet, but it must still gate
+    // mergeImportedDataset's "already unchanged" fast path for every row
+    // detectConflicts proved differs from the current data — otherwise a
+    // duplicate-target row (two import rows matching the same existing
+    // record) can have its second occurrence silently treated as a no-op
+    // once the first occurrence's in-place merge makes it look identical,
+    // under-reporting updatedCount vs. the confirmed-import accounting
+    // (see mergeImportedDataset's hasSelectedPolicy guard). The default
+    // "overwrite" policy here only establishes the baseline count assuming
+    // no conflict is skipped — it mirrors handleConflictPolicyChange in the
+    // renderer, which treats preview.updatedCount as the all-resolved
+    // baseline and subtracts skips as the user picks them.
+    const previewPolicies = new Map<number, MergePolicy>(
+      conflictedRecords.map((conflict) => [conflict.recordIndex, "overwrite" as MergePolicy])
+    );
+    const mergeSummary = this.mergeImportedDataset(
+      currentContacts,
+      dataset,
+      this.getEditorName(settings),
+      previewPolicies
+    );
 
     return {
       ...preview,
       mergedRecordCount: mergeSummary.contacts.records.length,
       createdCount: mergeSummary.createdCount,
       updatedCount: mergeSummary.updatedCount,
+      // Sourced from mergeSummary (not detectConflicts' own count) so it
+      // stays arithmetically consistent with createdCount/updatedCount,
+      // which are also derived from mergeSummary — mirrors the existing
+      // createdCount/updatedCount vs conflictedRecords split (see
+      // mergeImportedDataset's doc comment: it keeps its own independent
+      // match index from detectConflicts).
+      unchangedCount: mergeSummary.unchangedCount,
       conflictCount: conflictedRecords.length,
       conflictedRecords,
       policiesResolved: false
@@ -541,7 +569,7 @@ export class AppDataService {
     }
 
     const currentContacts = await this.readContacts(settings);
-    const conflicts = this.detectConflicts(currentContacts, dataset);
+    const { conflicts } = this.detectConflicts(currentContacts, dataset);
     const policies = this.resolveImportPolicies(conflicts, policySelections);
     const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
     const backupPath = await this.createBackupInner();
@@ -557,6 +585,7 @@ export class AppDataService {
       changes: {
         createdCount: { new: merged.createdCount },
         updatedCount: { new: merged.updatedCount },
+        unchangedCount: { new: merged.unchangedCount },
         conflictCount: { new: conflicts.length },
         conflictPolicyCounts: { new: merged.conflictPolicyCounts }
       }
@@ -1591,6 +1620,7 @@ export class AppDataService {
 
     let createdCount = 0;
     let updatedCount = 0;
+    let unchangedCount = 0;
     const conflictPolicyCounts: Partial<Record<MergePolicy, number>> = {};
 
     for (const [importRecordIndex, importedRecord] of importedDataset.records.entries()) {
@@ -1603,6 +1633,25 @@ export class AppDataService {
       const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
 
       if (matchIndex !== undefined) {
+        // A matched row that is already field-for-field identical (ignoring
+        // id/audit) to what's stored is a genuine no-op — never write it,
+        // never bump audit timestamps, and don't count it as an "update".
+        // This fast path only applies when the row was NOT surfaced as a
+        // conflict in detectConflicts (i.e. it has no entry in
+        // conflictPolicies): detectConflicts already proved those rows differ
+        // from the ORIGINAL currentDataset, so a user policy was chosen and
+        // must always be honored. Without this guard, an earlier row in the
+        // same import batch that updates `mergedRecords[matchIndex]` in place
+        // can make a later, still-unresolved conflict row look identical to
+        // the (already-mutated) in-progress record, which would silently
+        // skip applying the user's selected policy and under-report
+        // conflictPolicyCounts/audit for that row.
+        const hasSelectedPolicy = conflictPolicies.has(importRecordIndex);
+        if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(mergedRecords[matchIndex]!, importedRecord)) {
+          unchangedCount += 1;
+          continue;
+        }
+
         const selectedPolicy = conflictPolicies.get(importRecordIndex) ?? "overwrite";
         conflictPolicyCounts[selectedPolicy] = (conflictPolicyCounts[selectedPolicy] ?? 0) + 1;
 
@@ -1668,6 +1717,7 @@ export class AppDataService {
       contacts: this.buildNextDataset(mergedRecords, currentDataset, editorName, exportedAt),
       createdCount,
       updatedCount,
+      unchangedCount,
       conflictPolicyCounts
     };
   }
@@ -1816,6 +1866,119 @@ export class AppDataService {
     });
   }
 
+  /**
+   * Canonicalize a value for meaningful-field comparison (see
+   * `areMeaningfulFieldsIdentical`): trims strings and drops empty strings/
+   * undefined so e.g. `""` from a spreadsheet cell and `undefined` on the
+   * persisted record are treated as the same "no value" — otherwise a
+   * byte-for-byte re-import would spuriously fail the identical check.
+   * Objects have their keys sorted (order-independent); arrays are
+   * canonicalized element-by-element without reordering (order IS meaningful
+   * for arrays other than the entry lists handled by
+   * `canonicalizeEntryListForComparison`).
+   */
+  private canonicalizeValueForComparison(value: unknown): unknown {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.canonicalizeValueForComparison(entry));
+    }
+    if (value !== null && typeof value === "object") {
+      const result: Record<string, unknown> = {};
+      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+        const canonicalized = this.canonicalizeValueForComparison((value as Record<string, unknown>)[key]);
+        if (canonicalized !== undefined) {
+          result[key] = canonicalized;
+        }
+      }
+      return result;
+    }
+    return value;
+  }
+
+  /**
+   * Canonicalize a list of entries (phones/emails/socials) for
+   * order-independent, id-independent comparison: each entry's own internal
+   * `id` is stripped (it is a list-membership identifier, not meaningful
+   * content — two entries with identical number/label/kind but different
+   * `id`s are still the same phone), and the resulting list is sorted so
+   * re-ordering the same set of entries does not count as a change.
+   */
+  private canonicalizeEntryListForComparison(entries: Array<{ id: string } & Record<string, unknown>>): string[] {
+    return entries
+      .map((entry) => {
+        const { id: _id, ...rest } = entry;
+        return JSON.stringify(this.canonicalizeValueForComparison(rest));
+      })
+      .sort();
+  }
+
+  /**
+   * Build a comparable snapshot of every MEANINGFUL field of a contact
+   * record — everything except `id`, `audit` (createdAt/updatedAt/
+   * createdBy/updatedBy), and import-provenance metadata (`source`), which
+   * are never user-visible content and would otherwise make an otherwise
+   * byte-for-byte-identical re-import look "changed" purely because of
+   * bookkeeping fields. `externalId` IS included since it is meaningful
+   * (and, for a stable-key match rather than an externalId match, a
+   * differing externalId is a real difference worth surfacing).
+   */
+  private buildComparableRecordSnapshot(record: ContactRecord) {
+    return {
+      externalId: this.canonicalizeValueForComparison(record.externalId),
+      type: record.type,
+      displayName: this.canonicalizeValueForComparison(record.displayName),
+      status: record.status,
+      person: this.canonicalizeValueForComparison(record.person),
+      organization: this.canonicalizeValueForComparison(record.organization),
+      location: this.canonicalizeValueForComparison(record.location),
+      contactMethods: {
+        phones: this.canonicalizeEntryListForComparison(record.contactMethods.phones),
+        emails: this.canonicalizeEntryListForComparison(record.contactMethods.emails),
+        socials: this.canonicalizeEntryListForComparison(record.contactMethods.socials)
+      },
+      aliases: [...record.aliases].map((alias) => alias.trim()).filter(Boolean).sort(),
+      tags: [...record.tags].map((tag) => tag.trim()).filter(Boolean).sort(),
+      notes: this.canonicalizeValueForComparison(record.notes),
+      customFields: this.canonicalizeEntryListForComparison(record.customFields ?? [])
+    };
+  }
+
+  /**
+   * True when two matched contact records (an existing record and an
+   * imported row that matched it via `buildStableMergeKeys`/externalId) are
+   * identical in every MEANINGFUL field — i.e. importing `imported` over
+   * `existing` would be a genuine no-op. Used by `detectConflicts` (skip
+   * surfacing a no-op match as a conflict requiring manual resolution) and
+   * `mergeImportedDataset` (skip writing/counting a no-op as an update).
+   */
+  private areMeaningfulFieldsIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
+    return (
+      JSON.stringify(this.buildComparableRecordSnapshot(existing)) ===
+      JSON.stringify(this.buildComparableRecordSnapshot(imported))
+    );
+  }
+
+  /**
+   * True when two matched records differ ONLY in `customFields` — every
+   * other meaningful field (the ones actually rendered in the conflict diff
+   * card: name, phones, emails, socials, location, etc.) is identical. Used
+   * to flag a conflict as `customFieldsOnlyDiff` so the UI can surface a
+   * notice explaining why a pair that otherwise looks identical still needs
+   * manual resolution, instead of leaving the operator with no visible
+   * evidence of the actual difference (see `ConflictedImportRecord.customFieldsOnlyDiff`).
+   */
+  private isCustomFieldsOnlyDifference(existing: ContactRecord, imported: ContactRecord): boolean {
+    const { customFields: existingCustomFields, ...existingRest } = this.buildComparableRecordSnapshot(existing);
+    const { customFields: importedCustomFields, ...importedRest } = this.buildComparableRecordSnapshot(imported);
+    return (
+      JSON.stringify(existingRest) === JSON.stringify(importedRest) &&
+      JSON.stringify(existingCustomFields) !== JSON.stringify(importedCustomFields)
+    );
+  }
+
   private buildStableMergeKeys(record: ContactRecord): string[] {
     const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
     const phoneNumbers = record.contactMethods.phones
@@ -1852,8 +2015,9 @@ export class AppDataService {
   private detectConflicts(
     currentDataset: DirectoryDataset,
     importedDataset: DirectoryDataset
-  ): ConflictedImportRecord[] {
+  ): { conflicts: ConflictedImportRecord[]; unchangedCount: number } {
     const conflicts: ConflictedImportRecord[] = [];
+    let unchangedCount = 0;
     type ConflictIndexEntry = {
       recordIndex: number;
       conflictType: ConflictType;
@@ -1997,17 +2161,43 @@ export class AppDataService {
       }
 
       if (existingMatch !== undefined) {
-        conflicts.push({
-          recordIndex: importRecordIndex,
-          importedRecord: this.toConflictRecordSummary(importedRecord),
-          matchingRecord: existingMatch.record,
-          matchingRecordIndex: existingMatch.recordIndex,
-          matchingRecordSource: existingMatch.source,
-          conflictType: existingMatch.conflictType,
-          conflictReasonKey,
-          matchingFieldValue,
-          selectedPolicy: undefined
-        });
+        // A match against a PRE-EXISTING record that is already
+        // field-for-field identical (ignoring id/audit) to the imported row
+        // is not a real conflict — nothing would actually change if it were
+        // applied. Surfacing it for manual resolution anyway is what made a
+        // re-import of an already-imported file look like it needed hundreds
+        // of manual decisions even though almost none of them had any actual
+        // difference. Count it separately instead of pushing it into
+        // `conflicts`.
+        const matchedExistingRecord = currentDataset.records[existingMatch.recordIndex];
+        const isIdenticalToExisting = matchedExistingRecord !== undefined
+          && this.areMeaningfulFieldsIdentical(matchedExistingRecord, importedRecord);
+
+        if (isIdenticalToExisting) {
+          unchangedCount += 1;
+        } else {
+          // A conflict whose ONLY meaningful difference is `customFields` looks,
+          // in the visible diff card (name/phones/emails/socials/location), like
+          // a genuinely identical pair — with no clue why it was flagged. Flag
+          // it so the UI can surface a notice instead of leaving the operator to
+          // guess (and possibly silently discard the existing custom field value
+          // by picking "Sobrescribir").
+          const customFieldsOnlyDiff = matchedExistingRecord !== undefined
+            && this.isCustomFieldsOnlyDifference(matchedExistingRecord, importedRecord);
+
+          conflicts.push({
+            recordIndex: importRecordIndex,
+            importedRecord: this.toConflictRecordSummary(importedRecord),
+            matchingRecord: existingMatch.record,
+            matchingRecordIndex: existingMatch.recordIndex,
+            matchingRecordSource: existingMatch.source,
+            conflictType: existingMatch.conflictType,
+            conflictReasonKey,
+            matchingFieldValue,
+            selectedPolicy: undefined,
+            customFieldsOnlyDiff
+          });
+        }
       }
 
       const importedIndexEntry = existingMatch ?? importOnlyMatch ?? {
@@ -2029,7 +2219,7 @@ export class AppDataService {
       }
     });
 
-    return conflicts;
+    return { conflicts, unchangedCount };
   }
 
   private toConflictRecordSummary(record: ContactRecord): ConflictRecordSummary {

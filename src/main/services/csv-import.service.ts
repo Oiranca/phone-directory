@@ -701,6 +701,10 @@ export const buildImportPreviewFromRows = async (
       mergedRecordCount: dataset.records.length,
       createdCount: dataset.records.length,
       updatedCount: 0,
+      // Placeholder — always overwritten by AppDataService.previewCsvImport
+      // with the real mergeImportedDataset-derived count, same as
+      // createdCount/updatedCount above.
+      unchangedCount: 0,
       buscasSkippedRowCount: options.buscasSkippedRowCount ?? 0,
       socialHandleSkippedRowCount: options.socialHandleSkippedRowCount ?? 0,
       parsedBuscasCellCount: 0,

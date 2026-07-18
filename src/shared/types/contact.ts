@@ -233,6 +233,17 @@ export interface CsvImportPreview {
   createdCount: number;
   updatedCount: number;
   /**
+   * Rows that matched an existing record (via externalId or the stable-key
+   * heuristics — see AppDataService.buildStableMergeKeys) but are already
+   * field-for-field identical to it (ignoring id/audit bookkeeping fields).
+   * These are neither surfaced as a conflict requiring manual resolution nor
+   * counted in `updatedCount` — importing them would be a genuine no-op.
+   * Reported separately so the preview can tell the operator "N records
+   * already match, nothing will change" instead of silently folding them
+   * into `updatedCount` or (worse) `conflictCount`.
+   */
+  unchangedCount: number;
+  /**
    * INTERIM: Rows silently skipped because they belong to
    * Buscas (pager) sheets — a deferred import path. Always 0 for the CSV path.
    */
@@ -341,6 +352,17 @@ export interface ConflictedImportRecord {
   matchingFieldValue?: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
   selectedPolicy?: MergePolicy;
+  /**
+   * True when every field rendered in the conflict diff card (name, phones,
+   * emails, socials, location, etc.) is identical between the imported row
+   * and the existing record, and the ONLY meaningful difference is in
+   * `customFields` — a value never shown in `ConflictRecordSummary`. Without
+   * this flag the operator sees what looks like an identical pair with a
+   * generic external-id/phone/email match reason and no visible evidence of
+   * why it was flagged as a conflict, risking silent loss of the existing
+   * custom field value if they pick "Sobrescribir".
+   */
+  customFieldsOnlyDiff?: boolean;
 }
 
 /** Extends CsvImportPreview with per-record conflict information for the conflict-resolution UI. */

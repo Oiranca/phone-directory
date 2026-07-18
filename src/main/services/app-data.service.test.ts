@@ -2117,6 +2117,167 @@ describe("AppDataService", () => {
     expect(preview.policiesResolved).toBe(false);
   });
 
+  // Re-importing an already-imported file (e.g. an operator re-running the
+  // same ODS export) matches every row against its own existing record via
+  // buildStableMergeKeys/externalId, but when the row is byte-for-byte
+  // identical to what's already stored, surfacing it as a "conflict"
+  // requiring manual resolution is confusing and pointless — nothing would
+  // actually change. It must be counted separately (unchangedCount) instead.
+  describe("identical re-import — matched rows with no meaningful differences", () => {
+    const buildIdenticalCsvContent = () =>
+      [
+        "externalId,type,displayName,department,service,phone1Number,email1,status,tags,notes",
+        "identical-1,service,Mostrador Central,Recepción,Atención al público,55511,central@example.com,active,vip|urgente,Nota original"
+      ].join("\n") + "\n";
+
+    it("does not surface a conflict, does not bump updatedCount, and counts the row as unchanged when the imported row is field-for-field identical to the existing record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+
+      const firstImport = await service.importCsvDataset(sourceFilePath);
+      expect(firstImport.createdCount).toBe(1);
+      const createdRecord = firstImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+
+      // Re-import the exact same file: the row matches the record it created,
+      // but nothing about it actually differs.
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.conflictCount).toBe(0);
+      expect(preview.conflictedRecords).toEqual([]);
+      expect(preview.createdCount).toBe(0);
+      expect(preview.updatedCount).toBe(0);
+      expect(preview.unchangedCount).toBe(1);
+
+      const secondImport = await service.importCsvDataset(sourceFilePath);
+      expect(secondImport.createdCount).toBe(0);
+      expect(secondImport.updatedCount).toBe(0);
+      expect(secondImport.conflictCount).toBe(0);
+
+      const unchangedRecord = secondImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+      expect(unchangedRecord.id).toBe(createdRecord.id);
+      // No write should have happened for this record — audit timestamps
+      // (and editor) must stay exactly as they were after the first import.
+      expect(unchangedRecord.audit.updatedAt).toBe(createdRecord.audit.updatedAt);
+      expect(unchangedRecord.audit.updatedBy).toBe(createdRecord.audit.updatedBy);
+    });
+
+    it("still reports a real conflict (and does not count it as unchanged) when the matched row differs in a meaningful field", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport-diff.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+      await service.importCsvDataset(sourceFilePath);
+
+      // Re-import with a single meaningfully different field (notes changed).
+      const changedContent = buildIdenticalCsvContent().replace("Nota original", "Nota actualizada");
+      const changedSourceFilePath = path.join(testRoot, "incoming", "identical-reimport-changed.csv");
+      await fs.writeFile(changedSourceFilePath, changedContent, "utf-8");
+
+      const preview = await service.previewCsvImport(changedSourceFilePath);
+      expect(preview.conflictCount).toBe(1);
+      expect(preview.conflictedRecords).toHaveLength(1);
+      expect(preview.unchangedCount).toBe(0);
+
+      const result = await service.importCsvDataset(changedSourceFilePath, [
+        { recordIndex: preview.conflictedRecords[0]!.recordIndex, policy: "overwrite" }
+      ]);
+      expect(result.updatedCount).toBe(1);
+      expect(result.createdCount).toBe(0);
+      const updated = result.contacts.records.find((record) => record.externalId === "identical-1")!;
+      expect(updated.notes).toBe("Nota actualizada");
+    });
+
+    // Regression: buildComparableRecordSnapshot() must include customFields
+    // in the identical-match comparison. No import parser currently
+    // populates customFields, so a matched row's imported customFields is
+    // always empty/undefined — if the existing record has a non-empty
+    // customFields value, re-importing an otherwise byte-for-byte-identical
+    // row must still surface a real conflict (not be silently swallowed as
+    // "unchanged"), since the customFields difference would otherwise be
+    // lost with no audit trace.
+    it("still reports a real conflict when only customFields differs between the matched row and the existing record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "identical-reimport-customfields.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(sourceFilePath, buildIdenticalCsvContent(), "utf-8");
+
+      const firstImport = await service.importCsvDataset(sourceFilePath);
+      const createdRecord = firstImport.contacts.records.find((record) => record.externalId === "identical-1")!;
+
+      // Give the existing record a customFields entry the CSV import cannot
+      // produce — the imported row's customFields stays empty/undefined.
+      await service.updateRecord(createdRecord.id, {
+        id: createdRecord.id,
+        externalId: createdRecord.externalId,
+        type: createdRecord.type,
+        displayName: createdRecord.displayName,
+        person: createdRecord.person,
+        organization: createdRecord.organization,
+        location: createdRecord.location,
+        contactMethods: createdRecord.contactMethods,
+        aliases: createdRecord.aliases,
+        tags: createdRecord.tags,
+        notes: createdRecord.notes,
+        status: createdRecord.status,
+        customFields: [{ id: "cf_reimport_1", key: "Extensión", value: "9876" }]
+      });
+
+      // Re-import the exact same file: every meaningful field still matches
+      // except customFields, which the existing record now has and the
+      // imported row does not.
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.unchangedCount).toBe(0);
+      expect(preview.conflictCount).toBe(1);
+      expect(preview.conflictedRecords).toHaveLength(1);
+      // Regression (PR #152 review): a customFields-only difference must be
+      // flagged so the UI can explain why an otherwise-identical-looking pair
+      // is still a conflict, instead of showing a generic reason with no
+      // visible evidence.
+      expect(preview.conflictedRecords[0]?.customFieldsOnlyDiff).toBe(true);
+    });
+
+    it("still counts a genuinely new (no-match) row as created, unaffected by the unchanged-row check", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const sourceFilePath = path.join(testRoot, "incoming", "new-record.csv");
+      await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+      await fs.writeFile(
+        sourceFilePath,
+        [
+          "externalId,type,displayName,department,phone1Number,status",
+          "brand-new-1,service,Registro Nuevo,Recepción,99999,active"
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+
+      const preview = await service.previewCsvImport(sourceFilePath);
+      expect(preview.createdCount).toBe(1);
+      expect(preview.updatedCount).toBe(0);
+      expect(preview.unchangedCount).toBe(0);
+      expect(preview.conflictCount).toBe(0);
+    });
+  });
+
   it("rejects conflicted CSV imports until every conflict has a policy", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
@@ -2207,6 +2368,183 @@ describe("AppDataService", () => {
     expect(updated.contactMethods.phones.some((phone) => phone.number === "67890")).toBe(true);
     expect(updated.contactMethods.emails.some((email) => email.address === "nuevo@example.com")).toBe(true);
     expect(updated.tags).toContain("nuevo");
+  });
+
+  // Regression (PR #152 review): the "unchanged" short-circuit in
+  // mergeImportedDataset must not silently ignore the user's chosen conflict
+  // policy for a later row in the SAME import batch that targets the same
+  // existing record an earlier row already updated. Both rows are genuine
+  // conflicts against the ORIGINAL existing record; the second row must only
+  // ever be skipped because the user picked "skip" for it — never because it
+  // happens to look identical to the in-progress mergedRecords entry that an
+  // earlier row in this batch already overwrote.
+  it("still honors a later duplicate-target row's own conflict policy even when an earlier row in the same batch already made it look unchanged", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "dup-target-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "dup-target-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const baseline = await service.importCsvDataset(baselineSourceFilePath);
+    const existing = baseline.contacts.records.find((record) => record.externalId === "dup-target-1")!;
+
+    // Two rows, same externalId, byte-for-byte identical to each other, and
+    // both differing from the baseline record (phone1Number 77777 vs 55511)
+    // — so both are genuine conflicts against the ORIGINAL existing record.
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "dup-target-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "dup-target-1,service,Registro Original,Recepción,77777,active",
+        "dup-target-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "skip" }
+    ]);
+
+    expect(result.conflictCount).toBe(2);
+    // The first row's "overwrite" is applied normally.
+    expect(result.conflictPolicyCounts?.overwrite).toBe(1);
+    // The second row's own "skip" policy must be honored and counted — not
+    // silently swallowed as "unchanged" just because the first row already
+    // mutated the in-progress record to match it.
+    expect(result.conflictPolicyCounts?.skip).toBe(1);
+
+    const audit = await service.getAuditLog({ action: "bulk-import" });
+    expect(audit.entries[0]?.changes?.conflictPolicyCounts?.new).toEqual({ overwrite: 1, skip: 1 });
+
+    const updated = result.contacts.records.find((record) => record.id === existing.id)!;
+    expect(updated.contactMethods.phones.some((phone) => phone.number === "77777")).toBe(true);
+  });
+
+  // Preview must apply the same conflict-aware accounting as confirmed
+  // import for duplicate-target rows (two import rows matching the same
+  // existing record). Before the fix, previewCsvImport passed an EMPTY
+  // conflictPolicies map into mergeImportedDataset, so the second
+  // duplicate row's fast "already unchanged" path fired once the first
+  // row's in-preview merge made it look identical — under-reporting
+  // preview.updatedCount relative to what a confirmed import with the
+  // same policies actually produces.
+  it("preview's baseline updatedCount matches confirmed-import updatedCount for duplicate-target rows resolved as overwrite+overwrite", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    await service.importCsvDataset(baselineSourceFilePath);
+
+    // Two rows, same externalId, identical to each other, both differing
+    // from the baseline record — both are genuine conflicts against the
+    // ORIGINAL existing record.
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-1,service,Registro Original,Recepción,77777,active",
+        "preview-dup-target-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+    // Baseline preview accounting assumes no conflict is skipped yet —
+    // both rows must be counted as updates, matching what a confirmed
+    // import with overwrite+overwrite actually writes.
+    expect(preview.updatedCount).toBe(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "overwrite" }
+    ]);
+
+    expect(result.updatedCount).toBe(2);
+    expect(result.updatedCount).toBe(preview.updatedCount);
+  });
+
+  it("preview's baseline updatedCount, reduced by a skip selection using the same arithmetic the renderer applies, matches confirmed-import updatedCount for overwrite+skip", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-skip-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    await service.importCsvDataset(baselineSourceFilePath);
+
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-skip-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,77777,active",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+    expect(preview.updatedCount).toBe(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+
+    // Reproduce the exact arithmetic handleConflictPolicyChange
+    // (src/renderer/components/settings/DataManagementSection.tsx) applies
+    // when the user resolves the second conflict as "skip": it treats
+    // preview.updatedCount as the all-resolved (no-skip) baseline and
+    // subtracts one per newly-selected "skip".
+    const skippedUpdates = 1;
+    const rendererDerivedUpdatedCount = Math.max(0, preview.updatedCount - skippedUpdates);
+
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "skip" }
+    ]);
+
+    expect(result.updatedCount).toBe(1);
+    expect(result.updatedCount).toBe(rendererDerivedUpdatedCount);
   });
 
   it("does not invent a primary phone when merge-fields merges a record where none is marked primary", async () => {
@@ -3256,8 +3594,18 @@ describe("AppDataService", () => {
 
     const preview = await service.previewCsvImport(customPath);
 
+    // Merge-id stability is what's actually under test here: re-importing
+    // under a different (arbitrary) sheet title must still match these rows
+    // back to the SAME existing records rather than creating duplicates —
+    // createdCount staying at 0 proves that. These health-center rows carry
+    // no externalId, and every other meaningful field is byte-for-byte
+    // identical between the canonical and custom-title imports, so the
+    // matched rows are also genuine no-ops: unchangedCount (not
+    // updatedCount) is the correct signal now that identical matches are no
+    // longer counted as updates.
     expect(preview.createdCount).toBe(0);
-    expect(preview.updatedCount).toBe(2);
+    expect(preview.updatedCount).toBe(0);
+    expect(preview.unchangedCount).toBe(2);
   });
 
   it("labels normalized template previews with detected format metadata", async () => {
