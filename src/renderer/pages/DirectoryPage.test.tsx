@@ -761,6 +761,30 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("No compartas este contacto con pacientes ni acompañantes.")).not.toBeInTheDocument();
   });
 
+  it("hides the entire Teléfonos section (heading, counter, empty-state copy) when a record has no phones", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones = [];
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.queryByText("Teléfonos")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 disponibles")).not.toBeInTheDocument();
+    expect(screen.queryByText("No hay teléfonos registrados.")).not.toBeInTheDocument();
+  });
+
   it("exposes selected result state programmatically", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
@@ -1287,9 +1311,9 @@ describe("DirectoryPage", () => {
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     const firstRecord = defaultContacts.records[0]!;
-    const editLink = screen.getByRole("link", { name: `Editar registro: ${firstRecord.displayName}` });
+    const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
-    expect(editLink).toHaveTextContent("Editar registro");
+    expect(editLink).toHaveTextContent("Editar");
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
@@ -1369,6 +1393,30 @@ describe("DirectoryPage", () => {
     expect(screen.getByText("Laboral")).toBeInTheDocument();
     expect(screen.getAllByText("Principal").length).toBeGreaterThan(0);
     expect(screen.getByText(/nota-super-larga/)).toHaveClass("break-words");
+  });
+
+  it("hides the entire Correos electrónicos section (heading, counter, empty-state copy) when a record has no emails", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.emails = [];
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false
+        }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.queryByText("Correos electrónicos")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 disponibles")).not.toBeInTheDocument();
+    expect(screen.queryByText("No hay correos registrados.")).not.toBeInTheDocument();
   });
 
   it("shows the 'Privacidad sensible' list-card badge immediately after marking a non-preferred phone confidential", async () => {

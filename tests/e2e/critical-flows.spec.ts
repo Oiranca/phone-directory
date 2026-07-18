@@ -26,7 +26,7 @@ test.describe("critical MVP flows", () => {
 
       await expect(page.getByText("Detalle del registro")).toBeVisible();
       await expect(resultButton).toHaveAttribute("aria-pressed", "true");
-      await expect(page.getByRole("link", { name: "Editar registro" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Editar" })).toBeVisible();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);
@@ -56,7 +56,7 @@ test.describe("critical MVP flows", () => {
       await createdResultButton.click();
       await expect(createdResultButton).toHaveAttribute("aria-pressed", "true");
 
-      await launched.page.getByRole("link", { name: "Editar registro" }).click();
+      await launched.page.getByRole("link", { name: "Editar" }).click();
       await launched.page.getByLabel("Nombre visible").fill(updatedName);
       await launched.page.getByRole("button", { name: "Guardar cambios" }).click();
 
