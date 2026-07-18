@@ -523,8 +523,9 @@ export const DirectoryPage = () => {
                     </h3>
                   </div>
                   {/* Subtitle: name (unless duplicate of service) and role,
-                      joined with " · " — renders nothing when both are absent. */}
-                  {subtitle ? <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p> : null}
+                      joined with " · ". Always renders — even empty — so the
+                      layout slot/gap stays consistent across rows. */}
+                  <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
                     {privacyFlags.length > 0 && (
