@@ -2436,6 +2436,117 @@ describe("AppDataService", () => {
     expect(updated.contactMethods.phones.some((phone) => phone.number === "77777")).toBe(true);
   });
 
+  // Preview must apply the same conflict-aware accounting as confirmed
+  // import for duplicate-target rows (two import rows matching the same
+  // existing record). Before the fix, previewCsvImport passed an EMPTY
+  // conflictPolicies map into mergeImportedDataset, so the second
+  // duplicate row's fast "already unchanged" path fired once the first
+  // row's in-preview merge made it look identical — under-reporting
+  // preview.updatedCount relative to what a confirmed import with the
+  // same policies actually produces.
+  it("preview's baseline updatedCount matches confirmed-import updatedCount for duplicate-target rows resolved as overwrite+overwrite", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    await service.importCsvDataset(baselineSourceFilePath);
+
+    // Two rows, same externalId, identical to each other, both differing
+    // from the baseline record — both are genuine conflicts against the
+    // ORIGINAL existing record.
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-1,service,Registro Original,Recepción,77777,active",
+        "preview-dup-target-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+    // Baseline preview accounting assumes no conflict is skipped yet —
+    // both rows must be counted as updates, matching what a confirmed
+    // import with overwrite+overwrite actually writes.
+    expect(preview.updatedCount).toBe(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "overwrite" }
+    ]);
+
+    expect(result.updatedCount).toBe(2);
+    expect(result.updatedCount).toBe(preview.updatedCount);
+  });
+
+  it("preview's baseline updatedCount, reduced by a skip selection using the same arithmetic the renderer applies, matches confirmed-import updatedCount for overwrite+skip", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-skip-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    await service.importCsvDataset(baselineSourceFilePath);
+
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "preview-dup-target-skip-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,77777,active",
+        "preview-dup-target-skip-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+    expect(preview.updatedCount).toBe(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+
+    // Reproduce the exact arithmetic handleConflictPolicyChange
+    // (src/renderer/components/settings/DataManagementSection.tsx) applies
+    // when the user resolves the second conflict as "skip": it treats
+    // preview.updatedCount as the all-resolved (no-skip) baseline and
+    // subtracts one per newly-selected "skip".
+    const skippedUpdates = 1;
+    const rendererDerivedUpdatedCount = Math.max(0, preview.updatedCount - skippedUpdates);
+
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "skip" }
+    ]);
+
+    expect(result.updatedCount).toBe(1);
+    expect(result.updatedCount).toBe(rendererDerivedUpdatedCount);
+  });
+
   it("does not invent a primary phone when merge-fields merges a record where none is marked primary", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

@@ -499,8 +499,29 @@ export class AppDataService {
     // Buscas are persisted only when the user confirms via importCsvDataset.
 
     const currentContacts = await this.readContacts(settings);
-    const mergeSummary = this.mergeImportedDataset(currentContacts, dataset, this.getEditorName(settings));
     const { conflicts: conflictedRecords } = this.detectConflicts(currentContacts, dataset);
+
+    // Preview has no user-selected policies yet, but it must still gate
+    // mergeImportedDataset's "already unchanged" fast path for every row
+    // detectConflicts proved differs from the current data — otherwise a
+    // duplicate-target row (two import rows matching the same existing
+    // record) can have its second occurrence silently treated as a no-op
+    // once the first occurrence's in-place merge makes it look identical,
+    // under-reporting updatedCount vs. the confirmed-import accounting
+    // (see mergeImportedDataset's hasSelectedPolicy guard). The default
+    // "overwrite" policy here only establishes the baseline count assuming
+    // no conflict is skipped — it mirrors handleConflictPolicyChange in the
+    // renderer, which treats preview.updatedCount as the all-resolved
+    // baseline and subtracts skips as the user picks them.
+    const previewPolicies = new Map<number, MergePolicy>(
+      conflictedRecords.map((conflict) => [conflict.recordIndex, "overwrite" as MergePolicy])
+    );
+    const mergeSummary = this.mergeImportedDataset(
+      currentContacts,
+      dataset,
+      this.getEditorName(settings),
+      previewPolicies
+    );
 
     return {
       ...preview,
