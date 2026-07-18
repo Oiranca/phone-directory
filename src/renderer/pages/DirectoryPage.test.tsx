@@ -269,6 +269,37 @@ describe("DirectoryPage", () => {
     expect(card?.querySelectorAll("p")).toHaveLength(0);
   });
 
+  it("still renders an empty subtitle <p> when both the name and role lines are suppressed", async () => {
+    const contacts = structuredClone(defaultContacts);
+    // displayName duplicates organization.service, so the name line is
+    // suppressed, and organization.role is absent, so the category line is
+    // also empty — the subtitle string is "". The <p> element must still
+    // render (empty) so the layout slot/gap stays consistent across rows.
+    contacts.records[0]!.displayName = contacts.records[0]!.organization.service;
+    contacts.records[0]!.organization.role = undefined;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const heading = within(list).getByRole("heading", { name: contacts.records[0]!.displayName });
+    const card = heading.closest("button");
+    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
+    expect(subtitle).toBeInTheDocument();
+    expect(subtitle).toHaveClass("mt-2", "truncate", "text-sm", "text-slate-600");
+    expect(subtitle).toHaveTextContent("");
+  });
+
   it("does not render the Tipo/Unidad subtitle line in list cards", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
