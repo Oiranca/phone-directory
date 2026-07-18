@@ -352,6 +352,17 @@ export interface ConflictedImportRecord {
   matchingFieldValue?: string;
   /** Resolution policy chosen by the user; undefined until the user selects one. */
   selectedPolicy?: MergePolicy;
+  /**
+   * True when every field rendered in the conflict diff card (name, phones,
+   * emails, socials, location, etc.) is identical between the imported row
+   * and the existing record, and the ONLY meaningful difference is in
+   * `customFields` — a value never shown in `ConflictRecordSummary`. Without
+   * this flag the operator sees what looks like an identical pair with a
+   * generic external-id/phone/email match reason and no visible evidence of
+   * why it was flagged as a conflict, risking silent loss of the existing
+   * custom field value if they pick "Sobrescribir".
+   */
+  customFieldsOnlyDiff?: boolean;
 }
 
 /** Extends CsvImportPreview with per-record conflict information for the conflict-resolution UI. */

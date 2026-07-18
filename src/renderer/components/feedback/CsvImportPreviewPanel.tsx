@@ -675,9 +675,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                       onChange={() => handleToggleOne(conflict.recordIndex)}
                       className="mt-0.5 h-4 w-4 shrink-0 accent-amber-700"
                     />
-                    <p className="text-xs font-semibold text-amber-800">
-                      {matchSignal}
-                    </p>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">
+                        {matchSignal}
+                      </p>
+                      {conflict.customFieldsOnlyDiff && (
+                        <p className="mt-0.5 text-xs text-amber-700">
+                          Los datos visibles son iguales; la diferencia está en un campo personalizado (no se muestra aquí). Revisa antes de sobrescribir para no perder ese valor.
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(220px,0.8fr)]">
                     <ConflictRecordCol

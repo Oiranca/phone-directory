@@ -1615,9 +1615,18 @@ export class AppDataService {
         // A matched row that is already field-for-field identical (ignoring
         // id/audit) to what's stored is a genuine no-op — never write it,
         // never bump audit timestamps, and don't count it as an "update".
-        // It was never surfaced as a conflict in detectConflicts either, so
-        // there is no policy selection to consult for it.
-        if (this.areMeaningfulFieldsIdentical(mergedRecords[matchIndex]!, importedRecord)) {
+        // This fast path only applies when the row was NOT surfaced as a
+        // conflict in detectConflicts (i.e. it has no entry in
+        // conflictPolicies): detectConflicts already proved those rows differ
+        // from the ORIGINAL currentDataset, so a user policy was chosen and
+        // must always be honored. Without this guard, an earlier row in the
+        // same import batch that updates `mergedRecords[matchIndex]` in place
+        // can make a later, still-unresolved conflict row look identical to
+        // the (already-mutated) in-progress record, which would silently
+        // skip applying the user's selected policy and under-report
+        // conflictPolicyCounts/audit for that row.
+        const hasSelectedPolicy = conflictPolicies.has(importRecordIndex);
+        if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(mergedRecords[matchIndex]!, importedRecord)) {
           unchangedCount += 1;
           continue;
         }
@@ -1931,6 +1940,24 @@ export class AppDataService {
     );
   }
 
+  /**
+   * True when two matched records differ ONLY in `customFields` — every
+   * other meaningful field (the ones actually rendered in the conflict diff
+   * card: name, phones, emails, socials, location, etc.) is identical. Used
+   * to flag a conflict as `customFieldsOnlyDiff` so the UI can surface a
+   * notice explaining why a pair that otherwise looks identical still needs
+   * manual resolution, instead of leaving the operator with no visible
+   * evidence of the actual difference (see `ConflictedImportRecord.customFieldsOnlyDiff`).
+   */
+  private isCustomFieldsOnlyDifference(existing: ContactRecord, imported: ContactRecord): boolean {
+    const { customFields: existingCustomFields, ...existingRest } = this.buildComparableRecordSnapshot(existing);
+    const { customFields: importedCustomFields, ...importedRest } = this.buildComparableRecordSnapshot(imported);
+    return (
+      JSON.stringify(existingRest) === JSON.stringify(importedRest) &&
+      JSON.stringify(existingCustomFields) !== JSON.stringify(importedCustomFields)
+    );
+  }
+
   private buildStableMergeKeys(record: ContactRecord): string[] {
     const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
     const phoneNumbers = record.contactMethods.phones
@@ -2128,6 +2155,15 @@ export class AppDataService {
         if (isIdenticalToExisting) {
           unchangedCount += 1;
         } else {
+          // A conflict whose ONLY meaningful difference is `customFields` looks,
+          // in the visible diff card (name/phones/emails/socials/location), like
+          // a genuinely identical pair — with no clue why it was flagged. Flag
+          // it so the UI can surface a notice instead of leaving the operator to
+          // guess (and possibly silently discard the existing custom field value
+          // by picking "Sobrescribir").
+          const customFieldsOnlyDiff = matchedExistingRecord !== undefined
+            && this.isCustomFieldsOnlyDifference(matchedExistingRecord, importedRecord);
+
           conflicts.push({
             recordIndex: importRecordIndex,
             importedRecord: this.toConflictRecordSummary(importedRecord),
@@ -2137,7 +2173,8 @@ export class AppDataService {
             conflictType: existingMatch.conflictType,
             conflictReasonKey,
             matchingFieldValue,
-            selectedPolicy: undefined
+            selectedPolicy: undefined,
+            customFieldsOnlyDiff
           });
         }
       }

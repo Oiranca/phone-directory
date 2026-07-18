@@ -522,6 +522,74 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
+  // Regression (PR #152 review): a conflict whose ONLY meaningful difference
+  // is a customFields value looks, in the visible diff card, like an
+  // identical pair — the operator has no visible evidence of why it was
+  // flagged. `customFieldsOnlyDiff` must surface a notice explaining this.
+  describe("customFields-only conflict notice", () => {
+    const customFieldsOnlyConflictPreview: CsvImportPreviewWithConflicts = {
+      ...basePreview,
+      fileName: "conflicts.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      updatedCount: 1,
+      conflictCount: 1,
+      policiesResolved: false,
+      conflictedRecords: [
+        {
+          recordIndex: 0,
+          importedRecord: {
+            id: "import-1",
+            displayName: "Mostrador Central",
+            department: "Admisión",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: "existing-1",
+            displayName: "Mostrador Central",
+            department: "Admisión",
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: 0,
+          matchingRecordSource: "existing",
+          conflictType: "external-id-match",
+          conflictReasonKey: "conflict_reason.external_id",
+          customFieldsOnlyDiff: true
+        }
+      ]
+    };
+
+    it("shows a notice explaining the hidden customFields difference", () => {
+      renderPanel(customFieldsOnlyConflictPreview);
+
+      expect(
+        screen.getByText(/la diferencia está en un campo personalizado/i)
+      ).toBeInTheDocument();
+    });
+
+    it("does not show the notice for a regular conflict without customFieldsOnlyDiff", () => {
+      renderPanel({
+        ...customFieldsOnlyConflictPreview,
+        conflictedRecords: [
+          {
+            ...customFieldsOnlyConflictPreview.conflictedRecords[0]!,
+            customFieldsOnlyDiff: false
+          }
+        ]
+      });
+
+      expect(
+        screen.queryByText(/la diferencia está en un campo personalizado/i)
+      ).not.toBeInTheDocument();
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // Field-level diff display in conflict cards
   // ---------------------------------------------------------------------------

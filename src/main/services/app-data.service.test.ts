@@ -2245,6 +2245,11 @@ describe("AppDataService", () => {
       expect(preview.unchangedCount).toBe(0);
       expect(preview.conflictCount).toBe(1);
       expect(preview.conflictedRecords).toHaveLength(1);
+      // Regression (PR #152 review): a customFields-only difference must be
+      // flagged so the UI can explain why an otherwise-identical-looking pair
+      // is still a conflict, instead of showing a generic reason with no
+      // visible evidence.
+      expect(preview.conflictedRecords[0]?.customFieldsOnlyDiff).toBe(true);
     });
 
     it("still counts a genuinely new (no-match) row as created, unaffected by the unchanged-row check", async () => {
@@ -2363,6 +2368,72 @@ describe("AppDataService", () => {
     expect(updated.contactMethods.phones.some((phone) => phone.number === "67890")).toBe(true);
     expect(updated.contactMethods.emails.some((email) => email.address === "nuevo@example.com")).toBe(true);
     expect(updated.tags).toContain("nuevo");
+  });
+
+  // Regression (PR #152 review): the "unchanged" short-circuit in
+  // mergeImportedDataset must not silently ignore the user's chosen conflict
+  // policy for a later row in the SAME import batch that targets the same
+  // existing record an earlier row already updated. Both rows are genuine
+  // conflicts against the ORIGINAL existing record; the second row must only
+  // ever be skipped because the user picked "skip" for it — never because it
+  // happens to look identical to the in-progress mergedRecords entry that an
+  // earlier row in this batch already overwrote.
+  it("still honors a later duplicate-target row's own conflict policy even when an earlier row in the same batch already made it look unchanged", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselineSourceFilePath = path.join(testRoot, "incoming", "dup-target-baseline.csv");
+    await fs.mkdir(path.dirname(baselineSourceFilePath), { recursive: true });
+    await fs.writeFile(
+      baselineSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "dup-target-1,service,Registro Original,Recepción,55511,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    const baseline = await service.importCsvDataset(baselineSourceFilePath);
+    const existing = baseline.contacts.records.find((record) => record.externalId === "dup-target-1")!;
+
+    // Two rows, same externalId, byte-for-byte identical to each other, and
+    // both differing from the baseline record (phone1Number 77777 vs 55511)
+    // — so both are genuine conflicts against the ORIGINAL existing record.
+    const duplicateSourceFilePath = path.join(testRoot, "incoming", "dup-target-batch.csv");
+    await fs.writeFile(
+      duplicateSourceFilePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "dup-target-1,service,Registro Original,Recepción,77777,active",
+        "dup-target-1,service,Registro Original,Recepción,77777,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(duplicateSourceFilePath);
+    expect(preview.conflictedRecords).toHaveLength(2);
+
+    const [firstConflict, secondConflict] = preview.conflictedRecords;
+    const result = await service.importCsvDataset(duplicateSourceFilePath, [
+      { recordIndex: firstConflict!.recordIndex, policy: "overwrite" },
+      { recordIndex: secondConflict!.recordIndex, policy: "skip" }
+    ]);
+
+    expect(result.conflictCount).toBe(2);
+    // The first row's "overwrite" is applied normally.
+    expect(result.conflictPolicyCounts?.overwrite).toBe(1);
+    // The second row's own "skip" policy must be honored and counted — not
+    // silently swallowed as "unchanged" just because the first row already
+    // mutated the in-progress record to match it.
+    expect(result.conflictPolicyCounts?.skip).toBe(1);
+
+    const audit = await service.getAuditLog({ action: "bulk-import" });
+    expect(audit.entries[0]?.changes?.conflictPolicyCounts?.new).toEqual({ overwrite: 1, skip: 1 });
+
+    const updated = result.contacts.records.find((record) => record.id === existing.id)!;
+    expect(updated.contactMethods.phones.some((phone) => phone.number === "77777")).toBe(true);
   });
 
   it("does not invent a primary phone when merge-fields merges a record where none is marked primary", async () => {
