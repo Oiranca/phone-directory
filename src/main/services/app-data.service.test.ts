@@ -5648,5 +5648,60 @@ describe("AppDataService", () => {
       expect(persisted.buscas).toEqual([{ number: "9876" }]);
       expect(persisted.audit.updatedAt).not.toBe(existingWithBusca.audit.updatedAt);
     });
+
+    it("preserves an existing busca instead of wiping it when the reimported row has no busca data at all", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // The ordinary plain CSV/ODS canonical-template reimport (e.g. a
+      // routine name/phone touch-up) has no column mapped onto `buscas` at
+      // all, so the imported row's buscas is always an empty array — this
+      // must NEVER be read as "the pager number was removed".
+      const importedRecord = { ...baseRecord, buscas: [] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => {
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        };
+      };
+
+      const merged = privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map()
+      );
+
+      // An imported row with no busca data at all is a true no-op for the
+      // busca field — not an update, and never counted as one.
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(0);
+      expect(merged.unchangedCount).toBe(1);
+
+      const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      expect(persisted.buscas).toEqual([{ number: "4321" }]);
+      expect(persisted.audit.updatedAt).toBe(existingWithBusca.audit.updatedAt);
+    });
   });
 });

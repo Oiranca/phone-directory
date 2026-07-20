@@ -1656,9 +1656,25 @@ export class AppDataService {
           // dropping it inside the no-op fast path. This is a plain
           // field-level update, not a user-facing conflict, so it never goes
           // through conflictPolicies/mergeImportedRecordFields.
-          if (this.areBuscasIdentical(currentMatchedRecord, importedRecord)) {
-            unchangedCount += 1;
-          } else {
+          //
+          // The refresh only ever ADOPTS a busca value actually present on
+          // the imported row (`importedRecord.buscas.length > 0`). Most
+          // import sources (the plain CSV/ODS canonical-template pipeline)
+          // have no column mapped onto `buscas` at all, so a routine
+          // name/phone reimport produces `importedRecord.buscas === []` for
+          // every row — that means "this parser doesn't know about buscas",
+          // NOT "the pager number was removed". Treating an empty imported
+          // list as a real difference would silently WIPE an existing busca
+          // on every unrelated reimport, which is exactly the data-loss risk
+          // this whole guard exists to prevent. So an empty imported list is
+          // always a no-op here: the current record's busca is preserved
+          // untouched, nothing is written, and it is counted as unchanged —
+          // mirroring `mergeImportedRecordFields`'s
+          // `importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas`
+          // fallback for the merge-fields conflict policy.
+          const hasBuscaUpdate =
+            importedRecord.buscas.length > 0 && !this.areBuscasIdentical(currentMatchedRecord, importedRecord);
+          if (hasBuscaUpdate) {
             mergedRecords[matchIndex] = contactRecordSchema.parse({
               ...currentMatchedRecord,
               buscas: importedRecord.buscas,
@@ -1669,6 +1685,8 @@ export class AppDataService {
               }
             });
             updatedCount += 1;
+          } else {
+            unchangedCount += 1;
           }
           continue;
         }
