@@ -39,6 +39,18 @@ import {
 } from "./spreadsheet-normalize.js";
 import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
 
+/**
+ * Serialized shape for a "busca" (pager) entry parsed from an inserted
+ * "Busca 1" column (OIR-265). Mirrors the `record.phones` JSON-string
+ * convention: pushed onto a per-row array, then stored on the
+ * NormalizedImportRow as `record.buscas = JSON.stringify(buscaEntries)`.
+ * Field shape matches `buscaEntrySchema` (src/shared/schemas/contact.ts).
+ */
+export type SerializedBuscaEntry = {
+  number: string;
+  label?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Record construction helpers (moved here from spreadsheet-normalize.ts to
 // break the csv-import ↔ normalize circular dependency)
@@ -774,6 +786,14 @@ export type AgendaColumnIndices = {
   // (undefined) on sheets that don't have one — the canonical 17-column
   // header falls into this case.
   fax?: number;
+  // Optional inserted "Busca 1" column (pager code). Absent (undefined) on
+  // sheets that don't have one — mirrors the `fax` optional-column pattern
+  // (OIR-265).
+  busca1?: number;
+  // Optional inserted "Corporativo 1" column (corporate mobile phone).
+  // Absent (undefined) on sheets that don't have one — mirrors the `fax`
+  // optional-column pattern (OIR-265).
+  corporativo1?: number;
   horario: number;
   confidencial: number;
   edificio: number;
@@ -874,6 +894,13 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
   // shape, so its absence must not fail header detection.
   const faxIndex = normalized.indexOf("FAX", trailerStart);
 
+  // Optional extra "Busca 1" (pager) and "Corporativo 1" (corporate mobile)
+  // columns — same optional/graceful pattern as Fax above (OIR-265). Their
+  // absence must not fail header detection or change behavior for sheets
+  // without them.
+  const busca1Index = normalized.indexOf("BUSCA1", trailerStart);
+  const corporativo1Index = normalized.indexOf("CORPORATIVO1", trailerStart);
+
   return {
     nombre: 0,
     categoria: 1,
@@ -881,6 +908,8 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
     numeroStart: 3,
     numeroEnd: 9,
     fax: faxIndex === -1 ? undefined : faxIndex,
+    busca1: busca1Index === -1 ? undefined : busca1Index,
+    corporativo1: corporativo1Index === -1 ? undefined : corporativo1Index,
     horario,
     confidencial,
     edificio,
@@ -1032,6 +1061,40 @@ export const normalizeTabularAgendaSheet = (
       });
     }
 
+    // The "Corporativo 1" column (present on some real sheets, mirrors the
+    // Fax column pattern above — OIR-265) holds a real corporate mobile phone
+    // number, so it is cleaned up with extractNumbers exactly like Fax and
+    // pushed into contactMethods.phones (not buscas).
+    const corporativoValue = columns.corporativo1 !== undefined ? cells[columns.corporativo1] ?? "" : "";
+
+    if (corporativoValue) {
+      extractNumbers(corporativoValue).forEach((number) => {
+        phoneEntries.push({
+          number,
+          label: "Corporativo",
+          kind: "corporativo",
+          isPrimary: false,
+          confidential,
+          noPatientSharing: privacy.noPatientSharing,
+          notes: undefined
+        });
+      });
+    }
+
+    // The "Busca 1" column (pager code, OIR-265) is a single raw ~4-digit
+    // value — unlike phone columns it is NOT run through extractNumbers
+    // (no multi-value splitting/cleanup), and it is stored on the contact's
+    // own `buscas` array, never mixed into contactMethods.phones.
+    const buscaEntries: SerializedBuscaEntry[] = [];
+    const buscaValue = columns.busca1 !== undefined ? cells[columns.busca1] ?? "" : "";
+
+    if (buscaValue) {
+      buscaEntries.push({
+        number: buscaValue,
+        label: undefined
+      });
+    }
+
     const record = blankRecord();
 
     record.externalId = `${profile.canonicalSlug}-${buildStableExternalId([String(rowIndex), displayName, servicio])}`;
@@ -1063,6 +1126,7 @@ export const normalizeTabularAgendaSheet = (
     record.notes = cleanNoteFragments([comentarios]).join(" | ");
     record.status = "active";
     record.phones = JSON.stringify(phoneEntries);
+    record.buscas = JSON.stringify(buscaEntries);
 
     const first = phoneEntries[0];
     const second = phoneEntries[1];
