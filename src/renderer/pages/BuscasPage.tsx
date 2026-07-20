@@ -93,7 +93,7 @@ export const BuscasPage = () => {
     return importedRecords.filter(
       (r) =>
         r.deviceNumber.toLowerCase().includes(q) ||
-        r.holderType.toLowerCase().includes(q) ||
+        (r.holderType ?? "").toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q) ||
         r.sourceSheet.toLowerCase().includes(q)
     );
