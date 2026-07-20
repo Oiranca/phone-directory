@@ -5497,4 +5497,156 @@ describe("AppDataService", () => {
       expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
     });
   });
+
+  // Buscas (pager codes, OIR-264/265/266) are a 4-digit code that can
+  // coincidentally collide with an unrelated phone extension — they must
+  // never participate in record identity or conflict detection, but a
+  // genuinely changed busca number must still be a real, applied update on
+  // re-import. The CSV/ODS canonical-template import pipeline used by the
+  // rest of this file has no column that maps onto `buscas` (it is only
+  // ever populated via the tabular Agenda sheet's inserted "Busca 1" column
+  // — see spreadsheet-parsers.test.ts), so — mirroring the customFields
+  // merge-fields test above — these exercise the merge/conflict helpers
+  // directly rather than routing fabricated busca data through the CSV
+  // parser.
+  describe("buscas never participate in record identity or conflict detection", () => {
+    const createBaseRecord = async (service: InstanceType<typeof import("./app-data.service.js").AppDataService>) => {
+      const created = await service.createRecord({
+        type: "service",
+        displayName: "Centralita",
+        organization: { department: "Urgencias", service: "Recepción" },
+        contactMethods: {
+          phones: [{
+            id: "ph_1",
+            number: "912345678",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }],
+          emails: [],
+          socials: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active"
+      });
+      const bootstrap = await service.getBootstrapData();
+      return bootstrap.contacts.records.find((record) => record.id === created.savedRecordId)!;
+    };
+
+    it("produces identical stable merge keys for records that differ only in buscas, and never embeds a busca number in a merge key", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const recordWithBuscaA = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const recordWithBuscaB = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        buildStableMergeKeys: (record: typeof baseRecord) => string[];
+      };
+
+      const keysA = privateMerge.buildStableMergeKeys(recordWithBuscaA);
+      const keysB = privateMerge.buildStableMergeKeys(recordWithBuscaB);
+
+      expect(keysA.length).toBeGreaterThan(0);
+      expect(keysA).toEqual(keysB);
+      for (const key of [...keysA, ...keysB]) {
+        expect(key).not.toContain("4321");
+        expect(key).not.toContain("9876");
+      }
+    });
+
+    it("does not classify a busca-only difference as a phone-match or email-match conflict", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // Imported row matches on the same phone but carries a DIFFERENT busca
+      // number — the false-collision risk this guards against (a 4-digit
+      // busca code coincidentally equal to an unrelated phone extension).
+      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        detectConflicts: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] }
+        ) => { conflicts: unknown[]; unchangedCount: number };
+      };
+
+      const { conflicts, unchangedCount } = privateMerge.detectConflicts(currentDataset, {
+        records: [importedRecord]
+      });
+
+      expect(conflicts).toHaveLength(0);
+      expect(unchangedCount).toBe(1);
+    });
+
+    it("does not skip a changed busca number as a no-op, and applies it to the persisted record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // Re-imported agenda carries an updated pager number for the same
+      // contact — everything else about the row is byte-for-byte identical.
+      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => {
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        };
+      };
+
+      const merged = privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map()
+      );
+
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(1);
+      expect(merged.unchangedCount).toBe(0);
+
+      const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      expect(persisted.buscas).toEqual([{ number: "9876" }]);
+      expect(persisted.audit.updatedAt).not.toBe(existingWithBusca.audit.updatedAt);
+    });
+  });
 });

@@ -21,7 +21,7 @@ export type {
 } from "../schemas/contact.js";
 
 import type { AreaType, RecordType } from "../constants/catalogs.js";
-import type { AuditLogEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
+import type { AuditLogEntry, BuscaEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
 
 // ---------------------------------------------------------------------------
 // UX-only and composite types — not duplicated by any Zod schema.
@@ -338,6 +338,15 @@ export interface ConflictRecordSummary {
   emails: ConflictEmailSummary[];
   /** Lean social list for field-level diff. */
   socials: ConflictSocialSummary[];
+  /**
+   * Lean busca (pager) list, included for display only (see OIR-268).
+   * Busca codes are 4-digit pager numbers that may collide with an
+   * unrelated phone extension by coincidence — they intentionally never
+   * participate in match/conflict identification (see
+   * `buildStableMergeKeys` in app-data.service.ts), so a busca-only
+   * difference never causes this record to appear here as a conflict.
+   */
+  buscas: BuscaEntry[];
 }
 
 /** Represents a single imported record that collides with an existing record in the directory. */

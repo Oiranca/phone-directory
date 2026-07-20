@@ -1646,9 +1646,30 @@ export class AppDataService {
         // the (already-mutated) in-progress record, which would silently
         // skip applying the user's selected policy and under-report
         // conflictPolicyCounts/audit for that row.
+        const currentMatchedRecord = mergedRecords[matchIndex]!;
         const hasSelectedPolicy = conflictPolicies.has(importRecordIndex);
-        if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(mergedRecords[matchIndex]!, importedRecord)) {
-          unchangedCount += 1;
+        if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(currentMatchedRecord, importedRecord)) {
+          // `areMeaningfulFieldsIdentical` deliberately ignores `buscas` (a
+          // busca-only difference must never be treated as a conflict — see
+          // its doc comment) but a genuinely changed busca (pager) number is
+          // still real, wanted data: silently refresh it here instead of
+          // dropping it inside the no-op fast path. This is a plain
+          // field-level update, not a user-facing conflict, so it never goes
+          // through conflictPolicies/mergeImportedRecordFields.
+          if (this.areBuscasIdentical(currentMatchedRecord, importedRecord)) {
+            unchangedCount += 1;
+          } else {
+            mergedRecords[matchIndex] = contactRecordSchema.parse({
+              ...currentMatchedRecord,
+              buscas: importedRecord.buscas,
+              audit: {
+                ...currentMatchedRecord.audit,
+                updatedAt: exportedAt,
+                updatedBy: editorName
+              }
+            });
+            updatedCount += 1;
+          }
           continue;
         }
 
@@ -1858,6 +1879,14 @@ export class AppDataService {
       // of dropping the imported ones entirely; current record wins on key
       // conflicts, mirroring mergeDuplicates().
       customFields: mergeCustomFields(currentRecord.customFields, importedRecord.customFields),
+      // Buscas (pager codes) are sourced fresh from each re-imported agenda —
+      // the freshly imported row is authoritative when it has busca data
+      // (mirrors the phone confidential/noPatientSharing refresh above: the
+      // source file wins on re-import). Fall back to the current record's
+      // buscas only when the imported row has none, so a merge-fields
+      // resolution never silently wipes an existing busca just because this
+      // particular import row's busca column happened to be empty.
+      buscas: importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas,
       audit: {
         ...currentRecord.audit,
         updatedAt: exportedAt,
@@ -1916,6 +1945,18 @@ export class AppDataService {
   }
 
   /**
+   * Canonicalize a list of busca (pager) entries for order-independent
+   * comparison. Unlike phones/emails/customFields, busca entries carry no
+   * `id`, so this reuses `canonicalizeValueForComparison` directly instead
+   * of `canonicalizeEntryListForComparison` (which assumes/strips an `id`).
+   */
+  private canonicalizeBuscasForComparison(buscas: ContactRecord["buscas"]): string[] {
+    return (buscas ?? [])
+      .map((entry) => JSON.stringify(this.canonicalizeValueForComparison(entry)))
+      .sort();
+  }
+
+  /**
    * Build a comparable snapshot of every MEANINGFUL field of a contact
    * record — everything except `id`, `audit` (createdAt/updatedAt/
    * createdBy/updatedBy), and import-provenance metadata (`source`), which
@@ -1924,6 +1965,16 @@ export class AppDataService {
    * bookkeeping fields. `externalId` IS included since it is meaningful
    * (and, for a stable-key match rather than an externalId match, a
    * differing externalId is a real difference worth surfacing).
+   *
+   * `buscas` IS included here (for display/diffing purposes, e.g. OIR-268)
+   * but is deliberately excluded from the equality checks below
+   * (`areMeaningfulFieldsIdentical` / `isCustomFieldsOnlyDifference`) — a
+   * busca (4-digit pager code) can coincidentally collide with an unrelated
+   * phone extension, so it must never influence whether two records are
+   * considered "the same" for conflict/no-op purposes. See
+   * `mergeImportedDataset`'s silent busca-refresh step for how a genuinely
+   * changed busca number still gets applied without being treated as a
+   * conflict.
    */
   private buildComparableRecordSnapshot(record: ContactRecord) {
     return {
@@ -1942,7 +1993,8 @@ export class AppDataService {
       aliases: [...record.aliases].map((alias) => alias.trim()).filter(Boolean).sort(),
       tags: [...record.tags].map((tag) => tag.trim()).filter(Boolean).sort(),
       notes: this.canonicalizeValueForComparison(record.notes),
-      customFields: this.canonicalizeEntryListForComparison(record.customFields ?? [])
+      customFields: this.canonicalizeEntryListForComparison(record.customFields ?? []),
+      buscas: this.canonicalizeBuscasForComparison(record.buscas)
     };
   }
 
@@ -1953,12 +2005,17 @@ export class AppDataService {
    * `existing` would be a genuine no-op. Used by `detectConflicts` (skip
    * surfacing a no-op match as a conflict requiring manual resolution) and
    * `mergeImportedDataset` (skip writing/counting a no-op as an update).
+   *
+   * `buscas` is intentionally excluded from this comparison — see
+   * `buildComparableRecordSnapshot`'s doc comment. A busca-only difference
+   * must never surface as a conflict or block the no-op fast path; it is
+   * instead applied as a silent field-level update (see
+   * `mergeImportedDataset`).
    */
   private areMeaningfulFieldsIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
-    return (
-      JSON.stringify(this.buildComparableRecordSnapshot(existing)) ===
-      JSON.stringify(this.buildComparableRecordSnapshot(imported))
-    );
+    const { buscas: _existingBuscas, ...existingRest } = this.buildComparableRecordSnapshot(existing);
+    const { buscas: _importedBuscas, ...importedRest } = this.buildComparableRecordSnapshot(imported);
+    return JSON.stringify(existingRest) === JSON.stringify(importedRest);
   }
 
   /**
@@ -1969,13 +2026,38 @@ export class AppDataService {
    * notice explaining why a pair that otherwise looks identical still needs
    * manual resolution, instead of leaving the operator with no visible
    * evidence of the actual difference (see `ConflictedImportRecord.customFieldsOnlyDiff`).
+   *
+   * `buscas` is also excluded from both sides of the comparison (same
+   * reasoning as `areMeaningfulFieldsIdentical`) so a busca difference never
+   * masks — or is mistaken for — a genuine customFields-only conflict.
    */
   private isCustomFieldsOnlyDifference(existing: ContactRecord, imported: ContactRecord): boolean {
-    const { customFields: existingCustomFields, ...existingRest } = this.buildComparableRecordSnapshot(existing);
-    const { customFields: importedCustomFields, ...importedRest } = this.buildComparableRecordSnapshot(imported);
+    const {
+      customFields: existingCustomFields,
+      buscas: _existingBuscas,
+      ...existingRest
+    } = this.buildComparableRecordSnapshot(existing);
+    const {
+      customFields: importedCustomFields,
+      buscas: _importedBuscas,
+      ...importedRest
+    } = this.buildComparableRecordSnapshot(imported);
     return (
       JSON.stringify(existingRest) === JSON.stringify(importedRest) &&
       JSON.stringify(existingCustomFields) !== JSON.stringify(importedCustomFields)
+    );
+  }
+
+  /**
+   * True when two matched records have the exact same set of busca (pager)
+   * entries (order-independent). Used only by `mergeImportedDataset`'s
+   * silent busca-refresh step — never by conflict/no-op detection (see
+   * `areMeaningfulFieldsIdentical`).
+   */
+  private areBuscasIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
+    return (
+      JSON.stringify(this.canonicalizeBuscasForComparison(existing.buscas)) ===
+      JSON.stringify(this.canonicalizeBuscasForComparison(imported.buscas))
     );
   }
 
@@ -2256,6 +2338,10 @@ export class AppDataService {
         handle: s.handle,
         url: s.url,
         label: s.label
+      })),
+      buscas: (record.buscas ?? []).map((b) => ({
+        number: b.number,
+        label: b.label
       }))
     };
   }
