@@ -93,7 +93,9 @@ export const BuscasPage = () => {
     return importedRecords.filter(
       (r) =>
         r.deviceNumber.toLowerCase().includes(q) ||
-        r.holderType.toLowerCase().includes(q) ||
+        (r.holderType ?? "").toLowerCase().includes(q) ||
+        (r.name ?? "").toLowerCase().includes(q) ||
+        (r.category ?? "").toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q) ||
         r.sourceSheet.toLowerCase().includes(q)
     );
@@ -442,9 +444,9 @@ export const BuscasPage = () => {
                 {filteredImportedRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 bg-blue-50/30 transition hover:bg-blue-50/60">
                     <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
-                    <td className="px-4 py-3 text-slate-700">{record.holderType}</td>
+                    <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
-                    <td className="px-4 py-3 text-slate-600">—</td>
+                    <td className="px-4 py-3 text-slate-600">{record.category ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
                         ODS
