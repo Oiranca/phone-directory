@@ -8,6 +8,7 @@ export type {
   SocialPlatform,
   SocialContact,
   CustomField,
+  BuscaEntry,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -116,6 +117,15 @@ export interface EditableCustomField {
   value: string;
 }
 
+/**
+ * Editable busca (pager) entry on a contact record. Mirrors the
+ * EditablePhoneContact pattern. See ContactRecord.buscas (OIR-264).
+ */
+export interface EditableBuscaEntry {
+  number: string;
+  label?: string;
+}
+
 export interface EditableContactRecord {
   id?: string;
   externalId?: string;
@@ -150,6 +160,8 @@ export interface EditableContactRecord {
     emails: EditableEmailContact[];
     socials: EditableSocialContact[];
   };
+  /** See ContactRecord.buscas for rationale (OIR-264). */
+  buscas: EditableBuscaEntry[];
   aliases: string[];
   tags: string[];
   notes?: string;
