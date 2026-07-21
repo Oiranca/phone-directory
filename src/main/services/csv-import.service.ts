@@ -15,7 +15,8 @@ import type {
   PhoneContact,
   EmailContact,
   SocialContact,
-  SocialPlatform
+  SocialPlatform,
+  BuscaEntry
 } from "../../shared/types/contact.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
@@ -25,8 +26,8 @@ import { computeMetadataCounts } from "../../shared/utils/matching.js";
  * must never reach the renderer.
  */
 export type CsvImportPreviewInternal = CsvImportPreview & { sourceFilePath: string };
-import { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
-import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
+import { isSerializedPhoneEntry, isSerializedBuscaEntry } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry, SerializedBuscaEntry } from "./spreadsheet-normalize.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_COLUMNS = [
@@ -364,6 +365,60 @@ const buildEmails = (
 };
 
 /**
+ * Parses the row's structured `buscas` JSON field (emitted by the spreadsheet
+ * normalizer as `record.buscas = JSON.stringify(buscaEntries)`, see
+ * normalizeTabularAgendaSheet in spreadsheet-parsers.ts) into BuscaEntry[].
+ * Mirrors buildPhones' handling of `row.phones`: each entry is validated at
+ * runtime with isSerializedBuscaEntry before use so a crafted or malformed
+ * `buscas` column cannot crash the import pipeline or produce invalid
+ * ContactRecord.buscas entries. The CSV import path never sets this field,
+ * so it naturally resolves to an empty array there.
+ */
+const buildBuscas = (
+  row: NormalizedImportRow,
+  rowNumber: number,
+  displayName: string | undefined,
+  warnings: CsvImportWarning[]
+): BuscaEntry[] => {
+  const rawBuscasJson = maybe(row.buscas);
+
+  if (!rawBuscasJson) {
+    return [];
+  }
+
+  let entries: SerializedBuscaEntry[] = [];
+
+  try {
+    const parsed = JSON.parse(rawBuscasJson);
+    if (Array.isArray(parsed)) {
+      entries = (parsed as unknown[]).filter(isSerializedBuscaEntry);
+      if (entries.length !== parsed.length) {
+        warnings.push({
+          rowNumber,
+          displayName,
+          message: "Se descartaron uno o más buscas con formato inválido."
+        });
+      }
+    }
+  } catch {
+    warnings.push({
+      rowNumber,
+      displayName,
+      message: "El campo de buscas no se pudo interpretar y se omitió."
+    });
+    return [];
+  }
+
+  return entries.map(
+    (entry) =>
+      compactObject({
+        number: entry.number,
+        label: entry.label || undefined
+      }) as BuscaEntry
+  );
+};
+
+/**
  * Parses social1/social2 flat CSV columns into SocialContact entries.
  * Only `instagram`, `twitter`, `facebook`, `linkedin`, `youtube`, `tiktok`, `web`, `other`
  * are valid platforms; unknown values are normalized to "other" with a warning.
@@ -560,6 +615,7 @@ export const buildImportPreviewFromRows = async (
     const phones = buildPhones(row, rowNumber, displayName, rowWarnings);
     const emails = buildEmails(row, rowNumber, displayName, rowWarnings);
     const socials = buildSocials(row, rowNumber, displayName, rowWarnings);
+    const buscas = buildBuscas(row, rowNumber, displayName, rowWarnings);
     const location = compactObject({
       building: maybe(row.building),
       floor: maybe(row.floor),
@@ -630,6 +686,7 @@ export const buildImportPreviewFromRows = async (
           emails,
           socials
         },
+        buscas,
         aliases,
         tags,
         notes: maybe(row.notes),
