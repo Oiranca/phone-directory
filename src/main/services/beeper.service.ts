@@ -91,7 +91,12 @@ export class BeepersService {
     try {
       await fs.access(filePath);
       return;
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        // A real access error (e.g. EACCES/EPERM) must not be masked as "no records" —
+        // rethrow instead of silently falling through to the legacy path.
+        throw err;
+      }
       // beepers.json does not exist yet — fall through to check for legacy data.
     }
 

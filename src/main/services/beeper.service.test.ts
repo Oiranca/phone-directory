@@ -715,4 +715,39 @@ describe("BeepersService — legacy store migration (OIR-271)", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.deviceNumber).toBe("B-CURRENT");
   });
+
+  it("rethrows a non-ENOENT fs.access error instead of silently falling through to the legacy store", async () => {
+    // A legacy buscas.json with real data is present, so a bug that treats
+    // ANY access() failure as "missing" would silently mask the EACCES error
+    // by returning the legacy dataset (or an empty one) instead of failing loudly.
+    const dataDir = path.join(testRoot, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "buscas.json"),
+      JSON.stringify({
+        version: "1.0.0",
+        records: [
+          {
+            id: "bsc_aaaa1111",
+            deviceNumber: "B-LEGACY",
+            assignedTo: "Ana García",
+            department: "Urgencias",
+            role: "Enfermera",
+            shift: "mañana"
+          }
+        ]
+      }),
+      "utf-8"
+    );
+
+    const accessError = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    const accessSpy = vi.spyOn(fs, "access").mockRejectedValue(accessError);
+
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    await expect(service.list()).rejects.toThrow(/permission denied/);
+
+    accessSpy.mockRestore();
+  });
 });

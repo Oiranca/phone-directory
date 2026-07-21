@@ -574,6 +574,48 @@ describe("BeepersPage", () => {
     });
   });
 
+  it("shows name/category for new-layout imported records and finds them by search", async () => {
+    const newLayoutRecord: ImportedBeeperRecord = {
+      id: "ibsc_00000003",
+      deviceNumber: "5003",
+      department: "Pediatría",
+      // holderType is intentionally undefined for the new Busca 1/Busca 2
+      // layout — only name/category are populated.
+      name: "María López",
+      category: "Enfermero/a",
+      sourceSheet: "Buscas_Pediatría",
+      sourceRow: 4
+    };
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue([newLayoutRecord])
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("5003")).toBeInTheDocument();
+      // Name is displayed instead of a blank "Titular" cell.
+      expect(screen.getByText("María López")).toBeInTheDocument();
+      // Category is shown in the role column.
+      expect(screen.getByText("Enfermero/a")).toBeInTheDocument();
+    });
+
+    // Searching by name must find the record.
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), {
+      target: { value: "María López" }
+    });
+    await waitFor(() => {
+      expect(screen.getByText("5003")).toBeInTheDocument();
+    });
+
+    // Searching by category must also find the record.
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), {
+      target: { value: "Enfermero" }
+    });
+    await waitFor(() => {
+      expect(screen.getByText("5003")).toBeInTheDocument();
+    });
+  });
+
   it("table has accessible caption", async () => {
     renderPage();
     await waitFor(() => {
