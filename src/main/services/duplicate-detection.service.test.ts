@@ -6,7 +6,7 @@ describe("DuplicateDetectionService", () => {
   const service = new DuplicateDetectionService();
 
   const buildMinimalContact = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
-    buscas: [],
+    beepers: [],
     id: "id-1",
     type: "person",
     displayName: "Test Person",

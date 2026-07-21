@@ -7,7 +7,7 @@ import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
-import type { BuscasService } from "./buscas.service.js";
+import type { BeepersService } from "./beeper.service.js";
 import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
@@ -86,7 +86,7 @@ export class AppDataService {
   constructor(
     private readonly options: {
       onAutoBackupFailure?: (message: string) => void;
-      buscasService?: BuscasService;
+      beepersService?: BeepersService;
     } = {}
   ) {}
 
@@ -229,7 +229,7 @@ export class AppDataService {
     // file on Windows) must NOT fail the calling operation (importDataset /
     // restoreBackup / resetDataset) — the actual backup file above was already
     // created successfully. Non-fatal: log so operators can diagnose, matching
-    // the console.error convention used for the non-fatal buscas import failure
+    // the console.error convention used for the non-fatal beepers import failure
     // in importCsvDataset below.
     try {
       await this.pruneBackupsByPrefix(
@@ -495,8 +495,8 @@ export class AppDataService {
       this.getEditorName(settings)
     );
 
-    // previewCsvImport is side-effect-free: buscas are NOT persisted here.
-    // Buscas are persisted only when the user confirms via importCsvDataset.
+    // previewCsvImport is side-effect-free: beepers are NOT persisted here.
+    // Beepers are persisted only when the user confirms via importCsvDataset.
 
     const currentContacts = await this.readContacts(settings);
     const { conflicts: conflictedRecords } = this.detectConflicts(currentContacts, dataset);
@@ -548,7 +548,7 @@ export class AppDataService {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
-    const { dataset, preview, buscasParseResult } = await buildSpreadsheetImportPreview(
+    const { dataset, preview, beepersParseResult } = await buildSpreadsheetImportPreview(
       sourceFilePath,
       editorName
     );
@@ -560,11 +560,11 @@ export class AppDataService {
     // row. Rejected rows (and their existing per-row reasons in preview.rowIssues)
     // are simply skipped and reported back in the result below.
 
-    // A buscas-only ODS has validRowCount === 0 (no contact rows) but
+    // A beepers-only ODS has validRowCount === 0 (no contact rows) but
     // parsedCellCount > 0.  Allow that through; only reject a truly empty workbook
-    // that has nothing importable at all (no valid contact rows AND no buscas
+    // that has nothing importable at all (no valid contact rows AND no beepers
     // content). This is the one case that must still block the import.
-    if (preview.validRowCount === 0 && buscasParseResult.parsedCellCount === 0) {
+    if (preview.validRowCount === 0 && beepersParseResult.parsedCellCount === 0) {
       throw new Error("El archivo no contiene filas válidas para importar.");
     }
 
@@ -591,16 +591,16 @@ export class AppDataService {
       }
     });
 
-    // Persist buscas records after contacts are successfully written.
-    // A buscas failure must NOT roll back or suppress the contacts import result.
-    if (buscasParseResult.parsedCellCount > 0 && this.options.buscasService) {
+    // Persist beepers records after contacts are successfully written.
+    // A beepers failure must NOT roll back or suppress the contacts import result.
+    if (beepersParseResult.parsedCellCount > 0 && this.options.beepersService) {
       try {
-        await this.options.buscasService.importFromOds(buscasParseResult);
+        await this.options.beepersService.importFromOds(beepersParseResult);
       } catch (err) {
         // Non-fatal: contacts import succeeded; log so operators can diagnose.
         // Surfacing to the UI would require a contract change — out of scope here.
         const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[BuscasImport] Failed to persist buscas records — ${errMsg}`);
+        console.error(`[BeepersImport] Failed to persist beepers records — ${errMsg}`);
       }
     }
 
@@ -1649,35 +1649,35 @@ export class AppDataService {
         const currentMatchedRecord = mergedRecords[matchIndex]!;
         const hasSelectedPolicy = conflictPolicies.has(importRecordIndex);
         if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(currentMatchedRecord, importedRecord)) {
-          // `areMeaningfulFieldsIdentical` deliberately ignores `buscas` (a
-          // busca-only difference must never be treated as a conflict — see
-          // its doc comment) but a genuinely changed busca (pager) number is
+          // `areMeaningfulFieldsIdentical` deliberately ignores `beepers` (a
+          // beeper-only difference must never be treated as a conflict — see
+          // its doc comment) but a genuinely changed beeper (pager) number is
           // still real, wanted data: silently refresh it here instead of
           // dropping it inside the no-op fast path. This is a plain
           // field-level update, not a user-facing conflict, so it never goes
           // through conflictPolicies/mergeImportedRecordFields.
           //
-          // The refresh only ever ADOPTS a busca value actually present on
-          // the imported row (`importedRecord.buscas.length > 0`). Most
+          // The refresh only ever ADOPTS a beeper value actually present on
+          // the imported row (`importedRecord.beepers.length > 0`). Most
           // import sources (the plain CSV/ODS canonical-template pipeline)
-          // have no column mapped onto `buscas` at all, so a routine
-          // name/phone reimport produces `importedRecord.buscas === []` for
-          // every row — that means "this parser doesn't know about buscas",
+          // have no column mapped onto `beepers` at all, so a routine
+          // name/phone reimport produces `importedRecord.beepers === []` for
+          // every row — that means "this parser doesn't know about beepers",
           // NOT "the pager number was removed". Treating an empty imported
-          // list as a real difference would silently WIPE an existing busca
+          // list as a real difference would silently WIPE an existing beeper
           // on every unrelated reimport, which is exactly the data-loss risk
           // this whole guard exists to prevent. So an empty imported list is
-          // always a no-op here: the current record's busca is preserved
+          // always a no-op here: the current record's beeper is preserved
           // untouched, nothing is written, and it is counted as unchanged —
           // mirroring `mergeImportedRecordFields`'s
-          // `importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas`
+          // `importedRecord.beepers.length > 0 ? importedRecord.beepers : currentRecord.beepers`
           // fallback for the merge-fields conflict policy.
-          const hasBuscaUpdate =
-            importedRecord.buscas.length > 0 && !this.areBuscasIdentical(currentMatchedRecord, importedRecord);
-          if (hasBuscaUpdate) {
+          const hasBeeperUpdate =
+            importedRecord.beepers.length > 0 && !this.areBeepersIdentical(currentMatchedRecord, importedRecord);
+          if (hasBeeperUpdate) {
             mergedRecords[matchIndex] = contactRecordSchema.parse({
               ...currentMatchedRecord,
-              buscas: importedRecord.buscas,
+              beepers: importedRecord.beepers,
               audit: {
                 ...currentMatchedRecord.audit,
                 updatedAt: exportedAt,
@@ -1705,12 +1705,12 @@ export class AppDataService {
             ...importedRecord,
             id: currentRecord.id,
             // Same invariant as mergeImportedRecordFields above: an empty
-            // imported busca list means "this source did not provide busca
+            // imported beeper list means "this source did not provide beeper
             // data", not "delete the pager". The overwrite policy replaces
             // the whole record with importedRecord, so without this fallback
-            // it would silently wipe an existing busca whenever the
-            // resolved import row simply had no busca column/value.
-            buscas: importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas,
+            // it would silently wipe an existing beeper whenever the
+            // resolved import row simply had no beeper column/value.
+            beepers: importedRecord.beepers.length > 0 ? importedRecord.beepers : currentRecord.beepers,
             audit: {
               ...currentRecord.audit,
               updatedAt: exportedAt,
@@ -1904,14 +1904,14 @@ export class AppDataService {
       // of dropping the imported ones entirely; current record wins on key
       // conflicts, mirroring mergeDuplicates().
       customFields: mergeCustomFields(currentRecord.customFields, importedRecord.customFields),
-      // Buscas (pager codes) are sourced fresh from each re-imported agenda —
-      // the freshly imported row is authoritative when it has busca data
+      // Beepers (pager codes) are sourced fresh from each re-imported agenda —
+      // the freshly imported row is authoritative when it has beeper data
       // (mirrors the phone confidential/noPatientSharing refresh above: the
       // source file wins on re-import). Fall back to the current record's
-      // buscas only when the imported row has none, so a merge-fields
-      // resolution never silently wipes an existing busca just because this
-      // particular import row's busca column happened to be empty.
-      buscas: importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas,
+      // beepers only when the imported row has none, so a merge-fields
+      // resolution never silently wipes an existing beeper just because this
+      // particular import row's beeper column happened to be empty.
+      beepers: importedRecord.beepers.length > 0 ? importedRecord.beepers : currentRecord.beepers,
       audit: {
         ...currentRecord.audit,
         updatedAt: exportedAt,
@@ -1970,13 +1970,13 @@ export class AppDataService {
   }
 
   /**
-   * Canonicalize a list of busca (pager) entries for order-independent
-   * comparison. Unlike phones/emails/customFields, busca entries carry no
+   * Canonicalize a list of beeper (pager) entries for order-independent
+   * comparison. Unlike phones/emails/customFields, beeper entries carry no
    * `id`, so this reuses `canonicalizeValueForComparison` directly instead
    * of `canonicalizeEntryListForComparison` (which assumes/strips an `id`).
    */
-  private canonicalizeBuscasForComparison(buscas: ContactRecord["buscas"]): string[] {
-    return (buscas ?? [])
+  private canonicalizeBeepersForComparison(beepers: ContactRecord["beepers"]): string[] {
+    return (beepers ?? [])
       .map((entry) => JSON.stringify(this.canonicalizeValueForComparison(entry)))
       .sort();
   }
@@ -1991,14 +1991,14 @@ export class AppDataService {
    * (and, for a stable-key match rather than an externalId match, a
    * differing externalId is a real difference worth surfacing).
    *
-   * `buscas` IS included here (for display/diffing purposes, e.g. OIR-268)
+   * `beepers` IS included here (for display/diffing purposes, e.g. OIR-268)
    * but is deliberately excluded from the equality checks below
    * (`areMeaningfulFieldsIdentical` / `isCustomFieldsOnlyDifference`) — a
-   * busca (4-digit pager code) can coincidentally collide with an unrelated
+   * beeper (4-digit pager code) can coincidentally collide with an unrelated
    * phone extension, so it must never influence whether two records are
    * considered "the same" for conflict/no-op purposes. See
-   * `mergeImportedDataset`'s silent busca-refresh step for how a genuinely
-   * changed busca number still gets applied without being treated as a
+   * `mergeImportedDataset`'s silent beeper-refresh step for how a genuinely
+   * changed beeper number still gets applied without being treated as a
    * conflict.
    */
   private buildComparableRecordSnapshot(record: ContactRecord) {
@@ -2019,7 +2019,7 @@ export class AppDataService {
       tags: [...record.tags].map((tag) => tag.trim()).filter(Boolean).sort(),
       notes: this.canonicalizeValueForComparison(record.notes),
       customFields: this.canonicalizeEntryListForComparison(record.customFields ?? []),
-      buscas: this.canonicalizeBuscasForComparison(record.buscas)
+      beepers: this.canonicalizeBeepersForComparison(record.beepers)
     };
   }
 
@@ -2031,15 +2031,15 @@ export class AppDataService {
    * surfacing a no-op match as a conflict requiring manual resolution) and
    * `mergeImportedDataset` (skip writing/counting a no-op as an update).
    *
-   * `buscas` is intentionally excluded from this comparison — see
-   * `buildComparableRecordSnapshot`'s doc comment. A busca-only difference
+   * `beepers` is intentionally excluded from this comparison — see
+   * `buildComparableRecordSnapshot`'s doc comment. A beeper-only difference
    * must never surface as a conflict or block the no-op fast path; it is
    * instead applied as a silent field-level update (see
    * `mergeImportedDataset`).
    */
   private areMeaningfulFieldsIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
-    const { buscas: _existingBuscas, ...existingRest } = this.buildComparableRecordSnapshot(existing);
-    const { buscas: _importedBuscas, ...importedRest } = this.buildComparableRecordSnapshot(imported);
+    const { beepers: _existingBeepers, ...existingRest } = this.buildComparableRecordSnapshot(existing);
+    const { beepers: _importedBeepers, ...importedRest } = this.buildComparableRecordSnapshot(imported);
     return JSON.stringify(existingRest) === JSON.stringify(importedRest);
   }
 
@@ -2052,19 +2052,19 @@ export class AppDataService {
    * manual resolution, instead of leaving the operator with no visible
    * evidence of the actual difference (see `ConflictedImportRecord.customFieldsOnlyDiff`).
    *
-   * `buscas` is also excluded from both sides of the comparison (same
-   * reasoning as `areMeaningfulFieldsIdentical`) so a busca difference never
+   * `beepers` is also excluded from both sides of the comparison (same
+   * reasoning as `areMeaningfulFieldsIdentical`) so a beeper difference never
    * masks — or is mistaken for — a genuine customFields-only conflict.
    */
   private isCustomFieldsOnlyDifference(existing: ContactRecord, imported: ContactRecord): boolean {
     const {
       customFields: existingCustomFields,
-      buscas: _existingBuscas,
+      beepers: _existingBeepers,
       ...existingRest
     } = this.buildComparableRecordSnapshot(existing);
     const {
       customFields: importedCustomFields,
-      buscas: _importedBuscas,
+      beepers: _importedBeepers,
       ...importedRest
     } = this.buildComparableRecordSnapshot(imported);
     return (
@@ -2074,15 +2074,15 @@ export class AppDataService {
   }
 
   /**
-   * True when two matched records have the exact same set of busca (pager)
+   * True when two matched records have the exact same set of beeper (pager)
    * entries (order-independent). Used only by `mergeImportedDataset`'s
-   * silent busca-refresh step — never by conflict/no-op detection (see
+   * silent beeper-refresh step — never by conflict/no-op detection (see
    * `areMeaningfulFieldsIdentical`).
    */
-  private areBuscasIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
+  private areBeepersIdentical(existing: ContactRecord, imported: ContactRecord): boolean {
     return (
-      JSON.stringify(this.canonicalizeBuscasForComparison(existing.buscas)) ===
-      JSON.stringify(this.canonicalizeBuscasForComparison(imported.buscas))
+      JSON.stringify(this.canonicalizeBeepersForComparison(existing.beepers)) ===
+      JSON.stringify(this.canonicalizeBeepersForComparison(imported.beepers))
     );
   }
 
@@ -2364,7 +2364,7 @@ export class AppDataService {
         url: s.url,
         label: s.label
       })),
-      buscas: (record.buscas ?? []).map((b) => ({
+      beepers: (record.beepers ?? []).map((b) => ({
         number: b.number,
         label: b.label
       }))

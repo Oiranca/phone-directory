@@ -11,11 +11,11 @@ vi.mock("electron", () => ({
   }
 }));
 
-describe("BuscasService", () => {
+describe("BeepersService", () => {
   let testRoot: string;
 
   beforeEach(async () => {
-    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "buscas-service-test-"));
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "beeper-service-test-"));
     getPathMock.mockImplementation(() => testRoot);
   });
 
@@ -25,9 +25,9 @@ describe("BuscasService", () => {
     getPathMock.mockReset();
   });
 
-  it("cold start — returns empty array when buscas.json is missing", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+  it("cold start — returns empty array when beepers.json is missing", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const records = await service.list();
 
@@ -35,10 +35,10 @@ describe("BuscasService", () => {
   });
 
   it("readDataset — propagates non-ENOENT fs errors (e.g. EACCES)", async () => {
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
-    await fs.mkdir(path.dirname(buscasFilePath), { recursive: true });
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    await fs.mkdir(path.dirname(beepersFilePath), { recursive: true });
     await fs.writeFile(
-      buscasFilePath,
+      beepersFilePath,
       JSON.stringify({ version: "1.0.0", records: [] }),
       "utf-8"
     );
@@ -46,8 +46,8 @@ describe("BuscasService", () => {
     const accessError = Object.assign(new Error("permission denied"), { code: "EACCES" });
     const readFileSpy = vi.spyOn(fs, "readFile").mockRejectedValueOnce(accessError);
 
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await expect(service.list()).rejects.toThrow("permission denied");
 
@@ -55,8 +55,8 @@ describe("BuscasService", () => {
   });
 
   it("add → list round-trip — persists new record and returns it from list", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const created = await service.add({
       deviceNumber: "B-101",
@@ -79,14 +79,14 @@ describe("BuscasService", () => {
     expect(listed[0]?.deviceNumber).toBe("B-101");
 
     // Verify file was persisted to disk
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
-    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as { records: unknown[] };
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as { records: unknown[] };
     expect(raw.records).toHaveLength(1);
   });
 
   it("update existing record — changes only the updated fields", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const created = await service.add({
       deviceNumber: "B-200",
@@ -117,8 +117,8 @@ describe("BuscasService", () => {
   });
 
   it("update throws when record ID does not exist", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await expect(
       service.update("bsc_nonexist", {
@@ -132,8 +132,8 @@ describe("BuscasService", () => {
   });
 
   it("remove record — record is gone after remove", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const first = await service.add({
       deviceNumber: "B-301",
@@ -159,8 +159,8 @@ describe("BuscasService", () => {
   });
 
   it("remove throws when record ID does not exist", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await expect(service.remove("bsc_nonexist")).rejects.toThrow(
       "No se encontró la busca solicitada."
@@ -168,8 +168,8 @@ describe("BuscasService", () => {
   });
 
   it("add — rejects duplicate deviceNumber (exact match)", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await service.add({
       deviceNumber: "B-101",
@@ -191,8 +191,8 @@ describe("BuscasService", () => {
   });
 
   it("add — rejects duplicate deviceNumber (case/whitespace variant)", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await service.add({
       deviceNumber: "B-101",
@@ -224,8 +224,8 @@ describe("BuscasService", () => {
   });
 
   it("update — rejects deviceNumber collision with another record", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await service.add({
       deviceNumber: "B-101",
@@ -254,8 +254,8 @@ describe("BuscasService", () => {
   });
 
   it("update — allows keeping the same deviceNumber for the current record", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const created = await service.add({
       deviceNumber: "B-101",
@@ -278,8 +278,8 @@ describe("BuscasService", () => {
   });
 
   it("unique ID generation — IDs are unique across many adds", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const created = await Promise.all(
       Array.from({ length: 10 }, (_, i) =>
@@ -302,8 +302,8 @@ describe("BuscasService", () => {
   });
 
   it("unique ID generation — retries on collision and resolves to a unique ID", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     // Add a record that will hold the "colliding" UUID slot
     const first = await service.add({
@@ -338,8 +338,8 @@ describe("BuscasService", () => {
   });
 
   it("unique ID generation — throws after 1000 exhausted attempts", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     // Add a record whose hex will be the permanently colliding value
     const existing = await service.add({
@@ -375,11 +375,11 @@ describe("BuscasService", () => {
 // importFromOds + listImported
 // ---------------------------------------------------------------------------
 
-describe("BuscasService — importFromOds + listImported", () => {
+describe("BeepersService — importFromOds + listImported", () => {
   let testRoot: string;
 
   beforeEach(async () => {
-    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "buscas-service-import-test-"));
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "beeper-service-import-test-"));
     getPathMock.mockImplementation(() => testRoot);
   });
 
@@ -390,8 +390,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("listImported — returns empty array before any ODS import", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const imported = await service.listImported();
 
@@ -399,8 +399,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — persists imported records with ibsc_ IDs and returns count", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const parseResult = {
       records: [
@@ -443,8 +443,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — replaces all previously-imported records on second call", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const firstResult = {
       records: [
@@ -475,8 +475,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — does not disturb manually-managed records", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const manual = await service.add({
       deviceNumber: "B-MANUAL",
@@ -505,8 +505,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — generates unique IDs across all imported records in a single call", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     const parseResult = {
       records: Array.from({ length: 10 }, (_, i) => ({
@@ -532,9 +532,9 @@ describe("BuscasService — importFromOds + listImported", () => {
     });
   });
 
-  it("importFromOds — persists to buscas.json with importedRecords field", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+  it("importFromOds — persists to beepers.json with importedRecords field", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     await service.importFromOds({
       records: [
@@ -544,8 +544,8 @@ describe("BuscasService — importFromOds + listImported", () => {
       skippedRowCount: 0
     });
 
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
-    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as {
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as {
       version: string;
       records: unknown[];
       importedRecords: unknown[];
@@ -556,8 +556,8 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — empty parse result writes zero importedRecords", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
-    const service = new BuscasService();
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
 
     // Pre-populate with some imported records
     await service.importFromOds({
@@ -568,7 +568,7 @@ describe("BuscasService — importFromOds + listImported", () => {
       skippedRowCount: 0
     });
 
-    // Re-import with empty result (e.g. buscas sheets removed from workbook)
+    // Re-import with empty result (e.g. beeper sheets removed from workbook)
     const count = await service.importFromOds({ records: [], parsedCellCount: 0, skippedRowCount: 0 });
 
     expect(count).toBe(0);
@@ -577,9 +577,9 @@ describe("BuscasService — importFromOds + listImported", () => {
   });
 
   it("importFromOds — rejects parse result exceeding MAX_SPREADSHEET_IMPORT_ROWS with the same error as the contacts path", async () => {
-    const { BuscasService } = await import("./buscas.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
     const { MAX_SPREADSHEET_IMPORT_ROWS } = await import("./spreadsheet-import.service.js");
-    const service = new BuscasService();
+    const service = new BeepersService();
 
     const oversizedRecords = Array.from({ length: MAX_SPREADSHEET_IMPORT_ROWS + 1 }, (_, i) => ({
       deviceNumber: String(7000 + i),
@@ -596,5 +596,123 @@ describe("BuscasService — importFromOds + listImported", () => {
     // Nothing should have been persisted
     const imported = await service.listImported();
     expect(imported).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-271: legacy buscas.json → beepers.json store migration
+// ---------------------------------------------------------------------------
+
+describe("BeepersService — legacy store migration (OIR-271)", () => {
+  let testRoot: string;
+
+  beforeEach(async () => {
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "beeper-service-migration-test-"));
+    getPathMock.mockImplementation(() => testRoot);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
+    getPathMock.mockReset();
+  });
+
+  it("migrates records from legacy buscas.json when beepers.json does not exist", async () => {
+    const legacyFilePath = path.join(testRoot, "data", "buscas.json");
+    await fs.mkdir(path.dirname(legacyFilePath), { recursive: true });
+    await fs.writeFile(
+      legacyFilePath,
+      JSON.stringify({
+        version: "1.0.0",
+        records: [
+          {
+            id: "bsc_aaaa1111",
+            deviceNumber: "B-LEGACY",
+            assignedTo: "Ana García",
+            department: "Urgencias",
+            role: "Enfermera",
+            shift: "mañana"
+          }
+        ],
+        importedRecords: [
+          {
+            id: "ibsc_bbbb2222",
+            deviceNumber: "7321",
+            department: "Anestesia",
+            holderType: "Principal",
+            sourceSheet: "Buscas_Facultativos",
+            sourceRow: 0
+          }
+        ]
+      }),
+      "utf-8"
+    );
+
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    const records = await service.list();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.deviceNumber).toBe("B-LEGACY");
+
+    const imported = await service.listImported();
+    expect(imported).toHaveLength(1);
+    expect(imported[0]?.deviceNumber).toBe("7321");
+
+    // The new store file must now exist with the migrated data.
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as { records: unknown[] };
+    expect(raw.records).toHaveLength(1);
+
+    // The legacy file is preserved (not deleted) — user data is never lost.
+    await expect(fs.access(legacyFilePath)).resolves.toBeUndefined();
+  });
+
+  it("uses beepers.json directly when it already exists, ignoring any legacy buscas.json", async () => {
+    const dataDir = path.join(testRoot, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+
+    await fs.writeFile(
+      path.join(dataDir, "buscas.json"),
+      JSON.stringify({
+        version: "1.0.0",
+        records: [
+          {
+            id: "bsc_aaaa1111",
+            deviceNumber: "B-LEGACY",
+            assignedTo: "Ana García",
+            department: "Urgencias",
+            role: "Enfermera",
+            shift: "mañana"
+          }
+        ]
+      }),
+      "utf-8"
+    );
+
+    await fs.writeFile(
+      path.join(dataDir, "beepers.json"),
+      JSON.stringify({
+        version: "1.0.0",
+        records: [
+          {
+            id: "bsc_cccc3333",
+            deviceNumber: "B-CURRENT",
+            assignedTo: "Luis Pérez",
+            department: "UCI",
+            role: "Médico",
+            shift: "tarde"
+          }
+        ]
+      }),
+      "utf-8"
+    );
+
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    const records = await service.list();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.deviceNumber).toBe("B-CURRENT");
   });
 });

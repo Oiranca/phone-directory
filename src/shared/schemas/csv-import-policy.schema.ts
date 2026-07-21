@@ -6,7 +6,7 @@ import { z } from "zod";
  * (`importCsvDataset`). Previously this array was validated by hand
  * (typeof/Number.isInteger/Set.has checks in contacts.ipc.ts) instead of
  * going through Zod like every other IPC input in this codebase
- * (createRecord, updateRecord, mergeDuplicates, busca channels, etc). Not
+ * (createRecord, updateRecord, mergeDuplicates, beeper channels, etc). Not
  * exploitable as hand-written (the manual checks were correct), but a
  * consistency/maintainability regression risk — extracted here so future
  * changes to this shape can't silently bypass validation.

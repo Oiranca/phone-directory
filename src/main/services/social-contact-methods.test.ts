@@ -755,7 +755,7 @@ describe("H-01 regression — socials survive createRecord + updateRecord", () =
 
     // Step 1: create a contact WITH a social entry.
     const created = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Demo",
       organization: { department: "Administración" },
@@ -784,7 +784,7 @@ describe("H-01 regression — socials survive createRecord + updateRecord", () =
 
     // Step 2: updateRecord — change only displayName; socials must survive.
     const updated = await service.updateRecord(created.savedRecordId, {
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Demo (actualizado)",
       organization: { department: "Administración" },
@@ -859,7 +859,7 @@ describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
 
     // keepRecord: instagram/@hospital — id = soc_1_0 (row 1, index 0)
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Keep",
       organization: { department: "Admin" },
@@ -875,7 +875,7 @@ describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
 
     // discardRecord: instagram/@hospital — id = soc_2_0 (different positional id, same content)
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Discard",
       organization: { department: "Admin" },
@@ -904,7 +904,7 @@ describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
 
     // keepRecord: instagram/@hospitalinstagram — id = soc_1_0
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Keep",
       organization: { department: "Admin" },
@@ -920,7 +920,7 @@ describe("BUG1 — social dedup by content key in mergeDuplicates", () => {
 
     // discardRecord: facebook/@hospitalfb — ALSO id = soc_1_0, but different platform+handle
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Hospital Discard",
       organization: { department: "Admin" },

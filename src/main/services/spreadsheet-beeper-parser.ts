@@ -1,7 +1,7 @@
 /**
- * Buscas sheet parser.
+ * Beeper sheet parser.
  *
- * OIR-266: the real-world ODS buscas sheets ("Buscas Todos", "Buscas Usuales",
+ * OIR-266: the real-world ODS beeper sheets ("Buscas Todos", "Buscas Usuales",
  * "Buscas Celadores") use a PER-PERSON/PER-ROW layout, not the legacy
  * column-per-holder-type layout this parser originally targeted:
  *
@@ -13,12 +13,12 @@
  *
  * Each data row identifies a single service/holder via Nombre/Categoría/Servicio,
  * and carries up to two 4-5 digit pager codes in "Busca 1"/"Busca 2". A row with
- * both cells filled produces TWO ImportedBuscaRecord entries (one per code).
+ * both cells filled produces TWO ImportedBeeperRecord entries (one per code).
  * "Número 1"/"Corporativo" are phone extensions, not pager codes, and are ignored
  * here.
  *
  * Confirmed against the real source workbook (Agenda Normalizada.ods,
- * 2026-07-20): all three buscas sheets present in that workbook use this exact
+ * 2026-07-20): all three beeper sheets present in that workbook use this exact
  * per-person layout — no sheet used the legacy column-per-holder-type shape.
  *
  * LEGACY LAYOUT (kept as a fallback): earlier/other ODS exports used a
@@ -28,18 +28,18 @@
  *   Col 1+: holder-type columns (PRINCIPAL, PRINCIPAL / RESIDENTE, ADJUNTO 1, etc.)
  *   Last col: COMENTARIOS (ignored — no pager numbers)
  *
- * parseBuscasSheet() tries the new per-person layout first (detected via a
+ * parseBeeperSheet() tries the new per-person layout first (detected via a
  * literal "Busca 1" column header) and falls back to the legacy holder-type
  * layout when no such column is found. The legacy path is retained because it
  * is still exercised indirectly by the wider import-pipeline test suite
  * (spreadsheet-import-row-skips.test.ts, spreadsheet-import.golden.test.ts,
- * app-data.service.test.ts, buscas.service.test.ts) with real
+ * app-data.service.test.ts, beeper.service.test.ts) with real
  * PRINCIPAL/RESIDENTE-style fixtures; there is no evidence those shapes still
  * occur in current source data, but removing support outright is out of scope
  * for OIR-266 (parser rewrite only).
  */
 
-import type { ImportedBuscaRecord } from "../../shared/schemas/busca.schema.js";
+import type { ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
 
 type RawSheetData = {
   name: string;
@@ -113,8 +113,8 @@ const isPagerNumber = (value: string): boolean => {
  */
 const normalizePagerNumber = (value: string): string => value.replace(/\s+/g, "");
 
-export type BuscasSheetParseResult = {
-  records: Omit<ImportedBuscaRecord, "id">[];
+export type BeepersSheetParseResult = {
+  records: Omit<ImportedBeeperRecord, "id">[];
   /** Number of non-empty pager cells that were parsed into records. */
   parsedCellCount: number;
   /** Number of rows skipped because they were empty or comment-only. */
@@ -126,16 +126,16 @@ export type BuscasSheetParseResult = {
 // ---------------------------------------------------------------------------
 
 const NEW_LAYOUT_COLUMN_NAMES = {
-  busca1: "BUSCA 1",
-  busca2: "BUSCA 2",
+  beeper1: "BUSCA 1",
+  beeper2: "BUSCA 2",
   name: "NOMBRE",
   category: "CATEGORIA",
   service: "SERVICIO"
 } as const;
 
 type NewLayoutColumnMap = {
-  busca1: number;
-  busca2: number;
+  beeper1: number;
+  beeper2: number;
   name: number;
   category: number;
   service: number;
@@ -153,8 +153,8 @@ const detectNewLayoutHeader = (
   for (let i = 0; i < Math.min(rows.length, 5); i++) {
     const row = rows[i] ?? [];
     const normalizedCells = row.map(normalizeColumnName);
-    const busca1Idx = normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.busca1);
-    if (busca1Idx === -1) continue;
+    const beeper1Idx = normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.beeper1);
+    if (beeper1Idx === -1) continue;
 
     const serviceIdx = normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.service);
     if (serviceIdx === -1) {
@@ -166,8 +166,8 @@ const detectNewLayoutHeader = (
     return {
       headerIdx: i,
       columns: {
-        busca1: busca1Idx,
-        busca2: normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.busca2),
+        beeper1: beeper1Idx,
+        beeper2: normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.beeper2),
         name: normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.name),
         category: normalizedCells.indexOf(NEW_LAYOUT_COLUMN_NAMES.category),
         service: serviceIdx
@@ -185,9 +185,9 @@ const parseNewLayoutSheet = (
   sheet: RawSheetData,
   headerIdx: number,
   columns: NewLayoutColumnMap
-): BuscasSheetParseResult => {
+): BeepersSheetParseResult => {
   const { name: sheetName, rows } = sheet;
-  const records: Omit<ImportedBuscaRecord, "id">[] = [];
+  const records: Omit<ImportedBeeperRecord, "id">[] = [];
   let parsedCellCount = 0;
   let skippedRowCount = 0;
 
@@ -206,10 +206,10 @@ const parseNewLayoutSheet = (
     const name = cellAt(row, columns.name).trim() || undefined;
     const category = cellAt(row, columns.category).trim() || undefined;
 
-    const buscaValues = [cellAt(row, columns.busca1), cellAt(row, columns.busca2)];
+    const beeperValues = [cellAt(row, columns.beeper1), cellAt(row, columns.beeper2)];
 
     let rowHasRecord = false;
-    for (const rawValue of buscaValues) {
+    for (const rawValue of beeperValues) {
       const cellValue = rawValue.trim();
       if (!isPagerNumber(cellValue)) continue;
 
@@ -260,7 +260,7 @@ const isHolderTypeHeader = (cell: string): boolean => {
  * The header row must have at least one holder-type column header in col 1+.
  * Returns the 0-based row index, or -1 if not found.
  */
-export const detectBuscasHeaderRowIndex = (rows: string[][]): number => {
+export const detectBeeperHeaderRowIndex = (rows: string[][]): number => {
   for (let i = 0; i < Math.min(rows.length, 5); i++) {
     const row = rows[i] ?? [];
     // Col 0 is the SERVICIO label; check col 1+ for holder-type keywords
@@ -272,10 +272,10 @@ export const detectBuscasHeaderRowIndex = (rows: string[][]): number => {
   return -1;
 };
 
-const parseLegacyLayoutSheet = (sheet: RawSheetData): BuscasSheetParseResult => {
+const parseLegacyLayoutSheet = (sheet: RawSheetData): BeepersSheetParseResult => {
   const { name: sheetName, rows } = sheet;
 
-  const headerIdx = detectBuscasHeaderRowIndex(rows);
+  const headerIdx = detectBeeperHeaderRowIndex(rows);
   if (headerIdx === -1) {
     // Cannot identify header — treat all rows as skipped
     return { records: [], parsedCellCount: 0, skippedRowCount: rows.length };
@@ -294,7 +294,7 @@ const parseLegacyLayoutSheet = (sheet: RawSheetData): BuscasSheetParseResult => 
     // Non-holder columns (e.g. COMENTARIOS) are silently skipped
   }
 
-  const records: Omit<ImportedBuscaRecord, "id">[] = [];
+  const records: Omit<ImportedBeeperRecord, "id">[] = [];
   let parsedCellCount = 0;
   let skippedRowCount = 0;
 
@@ -342,7 +342,7 @@ const parseLegacyLayoutSheet = (sheet: RawSheetData): BuscasSheetParseResult => 
 // ---------------------------------------------------------------------------
 
 /**
- * Parses a single buscas sheet and returns import-ready records (no IDs —
+ * Parses a single beeper sheet and returns import-ready records (no IDs —
  * the service assigns IDs when persisting).
  *
  * Tries the new per-person "Busca 1"/"Busca 2" layout first; falls back to
@@ -350,7 +350,7 @@ const parseLegacyLayoutSheet = (sheet: RawSheetData): BuscasSheetParseResult => 
  *
  * @param sheet Raw sheet data (name + 2-D string array of cells).
  */
-export const parseBuscasSheet = (sheet: RawSheetData): BuscasSheetParseResult => {
+export const parseBeeperSheet = (sheet: RawSheetData): BeepersSheetParseResult => {
   const newLayout = detectNewLayoutHeader(sheet.rows);
   if (newLayout) {
     return parseNewLayoutSheet(sheet, newLayout.headerIdx, newLayout.columns);
@@ -359,17 +359,17 @@ export const parseBuscasSheet = (sheet: RawSheetData): BuscasSheetParseResult =>
 };
 
 /**
- * Parses multiple buscas sheets and aggregates the results.
+ * Parses multiple beeper sheets and aggregates the results.
  */
-export const parseBuscasSheets = (sheets: RawSheetData[]): BuscasSheetParseResult => {
-  const combined: BuscasSheetParseResult = {
+export const parseBeeperSheets = (sheets: RawSheetData[]): BeepersSheetParseResult => {
+  const combined: BeepersSheetParseResult = {
     records: [],
     parsedCellCount: 0,
     skippedRowCount: 0
   };
 
   for (const sheet of sheets) {
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
     combined.records.push(...result.records);
     combined.parsedCellCount += result.parsedCellCount;
     combined.skippedRowCount += result.skippedRowCount;

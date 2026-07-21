@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
-import { BUSCA_SHIFTS } from "../../shared/schemas/busca.schema";
+import type { BeeperRecord, EditableBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
+import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";
@@ -18,10 +18,10 @@ const SHIFT_LABELS: Record<string, string> = {
 
 // Options for the accessible SelectField combobox used below,
 // replacing the previous plain native <select>. Same values/order as
-// BUSCA_SHIFTS.
-const SHIFT_OPTIONS = BUSCA_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));
+// BEEPER_SHIFTS.
+const SHIFT_OPTIONS = BEEPER_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));
 
-const emptyForm = (): EditableBuscaRecord => ({
+const emptyForm = (): EditableBeeperRecord => ({
   deviceNumber: "",
   assignedTo: "",
   department: "",
@@ -30,16 +30,16 @@ const emptyForm = (): EditableBuscaRecord => ({
   group: ""
 });
 
-export const BuscasPage = () => {
+export const BeepersPage = () => {
   const { pushToast } = useToast();
-  const [records, setRecords] = useState<BuscaRecord[]>([]);
-  const [importedRecords, setImportedRecords] = useState<ImportedBuscaRecord[]>([]);
+  const [records, setRecords] = useState<BeeperRecord[]>([]);
+  const [importedRecords, setImportedRecords] = useState<ImportedBeeperRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<EditableBuscaRecord>(emptyForm());
+  const [formData, setFormData] = useState<EditableBeeperRecord>(emptyForm());
   const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; deviceNumber: string } | null>(null);
@@ -48,13 +48,13 @@ export const BuscasPage = () => {
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query);
 
-  const loadBuscas = async () => {
+  const loadBeepers = async () => {
     try {
       setIsLoading(true);
       setLoadError(false);
       const [primary, imported] = await Promise.allSettled([
-        window.hospitalDirectory.listBuscas(),
-        window.hospitalDirectory.listImportedBuscas()
+        window.hospitalDirectory.listBeepers(),
+        window.hospitalDirectory.listImportedBeepers()
       ]);
       if (primary.status === "rejected") throw primary.reason;
       setRecords(primary.value);
@@ -67,7 +67,7 @@ export const BuscasPage = () => {
   };
 
   useEffect(() => {
-    void loadBuscas();
+    void loadBeepers();
   }, []);
 
   // `when` combines showForm with editingId so switching from "create" to
@@ -106,7 +106,7 @@ export const BuscasPage = () => {
     setShowForm(true);
   };
 
-  const handleEdit = (record: BuscaRecord) => {
+  const handleEdit = (record: BeeperRecord) => {
     setEditingId(record.id);
     setFormData({
       deviceNumber: record.deviceNumber,
@@ -134,10 +134,10 @@ export const BuscasPage = () => {
     setIsSaving(true);
     try {
       if (editingId) {
-        const updated = await window.hospitalDirectory.updateBusca(editingId, formData);
+        const updated = await window.hospitalDirectory.updateBeeper(editingId, formData);
         setRecords((prev) => prev.map((r) => (r.id === editingId ? updated : r)));
       } else {
-        const created = await window.hospitalDirectory.addBusca(formData);
+        const created = await window.hospitalDirectory.addBeeper(formData);
         setRecords((prev) => [created, ...prev]);
       }
       setShowForm(false);
@@ -154,7 +154,7 @@ export const BuscasPage = () => {
     }
   };
 
-  const handleDeleteClick = (record: BuscaRecord) => {
+  const handleDeleteClick = (record: BeeperRecord) => {
     setDeleteConfirm({ id: record.id, deviceNumber: record.deviceNumber });
   };
 
@@ -162,7 +162,7 @@ export const BuscasPage = () => {
     if (!deleteConfirm || isDeleting) return;
     setIsDeleting(true);
     try {
-      await window.hospitalDirectory.deleteBusca(deleteConfirm.id);
+      await window.hospitalDirectory.deleteBeeper(deleteConfirm.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteConfirm.id));
       setDeleteConfirm(null);
     } catch {
@@ -173,7 +173,7 @@ export const BuscasPage = () => {
     }
   };
 
-  const setField = <K extends keyof EditableBuscaRecord>(key: K, value: EditableBuscaRecord[K]) => {
+  const setField = <K extends keyof EditableBeeperRecord>(key: K, value: EditableBeeperRecord[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -183,9 +183,9 @@ export const BuscasPage = () => {
 
   if (loadError) {
     return (
-      <section aria-labelledby="buscas-page-title" className="flex flex-col gap-5">
+      <section aria-labelledby="beeper-page-title" className="flex flex-col gap-5">
         <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
-          <h2 id="buscas-page-title" className="text-xl font-semibold text-scs-blueDark">
+          <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">
             Registro de Buscas
           </h2>
         </div>
@@ -196,7 +196,7 @@ export const BuscasPage = () => {
           action={
             <button
               type="button"
-              onClick={() => void loadBuscas()}
+              onClick={() => void loadBeepers()}
               className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
             >
               Reintentar
@@ -208,20 +208,20 @@ export const BuscasPage = () => {
   }
 
   return (
-    <section aria-labelledby="buscas-page-title" className="flex flex-col gap-5" aria-busy={isDeleting}>
+    <section aria-labelledby="beeper-page-title" className="flex flex-col gap-5" aria-busy={isDeleting}>
       {/* Header */}
       <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-4">
-          <h2 id="buscas-page-title" className="text-xl font-semibold text-scs-blueDark">
+          <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">
             Registro de Buscas
           </h2>
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex-1">
-              <label htmlFor="buscas-search" className="sr-only">
+              <label htmlFor="beeper-search" className="sr-only">
                 Buscar buscas
               </label>
               <input
-                id="buscas-search"
+                id="beeper-search"
                 data-page-search
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -323,7 +323,7 @@ export const BuscasPage = () => {
                 id="form-shift"
                 label="Turno"
                 value={formData.shift}
-                onChange={(value) => setField("shift", value as EditableBuscaRecord["shift"])}
+                onChange={(value) => setField("shift", value as EditableBeeperRecord["shift"])}
                 options={SHIFT_OPTIONS}
               />
             </div>

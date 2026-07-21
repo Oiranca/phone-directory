@@ -1,22 +1,22 @@
 import fs from "node:fs/promises";
-import { buscaRecordSchema, buscasDatasetSchema, editableBuscaRecordSchema, importedBuscaRecordSchema } from "../../shared/schemas/busca.schema.js";
-import type { BuscaRecord, BuscasDataset, EditableBuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema.js";
+import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
+import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
 import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
-import { getBuscasFilePath, getManagedDataDirectory } from "../utils/paths.js";
-import type { BuscasSheetParseResult } from "./spreadsheet-buscas-parser.js";
+import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
+import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
 
-const BUSCAS_VERSION = "1.0.0";
+const BEEPERS_VERSION = "1.0.0";
 
-const emptyDataset = (): BuscasDataset => ({
-  version: BUSCAS_VERSION,
+const emptyDataset = (): BeepersDataset => ({
+  version: BEEPERS_VERSION,
   records: [],
   importedRecords: []
 });
 
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
 
-const assertUniqueDeviceNumber = (records: BuscaRecord[], deviceNumber: string, excludeId?: string): void => {
+const assertUniqueDeviceNumber = (records: BeeperRecord[], deviceNumber: string, excludeId?: string): void => {
   const normalized = normalizeDeviceNumber(deviceNumber);
   const conflict = records.find(
     (r) => normalizeDeviceNumber(r.deviceNumber) === normalized && r.id !== excludeId
@@ -29,7 +29,7 @@ const assertUniqueDeviceNumber = (records: BuscaRecord[], deviceNumber: string, 
 const createEntityId = () => `bsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
 const createImportedEntityId = () => `ibsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
 
-const createUniqueId = (records: BuscaRecord[]): string => {
+const createUniqueId = (records: BeeperRecord[]): string => {
   const maxAttempts = 1000;
   let attempts = 0;
   let candidate = createEntityId();
@@ -62,11 +62,11 @@ const createUniqueImportedId = (existingIds: Set<string>): string => {
   return candidate;
 };
 
-// NOTE: buscas.json is stored in the managed data directory alongside contacts.json but is
+// NOTE: beepers.json is stored in the managed data directory alongside contacts.json but is
 // currently outside the backup/restore scope. AppDataService backups only cover contacts.json.
 // If backup coverage for pager-registry data is needed in the future, this service will need
 // to be wired into the backup pipeline.
-export class BuscasService {
+export class BeepersService {
   private writeQueue: Promise<void> = Promise.resolve();
 
   private enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
@@ -78,10 +78,42 @@ export class BuscasService {
     return next;
   }
 
-  private async readDataset(): Promise<BuscasDataset> {
-    const filePath = getBuscasFilePath();
+  /**
+   * OIR-271: the on-disk store was renamed from buscas.json to beepers.json.
+   * If the new file does not exist yet but the legacy file does, migrate the
+   * legacy data to the new path (atomic write, dual-fsync) so existing user
+   * data is never lost. The legacy file is left in place afterwards.
+   */
+  private async migrateLegacyStoreIfNeeded(): Promise<void> {
+    const filePath = getBeepersFilePath();
+    const legacyFilePath = getLegacyBeepersFilePath();
+
     try {
-      return buscasDatasetSchema.parse(await readJsonFile<BuscasDataset>(filePath));
+      await fs.access(filePath);
+      return;
+    } catch {
+      // beepers.json does not exist yet — fall through to check for legacy data.
+    }
+
+    let legacyDataset: BeepersDataset;
+    try {
+      legacyDataset = beepersDatasetSchema.parse(await readJsonFile<BeepersDataset>(legacyFilePath));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
+      throw err;
+    }
+
+    await ensureDirectory(getManagedDataDirectory());
+    await writeJsonFile(filePath, legacyDataset);
+  }
+
+  private async readDataset(): Promise<BeepersDataset> {
+    await this.migrateLegacyStoreIfNeeded();
+    const filePath = getBeepersFilePath();
+    try {
+      return beepersDatasetSchema.parse(await readJsonFile<BeepersDataset>(filePath));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return emptyDataset();
@@ -90,25 +122,25 @@ export class BuscasService {
     }
   }
 
-  private async writeDataset(dataset: BuscasDataset): Promise<void> {
-    const filePath = getBuscasFilePath();
+  private async writeDataset(dataset: BeepersDataset): Promise<void> {
+    const filePath = getBeepersFilePath();
     await ensureDirectory(getManagedDataDirectory());
     await writeJsonFile(filePath, dataset);
   }
 
-  async list(): Promise<BuscaRecord[]> {
+  async list(): Promise<BeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.records;
   }
 
-  async add(payload: EditableBuscaRecord): Promise<BuscaRecord> {
+  async add(payload: EditableBeeperRecord): Promise<BeeperRecord> {
     return this.enqueueWrite(async () => {
-      const parsed = editableBuscaRecordSchema.parse(payload);
+      const parsed = editableBeeperRecordSchema.parse(payload);
       const dataset = await this.readDataset();
       assertUniqueDeviceNumber(dataset.records, parsed.deviceNumber);
       const id = createUniqueId(dataset.records);
-      const newRecord = buscaRecordSchema.parse({ ...parsed, id });
-      const nextDataset = buscasDatasetSchema.parse({
+      const newRecord = beeperRecordSchema.parse({ ...parsed, id });
+      const nextDataset = beepersDatasetSchema.parse({
         ...dataset,
         records: [newRecord, ...dataset.records]
       });
@@ -117,18 +149,18 @@ export class BuscasService {
     });
   }
 
-  async update(id: string, payload: EditableBuscaRecord): Promise<BuscaRecord> {
+  async update(id: string, payload: EditableBeeperRecord): Promise<BeeperRecord> {
     return this.enqueueWrite(async () => {
-      const parsed = editableBuscaRecordSchema.parse(payload);
+      const parsed = editableBeeperRecordSchema.parse(payload);
       const dataset = await this.readDataset();
       const index = dataset.records.findIndex((r) => r.id === id);
       if (index === -1) {
         throw new Error("No se encontró la busca solicitada.");
       }
       assertUniqueDeviceNumber(dataset.records, parsed.deviceNumber, id);
-      const updatedRecord = buscaRecordSchema.parse({ ...parsed, id });
+      const updatedRecord = beeperRecordSchema.parse({ ...parsed, id });
       const nextRecords = dataset.records.map((r, i) => (i === index ? updatedRecord : r));
-      const nextDataset = buscasDatasetSchema.parse({ ...dataset, records: nextRecords });
+      const nextDataset = beepersDatasetSchema.parse({ ...dataset, records: nextRecords });
       await this.writeDataset(nextDataset);
       return updatedRecord;
     });
@@ -142,27 +174,27 @@ export class BuscasService {
         throw new Error("No se encontró la busca solicitada.");
       }
       const nextRecords = dataset.records.filter((r) => r.id !== id);
-      const nextDataset = buscasDatasetSchema.parse({ ...dataset, records: nextRecords });
+      const nextDataset = beepersDatasetSchema.parse({ ...dataset, records: nextRecords });
       await this.writeDataset(nextDataset);
     });
   }
 
-  async listImported(): Promise<ImportedBuscaRecord[]> {
+  async listImported(): Promise<ImportedBeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.importedRecords ?? [];
   }
 
   /**
-   * Replaces all ODS-imported buscas records with the result of a fresh parse.
+   * Replaces all ODS-imported beeper records with the result of a fresh parse.
    * Existing manually-managed records (in `records`) are untouched.
    *
-   * The incoming `parseResult` is the output of parseBuscasSheets() — records
+   * The incoming `parseResult` is the output of parseBeepersSheets() — records
    * have no IDs yet. This method assigns ibsc_ IDs and writes the dataset
    * atomically via the serialised write queue.
    *
    * Returns the number of imported records written.
    */
-  async importFromOds(parseResult: BuscasSheetParseResult): Promise<number> {
+  async importFromOds(parseResult: BeepersSheetParseResult): Promise<number> {
     return this.enqueueWrite(async () => {
       if (parseResult.records.length > MAX_SPREADSHEET_IMPORT_ROWS) {
         throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
@@ -171,12 +203,12 @@ export class BuscasService {
       const dataset = await this.readDataset();
       const existingIds = new Set<string>();
 
-      const importedRecords: ImportedBuscaRecord[] = parseResult.records.map((raw) => {
+      const importedRecords: ImportedBeeperRecord[] = parseResult.records.map((raw) => {
         const id = createUniqueImportedId(existingIds);
-        return importedBuscaRecordSchema.parse({ ...raw, id });
+        return importedBeeperRecordSchema.parse({ ...raw, id });
       });
 
-      const nextDataset = buscasDatasetSchema.parse({
+      const nextDataset = beepersDatasetSchema.parse({
         ...dataset,
         importedRecords
       });

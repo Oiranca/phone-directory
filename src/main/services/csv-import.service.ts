@@ -5,7 +5,7 @@ import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
 import type { AreaType } from "../../shared/constants/catalogs.js";
 import { contactRecordSchema, directoryDatasetSchema, socialPlatformSchema } from "../../shared/schemas/contact.js";
 import type {
-  BuscaEntry,
+  BeeperEntry,
   ContactRecord,
   CsvImportIssue,
   CsvImportPreview,
@@ -26,8 +26,8 @@ import { computeMetadataCounts } from "../../shared/utils/matching.js";
  * must never reach the renderer.
  */
 export type CsvImportPreviewInternal = CsvImportPreview & { sourceFilePath: string };
-import { isSerializedPhoneEntry, isSerializedBuscaEntry } from "./spreadsheet-normalize.js";
-import type { SerializedPhoneEntry, SerializedBuscaEntry } from "./spreadsheet-normalize.js";
+import { isSerializedPhoneEntry, isSerializedBeeperEntry } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry, SerializedBeeperEntry } from "./spreadsheet-normalize.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_COLUMNS = [
@@ -365,33 +365,33 @@ const buildEmails = (
 };
 
 /**
- * Parses the row's structured `buscas` JSON field (emitted by the spreadsheet
- * normalizer as `record.buscas = JSON.stringify(buscaEntries)`, see
- * normalizeTabularAgendaSheet in spreadsheet-parsers.ts) into BuscaEntry[].
+ * Parses the row's structured `beepers` JSON field (emitted by the spreadsheet
+ * normalizer as `record.beepers = JSON.stringify(beeperEntries)`, see
+ * normalizeTabularAgendaSheet in spreadsheet-parsers.ts) into BeeperEntry[].
  * Mirrors buildPhones' handling of `row.phones`: each entry is validated at
- * runtime with isSerializedBuscaEntry before use so a crafted or malformed
- * `buscas` column cannot crash the import pipeline or produce invalid
- * ContactRecord.buscas entries. The CSV import path never sets this field,
+ * runtime with isSerializedBeeperEntry before use so a crafted or malformed
+ * `beepers` column cannot crash the import pipeline or produce invalid
+ * ContactRecord.beepers entries. The CSV import path never sets this field,
  * so it naturally resolves to an empty array there.
  */
-const buildBuscas = (
+const buildBeepers = (
   row: NormalizedImportRow,
   rowNumber: number,
   displayName: string | undefined,
   warnings: CsvImportWarning[]
-): BuscaEntry[] => {
-  const rawBuscasJson = maybe(row.buscas);
+): BeeperEntry[] => {
+  const rawBeepersJson = maybe(row.beepers);
 
-  if (!rawBuscasJson) {
+  if (!rawBeepersJson) {
     return [];
   }
 
-  let entries: SerializedBuscaEntry[] = [];
+  let entries: SerializedBeeperEntry[] = [];
 
   try {
-    const parsed = JSON.parse(rawBuscasJson);
+    const parsed = JSON.parse(rawBeepersJson);
     if (Array.isArray(parsed)) {
-      entries = (parsed as unknown[]).filter(isSerializedBuscaEntry);
+      entries = (parsed as unknown[]).filter(isSerializedBeeperEntry);
       if (entries.length !== parsed.length) {
         warnings.push({
           rowNumber,
@@ -414,7 +414,7 @@ const buildBuscas = (
       compactObject({
         number: entry.number,
         label: entry.label || undefined
-      }) as BuscaEntry
+      }) as BeeperEntry
   );
 };
 
@@ -551,8 +551,8 @@ export const buildImportPreviewFromRows = async (
     editorName: string;
     detectedFormat?: string;
     detectionConfidence?: DetectionConfidence;
-    /** INTERIM: Buscas-sheet rows silently skipped. Default 0 (CSV path). */
-    buscasSkippedRowCount?: number;
+    /** INTERIM: Beepers-sheet rows silently skipped. Default 0 (CSV path). */
+    beepersSkippedRowCount?: number;
     /** INTERIM: Social-handle rows silently skipped. Default 0 (CSV path). */
     socialHandleSkippedRowCount?: number;
   }
@@ -615,7 +615,7 @@ export const buildImportPreviewFromRows = async (
     const phones = buildPhones(row, rowNumber, displayName, rowWarnings);
     const emails = buildEmails(row, rowNumber, displayName, rowWarnings);
     const socials = buildSocials(row, rowNumber, displayName, rowWarnings);
-    const buscas = buildBuscas(row, rowNumber, displayName, rowWarnings);
+    const beepers = buildBeepers(row, rowNumber, displayName, rowWarnings);
     const location = compactObject({
       building: maybe(row.building),
       floor: maybe(row.floor),
@@ -686,7 +686,7 @@ export const buildImportPreviewFromRows = async (
           emails,
           socials
         },
-        buscas,
+        beepers,
         aliases,
         tags,
         notes: maybe(row.notes),
@@ -762,9 +762,9 @@ export const buildImportPreviewFromRows = async (
       // with the real mergeImportedDataset-derived count, same as
       // createdCount/updatedCount above.
       unchangedCount: 0,
-      buscasSkippedRowCount: options.buscasSkippedRowCount ?? 0,
+      beepersSkippedRowCount: options.beepersSkippedRowCount ?? 0,
       socialHandleSkippedRowCount: options.socialHandleSkippedRowCount ?? 0,
-      parsedBuscasCellCount: 0,
+      parsedBeepersCellCount: 0,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

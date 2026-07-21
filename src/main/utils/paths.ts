@@ -10,7 +10,10 @@ export const getManagedPaths = (appDataRoot: string) => ({
   contactsFilePath: path.join(appDataRoot, "data", "contacts.json"),
   settingsFilePath: path.join(appDataRoot, "data", "settings.json"),
   auditLogFilePath: path.join(appDataRoot, "data", "audit-log.json"),
-  buscasFilePath: path.join(appDataRoot, "data", "buscas.json"),
+  beepersFilePath: path.join(appDataRoot, "data", "beepers.json"),
+  // Legacy store name (pre-OIR-271 rename). Used only to migrate existing user data
+  // on first load — never written to.
+  legacyBeepersFilePath: path.join(appDataRoot, "data", "buscas.json"),
   crashLogFilePath: path.join(appDataRoot, "data", "crash-log.jsonl")
 });
 
@@ -22,7 +25,9 @@ export const getManagedBackupDirectory = () => getManagedPaths(getAppDataRoot())
 
 export const getContactsFilePath = () => getManagedPaths(getAppDataRoot()).contactsFilePath;
 
-export const getBuscasFilePath = () => getManagedPaths(getAppDataRoot()).buscasFilePath;
+export const getBeepersFilePath = () => getManagedPaths(getAppDataRoot()).beepersFilePath;
+
+export const getLegacyBeepersFilePath = () => getManagedPaths(getAppDataRoot()).legacyBeepersFilePath;
 
 export const getSettingsFilePath = () => getManagedPaths(getAppDataRoot()).settingsFilePath;
 

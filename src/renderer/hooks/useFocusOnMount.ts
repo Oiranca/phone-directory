@@ -5,12 +5,12 @@ import type { RefObject } from "react";
  * Shared primitive for the "focus this element when a
  * panel/form opens" pattern that was hand-rewritten independently in
  * DataManagementSection.tsx (focus the import-preview panel heading when it
- * opens) and BuscasPage.tsx (focus the first form field when the
+ * opens) and BeepersPage.tsx (focus the first form field when the
  * create/edit form opens).
  *
  * `when` is intentionally typed as `unknown` rather than `boolean`: it is
  * used directly as the effect's dependency, so callers that need to
- * re-trigger focus on more than one condition (e.g. BuscasPage re-focusing
+ * re-trigger focus on more than one condition (e.g. BeepersPage re-focusing
  * when switching from "create" to "edit" while the form stays open) can pass
  * a composite value (e.g. `showForm && (editingId ?? "new")`) instead of a
  * plain boolean. Any truthy value triggers a focus call; a falsy value is a

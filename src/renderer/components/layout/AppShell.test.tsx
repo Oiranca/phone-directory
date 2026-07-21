@@ -193,7 +193,7 @@ describe("AppShell — default mode", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/contacts/new");
   });
 
-  it("does not steal modifier+n while an in-progress form is open (e.g. Buscas inline form)", () => {
+  it("does not steal modifier+n while an in-progress form is open (e.g. Beepers inline form)", () => {
     render(
       <MemoryRouter future={future}>
         <AppShell>

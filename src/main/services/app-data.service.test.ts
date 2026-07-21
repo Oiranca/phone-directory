@@ -658,7 +658,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Ana Pérez",
       person: {
@@ -764,7 +764,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Trigger",
       person: {
@@ -833,7 +833,7 @@ describe("AppDataService", () => {
       .mockRejectedValueOnce(Object.assign(new Error("copy failed"), { code: "EACCES" }));
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Failure One",
       person: {
@@ -868,7 +868,7 @@ describe("AppDataService", () => {
     await service.dispose();
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Failure Two",
       person: {
@@ -929,7 +929,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Progress One",
       person: {
@@ -977,7 +977,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Progress Two",
       person: {
@@ -1039,7 +1039,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Reset One",
       person: {
@@ -1089,7 +1089,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Reset Two",
       person: {
@@ -1124,7 +1124,7 @@ describe("AppDataService", () => {
     expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Reset Three",
       person: {
@@ -1185,7 +1185,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Data Path One",
       person: {
@@ -1236,7 +1236,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Data Path Two",
       person: {
@@ -1271,7 +1271,7 @@ describe("AppDataService", () => {
     expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
 
     await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "person",
       displayName: "Auto Backup Data Path Three",
       person: {
@@ -1319,7 +1319,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
-      buscas: [],
+      beepers: [],
       id: "cnt_0001",
       type: "person",
       displayName: "Registro nuevo",
@@ -1370,7 +1370,7 @@ describe("AppDataService", () => {
     const existing = initial.contacts.records[0];
 
     const result = await service.updateRecord(existing.id, {
-      buscas: [],
+      beepers: [],
       id: existing.id,
       externalId: existing.externalId,
       type: existing.type,
@@ -1415,7 +1415,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const result = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Mesa sin principal",
       organization: {
@@ -1461,7 +1461,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const result = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Un solo teléfono sin principal",
       organization: {
@@ -1497,7 +1497,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const created = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Registro a actualizar",
       organization: {
@@ -1527,7 +1527,7 @@ describe("AppDataService", () => {
     const existingRecord = created.contacts.records.find((record) => record.id === savedRecordId)!;
 
     const updated = await service.updateRecord(savedRecordId, {
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Registro a actualizar",
       organization: {
@@ -2242,7 +2242,7 @@ describe("AppDataService", () => {
       // Give the existing record a customFields entry the CSV import cannot
       // produce — the imported row's customFields stays empty/undefined.
       await service.updateRecord(createdRecord.id, {
-        buscas: [],
+        beepers: [],
         id: createdRecord.id,
         externalId: createdRecord.externalId,
         type: createdRecord.type,
@@ -3854,7 +3854,7 @@ describe("AppDataService", () => {
       "utf-8"
     );
 
-    // A file with zero valid rows (and no buscas content) still blocks
+    // A file with zero valid rows (and no beepers content) still blocks
     // the import — this is the "nothing valid" guard, kept intentionally.
     await expect(service.importCsvDataset(sourceFilePath)).rejects.toThrow(
       "El archivo no contiene filas válidas para importar."
@@ -4051,7 +4051,7 @@ describe("AppDataService", () => {
 
     await expect(
       service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "service",
         displayName: "Desbordamiento",
         organization: { department: "Test" },
@@ -4236,7 +4236,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const makePayload = (label: string) => ({
-      buscas: [],
+      beepers: [],
       type: "service" as const,
       displayName: `Concurrent ${label}`,
       organization: { department: "Test" },
@@ -4605,7 +4605,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const makeRecord = (name: string, phoneId: string, phone: string) => ({
-        buscas: [],
+        beepers: [],
         type: "person" as const,
         displayName: name,
         person: { firstName: name, lastName: "Test" },
@@ -4665,7 +4665,7 @@ describe("AppDataService", () => {
       });
 
       const makeRecord = (name: string, phoneId: string, phone: string) => ({
-        buscas: [],
+        beepers: [],
         type: "person" as const,
         displayName: name,
         person: { firstName: name, lastName: "Test" },
@@ -4993,22 +4993,22 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Buscas persistence — preview must NOT write, confirm MUST write
+  // Beepers persistence — preview must NOT write, confirm MUST write
   // ---------------------------------------------------------------------------
 
-  it("previewCsvImport does NOT persist buscas records (side-effect-free)", async () => {
+  it("previewCsvImport does NOT persist beepers records (side-effect-free)", async () => {
     const { AppDataService } = await import("./app-data.service.js");
-    const { BuscasService } = await import("./buscas.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
 
-    const buscasService = new BuscasService();
-    const service = new AppDataService({ buscasService });
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    // Build an ODS with a contacts sheet + a buscas sheet.
+    // Build an ODS with a contacts sheet + a beepers sheet.
     const sourceFilePath = writeWorkbook(
       path.join(testRoot, "incoming"),
-      "agenda-buscas.ods",
+      "agenda-beepers.ods",
       [
         {
           name: "Urgencias",
@@ -5030,11 +5030,11 @@ describe("AppDataService", () => {
     // Run preview only — do NOT call importCsvDataset.
     await service.previewCsvImport(sourceFilePath);
 
-    // buscas.json must NOT exist (or if it does, importedRecords must be empty).
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
+    // beepers.json must NOT exist (or if it does, importedRecords must be empty).
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
     let importedRecords: unknown[] = [];
     try {
-      const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as { importedRecords?: unknown[] };
+      const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as { importedRecords?: unknown[] };
       importedRecords = raw.importedRecords ?? [];
     } catch {
       // ENOENT — file was not created at all, which is also correct.
@@ -5042,18 +5042,18 @@ describe("AppDataService", () => {
     expect(importedRecords).toHaveLength(0);
   });
 
-  it("importCsvDataset persists buscas records after contacts are written", async () => {
+  it("importCsvDataset persists beepers records after contacts are written", async () => {
     const { AppDataService } = await import("./app-data.service.js");
-    const { BuscasService } = await import("./buscas.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
 
-    const buscasService = new BuscasService();
-    const service = new AppDataService({ buscasService });
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
     const sourceFilePath = writeWorkbook(
       path.join(testRoot, "incoming"),
-      "agenda-buscas-confirm.ods",
+      "agenda-beepers-confirm.ods",
       [
         {
           name: "Urgencias",
@@ -5078,30 +5078,30 @@ describe("AppDataService", () => {
     // Contacts import succeeded.
     expect(result.createdCount).toBeGreaterThan(0);
 
-    // buscas.json now contains the imported pager records.
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
-    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as { importedRecords: Array<{ deviceNumber: string }> };
+    // beepers.json now contains the imported pager records.
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as { importedRecords: Array<{ deviceNumber: string }> };
     expect(raw.importedRecords).toHaveLength(2);
     const numbers = raw.importedRecords.map((r) => r.deviceNumber);
     expect(numbers).toContain("7321");
     expect(numbers).toContain("7322");
   });
 
-  it("importCsvDataset returns contacts result even when buscas persist fails", async () => {
+  it("importCsvDataset returns contacts result even when beepers persist fails", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
-    // Inject a buscasService stub that always throws.
-    const failingBuscasService = {
-      importFromOds: async () => { throw new Error("buscas write failure"); }
+    // Inject a beepersService stub that always throws.
+    const failingBeepersService = {
+      importFromOds: async () => { throw new Error("beepers write failure"); }
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const service = new AppDataService({ buscasService: failingBuscasService as any });
+    const service = new AppDataService({ beepersService: failingBeepersService as any });
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
     const sourceFilePath = writeWorkbook(
       path.join(testRoot, "incoming"),
-      "agenda-buscas-error.ods",
+      "agenda-beepers-error.ods",
       [
         {
           name: "Urgencias",
@@ -5120,24 +5120,24 @@ describe("AppDataService", () => {
       ]
     );
 
-    // importCsvDataset must NOT throw even though buscas persist throws.
+    // importCsvDataset must NOT throw even though beepers persist throws.
     const result = await service.importCsvDataset(sourceFilePath);
     expect(result.createdCount).toBeGreaterThan(0);
   });
 
-  it("importCsvDataset persists buscas records when workbook has zero contact rows (buscas-only ODS)", async () => {
+  it("importCsvDataset persists beepers records when workbook has zero contact rows (beepers-only ODS)", async () => {
     const { AppDataService } = await import("./app-data.service.js");
-    const { BuscasService } = await import("./buscas.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
 
-    const buscasService = new BuscasService();
-    const service = new AppDataService({ buscasService });
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());
 
-    // Build a workbook with ONLY a buscas sheet — no contact sheet at all.
+    // Build a workbook with ONLY a beepers sheet — no contact sheet at all.
     const sourceFilePath = writeWorkbook(
       path.join(testRoot, "incoming"),
-      "buscas-only.ods",
+      "beepers-only.ods",
       [
         {
           name: "Buscas_Facultativos",
@@ -5150,7 +5150,7 @@ describe("AppDataService", () => {
       ]
     );
 
-    // Preview must succeed (buscas-only is a valid, confirmable workbook).
+    // Preview must succeed (beepers-only is a valid, confirmable workbook).
     await service.previewCsvImport(sourceFilePath);
 
     // Confirm must NOT throw even though validRowCount === 0 (no contact rows).
@@ -5160,9 +5160,9 @@ describe("AppDataService", () => {
     expect(result.createdCount).toBe(0);
     expect(result.updatedCount).toBe(0);
 
-    // buscas.json must contain the imported pager records.
-    const buscasFilePath = path.join(testRoot, "data", "buscas.json");
-    const raw = JSON.parse(await fs.readFile(buscasFilePath, "utf-8")) as {
+    // beepers.json must contain the imported pager records.
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    const raw = JSON.parse(await fs.readFile(beepersFilePath, "utf-8")) as {
       importedRecords: Array<{ deviceNumber: string }>;
     };
     const numbers = raw.importedRecords.map((r) => r.deviceNumber);
@@ -5323,7 +5323,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const keepRecord = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "person",
         displayName: "Ana Pérez",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5344,7 +5344,7 @@ describe("AppDataService", () => {
       });
 
       const discardRecord = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "person",
         displayName: "Ana Pérez (duplicado)",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5398,7 +5398,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const keepRecord = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "person",
         displayName: "Luis García",
         person: { firstName: "Luis", lastName: "García" },
@@ -5411,7 +5411,7 @@ describe("AppDataService", () => {
       });
 
       const discardRecord = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "person",
         displayName: "Luis García (duplicado)",
         person: { firstName: "Luis", lastName: "García" },
@@ -5477,7 +5477,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const current = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "person",
         displayName: "Ana Pérez",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5527,21 +5527,21 @@ describe("AppDataService", () => {
     });
   });
 
-  // Buscas (pager codes, OIR-264/265/266) are a 4-digit code that can
+  // Beepers (pager codes, OIR-264/265/266) are a 4-digit code that can
   // coincidentally collide with an unrelated phone extension — they must
   // never participate in record identity or conflict detection, but a
-  // genuinely changed busca number must still be a real, applied update on
+  // genuinely changed beeper number must still be a real, applied update on
   // re-import. The CSV/ODS canonical-template import pipeline used by the
-  // rest of this file has no column that maps onto `buscas` (it is only
+  // rest of this file has no column that maps onto `beepers` (it is only
   // ever populated via the tabular Agenda sheet's inserted "Busca 1" column
   // — see spreadsheet-parsers.test.ts), so — mirroring the customFields
   // merge-fields test above — these exercise the merge/conflict helpers
-  // directly rather than routing fabricated busca data through the CSV
+  // directly rather than routing fabricated beeper data through the CSV
   // parser.
-  describe("buscas never participate in record identity or conflict detection", () => {
+  describe("beepers never participate in record identity or conflict detection", () => {
     const createBaseRecord = async (service: InstanceType<typeof import("./app-data.service.js").AppDataService>) => {
       const created = await service.createRecord({
-        buscas: [],
+        beepers: [],
         type: "service",
         displayName: "Centralita",
         organization: { department: "Urgencias", service: "Recepción" },
@@ -5565,7 +5565,7 @@ describe("AppDataService", () => {
       return bootstrap.contacts.records.find((record) => record.id === created.savedRecordId)!;
     };
 
-    it("produces identical stable merge keys for records that differ only in buscas, and never embeds a busca number in a merge key", async () => {
+    it("produces identical stable merge keys for records that differ only in beepers, and never embeds a beeper number in a merge key", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -5573,15 +5573,15 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const baseRecord = await createBaseRecord(service);
-      const recordWithBuscaA = { ...baseRecord, buscas: [{ number: "4321" }] };
-      const recordWithBuscaB = { ...baseRecord, buscas: [{ number: "9876" }] };
+      const recordWithBeeperA = { ...baseRecord, beepers: [{ number: "4321" }] };
+      const recordWithBeeperB = { ...baseRecord, beepers: [{ number: "9876" }] };
 
       const privateMerge = service as unknown as {
         buildStableMergeKeys: (record: typeof baseRecord) => string[];
       };
 
-      const keysA = privateMerge.buildStableMergeKeys(recordWithBuscaA);
-      const keysB = privateMerge.buildStableMergeKeys(recordWithBuscaB);
+      const keysA = privateMerge.buildStableMergeKeys(recordWithBeeperA);
+      const keysB = privateMerge.buildStableMergeKeys(recordWithBeeperB);
 
       expect(keysA.length).toBeGreaterThan(0);
       expect(keysA).toEqual(keysB);
@@ -5591,7 +5591,7 @@ describe("AppDataService", () => {
       }
     });
 
-    it("does not classify a busca-only difference as a phone-match or email-match conflict", async () => {
+    it("does not classify a beeper-only difference as a phone-match or email-match conflict", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -5600,18 +5600,18 @@ describe("AppDataService", () => {
 
       const baseRecord = await createBaseRecord(service);
       const bootstrap = await service.getBootstrapData();
-      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const existingWithBeeper = { ...baseRecord, beepers: [{ number: "4321" }] };
       const currentDataset = {
         ...bootstrap.contacts,
         records: bootstrap.contacts.records.map((record) =>
-          record.id === baseRecord.id ? existingWithBusca : record
+          record.id === baseRecord.id ? existingWithBeeper : record
         )
       };
 
-      // Imported row matches on the same phone but carries a DIFFERENT busca
+      // Imported row matches on the same phone but carries a DIFFERENT beeper
       // number — the false-collision risk this guards against (a 4-digit
-      // busca code coincidentally equal to an unrelated phone extension).
-      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+      // beeper code coincidentally equal to an unrelated phone extension).
+      const importedRecord = { ...baseRecord, beepers: [{ number: "9876" }] };
 
       const privateMerge = service as unknown as {
         detectConflicts: (
@@ -5628,7 +5628,7 @@ describe("AppDataService", () => {
       expect(unchangedCount).toBe(1);
     });
 
-    it("does not skip a changed busca number as a no-op, and applies it to the persisted record", async () => {
+    it("does not skip a changed beeper number as a no-op, and applies it to the persisted record", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -5637,17 +5637,17 @@ describe("AppDataService", () => {
 
       const baseRecord = await createBaseRecord(service);
       const bootstrap = await service.getBootstrapData();
-      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const existingWithBeeper = { ...baseRecord, beepers: [{ number: "4321" }] };
       const currentDataset = {
         ...bootstrap.contacts,
         records: bootstrap.contacts.records.map((record) =>
-          record.id === baseRecord.id ? existingWithBusca : record
+          record.id === baseRecord.id ? existingWithBeeper : record
         )
       };
 
       // Re-imported agenda carries an updated pager number for the same
       // contact — everything else about the row is byte-for-byte identical.
-      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+      const importedRecord = { ...baseRecord, beepers: [{ number: "9876" }] };
 
       const privateMerge = service as unknown as {
         mergeImportedDataset: (
@@ -5675,11 +5675,11 @@ describe("AppDataService", () => {
       expect(merged.unchangedCount).toBe(0);
 
       const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
-      expect(persisted.buscas).toEqual([{ number: "9876" }]);
-      expect(persisted.audit.updatedAt).not.toBe(existingWithBusca.audit.updatedAt);
+      expect(persisted.beepers).toEqual([{ number: "9876" }]);
+      expect(persisted.audit.updatedAt).not.toBe(existingWithBeeper.audit.updatedAt);
     });
 
-    it("preserves an existing busca instead of wiping it when the reimported row has no busca data at all", async () => {
+    it("preserves an existing beeper instead of wiping it when the reimported row has no beeper data at all", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -5688,19 +5688,19 @@ describe("AppDataService", () => {
 
       const baseRecord = await createBaseRecord(service);
       const bootstrap = await service.getBootstrapData();
-      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const existingWithBeeper = { ...baseRecord, beepers: [{ number: "4321" }] };
       const currentDataset = {
         ...bootstrap.contacts,
         records: bootstrap.contacts.records.map((record) =>
-          record.id === baseRecord.id ? existingWithBusca : record
+          record.id === baseRecord.id ? existingWithBeeper : record
         )
       };
 
       // The ordinary plain CSV/ODS canonical-template reimport (e.g. a
-      // routine name/phone touch-up) has no column mapped onto `buscas` at
-      // all, so the imported row's buscas is always an empty array — this
+      // routine name/phone touch-up) has no column mapped onto `beepers` at
+      // all, so the imported row's beepers is always an empty array — this
       // must NEVER be read as "the pager number was removed".
-      const importedRecord = { ...baseRecord, buscas: [] };
+      const importedRecord = { ...baseRecord, beepers: [] };
 
       const privateMerge = service as unknown as {
         mergeImportedDataset: (
@@ -5723,18 +5723,18 @@ describe("AppDataService", () => {
         new Map()
       );
 
-      // An imported row with no busca data at all is a true no-op for the
-      // busca field — not an update, and never counted as one.
+      // An imported row with no beeper data at all is a true no-op for the
+      // beeper field — not an update, and never counted as one.
       expect(merged.createdCount).toBe(0);
       expect(merged.updatedCount).toBe(0);
       expect(merged.unchangedCount).toBe(1);
 
       const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
-      expect(persisted.buscas).toEqual([{ number: "4321" }]);
-      expect(persisted.audit.updatedAt).toBe(existingWithBusca.audit.updatedAt);
+      expect(persisted.beepers).toEqual([{ number: "4321" }]);
+      expect(persisted.audit.updatedAt).toBe(existingWithBeeper.audit.updatedAt);
     });
 
-    it("preserves an existing busca instead of wiping it when an OVERWRITE conflict resolution's imported row has no busca data (PR #158 review fix)", async () => {
+    it("preserves an existing beeper instead of wiping it when an OVERWRITE conflict resolution's imported row has no beeper data (PR #158 review fix)", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
       const service = new AppDataService();
@@ -5743,21 +5743,21 @@ describe("AppDataService", () => {
 
       const baseRecord = await createBaseRecord(service);
       const bootstrap = await service.getBootstrapData();
-      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const existingWithBeeper = { ...baseRecord, beepers: [{ number: "4321" }] };
       const currentDataset = {
         ...bootstrap.contacts,
         records: bootstrap.contacts.records.map((record) =>
-          record.id === baseRecord.id ? existingWithBusca : record
+          record.id === baseRecord.id ? existingWithBeeper : record
         )
       };
 
       // A genuine field-level conflict (displayName changed) so the row is
       // NOT treated as the no-op fast path — this forces mergeImportedDataset
       // through the selectedPolicy branch below. The imported row has no
-      // busca data at all (same "plain reimport" scenario as the
+      // beeper data at all (same "plain reimport" scenario as the
       // merge-fields test above), and the user explicitly resolves the
       // conflict with the "overwrite" policy.
-      const importedRecord = { ...baseRecord, displayName: "Centralita (renombrada)", buscas: [] };
+      const importedRecord = { ...baseRecord, displayName: "Centralita (renombrada)", beepers: [] };
 
       const privateMerge = service as unknown as {
         mergeImportedDataset: (
@@ -5786,12 +5786,12 @@ describe("AppDataService", () => {
       const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
       // The overwrite policy DID apply the displayName change...
       expect(persisted.displayName).toBe("Centralita (renombrada)");
-      // ...but must NOT have wiped the existing busca just because this
-      // particular import row's busca column was empty.
-      expect(persisted.buscas).toEqual([{ number: "4321" }]);
+      // ...but must NOT have wiped the existing beeper just because this
+      // particular import row's beeper column was empty.
+      expect(persisted.beepers).toEqual([{ number: "4321" }]);
     });
 
-    it("carries an embedded 'Busca 1' column value all the way to ContactRecord.buscas through the real public import entry point (PR #158 review fix)", async () => {
+    it("carries an embedded 'Busca 1' column value all the way to ContactRecord.beepers through the real public import entry point (PR #158 review fix)", async () => {
       // Unlike the unit tests above (which exercise mergeImportedDataset /
       // buildStableMergeKeys / detectConflicts directly on hand-built
       // ContactRecord fixtures), this goes through buildSpreadsheetImportPreview
@@ -5799,10 +5799,10 @@ describe("AppDataService", () => {
       // starting from a real tabular Agenda-shaped workbook row with an
       // inserted "Busca 1" column, exactly as spreadsheet-parsers.ts would
       // encounter in production. It depends on PR #156's fix (buildImportPreviewFromRows
-      // actually carrying row.buscas through into ContactRecord.buscas,
+      // actually carrying row.beepers through into ContactRecord.beepers,
       // commit 049bc26) — without that fix this would fail with an empty
-      // buscas array, not for any OIR-267-specific reason.
-      const AGENDA_HEADER_ROW_WITH_BUSCA = [
+      // beepers array, not for any OIR-267-specific reason.
+      const AGENDA_HEADER_ROW_WITH_BEEPER = [
         "Nombre",
         "Categoría",
         "Servicio",
@@ -5823,7 +5823,7 @@ describe("AppDataService", () => {
         "Sección",
         "Comentarios"
       ];
-      const rowWithBusca = [
+      const rowWithBeeper = [
         "Juan Pérez", // Nombre
         "Enfermero/a", // Categoría
         "Urgencias", // Servicio
@@ -5835,11 +5835,11 @@ describe("AppDataService", () => {
 
       const sourceFilePath = writeWorkbook(
         path.join(testRoot, "incoming"),
-        "agenda-embedded-busca.ods",
+        "agenda-embedded-beeper.ods",
         [
           {
             name: "Agenda",
-            data: [AGENDA_HEADER_ROW_WITH_BUSCA, rowWithBusca]
+            data: [AGENDA_HEADER_ROW_WITH_BEEPER, rowWithBeeper]
           }
         ]
       );
@@ -5847,7 +5847,7 @@ describe("AppDataService", () => {
       const { dataset } = await buildSpreadsheetImportPreview(sourceFilePath, "TestEditor");
 
       expect(dataset.records).toHaveLength(1);
-      expect(dataset.records[0]!.buscas).toEqual([{ number: "4321" }]);
+      expect(dataset.records[0]!.beepers).toEqual([{ number: "4321" }]);
     });
   });
 });

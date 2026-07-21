@@ -40,7 +40,7 @@ XLSX.set_fs(nodeFs);
  * confidential/noPatientSharing, email with id).
  */
 const makeContact = (overrides: Partial<EditableContactRecord> = {}): EditableContactRecord => ({
-  buscas: [],
+  beepers: [],
   type: "service",
   displayName: "Test Contact",
   organization: {

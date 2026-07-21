@@ -2,10 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
-import { BuscasPage } from "./BuscasPage";
-import type { BuscaRecord, ImportedBuscaRecord } from "../../shared/schemas/busca.schema";
+import { BeepersPage } from "./BeepersPage";
+import type { BeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 
-const mockRecords: BuscaRecord[] = [
+const mockRecords: BeeperRecord[] = [
   {
     id: "bsc_001",
     deviceNumber: "B-001",
@@ -25,7 +25,7 @@ const mockRecords: BuscaRecord[] = [
   }
 ];
 
-const mockImportedRecords: ImportedBuscaRecord[] = [
+const mockImportedRecords: ImportedBeeperRecord[] = [
   {
     id: "ibsc_00000001",
     deviceNumber: "5001",
@@ -84,11 +84,11 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
   Object.defineProperty(window, "hospitalDirectory", {
     configurable: true,
     value: {
-      listBuscas: vi.fn().mockResolvedValue(mockRecords),
-      listImportedBuscas: vi.fn().mockResolvedValue([]),
-      addBusca: vi.fn(),
-      updateBusca: vi.fn(),
-      deleteBusca: vi.fn(),
+      listBeepers: vi.fn().mockResolvedValue(mockRecords),
+      listImportedBeepers: vi.fn().mockResolvedValue([]),
+      addBeeper: vi.fn(),
+      updateBeeper: vi.fn(),
+      deleteBeeper: vi.fn(),
       ...overrides
     }
   });
@@ -98,12 +98,12 @@ const renderPage = () =>
   render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ToastProvider>
-        <BuscasPage />
+        <BeepersPage />
       </ToastProvider>
     </MemoryRouter>
   );
 
-describe("BuscasPage", () => {
+describe("BeepersPage", () => {
   beforeEach(() => {
     setupWindowApi();
   });
@@ -121,9 +121,9 @@ describe("BuscasPage", () => {
     });
   });
 
-  it("shows retryable error state when listBuscas fails — no empty state shown", async () => {
+  it("shows retryable error state when listBeepers fails — no empty state shown", async () => {
     setupWindowApi({
-      listBuscas: vi.fn().mockRejectedValue(new Error("network error"))
+      listBeepers: vi.fn().mockRejectedValue(new Error("network error"))
     });
     renderPage();
     await waitFor(() => {
@@ -138,11 +138,11 @@ describe("BuscasPage", () => {
   });
 
   it("retries load when Reintentar is clicked after a failure", async () => {
-    const listBuscasMock = vi
+    const listBeepersMock = vi
       .fn()
       .mockRejectedValueOnce(new Error("network error"))
       .mockResolvedValueOnce(mockRecords);
-    setupWindowApi({ listBuscas: listBuscasMock });
+    setupWindowApi({ listBeepers: listBeepersMock });
     renderPage();
 
     await waitFor(() => {
@@ -157,7 +157,7 @@ describe("BuscasPage", () => {
   });
 
   it("shows empty state when no records exist", async () => {
-    setupWindowApi({ listBuscas: vi.fn().mockResolvedValue([]) });
+    setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
     renderPage();
     await waitFor(() => {
       expect(screen.getByText(/No hay buscas registradas/)).toBeInTheDocument();
@@ -205,8 +205,8 @@ describe("BuscasPage", () => {
     expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
   });
 
-  it("creates a new busca on form submit", async () => {
-    const newRecord: BuscaRecord = {
+  it("creates a new beeper on form submit", async () => {
+    const newRecord: BeeperRecord = {
       id: "bsc_003",
       deviceNumber: "B-003",
       assignedTo: "Marta Ruiz",
@@ -214,7 +214,7 @@ describe("BuscasPage", () => {
       role: "Auxiliar",
       shift: "noche"
     };
-    setupWindowApi({ addBusca: vi.fn().mockResolvedValue(newRecord) });
+    setupWindowApi({ addBeeper: vi.fn().mockResolvedValue(newRecord) });
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
     fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
@@ -234,20 +234,20 @@ describe("BuscasPage", () => {
     fireEvent.submit(form);
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.addBusca).toHaveBeenCalledWith(
+      expect(window.hospitalDirectory.addBeeper).toHaveBeenCalledWith(
         expect.objectContaining({ deviceNumber: "B-003", shift: "noche" })
       );
       expect(screen.getByText("B-003")).toBeInTheDocument();
     });
   });
 
-  it("sanitizes IPC error boilerplate when addBusca rejects", async () => {
+  it("sanitizes IPC error boilerplate when addBeeper rejects", async () => {
     setupWindowApi({
-      addBusca: vi
+      addBeeper: vi
         .fn()
         .mockRejectedValue(
           new Error(
-            "Error invoking remote method 'busca:add': Error: El número de busca ya existe."
+            "Error invoking remote method 'beepers:add': Error: El número de busca ya existe."
           )
         )
     });
@@ -282,9 +282,9 @@ describe("BuscasPage", () => {
     expect(assignedInput.value).toBe("Ana García");
   });
 
-  it("updates a busca on edit form submit", async () => {
-    const updated: BuscaRecord = { ...mockRecords[0]!, assignedTo: "Ana Actualizada" };
-    setupWindowApi({ updateBusca: vi.fn().mockResolvedValue(updated) });
+  it("updates a beeper on edit form submit", async () => {
+    const updated: BeeperRecord = { ...mockRecords[0]!, assignedTo: "Ana Actualizada" };
+    setupWindowApi({ updateBeeper: vi.fn().mockResolvedValue(updated) });
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
     fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
@@ -293,7 +293,7 @@ describe("BuscasPage", () => {
     fireEvent.submit(screen.getByRole("form", { name: /Editar busca/i }));
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.updateBusca).toHaveBeenCalledWith(
+      expect(window.hospitalDirectory.updateBeeper).toHaveBeenCalledWith(
         "bsc_001",
         expect.objectContaining({ assignedTo: "Ana Actualizada" })
       );
@@ -310,7 +310,7 @@ describe("BuscasPage", () => {
   });
 
   it("deletes a record after confirm", async () => {
-    setupWindowApi({ deleteBusca: vi.fn().mockResolvedValue(undefined) });
+    setupWindowApi({ deleteBeeper: vi.fn().mockResolvedValue(undefined) });
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
     fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-001/i }));
@@ -318,7 +318,7 @@ describe("BuscasPage", () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(window.hospitalDirectory.deleteBusca).toHaveBeenCalledWith("bsc_001");
+      expect(window.hospitalDirectory.deleteBeeper).toHaveBeenCalledWith("bsc_001");
       expect(screen.queryByText("B-001")).not.toBeInTheDocument();
     });
   });
@@ -345,7 +345,7 @@ describe("BuscasPage", () => {
     const slowDelete = new Promise<void>((resolve) => {
       resolveDelete = resolve;
     });
-    setupWindowApi({ deleteBusca: vi.fn().mockReturnValueOnce(slowDelete) });
+    setupWindowApi({ deleteBeeper: vi.fn().mockReturnValueOnce(slowDelete) });
 
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
@@ -371,7 +371,7 @@ describe("BuscasPage", () => {
     const slowDelete = new Promise<void>((resolve) => {
       resolveDelete = resolve;
     });
-    setupWindowApi({ deleteBusca: vi.fn().mockReturnValueOnce(slowDelete) });
+    setupWindowApi({ deleteBeeper: vi.fn().mockReturnValueOnce(slowDelete) });
 
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
@@ -404,8 +404,8 @@ describe("BuscasPage", () => {
   });
 
   it("prevents Cancel and form dismissal while save is in-flight", async () => {
-    let resolveSave!: (value: BuscaRecord) => void;
-    const newRecord: BuscaRecord = {
+    let resolveSave!: (value: BeeperRecord) => void;
+    const newRecord: BeeperRecord = {
       id: "bsc_003",
       deviceNumber: "B-003",
       assignedTo: "Marta Ruiz",
@@ -413,10 +413,10 @@ describe("BuscasPage", () => {
       role: "Auxiliar",
       shift: "noche"
     };
-    const slowAdd = new Promise<BuscaRecord>((resolve) => {
+    const slowAdd = new Promise<BeeperRecord>((resolve) => {
       resolveSave = resolve;
     });
-    setupWindowApi({ addBusca: vi.fn().mockReturnValueOnce(slowAdd) });
+    setupWindowApi({ addBeeper: vi.fn().mockReturnValueOnce(slowAdd) });
 
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
@@ -464,8 +464,8 @@ describe("BuscasPage", () => {
   });
 
   it("prevents double-submit on rapid form submit events", async () => {
-    let resolveSave!: (value: BuscaRecord) => void;
-    const newRecord: BuscaRecord = {
+    let resolveSave!: (value: BeeperRecord) => void;
+    const newRecord: BeeperRecord = {
       id: "bsc_004",
       deviceNumber: "B-004",
       assignedTo: "Carlos Díaz",
@@ -473,11 +473,11 @@ describe("BuscasPage", () => {
       role: "Técnico",
       shift: "mañana"
     };
-    const slowAdd = new Promise<BuscaRecord>((resolve) => {
+    const slowAdd = new Promise<BeeperRecord>((resolve) => {
       resolveSave = resolve;
     });
-    const addBuscaMock = vi.fn().mockReturnValueOnce(slowAdd);
-    setupWindowApi({ addBusca: addBuscaMock });
+    const addBeeperMock = vi.fn().mockReturnValueOnce(slowAdd);
+    setupWindowApi({ addBeeper: addBeeperMock });
 
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
@@ -502,7 +502,7 @@ describe("BuscasPage", () => {
     });
 
     // Only one service call must have been made despite two submit events
-    expect(addBuscaMock).toHaveBeenCalledTimes(1);
+    expect(addBeeperMock).toHaveBeenCalledTimes(1);
 
     // Resolve the save and confirm the record appears
     resolveSave(newRecord);
@@ -511,13 +511,13 @@ describe("BuscasPage", () => {
       expect(screen.getByText("B-004")).toBeInTheDocument();
     });
 
-    // addBusca must still have been called exactly once
-    expect(addBuscaMock).toHaveBeenCalledTimes(1);
+    // addBeeper must still have been called exactly once
+    expect(addBeeperMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows manual buscas even when listImportedBuscas rejects — no error state", async () => {
+  it("shows manual beepers even when listImportedBeepers rejects — no error state", async () => {
     setupWindowApi({
-      listImportedBuscas: vi.fn().mockRejectedValue(new Error("ODS store unavailable"))
+      listImportedBeepers: vi.fn().mockRejectedValue(new Error("ODS store unavailable"))
     });
     renderPage();
     await waitFor(() => {
@@ -532,7 +532,7 @@ describe("BuscasPage", () => {
 
   it("shows imported ODS records with ODS badge in the table", async () => {
     setupWindowApi({
-      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords)
     });
     renderPage();
     await waitFor(() => {
@@ -548,7 +548,7 @@ describe("BuscasPage", () => {
 
   it("includes imported records in the result count", async () => {
     setupWindowApi({
-      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords)
     });
     renderPage();
     await waitFor(() => {
@@ -559,7 +559,7 @@ describe("BuscasPage", () => {
 
   it("filters imported records by search query", async () => {
     setupWindowApi({
-      listImportedBuscas: vi.fn().mockResolvedValue(mockImportedRecords)
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords)
     });
     renderPage();
     await waitFor(() => {
