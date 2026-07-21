@@ -390,18 +390,51 @@ describe("beepers pipeline — (c) full-agenda reimport through AppDataService (
     // even though the record genuinely still has one.
     expect(conflictedRecord.matchingRecord.beepers).toEqual([{ number: "1111" }]);
 
-    // "merge-fields" ("Combinar") is the policy that carries the beeper
-    // preserve-on-empty fallback (mergeImportedRecordFields) — a plain
-    // "overwrite" would legitimately replace the whole record, including
-    // wiping beepers, since the CSV row has no beepers column at all.
-    const result = await service.importCsvDataset(plainCsvPath, [
+    // This case exercises the "merge-fields" ("Combinar") policy, which
+    // carries the beeper preserve-on-empty fallback via
+    // mergeImportedRecordFields. Since PR #158, "overwrite" carries the
+    // exact same preserve-on-empty fallback (see the `beepers:
+    // importedRecord.beepers.length > 0 ? importedRecord.beepers :
+    // currentRecord.beepers` guard in app-data.service.ts) — it does NOT
+    // wipe beepers either. That path is covered directly below, and also has
+    // a dedicated unit regression from PR #158.
+    const mergeFieldsResult = await service.importCsvDataset(plainCsvPath, [
       { recordIndex: conflictedRecord.recordIndex, policy: "merge-fields" }
     ]);
-    const anaAfter = result.contacts.records.find((record) => record.id === anaFirst.id)!;
+    const anaAfterMergeFields = mergeFieldsResult.contacts.records.find(
+      (record) => record.id === anaFirst.id
+    )!;
 
-    expect(anaAfter.notes).toBe("Turno actualizado");
+    expect(anaAfterMergeFields.notes).toBe("Turno actualizado");
     // The pager number survives a merge-fields resolution from a parser
     // that has no beepers column at all.
-    expect(anaAfter.beepers).toEqual([{ number: "1111" }]);
+    expect(anaAfterMergeFields.beepers).toEqual([{ number: "1111" }]);
+
+    // A second, distinct plain-CSV reimport (still no "Busca" column) that
+    // updates Notas again, this time resolved with "overwrite", to prove the
+    // preserve-on-empty fallback also holds on that path (PR #158).
+    const secondPlainCsv = [
+      "externalId,type,displayName,department,service,phone1Number,status,notes",
+      `${anaFirst.externalId},person,Ana Pérez,,Urgencias,10001,active,Turno actualizado de nuevo`
+    ].join("\n") + "\n";
+    const secondPlainCsvPath = path.join(testRoot, "incoming", "agenda-beepers-plain-3.csv");
+    await fs.writeFile(secondPlainCsvPath, secondPlainCsv, "utf-8");
+
+    const overwritePreview = await service.previewCsvImport(secondPlainCsvPath);
+    expect(overwritePreview.conflictCount).toBe(1);
+    const overwriteConflictedRecord = overwritePreview.conflictedRecords[0]!;
+
+    const overwriteResult = await service.importCsvDataset(secondPlainCsvPath, [
+      { recordIndex: overwriteConflictedRecord.recordIndex, policy: "overwrite" }
+    ]);
+    const anaAfterOverwrite = overwriteResult.contacts.records.find(
+      (record) => record.id === anaFirst.id
+    )!;
+
+    expect(anaAfterOverwrite.notes).toBe("Turno actualizado de nuevo");
+    // The pager number also survives an overwrite resolution from a parser
+    // that has no beepers column at all — overwrite is NOT a data-loss path
+    // for beepers since PR #158.
+    expect(anaAfterOverwrite.beepers).toEqual([{ number: "1111" }]);
   });
 });
