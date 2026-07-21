@@ -8,6 +8,7 @@ export type {
   SocialPlatform,
   SocialContact,
   CustomField,
+  BuscaEntry,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -20,7 +21,7 @@ export type {
 } from "../schemas/contact.js";
 
 import type { AreaType, RecordType } from "../constants/catalogs.js";
-import type { AuditLogEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
+import type { AuditLogEntry, BuscaEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
 
 // ---------------------------------------------------------------------------
 // UX-only and composite types — not duplicated by any Zod schema.
@@ -116,6 +117,15 @@ export interface EditableCustomField {
   value: string;
 }
 
+/**
+ * Editable busca (pager) entry on a contact record. Mirrors the
+ * EditablePhoneContact pattern. See ContactRecord.buscas (OIR-264).
+ */
+export interface EditableBuscaEntry {
+  number: string;
+  label?: string;
+}
+
 export interface EditableContactRecord {
   id?: string;
   externalId?: string;
@@ -150,6 +160,8 @@ export interface EditableContactRecord {
     emails: EditableEmailContact[];
     socials: EditableSocialContact[];
   };
+  /** See ContactRecord.buscas for rationale (OIR-264). */
+  buscas: EditableBuscaEntry[];
   aliases: string[];
   tags: string[];
   notes?: string;
@@ -326,6 +338,15 @@ export interface ConflictRecordSummary {
   emails: ConflictEmailSummary[];
   /** Lean social list for field-level diff. */
   socials: ConflictSocialSummary[];
+  /**
+   * Lean busca (pager) list, included for display only (see OIR-268).
+   * Busca codes are 4-digit pager numbers that may collide with an
+   * unrelated phone extension by coincidence — they intentionally never
+   * participate in match/conflict identification (see
+   * `buildStableMergeKeys` in app-data.service.ts), so a busca-only
+   * difference never causes this record to appear here as a conflict.
+   */
+  buscas: BuscaEntry[];
 }
 
 /** Represents a single imported record that collides with an existing record in the directory. */

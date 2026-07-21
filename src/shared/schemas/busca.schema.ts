@@ -38,12 +38,26 @@ export const editableBuscaRecordSchema = z.object({
  *   - no `shift` (not present in ODS data)
  *   - `holderType` is the normalised column header (e.g. "Principal", "Residente")
  *   - `sourceSheet` + `sourceRow` provide traceability back to the ODS
+ *
+ * OIR-264: `holderType` is now optional and `name`/`category`/`service` were
+ * added to support the new "Busca 1"/"Corporativo 1" style column layout
+ * (parsing itself is out of scope — reserved for OIR-265/266). BACKWARD
+ * COMPAT: all four are optional so existing persisted buscas.json entries
+ * (written before this change) still parse without these keys.
  */
 export const importedBuscaRecordSchema = z.object({
   id: z.string().regex(/^ibsc_[0-9a-f]{8}$/, "ID must be ibsc_ prefix + 8 hex chars"),
   deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
   department: z.string().trim().min(1, "El servicio/departamento es obligatorio.").max(255),
-  holderType: z.string().trim().min(1, "El tipo de titular es obligatorio.").max(255),
+  holderType: z.string().trim().min(1, "El tipo de titular es obligatorio.").max(255).optional(),
+  // Holder's name, when the source sheet identifies a specific person rather
+  // than just a holder-type/department combination.
+  name: z.string().trim().max(255).optional(),
+  // Category/role of the holder (e.g. "Enfermero/a", "Jefe/a").
+  category: z.string().trim().max(255).optional(),
+  // Service the busca belongs to, distinct from `department` when the sheet
+  // distinguishes the two (e.g. a department with multiple services).
+  service: z.string().trim().max(255).optional(),
   sourceSheet: z.string().trim().min(1).max(255),
   sourceRow: z.number().int().nonnegative()
 });
