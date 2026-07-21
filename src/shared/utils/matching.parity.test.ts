@@ -33,7 +33,7 @@ import type { ContactRecord } from "../types/contact.js";
 const makeRecord = (
   overrides: Partial<ContactRecord> & { id: string }
 ): ContactRecord => ({
-  buscas: [],
+  beepers: [],
   type: "service",
   displayName: "Test",
   organization: {},

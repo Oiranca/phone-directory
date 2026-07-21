@@ -378,25 +378,25 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
 });
 
 // ---------------------------------------------------------------------------
-// PR #156 review fix — record.buscas silently dropped by the real import
+// PR #156 review fix — record.beepers silently dropped by the real import
 // pipeline (OIR-265).
 //
 // normalizeTabularAgendaSheet (spreadsheet-parsers.ts) sets
-// `record.buscas = JSON.stringify(buscaEntries)` on the NormalizedImportRow,
+// `record.beepers = JSON.stringify(beeperEntries)` on the NormalizedImportRow,
 // but buildImportPreviewFromRows never read that field back out into the
-// ContactRecord it constructs — buscas were parsed correctly and then
+// ContactRecord it constructs — beepers were parsed correctly and then
 // silently dropped at actual import time, even though the lower-level
 // normalizeTabularAgendaSheet unit tests were green. These tests exercise
 // the REAL end-to-end pipeline (buildImportPreviewFromRows), not just the
 // row-normalization step, so they would have caught the regression.
 // ---------------------------------------------------------------------------
-describe("buildImportPreviewFromRows — buscas flow through to the ContactRecord", () => {
-  it("parses the row's `buscas` JSON field into ContactRecord.buscas (end-to-end import path)", async () => {
+describe("buildImportPreviewFromRows — beepers flow through to the ContactRecord", () => {
+  it("parses the row's `beepers` JSON field into ContactRecord.beepers (end-to-end import path)", async () => {
     const row = {
       type: "service",
       displayName: "Consulta 3",
       phone1Number: "55555",
-      buscas: JSON.stringify([{ number: "1234", label: "Busca 1" }])
+      beepers: JSON.stringify([{ number: "1234", label: "Beeper 1" }])
     };
 
     const { dataset } = await buildImportPreviewFromRows([row], {
@@ -406,16 +406,16 @@ describe("buildImportPreviewFromRows — buscas flow through to the ContactRecor
     });
 
     expect(dataset.records).toHaveLength(1);
-    expect(dataset.records[0]!.buscas).toEqual([{ number: "1234", label: "Busca 1" }]);
+    expect(dataset.records[0]!.beepers).toEqual([{ number: "1234", label: "Beeper 1" }]);
   });
 
-  it("supports multiple busca entries and an entry without a label", async () => {
+  it("supports multiple beeper entries and an entry without a label", async () => {
     const row = {
       type: "service",
       displayName: "Consulta 4",
       phone1Number: "55556",
-      buscas: JSON.stringify([
-        { number: "1111", label: "Busca 1" },
+      beepers: JSON.stringify([
+        { number: "1111", label: "Beeper 1" },
         { number: "2222" }
       ])
     };
@@ -426,13 +426,13 @@ describe("buildImportPreviewFromRows — buscas flow through to the ContactRecor
       editorName: "TestEditor"
     });
 
-    const buscas = dataset.records[0]!.buscas;
-    expect(buscas).toHaveLength(2);
-    expect(buscas[0]).toEqual({ number: "1111", label: "Busca 1" });
-    expect(buscas[1]).toEqual({ number: "2222" });
+    const beepers = dataset.records[0]!.beepers;
+    expect(beepers).toHaveLength(2);
+    expect(beepers[0]).toEqual({ number: "1111", label: "Beeper 1" });
+    expect(beepers[1]).toEqual({ number: "2222" });
   });
 
-  it("resolves to an empty array when the row has no `buscas` field (plain CSV import path)", async () => {
+  it("resolves to an empty array when the row has no `beepers` field (plain CSV import path)", async () => {
     const row = {
       type: "service",
       displayName: "Consulta 5",
@@ -445,16 +445,16 @@ describe("buildImportPreviewFromRows — buscas flow through to the ContactRecor
       editorName: "TestEditor"
     });
 
-    expect(dataset.records[0]!.buscas).toEqual([]);
+    expect(dataset.records[0]!.beepers).toEqual([]);
   });
 
-  it("drops malformed busca entries at runtime instead of crashing the import, and warns", async () => {
+  it("drops malformed beeper entries at runtime instead of crashing the import, and warns", async () => {
     const row = {
       type: "service",
       displayName: "Consulta 6",
       phone1Number: "55558",
       // A crafted/corrupt row: one valid entry, one with a non-string `number`.
-      buscas: JSON.stringify([{ number: "1234" }, { number: null }])
+      beepers: JSON.stringify([{ number: "1234" }, { number: null }])
     };
 
     const { dataset, preview } = await buildImportPreviewFromRows([row], {
@@ -463,7 +463,7 @@ describe("buildImportPreviewFromRows — buscas flow through to the ContactRecor
       editorName: "TestEditor"
     });
 
-    expect(dataset.records[0]!.buscas).toEqual([{ number: "1234" }]);
+    expect(dataset.records[0]!.beepers).toEqual([{ number: "1234" }]);
     expect(preview.warningCount).toBeGreaterThan(0);
   });
 });

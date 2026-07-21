@@ -28,7 +28,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
-import type { BuscaRecord, EditableBuscaRecord, ImportedBuscaRecord } from "../schemas/busca.schema.js";
+import type { BeeperRecord, EditableBeeperRecord, ImportedBeeperRecord } from "../schemas/beeper.schema.js";
 import type { MergeContactsOverrides } from "../schemas/merge-contacts.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
@@ -63,14 +63,14 @@ export interface HospitalDirectoryApi {
   // dialog and dispatches by extension to importDataset()/previewCsvImport().
   pickAndImportDataset: () => Promise<PickAndImportDatasetResult>;
 
-  // Buscas — manual registry
-  listBuscas: () => Promise<BuscaRecord[]>;
-  addBusca: (record: EditableBuscaRecord) => Promise<BuscaRecord>;
-  updateBusca: (id: string, record: EditableBuscaRecord) => Promise<BuscaRecord>;
-  deleteBusca: (id: string) => Promise<void>;
+  // Beepers — manual registry
+  listBeepers: () => Promise<BeeperRecord[]>;
+  addBeeper: (record: EditableBeeperRecord) => Promise<BeeperRecord>;
+  updateBeeper: (id: string, record: EditableBeeperRecord) => Promise<BeeperRecord>;
+  deleteBeeper: (id: string) => Promise<void>;
 
-  // Buscas — ODS-imported (read-only from renderer side)
-  listImportedBuscas: () => Promise<ImportedBuscaRecord[]>;
+  // Beepers — ODS-imported (read-only from renderer side)
+  listImportedBeepers: () => Promise<ImportedBeeperRecord[]>;
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;

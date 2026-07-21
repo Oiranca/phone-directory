@@ -1,12 +1,12 @@
 /**
- * Unit tests for spreadsheet-buscas-parser.ts
+ * Unit tests for spreadsheet-beeper-parser.ts
  *
  * Covers:
  *   1. New per-person layout ("Busca 1"/"Busca 2" + Nombre/Categoría/Servicio)
  *      — OIR-266, the current real-world ODS shape.
- *   2. detectBuscasHeaderRowIndex — LEGACY header detection across first 5 rows
- *   3. parseBuscasSheet (legacy path) — column routing, pager extraction, skipped rows
- *   4. parseBuscasSheets — multi-sheet aggregation (both layouts)
+ *   2. detectBeeperHeaderRowIndex — LEGACY header detection across first 5 rows
+ *   3. parseBeeperSheet (legacy path) — column routing, pager extraction, skipped rows
+ *   4. parseBeeperSheets — multi-sheet aggregation (both layouts)
  *   5. Edge cases: empty sheets, no holder columns, non-pager cells, COMENTARIOS column
  *
  * Real ODS sheet shapes tested (confirmed against
@@ -26,16 +26,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  detectBuscasHeaderRowIndex,
-  parseBuscasSheet,
-  parseBuscasSheets
-} from "./spreadsheet-buscas-parser.js";
+  detectBeeperHeaderRowIndex,
+  parseBeeperSheet,
+  parseBeeperSheets
+} from "./spreadsheet-beeper-parser.js";
 
 // ---------------------------------------------------------------------------
 // New per-person layout ("Busca 1"/"Busca 2") — OIR-266
 // ---------------------------------------------------------------------------
 
-describe("parseBuscasSheet — new per-person layout", () => {
+describe("parseBeeperSheet — new per-person layout", () => {
   it("parses 'Buscas Todos' shape: one record per non-empty Busca cell", () => {
     const sheet = {
       name: "Buscas Todos",
@@ -76,7 +76,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     // Row 0: Busca 1 only → 1 record. Row 1: Busca 1 + Busca 2 → 2 records.
     expect(result.parsedCellCount).toBe(3);
@@ -132,7 +132,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(1);
     expect(result.records).toHaveLength(1);
@@ -155,7 +155,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(1);
     expect(result.records[0]!.deviceNumber).toBe("79258");
@@ -171,7 +171,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.skippedRowCount).toBe(1);
     expect(result.parsedCellCount).toBe(1);
@@ -189,7 +189,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.skippedRowCount).toBe(1);
     expect(result.parsedCellCount).toBe(1);
@@ -205,7 +205,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(0);
     expect(result.skippedRowCount).toBe(1);
@@ -220,7 +220,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(1);
     expect(result.records[0]!.category).toBe("Enfermero/a");
@@ -235,7 +235,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.records[0]!.name).toBeUndefined();
     expect(result.records[0]!.category).toBeUndefined();
@@ -253,7 +253,7 @@ describe("parseBuscasSheet — new per-person layout", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(1);
     expect(result.records[0]!.deviceNumber).toBe("7001");
@@ -262,8 +262,8 @@ describe("parseBuscasSheet — new per-person layout", () => {
   });
 });
 
-describe("parseBuscasSheets — new per-person layout aggregation", () => {
-  it("aggregates records across the three real buscas sheet names", () => {
+describe("parseBeeperSheets — new per-person layout aggregation", () => {
+  it("aggregates records across the three real beeper sheet names", () => {
     const sheets = [
       {
         name: "Buscas Todos",
@@ -288,7 +288,7 @@ describe("parseBuscasSheets — new per-person layout aggregation", () => {
       }
     ];
 
-    const result = parseBuscasSheets(sheets);
+    const result = parseBeeperSheets(sheets);
 
     expect(result.parsedCellCount).toBe(3);
     expect(result.records).toHaveLength(3);
@@ -298,16 +298,16 @@ describe("parseBuscasSheets — new per-person layout aggregation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// detectBuscasHeaderRowIndex (LEGACY layout — fallback path)
+// detectBeeperHeaderRowIndex (LEGACY layout — fallback path)
 // ---------------------------------------------------------------------------
 
-describe("detectBuscasHeaderRowIndex", () => {
+describe("detectBeeperHeaderRowIndex", () => {
   it("detects header at row 0 when PRINCIPAL is in col 1", () => {
     const rows = [
       ["SERVICIO", "PRINCIPAL", "RESIDENTE", "COMENTARIOS"],
       ["ANESTESIA", "7321", "", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 
   it("detects header at row 1 when row 0 is a title row", () => {
@@ -316,7 +316,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "PRINCIPAL / RESIDENTE", "ADJUNTO 1", "COMENTARIOS"],
       ["ANESTESIA", "7321", "", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(1);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(1);
   });
 
   it("detects RESIDENTE keyword alone in col 1", () => {
@@ -324,7 +324,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "RESIDENTE", "COMENTARIOS"],
       ["UCI", "8001", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 
   it("detects ADJUNTO keyword in col 2 (col 1 may be non-holder)", () => {
@@ -332,7 +332,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "NUMERO", "ADJUNTO 1", "COMENTARIOS"],
       ["CIRUGÍA", "7500", "7501", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 
   it("detects LOCALIZADOR keyword", () => {
@@ -340,7 +340,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "LOCALIZADOR"],
       ["PLANTA 1", "9001"]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 
   it("detects GUARDIA keyword", () => {
@@ -348,7 +348,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "GUARDIA", "COMENTARIOS"],
       ["TRAUMATOLOGÍA", "7600", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 
   it("returns -1 when no holder-type keyword is found in cols 1+", () => {
@@ -356,11 +356,11 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "NUMERO", "COMENTARIOS"],
       ["URGENCIAS", "12345", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(-1);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(-1);
   });
 
   it("returns -1 for empty rows", () => {
-    expect(detectBuscasHeaderRowIndex([])).toBe(-1);
+    expect(detectBeeperHeaderRowIndex([])).toBe(-1);
   });
 
   it("returns -1 when holder keyword only appears in col 0", () => {
@@ -371,7 +371,7 @@ describe("detectBuscasHeaderRowIndex", () => {
     ];
     // col 0 is not checked — these look like data rows, not headers
     // (no holder keyword in col 1+) — actually col 1 has "7321" (numeric), not a keyword
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(-1);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(-1);
   });
 
   it("searches only the first 5 rows", () => {
@@ -385,7 +385,7 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "PRINCIPAL", "COMENTARIOS"],
       ["ANESTESIA", "7321", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(-1);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(-1);
   });
 
   it("detects PRINCIPAL / RESIDENTE combined in one cell", () => {
@@ -393,15 +393,15 @@ describe("detectBuscasHeaderRowIndex", () => {
       ["SERVICIO", "PRINCIPAL / RESIDENTE", "ADJUNTO 1", "COMENTARIOS"],
       ["CARDIOLOGÍA", "7580", "", ""]
     ];
-    expect(detectBuscasHeaderRowIndex(rows)).toBe(0);
+    expect(detectBeeperHeaderRowIndex(rows)).toBe(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseBuscasSheet (LEGACY layout — fallback path)
+// parseBeeperSheet (LEGACY layout — fallback path)
 // ---------------------------------------------------------------------------
 
-describe("parseBuscasSheet (legacy layout)", () => {
+describe("parseBeeperSheet (legacy layout)", () => {
   it("parses a standard Buscas_Facultativos shape correctly", () => {
     const sheet = {
       name: "Buscas_Facultativos",
@@ -412,7 +412,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     // ANESTESIA × PRINCIPAL / RESIDENTE = 1 record; ADJUNTO 1 is empty
     // CARDIOLOGÍA × PRINCIPAL / RESIDENTE = 1 record; ADJUNTO 1 = 1 record
@@ -442,7 +442,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     // COMENTARIOS column is excluded (not a holder keyword)
     // Row 0: PRINCIPAL=7183, PRINCIPAL 2=empty → 1 record
@@ -467,7 +467,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.skippedRowCount).toBe(1);
     expect(result.parsedCellCount).toBe(3); // 2 from PLANTA 1, 1 from PLANTA 2
@@ -485,7 +485,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.skippedRowCount).toBe(1); // RESERVA row
     expect(result.parsedCellCount).toBe(2);
@@ -501,7 +501,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(0);
     expect(result.records).toHaveLength(0);
@@ -509,7 +509,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
   });
 
   it("returns empty result for an empty sheet", () => {
-    const result = parseBuscasSheet({ name: "Empty", rows: [] });
+    const result = parseBeeperSheet({ name: "Empty", rows: [] });
 
     expect(result.parsedCellCount).toBe(0);
     expect(result.records).toHaveLength(0);
@@ -527,7 +527,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.records[0]!.sourceRow).toBe(0);
     expect(result.records[1]!.sourceRow).toBe(1);
@@ -544,7 +544,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(2);
     expect(result.records[0]!.holderType).toBe("Principal");
@@ -560,7 +560,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.parsedCellCount).toBe(2);
     // Internal whitespace is stripped so the stored number is lookup-ready.
@@ -578,7 +578,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     // Only numeric cells are parsed
     const numbers = result.records.map((r) => r.deviceNumber);
@@ -600,7 +600,7 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     const departments = result.records.map((r) => r.department);
     expect(departments[0]).toBe("Unidad De Cuidados Intensivos");
@@ -617,17 +617,17 @@ describe("parseBuscasSheet (legacy layout)", () => {
       ]
     };
 
-    const result = parseBuscasSheet(sheet);
+    const result = parseBeeperSheet(sheet);
 
     expect(result.records[0]!.sourceSheet).toBe("Buscas_Enfermería");
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseBuscasSheets (legacy layout — multi-sheet aggregation)
+// parseBeeperSheets (legacy layout — multi-sheet aggregation)
 // ---------------------------------------------------------------------------
 
-describe("parseBuscasSheets (legacy layout)", () => {
+describe("parseBeeperSheets (legacy layout)", () => {
   it("aggregates records from multiple sheets", () => {
     const sheets = [
       {
@@ -647,7 +647,7 @@ describe("parseBuscasSheets (legacy layout)", () => {
       }
     ];
 
-    const result = parseBuscasSheets(sheets);
+    const result = parseBeeperSheets(sheets);
 
     expect(result.parsedCellCount).toBe(4);
     expect(result.records).toHaveLength(4);
@@ -659,7 +659,7 @@ describe("parseBuscasSheets (legacy layout)", () => {
   });
 
   it("returns empty result for an empty sheets array", () => {
-    const result = parseBuscasSheets([]);
+    const result = parseBeeperSheets([]);
 
     expect(result.parsedCellCount).toBe(0);
     expect(result.records).toHaveLength(0);
@@ -686,7 +686,7 @@ describe("parseBuscasSheets (legacy layout)", () => {
       }
     ];
 
-    const result = parseBuscasSheets(sheets);
+    const result = parseBeeperSheets(sheets);
 
     expect(result.skippedRowCount).toBe(2);
     expect(result.parsedCellCount).toBe(2);
@@ -708,7 +708,7 @@ describe("parseBuscasSheets (legacy layout)", () => {
       ]
     }));
 
-    const result = parseBuscasSheets(sheets);
+    const result = parseBeeperSheets(sheets);
 
     expect(result.parsedCellCount).toBe(4);
     const sourceSheets = new Set(result.records.map((r) => r.sourceSheet));
@@ -722,10 +722,10 @@ describe("parseBuscasSheets (legacy layout)", () => {
 // Integration: interim-skip tests
 // ---------------------------------------------------------------------------
 
-describe("buscas sheets are parsed, not skipped", () => {
-  it("parseBuscasSheets produces records matching real ODS fixture shape", () => {
+describe("beeper sheets are parsed, not skipped", () => {
+  it("parseBeeperSheets produces records matching real ODS fixture shape", () => {
     // Mirrors the real Buscas_Facultativos + Buscas_Celadores structure
-    const result = parseBuscasSheets([
+    const result = parseBeeperSheets([
       {
         name: "Buscas_Facultativos",
         rows: [

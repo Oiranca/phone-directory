@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import type { HospitalDirectoryApi } from "./api.js";
-import { CONTACTS_CHANNELS, SETTINGS_CHANNELS, BUSCAS_CHANNELS } from "./channels.js";
+import { CONTACTS_CHANNELS, SETTINGS_CHANNELS, BEEPERS_CHANNELS } from "./channels.js";
 
 // ---------------------------------------------------------------------------
 // Compile-time-exhaustive method map
@@ -50,11 +50,11 @@ const API_METHOD_MAP: Record<keyof HospitalDirectoryApi, true> = {
   previewCsvImport:      true,
   importCsvDataset:      true,
   pickAndImportDataset:  true,
-  listBuscas:            true,
-  addBusca:              true,
-  updateBusca:           true,
-  deleteBusca:           true,
-  listImportedBuscas:    true,
+  listBeepers:           true,
+  addBeeper:             true,
+  updateBeeper:          true,
+  deleteBeeper:          true,
+  listImportedBeepers:   true,
   detectDuplicates:      true,
   mergeContacts:         true,
   onAutoBackupFailure:   true
@@ -66,7 +66,7 @@ const API_METHODS = Object.keys(API_METHOD_MAP) as Array<keyof HospitalDirectory
 // 1. Handler registration coverage
 //
 // REQUIRED_CHANNELS is derived directly from the shared channel objects so
-// adding a key to CONTACTS_CHANNELS / SETTINGS_CHANNELS / BUSCAS_CHANNELS
+// adding a key to CONTACTS_CHANNELS / SETTINGS_CHANNELS / BEEPERS_CHANNELS
 // automatically lands in the coverage assertion — no manual list to maintain.
 //
 // PUSH_CHANNELS (app:auto-backup-failed) is excluded: it is a one-way push
@@ -76,7 +76,7 @@ const API_METHODS = Object.keys(API_METHOD_MAP) as Array<keyof HospitalDirectory
 const REQUIRED_CHANNELS: ReadonlyArray<string> = [
   ...Object.values(CONTACTS_CHANNELS),
   ...Object.values(SETTINGS_CHANNELS),
-  ...Object.values(BUSCAS_CHANNELS)
+  ...Object.values(BEEPERS_CHANNELS)
 ];
 
 describe("Handler registration coverage — every renderer-invokable channel has an ipcMain handler", () => {
@@ -103,11 +103,11 @@ describe("Handler registration coverage — every renderer-invokable channel has
       app: { getPath: vi.fn().mockReturnValue("/tmp") }
     }));
 
-    const [{ registerContactsIpc }, { registerSettingsIpc }, { registerBuscasIpc }] =
+    const [{ registerContactsIpc }, { registerSettingsIpc }, { registerBeepersIpc }] =
       await Promise.all([
         import("../../main/ipc/contacts.ipc.js"),
         import("../../main/ipc/settings.ipc.js"),
-        import("../../main/ipc/buscas.ipc.js")
+        import("../../main/ipc/beeper.ipc.js")
       ]);
 
     // Minimal service stub: every property access returns a vi.fn() that resolves undefined
@@ -117,7 +117,7 @@ describe("Handler registration coverage — every renderer-invokable channel has
 
     registerContactsIpc(serviceStub);
     registerSettingsIpc(serviceStub);
-    registerBuscasIpc(serviceStub);
+    registerBeepersIpc(serviceStub);
   });
 
   it("REQUIRED_CHANNELS is non-empty (derived from shared channel objects)", () => {
@@ -184,11 +184,11 @@ describe("Renderer mock helper — typed as HospitalDirectoryApi", () => {
       previewCsvImport:    vi.fn(),
       importCsvDataset:    vi.fn(),
       pickAndImportDataset: vi.fn(),
-      listBuscas:          vi.fn(),
-      addBusca:            vi.fn(),
-      updateBusca:         vi.fn(),
-      deleteBusca:         vi.fn(),
-      listImportedBuscas:  vi.fn(),
+      listBeepers:         vi.fn(),
+      addBeeper:           vi.fn(),
+      updateBeeper:        vi.fn(),
+      deleteBeeper:        vi.fn(),
+      listImportedBeepers: vi.fn(),
       detectDuplicates:    vi.fn(),
       mergeContacts:       vi.fn(),
       onAutoBackupFailure: vi.fn().mockReturnValue(() => undefined)

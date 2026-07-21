@@ -21,8 +21,8 @@ const sampleResult: SpreadsheetImportNormalizationResult = {
   rows: [],
   detectedFormat: "exportación cruda de hoja de servicios",
   detectionConfidence: "high",
-  buscasParseResult: { records: [], parsedCellCount: 0, skippedRowCount: 0 },
-  buscasSkippedRowCount: 0,
+  beepersParseResult: { records: [], parsedCellCount: 0, skippedRowCount: 0 },
+  beepersSkippedRowCount: 0,
   socialHandleSkippedRowCount: 0
 };
 

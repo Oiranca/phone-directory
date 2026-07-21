@@ -29,7 +29,7 @@ const NewRecordIcon = () => (
   </svg>
 );
 
-const BuscasIcon = () => (
+const BeepersIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
     <rect x="5" y="2" width="10" height="16" rx="2" />
     <line x1="8" y1="6" x2="12" y2="6" />
@@ -79,7 +79,7 @@ interface RailNavItem {
 const primaryNavItems: RailNavItem[] = [
   { to: "/", label: "Directorio", title: "Directorio — Alt+1", icon: <DirectoryIcon /> },
   { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
-  { to: "/buscas", label: "Buscas", title: "Buscas — Alt+4", icon: <BuscasIcon /> },
+  { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> },
   { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+5", icon: <DuplicatesIcon /> }
 ];
 

@@ -47,8 +47,8 @@ const shortcutRoutes: Record<string, string> = {
   Numpad2: "/contacts/new",
   Digit3: "/settings",
   Numpad3: "/settings",
-  Digit4: "/buscas",
-  Numpad4: "/buscas",
+  Digit4: "/beeper",
+  Numpad4: "/beeper",
   Digit5: "/deduplicate",
   Numpad5: "/deduplicate"
 };
@@ -136,7 +136,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       }
 
       if (isModifierShortcut && key === "n") {
-        // Ctrl/Cmd+N always jumps to "Nuevo registro", but some pages (e.g. Buscas'
+        // Ctrl/Cmd+N always jumps to "Nuevo registro", but some pages (e.g. Beepers'
         // inline create/edit form, or an existing contact being edited) keep unsaved
         // work in local component state that isn't tied to the URL and has no
         // dirty-check guard yet. Reuse the same `[data-keyboard-cancel]` marker the
@@ -173,7 +173,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
         const searchInput =
           (document.querySelector<HTMLInputElement>("[data-page-search]")) ??
           (document.getElementById("directory-search") as HTMLInputElement | null) ??
-          (document.getElementById("buscas-search") as HTMLInputElement | null);
+          (document.getElementById("beeper-search") as HTMLInputElement | null);
         if (searchInput) {
           event.preventDefault();
           searchInput.focus();
