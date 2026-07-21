@@ -1704,6 +1704,13 @@ export class AppDataService {
           : contactRecordSchema.parse({
             ...importedRecord,
             id: currentRecord.id,
+            // Same invariant as mergeImportedRecordFields above: an empty
+            // imported busca list means "this source did not provide busca
+            // data", not "delete the pager". The overwrite policy replaces
+            // the whole record with importedRecord, so without this fallback
+            // it would silently wipe an existing busca whenever the
+            // resolved import row simply had no busca column/value.
+            buscas: importedRecord.buscas.length > 0 ? importedRecord.buscas : currentRecord.buscas,
             audit: {
               ...currentRecord.audit,
               updatedAt: exportedAt,
