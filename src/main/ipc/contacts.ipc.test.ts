@@ -495,6 +495,7 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     unchangedCount: 0,
     buscasSkippedRowCount: 0,
     socialHandleSkippedRowCount: 0,
+    parsedBuscasCellCount: 0,
     typeCounts: {},
     areaCounts: {},
     rowIssues: [],
