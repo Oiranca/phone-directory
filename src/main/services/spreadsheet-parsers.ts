@@ -37,19 +37,7 @@ import {
   isExcludedLabel,
   parseSiNoFlag,
 } from "./spreadsheet-normalize.js";
-import type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
-
-/**
- * Serialized shape for a "busca" (pager) entry parsed from an inserted
- * "Busca 1" column (OIR-265). Mirrors the `record.phones` JSON-string
- * convention: pushed onto a per-row array, then stored on the
- * NormalizedImportRow as `record.buscas = JSON.stringify(buscaEntries)`.
- * Field shape matches `buscaEntrySchema` (src/shared/schemas/contact.ts).
- */
-export type SerializedBuscaEntry = {
-  number: string;
-  label?: string;
-};
+import type { SerializedPhoneEntry, SerializedBuscaEntry } from "./spreadsheet-normalize.js";
 
 // ---------------------------------------------------------------------------
 // Record construction helpers (moved here from spreadsheet-normalize.ts to

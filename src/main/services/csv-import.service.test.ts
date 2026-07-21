@@ -376,3 +376,94 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
     expect(preview.warningCount).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// PR #156 review fix — record.buscas silently dropped by the real import
+// pipeline (OIR-265).
+//
+// normalizeTabularAgendaSheet (spreadsheet-parsers.ts) sets
+// `record.buscas = JSON.stringify(buscaEntries)` on the NormalizedImportRow,
+// but buildImportPreviewFromRows never read that field back out into the
+// ContactRecord it constructs — buscas were parsed correctly and then
+// silently dropped at actual import time, even though the lower-level
+// normalizeTabularAgendaSheet unit tests were green. These tests exercise
+// the REAL end-to-end pipeline (buildImportPreviewFromRows), not just the
+// row-normalization step, so they would have caught the regression.
+// ---------------------------------------------------------------------------
+describe("buildImportPreviewFromRows — buscas flow through to the ContactRecord", () => {
+  it("parses the row's `buscas` JSON field into ContactRecord.buscas (end-to-end import path)", async () => {
+    const row = {
+      type: "service",
+      displayName: "Consulta 3",
+      phone1Number: "55555",
+      buscas: JSON.stringify([{ number: "1234", label: "Busca 1" }])
+    };
+
+    const { dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records).toHaveLength(1);
+    expect(dataset.records[0]!.buscas).toEqual([{ number: "1234", label: "Busca 1" }]);
+  });
+
+  it("supports multiple busca entries and an entry without a label", async () => {
+    const row = {
+      type: "service",
+      displayName: "Consulta 4",
+      phone1Number: "55556",
+      buscas: JSON.stringify([
+        { number: "1111", label: "Busca 1" },
+        { number: "2222" }
+      ])
+    };
+
+    const { dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    const buscas = dataset.records[0]!.buscas;
+    expect(buscas).toHaveLength(2);
+    expect(buscas[0]).toEqual({ number: "1111", label: "Busca 1" });
+    expect(buscas[1]).toEqual({ number: "2222" });
+  });
+
+  it("resolves to an empty array when the row has no `buscas` field (plain CSV import path)", async () => {
+    const row = {
+      type: "service",
+      displayName: "Consulta 5",
+      phone1Number: "55557"
+    };
+
+    const { dataset } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records[0]!.buscas).toEqual([]);
+  });
+
+  it("drops malformed busca entries at runtime instead of crashing the import, and warns", async () => {
+    const row = {
+      type: "service",
+      displayName: "Consulta 6",
+      phone1Number: "55558",
+      // A crafted/corrupt row: one valid entry, one with a non-string `number`.
+      buscas: JSON.stringify([{ number: "1234" }, { number: null }])
+    };
+
+    const { dataset, preview } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records[0]!.buscas).toEqual([{ number: "1234" }]);
+    expect(preview.warningCount).toBeGreaterThan(0);
+  });
+});
