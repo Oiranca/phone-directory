@@ -61,6 +61,7 @@ describe("customFields survive createRecord + updateRecord", () => {
 
     // Step 1: create a contact WITH a custom field.
     const created = await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Contacto Demo",
       organization: {},
@@ -81,6 +82,7 @@ describe("customFields survive createRecord + updateRecord", () => {
 
     // Step 2: updateRecord — change only displayName; the custom field must survive.
     const updated = await service.updateRecord(created.savedRecordId, {
+      buscas: [],
       type: "person",
       displayName: "Contacto Demo (actualizado)",
       organization: {},
@@ -123,6 +125,7 @@ describe("customFields survive createRecord + updateRecord", () => {
     });
 
     const created = await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Sin campos personalizados",
       organization: {},

@@ -5,6 +5,7 @@ import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
 import type { AreaType } from "../../shared/constants/catalogs.js";
 import { contactRecordSchema, directoryDatasetSchema, socialPlatformSchema } from "../../shared/schemas/contact.js";
 import type {
+  BuscaEntry,
   ContactRecord,
   CsvImportIssue,
   CsvImportPreview,
@@ -15,8 +16,7 @@ import type {
   PhoneContact,
   EmailContact,
   SocialContact,
-  SocialPlatform,
-  BuscaEntry
+  SocialPlatform
 } from "../../shared/types/contact.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
@@ -88,7 +88,7 @@ const SUPPORTED_COLUMNS = [
   "notes",
   "status"
 ] as const;
-const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "other"]);
+const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "corporativo", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CSV_IMPORT_ROWS = 5000;

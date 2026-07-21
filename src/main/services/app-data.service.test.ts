@@ -658,6 +658,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Ana Pérez",
       person: {
@@ -763,6 +764,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Trigger",
       person: {
@@ -831,6 +833,7 @@ describe("AppDataService", () => {
       .mockRejectedValueOnce(Object.assign(new Error("copy failed"), { code: "EACCES" }));
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Failure One",
       person: {
@@ -865,6 +868,7 @@ describe("AppDataService", () => {
     await service.dispose();
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Failure Two",
       person: {
@@ -925,6 +929,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Progress One",
       person: {
@@ -972,6 +977,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Progress Two",
       person: {
@@ -1033,6 +1039,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Reset One",
       person: {
@@ -1082,6 +1089,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Reset Two",
       person: {
@@ -1116,6 +1124,7 @@ describe("AppDataService", () => {
     expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Reset Three",
       person: {
@@ -1176,6 +1185,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Data Path One",
       person: {
@@ -1226,6 +1236,7 @@ describe("AppDataService", () => {
     );
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Data Path Two",
       person: {
@@ -1260,6 +1271,7 @@ describe("AppDataService", () => {
     expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
 
     await service.createRecord({
+      buscas: [],
       type: "person",
       displayName: "Auto Backup Data Path Three",
       person: {
@@ -1307,6 +1319,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const result = await service.createRecord({
+      buscas: [],
       id: "cnt_0001",
       type: "person",
       displayName: "Registro nuevo",
@@ -1357,6 +1370,7 @@ describe("AppDataService", () => {
     const existing = initial.contacts.records[0];
 
     const result = await service.updateRecord(existing.id, {
+      buscas: [],
       id: existing.id,
       externalId: existing.externalId,
       type: existing.type,
@@ -1401,6 +1415,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const result = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Mesa sin principal",
       organization: {
@@ -1446,6 +1461,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const result = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Un solo teléfono sin principal",
       organization: {
@@ -1481,6 +1497,7 @@ describe("AppDataService", () => {
     await service.ensureInitialFiles();
 
     const created = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Registro a actualizar",
       organization: {
@@ -1510,6 +1527,7 @@ describe("AppDataService", () => {
     const existingRecord = created.contacts.records.find((record) => record.id === savedRecordId)!;
 
     const updated = await service.updateRecord(savedRecordId, {
+      buscas: [],
       type: "service",
       displayName: "Registro a actualizar",
       organization: {
@@ -2224,6 +2242,7 @@ describe("AppDataService", () => {
       // Give the existing record a customFields entry the CSV import cannot
       // produce — the imported row's customFields stays empty/undefined.
       await service.updateRecord(createdRecord.id, {
+        buscas: [],
         id: createdRecord.id,
         externalId: createdRecord.externalId,
         type: createdRecord.type,
@@ -4032,6 +4051,7 @@ describe("AppDataService", () => {
 
     await expect(
       service.createRecord({
+        buscas: [],
         type: "service",
         displayName: "Desbordamiento",
         organization: { department: "Test" },
@@ -4216,6 +4236,7 @@ describe("AppDataService", () => {
     await service.saveSettings(buildEditableSettings());
 
     const makePayload = (label: string) => ({
+      buscas: [],
       type: "service" as const,
       displayName: `Concurrent ${label}`,
       organization: { department: "Test" },
@@ -4584,6 +4605,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const makeRecord = (name: string, phoneId: string, phone: string) => ({
+        buscas: [],
         type: "person" as const,
         displayName: name,
         person: { firstName: name, lastName: "Test" },
@@ -4643,6 +4665,7 @@ describe("AppDataService", () => {
       });
 
       const makeRecord = (name: string, phoneId: string, phone: string) => ({
+        buscas: [],
         type: "person" as const,
         displayName: name,
         person: { firstName: name, lastName: "Test" },
@@ -5300,6 +5323,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const keepRecord = await service.createRecord({
+        buscas: [],
         type: "person",
         displayName: "Ana Pérez",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5320,6 +5344,7 @@ describe("AppDataService", () => {
       });
 
       const discardRecord = await service.createRecord({
+        buscas: [],
         type: "person",
         displayName: "Ana Pérez (duplicado)",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5373,6 +5398,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const keepRecord = await service.createRecord({
+        buscas: [],
         type: "person",
         displayName: "Luis García",
         person: { firstName: "Luis", lastName: "García" },
@@ -5385,6 +5411,7 @@ describe("AppDataService", () => {
       });
 
       const discardRecord = await service.createRecord({
+        buscas: [],
         type: "person",
         displayName: "Luis García (duplicado)",
         person: { firstName: "Luis", lastName: "García" },
@@ -5450,6 +5477,7 @@ describe("AppDataService", () => {
       await service.saveSettings(buildEditableSettings());
 
       const current = await service.createRecord({
+        buscas: [],
         type: "person",
         displayName: "Ana Pérez",
         person: { firstName: "Ana", lastName: "Pérez" },
@@ -5513,6 +5541,7 @@ describe("AppDataService", () => {
   describe("buscas never participate in record identity or conflict detection", () => {
     const createBaseRecord = async (service: InstanceType<typeof import("./app-data.service.js").AppDataService>) => {
       const created = await service.createRecord({
+        buscas: [],
         type: "service",
         displayName: "Centralita",
         organization: { department: "Urgencias", service: "Recepción" },

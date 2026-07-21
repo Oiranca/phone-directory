@@ -45,6 +45,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     if ("recovery" in bootstrap) throw new Error("recovery mode unexpected");
 
     const keepRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión", area: "gestion-administracion" },
@@ -60,6 +61,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     });
 
     const discardRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: { department: "Admisión", area: "gestion-administracion" },
@@ -110,6 +112,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     await service.ensureInitialFiles();
 
     const discardRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Registro existente",
       organization: {},
@@ -131,6 +134,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Registro existente",
       organization: {},
@@ -171,6 +175,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión" },
@@ -186,6 +191,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: {},
@@ -208,6 +214,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión" },
@@ -219,6 +226,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
+      buscas: [],
       type: "department",
       displayName: "Admisión General (duplicado)",
       organization: {},
@@ -245,6 +253,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General",
       organization: {},
@@ -260,6 +269,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
+      buscas: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: {},
