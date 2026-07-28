@@ -1591,6 +1591,9 @@ describe("AppDataService", () => {
       await fs.readFile(exportFilePath, "utf-8")
     ) as { records: unknown[] };
     expect(exportedDataset.records).toHaveLength(2);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(exportFilePath)).mode & 0o777).toBe(0o600);
+    }
 
     const firstBackupPath = await service.createBackup();
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1601,6 +1604,10 @@ describe("AppDataService", () => {
     expect(backups[0]?.filePath).toBe(secondBackupPath);
     expect(backups[1]?.filePath).toBe(firstBackupPath);
     expect(backups[0]?.sizeBytes).toBeGreaterThan(0);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(firstBackupPath)).mode & 0o777).toBe(0o600);
+      expect((await fs.stat(secondBackupPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("surfaces the affected backup path when backup creation fails", async () => {

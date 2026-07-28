@@ -38,7 +38,13 @@ import type {
   SaveContactResult,
   MergePolicy
 } from "../../shared/types/contact.js";
-import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
+import {
+  ensureDirectory,
+  ensurePrivateDirectory,
+  readJsonFile,
+  SENSITIVE_FILE_MODE,
+  writeJsonFile
+} from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
@@ -108,8 +114,8 @@ export class AppDataService {
     const contactsFilePath = managedDefaults.dataFilePath;
     const settingsFilePath = getSettingsFilePath();
 
-    await ensureDirectory(dataDirectory);
-    await ensureDirectory(backupDirectory);
+    await ensurePrivateDirectory(dataDirectory);
+    await ensurePrivateDirectory(backupDirectory);
 
     if (!(await this.fileExists(contactsFilePath))) {
       await writeJsonFile(contactsFilePath, defaultContacts);
@@ -273,7 +279,7 @@ export class AppDataService {
       "No se pudo leer la carpeta de copias de seguridad."
     );
     try {
-      await ensureDirectory(backupDirectory);
+      await ensurePrivateDirectory(backupDirectory);
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
       const backupEntries = await Promise.all(
         entries
@@ -2475,6 +2481,9 @@ export class AppDataService {
       );
 
       await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
+      if (process.platform !== "win32") {
+        await fs.chmod(canonicalTargetFilePath, SENSITIVE_FILE_MODE);
+      }
     } catch (error) {
       throw this.toFilesystemError(error, message, {
         sourceFilePath,

@@ -81,6 +81,23 @@ export const registerContactsIpc = (service: AppDataService) => {
     }
 
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const warningOptions = {
+      type: "warning",
+      buttons: ["Cancelar", "Continuar"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Exportar datos sensibles",
+      message: "El archivo exportado contiene datos sensibles del directorio.",
+      detail: "Guárdalo solo en una ubicación protegida y elimínalo cuando ya no sea necesario."
+    } satisfies Electron.MessageBoxOptions;
+    const warningResult = browserWindow
+      ? await dialog.showMessageBox(browserWindow, warningOptions)
+      : await dialog.showMessageBox(warningOptions);
+
+    if (warningResult.response !== 1) {
+      return null;
+    }
+
     const saveOptions = {
       title: "Exportar directorio",
       defaultPath: path.join(app.getPath("downloads"), "contacts-export.json"),

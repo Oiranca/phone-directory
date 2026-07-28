@@ -11,6 +11,40 @@ picking up related work.
 
 ---
 
+## Decision: PII-at-rest policy for local JSON storage
+
+**Status:** Active.
+
+### Decision
+
+Keep the current local JSON storage model for normal userData mode and portable-USB mode,
+but treat every app-managed contacts/settings/backup/audit/crash/export file as sensitive
+data at rest.
+
+On POSIX platforms, app-managed data and backup directories are created with `0700`
+permissions, and JSON files written by the app are finalized with `0600` permissions.
+Windows does not map these POSIX modes reliably, so the policy there remains "use the
+user profile / USB filesystem access controls".
+
+Operators must treat exported JSON as sensitive data. The export IPC path warns before
+opening the native save dialog; exports should be stored only in protected locations and
+deleted when no longer needed.
+
+### Deferred
+
+Passphrase encryption for portable deployments is deferred until there is a concrete
+operator key-management flow. Encryption without recovery, rotation, and handoff
+procedures would increase data-loss risk while decrypted data still exists in the running
+Electron process.
+
+### Revisit When
+
+Revisit if the app needs multi-user roles, centralized workstation policy, encrypted USB
+handoff, remote sync, or regulated retention guarantees beyond local best-effort file
+permissions and existing log/backup rotation.
+
+---
+
 ## Decision: SQLite migration trigger (ARQ-9)
 
 **Status:** Documented, not yet triggered.

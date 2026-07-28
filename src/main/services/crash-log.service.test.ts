@@ -46,6 +46,10 @@ describe("logCrash", () => {
     expect(record.stack).toBe("Error: Boom\n at x");
     expect(typeof record.timestamp).toBe("string");
     expect(Number.isNaN(Date.parse(record.timestamp))).toBe(false);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(path.dirname(crashLogPath))).mode & 0o777).toBe(0o700);
+      expect((await fs.stat(crashLogPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("omits the stack field when none is provided", async () => {

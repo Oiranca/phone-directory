@@ -18,6 +18,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { PRIVATE_DIRECTORY_MODE, SENSITIVE_FILE_MODE } from "../utils/fs-json.js";
 import { getCrashLogFilePath } from "../utils/paths.js";
 
 export type CrashSource = "uncaughtException" | "unhandledRejection" | "render-process-gone";
@@ -114,7 +115,13 @@ const sanitizeAndRotateCrashLogIfNeeded = (filePath: string): void => {
 
   const retainedLines = sanitizedLines.slice(-(MAX_CRASH_LOG_ENTRIES - 1));
   const tempFilePath = `${filePath}.tmp`;
-  fs.writeFileSync(tempFilePath, retainedLines.length > 0 ? `${retainedLines.join("\n")}\n` : "", "utf-8");
+  fs.writeFileSync(
+    tempFilePath,
+    retainedLines.length > 0 ? `${retainedLines.join("\n")}\n` : "",
+    process.platform !== "win32"
+      ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
+      : "utf-8"
+  );
   fs.renameSync(tempFilePath, filePath);
 };
 
@@ -126,7 +133,10 @@ const sanitizeAndRotateCrashLogIfNeeded = (filePath: string): void => {
 export const logCrash = (entry: CrashLogInput): void => {
   try {
     const filePath = getCrashLogFilePath();
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+    if (process.platform !== "win32") {
+      fs.chmodSync(path.dirname(filePath), PRIVATE_DIRECTORY_MODE);
+    }
     sanitizeAndRotateCrashLogIfNeeded(filePath);
 
     const record: CrashLogEntry = {
@@ -136,7 +146,16 @@ export const logCrash = (entry: CrashLogInput): void => {
       ...(entry.stack ? { stack: sanitizeCrashLogText(entry.stack, MAX_CRASH_LOG_STACK_LENGTH) } : {})
     };
 
-    fs.appendFileSync(filePath, `${JSON.stringify(record)}\n`, "utf-8");
+    fs.appendFileSync(
+      filePath,
+      `${JSON.stringify(record)}\n`,
+      process.platform !== "win32"
+        ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
+        : "utf-8"
+    );
+    if (process.platform !== "win32") {
+      fs.chmodSync(filePath, SENSITIVE_FILE_MODE);
+    }
   } catch {
     // Never let a broken crash-log write mask the original crash.
   }

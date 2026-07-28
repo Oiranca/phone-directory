@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { shouldFsyncParentDirectory, writeJsonFile } from "./fs-json.js";
+import {
+  ensurePrivateDirectory,
+  PRIVATE_DIRECTORY_MODE,
+  SENSITIVE_FILE_MODE,
+  shouldFsyncParentDirectory,
+  writeJsonFile
+} from "./fs-json.js";
 
 // ---------------------------------------------------------------------------
 // Per-OS release smoke intent
@@ -42,6 +48,34 @@ describe("writeJsonFile", () => {
     expect(shouldFsyncParentDirectory("linux")).toBe(true);
     expect(shouldFsyncParentDirectory("darwin")).toBe(true);
     expect(shouldFsyncParentDirectory("win32")).toBe(false);
+  });
+
+  it("creates private directories on POSIX platforms", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-private-dir-"));
+    const privateDir = path.join(tmpDir, "data");
+
+    try {
+      await ensurePrivateDirectory(privateDir, "linux");
+
+      const mode = (await fs.stat(privateDir)).mode & 0o777;
+      expect(mode).toBe(PRIVATE_DIRECTORY_MODE);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes private JSON files on POSIX platforms", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-private-file-"));
+    const filePath = path.join(tmpDir, "contacts.json");
+
+    try {
+      await writeJsonFile(filePath, { sensitive: true }, { platform: "linux" });
+
+      const mode = (await fs.stat(filePath)).mode & 0o777;
+      expect(mode).toBe(SENSITIVE_FILE_MODE);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   });
 
   // -------------------------------------------------------------------------
