@@ -11,9 +11,10 @@ pnpm run release:usb -- linux
 pnpm run release:usb -- win
 ```
 
-The command runs typecheck, tests, and the production build before invoking
-`electron-builder --dir` for the target platform. It writes the copy-ready USB
-layout to:
+The command runs typecheck, tests, the production build, dev-mode E2E, and
+`electron-builder --dir` for the target platform. When the target platform
+matches the host platform, it also launches the packaged binary and verifies the
+real `file://` renderer startup path. It writes the copy-ready USB layout to:
 
 ```bash
 dist-portable/usb-package/
@@ -91,6 +92,20 @@ pnpm run test:audit-gate
 ```
 
 Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass, infra/network error, bypass with and without reason, and strict `SKIP_AUDIT=1` matching.
+
+### Packaged startup smoke
+
+Run the packaged startup smoke on each target OS before release handoff:
+
+```bash
+pnpm run test:e2e:packaged
+```
+
+The script builds the current platform with `electron-builder --dir`, launches
+the packaged executable, asserts the renderer loaded from `file://`, and waits
+for the main directory UI. `release-usb.sh` runs the same smoke automatically
+when the release target matches the host platform; cross-built artifacts must be
+smoked on their own OS.
 
 ## `extract_ods_to_csv.py`
 

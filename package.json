@@ -24,6 +24,7 @@
     "release:usb": "bash scripts/release-usb.sh",
     "test:audit-gate": "bash scripts/release-usb.audit.test.sh",
     "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
+    "test:e2e:packaged": "node scripts/packaged-startup-smoke.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",

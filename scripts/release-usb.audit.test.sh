@@ -216,6 +216,21 @@ case "\${1:-}" in
     esac
     exit 0
     ;;
+  run)
+    if [[ "\${2:-}" == "test:e2e:packaged" ]]; then
+      smoke_argv="\$*"
+      if ! printf '%s' "\$smoke_argv" | grep -qw -- '--skip-build'; then
+        printf 'FAKE-PNPM: packaged smoke missing --skip-build (argv: %s)\n' "\$smoke_argv" >&2
+        exit 93
+      fi
+      if ! printf '%s' "\$smoke_argv" | grep -qw -- '--platform=${platform}'; then
+        printf 'FAKE-PNPM: packaged smoke missing expected --platform=${platform} (argv: %s)\n' "\$smoke_argv" >&2
+        exit 94
+      fi
+      printf '%s\n' "\$smoke_argv" > '${sandbox}/packaged-smoke.marker'
+    fi
+    exit 0
+    ;;
   *)
     # typecheck / test / run build / anything else → succeed silently.
     exit 0
@@ -234,6 +249,31 @@ fi
 exit 0
 STUB
   chmod +x "$bindir/git"
+}
+
+host_platform() {
+  node -p "process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : process.platform === 'linux' ? 'linux' : process.platform"
+}
+
+assert_packaged_smoke_gate() {
+  local sandbox="$1"
+  local platform="$2"
+  local label="$3"
+  local marker="$sandbox/packaged-smoke.marker"
+
+  if [[ "$(host_platform)" == "$platform" ]]; then
+    if [[ -f "$marker" ]]; then
+      pass "$label: packaged startup smoke ran for host-matching $platform artifact"
+    else
+      fail "$label: packaged startup smoke marker missing for host-matching $platform artifact"
+    fi
+  else
+    if [[ ! -f "$marker" ]]; then
+      pass "$label: packaged startup smoke skipped for cross-host $platform artifact"
+    else
+      fail "$label: packaged startup smoke unexpectedly ran for cross-host $platform artifact"
+    fi
+  fi
 }
 
 # --- smoke subset (AUDIT_GATE_SMOKE=1) -----------------------------------------
@@ -3768,6 +3808,7 @@ if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST89"; t
 else
   fail "Commit2 e2e audited: manifest missing PASSED line (got: $(cat "$MANIFEST89" 2>/dev/null || echo MISSING))"
 fi
+assert_packaged_smoke_gate "$SANDBOX89" linux "Commit2 e2e audited"
 rm -rf "$SANDBOX89" "$BIN89"
 
 # Test 90 (Commit2 e2e, BYPASS path): SKIP_AUDIT=1 + reason → manifest BYPASSED
@@ -3842,6 +3883,7 @@ if [[ -f "$PKG91/launch.bat" ]]; then
 else
   fail "Commit2 e2e win: launch.bat missing from usb-package"
 fi
+assert_packaged_smoke_gate "$SANDBOX91" win "Commit2 e2e win"
 rm -rf "$SANDBOX91" "$BIN91"
 
 # Test 92 (Commit2 e2e, mac audited PASS): clean deps → manifest PASSED + dual mac bundles + launch.command (executable)
@@ -3878,6 +3920,7 @@ if [[ -f "$PKG92/launch.command" ]] && [[ -x "$PKG92/launch.command" ]]; then
 else
   fail "Commit2 e2e mac: launch.command missing or not executable in usb-package"
 fi
+assert_packaged_smoke_gate "$SANDBOX92" mac "Commit2 e2e mac"
 rm -rf "$SANDBOX92" "$BIN92"
 
 # Test 93 (Commit2 e2e, win BYPASS path): SKIP_AUDIT=1 + reason → manifest BYPASSED on the win branch
