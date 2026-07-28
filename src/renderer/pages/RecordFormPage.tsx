@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { Link, useBlocker } from "react-router-dom";
+import { Link, useBlocker } from "react-router";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";

@@ -220,7 +220,7 @@ type Props = {
   onConfirm: () => void;
   onPolicyChange: (recordIndex: number, policy: MergePolicy) => void;
   onClose: () => void;
-  headingRef?: RefObject<HTMLHeadingElement>;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
 };
 
 export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose, headingRef }: Props) => {

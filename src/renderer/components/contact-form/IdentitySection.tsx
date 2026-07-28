@@ -7,7 +7,7 @@ type Props = {
   formState: ContactFormState;
   fieldErrors: Record<string, string>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
-  displayNameInputRef?: React.RefObject<HTMLInputElement>;
+  displayNameInputRef?: React.RefObject<HTMLInputElement | null>;
   clearFieldError?: (path: string) => void;
 };
 

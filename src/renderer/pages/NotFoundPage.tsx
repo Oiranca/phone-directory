@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 export const NotFoundPage = () => (
   <section aria-labelledby="not-found-title" className="rounded-3xl bg-white p-6 shadow-panel">

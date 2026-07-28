@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { ZodError } from "zod";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs";
 import { editableContactRecordSchema } from "../../shared/schemas/contact";
@@ -275,10 +275,10 @@ export type UseContactFormResult = {
   /** Key names already used in customFields across all currently-loaded contacts (deduped, sorted), for the key-name autocomplete. */
   existingCustomFieldKeys: string[];
   // refs
-  displayNameInputRef: React.RefObject<HTMLInputElement>;
-  addPhoneButtonRef: React.RefObject<HTMLButtonElement>;
-  addEmailButtonRef: React.RefObject<HTMLButtonElement>;
-  addCustomFieldButtonRef: React.RefObject<HTMLButtonElement>;
+  displayNameInputRef: React.RefObject<HTMLInputElement | null>;
+  addPhoneButtonRef: React.RefObject<HTMLButtonElement | null>;
+  addEmailButtonRef: React.RefObject<HTMLButtonElement | null>;
+  addCustomFieldButtonRef: React.RefObject<HTMLButtonElement | null>;
   phoneNumberInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   emailAddressInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   customFieldKeyInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;

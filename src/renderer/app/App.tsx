@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet } from "react-router";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
 import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";

@@ -6,7 +6,7 @@ import { createPhoneDraft, phoneKindOptions } from "../../hooks/useContactForm";
 type Props = {
   phones: ContactFormState["contactMethods"]["phones"];
   fieldErrors: Record<string, string>;
-  addPhoneButtonRef: React.RefObject<HTMLButtonElement>;
+  addPhoneButtonRef: React.RefObject<HTMLButtonElement | null>;
   phoneNumberInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
   setLiveMessage: React.Dispatch<React.SetStateAction<string>>;
