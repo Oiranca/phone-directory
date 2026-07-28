@@ -1,4 +1,4 @@
-import { Navigate, createHashRouter } from "react-router-dom";
+import { Navigate, createHashRouter } from "react-router";
 import { App } from "./App";
 import { BeepersPage } from "../pages/BeepersPage";
 import { RecordFormPage } from "../pages/RecordFormPage";

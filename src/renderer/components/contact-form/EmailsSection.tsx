@@ -5,7 +5,7 @@ import { createEmailDraft } from "../../hooks/useContactForm";
 type Props = {
   emails: ContactFormState["contactMethods"]["emails"];
   fieldErrors: Record<string, string>;
-  addEmailButtonRef: React.RefObject<HTMLButtonElement>;
+  addEmailButtonRef: React.RefObject<HTMLButtonElement | null>;
   emailAddressInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
   setLiveMessage: React.Dispatch<React.SetStateAction<string>>;

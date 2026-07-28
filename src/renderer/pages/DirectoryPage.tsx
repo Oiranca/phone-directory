@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
@@ -655,6 +655,7 @@ export const DirectoryPage = () => {
                     </div>
                     <Link
                       to={`/contacts/${selectedRecord.id}/edit`}
+                      reloadDocument
                       aria-label={`Editar: ${selectedRecord.displayName}`}
                       className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >

@@ -8,7 +8,7 @@ type Props = {
   /** Key names already used on OTHER loaded contacts, for the key-name autocomplete. */
   existingCustomFieldKeys: string[];
   fieldErrors: Record<string, string>;
-  addCustomFieldButtonRef: React.RefObject<HTMLButtonElement>;
+  addCustomFieldButtonRef: React.RefObject<HTMLButtonElement | null>;
   customFieldKeyInputRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   setFormState: React.Dispatch<React.SetStateAction<ContactFormState>>;
   setLiveMessage: React.Dispatch<React.SetStateAction<string>>;

@@ -1,6 +1,6 @@
 import { renderHook, act, cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { createElement } from "react";
 import { useContactForm } from "./useContactForm";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
