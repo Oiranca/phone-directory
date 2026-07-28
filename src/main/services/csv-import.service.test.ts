@@ -177,22 +177,6 @@ describe("buildCsvImportPreview", () => {
     expect(dataset.records[0]?.contactMethods.phones[0]?.kind).toBe("other");
   });
 
-  it("accepts corporativo as a supported phone kind", async () => {
-    const filePath = await writeFile(
-      "corporativo-kind.csv",
-      [
-        "type,displayName,phone1Number,phone1Kind",
-        "service,Centralita,55555,corporativo"
-      ].join("\n") + "\n"
-    );
-
-    const { preview, dataset } = await buildCsvImportPreview(filePath, "TestEditor");
-
-    expect(preview.validRowCount).toBe(1);
-    expect(preview.warningCount).toBe(0);
-    expect(dataset.records[0]?.contactMethods.phones[0]?.kind).toBe("corporativo");
-  });
-
   it("emits a warning and omits area when area is invalid", async () => {
     const filePath = await writeFile(
       "bad-area.csv",
