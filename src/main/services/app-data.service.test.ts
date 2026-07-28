@@ -8,6 +8,7 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
 import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
+import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 
 const getPathMock = vi.fn();
 
@@ -5495,6 +5496,329 @@ describe("AppDataService", () => {
         merged.customFields?.some((field) => field.key === "Extensión antigua" && field.value === "1234")
       ).toBe(true);
       expect(merged.customFields?.some((field) => field.key === "Turno" && field.value === "Mañana")).toBe(true);
+    });
+  });
+
+  // Buscas (pager codes, OIR-264/265/266) are a 4-digit code that can
+  // coincidentally collide with an unrelated phone extension — they must
+  // never participate in record identity or conflict detection, but a
+  // genuinely changed busca number must still be a real, applied update on
+  // re-import. The CSV/ODS canonical-template import pipeline used by the
+  // rest of this file has no column that maps onto `buscas` (it is only
+  // ever populated via the tabular Agenda sheet's inserted "Busca 1" column
+  // — see spreadsheet-parsers.test.ts), so — mirroring the customFields
+  // merge-fields test above — these exercise the merge/conflict helpers
+  // directly rather than routing fabricated busca data through the CSV
+  // parser.
+  describe("buscas never participate in record identity or conflict detection", () => {
+    const createBaseRecord = async (service: InstanceType<typeof import("./app-data.service.js").AppDataService>) => {
+      const created = await service.createRecord({
+        type: "service",
+        displayName: "Centralita",
+        organization: { department: "Urgencias", service: "Recepción" },
+        contactMethods: {
+          phones: [{
+            id: "ph_1",
+            number: "912345678",
+            kind: "internal",
+            isPrimary: true,
+            confidential: false,
+            noPatientSharing: false
+          }],
+          emails: [],
+          socials: []
+        },
+        aliases: [],
+        tags: [],
+        status: "active"
+      });
+      const bootstrap = await service.getBootstrapData();
+      return bootstrap.contacts.records.find((record) => record.id === created.savedRecordId)!;
+    };
+
+    it("produces identical stable merge keys for records that differ only in buscas, and never embeds a busca number in a merge key", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const recordWithBuscaA = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const recordWithBuscaB = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        buildStableMergeKeys: (record: typeof baseRecord) => string[];
+      };
+
+      const keysA = privateMerge.buildStableMergeKeys(recordWithBuscaA);
+      const keysB = privateMerge.buildStableMergeKeys(recordWithBuscaB);
+
+      expect(keysA.length).toBeGreaterThan(0);
+      expect(keysA).toEqual(keysB);
+      for (const key of [...keysA, ...keysB]) {
+        expect(key).not.toContain("4321");
+        expect(key).not.toContain("9876");
+      }
+    });
+
+    it("does not classify a busca-only difference as a phone-match or email-match conflict", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // Imported row matches on the same phone but carries a DIFFERENT busca
+      // number — the false-collision risk this guards against (a 4-digit
+      // busca code coincidentally equal to an unrelated phone extension).
+      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        detectConflicts: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] }
+        ) => { conflicts: unknown[]; unchangedCount: number };
+      };
+
+      const { conflicts, unchangedCount } = privateMerge.detectConflicts(currentDataset, {
+        records: [importedRecord]
+      });
+
+      expect(conflicts).toHaveLength(0);
+      expect(unchangedCount).toBe(1);
+    });
+
+    it("does not skip a changed busca number as a no-op, and applies it to the persisted record", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // Re-imported agenda carries an updated pager number for the same
+      // contact — everything else about the row is byte-for-byte identical.
+      const importedRecord = { ...baseRecord, buscas: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => {
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        };
+      };
+
+      const merged = privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map()
+      );
+
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(1);
+      expect(merged.unchangedCount).toBe(0);
+
+      const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      expect(persisted.buscas).toEqual([{ number: "9876" }]);
+      expect(persisted.audit.updatedAt).not.toBe(existingWithBusca.audit.updatedAt);
+    });
+
+    it("preserves an existing busca instead of wiping it when the reimported row has no busca data at all", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // The ordinary plain CSV/ODS canonical-template reimport (e.g. a
+      // routine name/phone touch-up) has no column mapped onto `buscas` at
+      // all, so the imported row's buscas is always an empty array — this
+      // must NEVER be read as "the pager number was removed".
+      const importedRecord = { ...baseRecord, buscas: [] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => {
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        };
+      };
+
+      const merged = privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map()
+      );
+
+      // An imported row with no busca data at all is a true no-op for the
+      // busca field — not an update, and never counted as one.
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(0);
+      expect(merged.unchangedCount).toBe(1);
+
+      const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      expect(persisted.buscas).toEqual([{ number: "4321" }]);
+      expect(persisted.audit.updatedAt).toBe(existingWithBusca.audit.updatedAt);
+    });
+
+    it("preserves an existing busca instead of wiping it when an OVERWRITE conflict resolution's imported row has no busca data (PR #158 review fix)", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      const existingWithBusca = { ...baseRecord, buscas: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record) =>
+          record.id === baseRecord.id ? existingWithBusca : record
+        )
+      };
+
+      // A genuine field-level conflict (displayName changed) so the row is
+      // NOT treated as the no-op fast path — this forces mergeImportedDataset
+      // through the selectedPolicy branch below. The imported row has no
+      // busca data at all (same "plain reimport" scenario as the
+      // merge-fields test above), and the user explicitly resolves the
+      // conflict with the "overwrite" policy.
+      const importedRecord = { ...baseRecord, displayName: "Centralita (renombrada)", buscas: [] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => {
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        };
+      };
+
+      const merged = privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map([[0, "overwrite"]])
+      );
+
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(1);
+
+      const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      // The overwrite policy DID apply the displayName change...
+      expect(persisted.displayName).toBe("Centralita (renombrada)");
+      // ...but must NOT have wiped the existing busca just because this
+      // particular import row's busca column was empty.
+      expect(persisted.buscas).toEqual([{ number: "4321" }]);
+    });
+
+    it("carries an embedded 'Busca 1' column value all the way to ContactRecord.buscas through the real public import entry point (PR #158 review fix)", async () => {
+      // Unlike the unit tests above (which exercise mergeImportedDataset /
+      // buildStableMergeKeys / detectConflicts directly on hand-built
+      // ContactRecord fixtures), this goes through buildSpreadsheetImportPreview
+      // — the same public entry point AppDataService.previewCsvImport calls —
+      // starting from a real tabular Agenda-shaped workbook row with an
+      // inserted "Busca 1" column, exactly as spreadsheet-parsers.ts would
+      // encounter in production. It depends on PR #156's fix (buildImportPreviewFromRows
+      // actually carrying row.buscas through into ContactRecord.buscas,
+      // commit 049bc26) — without that fix this would fail with an empty
+      // buscas array, not for any OIR-267-specific reason.
+      const AGENDA_HEADER_ROW_WITH_BUSCA = [
+        "Nombre",
+        "Categoría",
+        "Servicio",
+        "Número 1",
+        "Número 2",
+        "Número 3",
+        "Número 4",
+        "Número 5",
+        "Número 6",
+        "Número 7",
+        "Busca 1",
+        "Corporativo 1",
+        "Horario",
+        "Confidencial",
+        "Edificio",
+        "Planta",
+        "Sector",
+        "Sección",
+        "Comentarios"
+      ];
+      const rowWithBusca = [
+        "Juan Pérez", // Nombre
+        "Enfermero/a", // Categoría
+        "Urgencias", // Servicio
+        "11111", "", "", "", "", "", "", // Número 1..7
+        "4321", // Busca 1
+        "", // Corporativo 1
+        "", "", "", "", "", "", "" // Horario..Comentarios
+      ];
+
+      const sourceFilePath = writeWorkbook(
+        path.join(testRoot, "incoming"),
+        "agenda-embedded-busca.ods",
+        [
+          {
+            name: "Agenda",
+            data: [AGENDA_HEADER_ROW_WITH_BUSCA, rowWithBusca]
+          }
+        ]
+      );
+
+      const { dataset } = await buildSpreadsheetImportPreview(sourceFilePath, "TestEditor");
+
+      expect(dataset.records).toHaveLength(1);
+      expect(dataset.records[0]!.buscas).toEqual([{ number: "4321" }]);
     });
   });
 });
