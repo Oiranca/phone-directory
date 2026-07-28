@@ -88,7 +88,7 @@ const SUPPORTED_COLUMNS = [
   "notes",
   "status"
 ] as const;
-const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "other"]);
+const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "corporativo", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CSV_IMPORT_ROWS = 5000;
