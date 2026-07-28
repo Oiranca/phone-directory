@@ -29,6 +29,7 @@ The following vulnerabilities have been addressed as of this release:
 
 - **react-router / react-router-dom**: Upgraded to `>=6.30.4` (patches GHSA-2j2x-hqr9-3h42 — moderate severity open redirect vulnerability)
 - **esbuild** (via vite): Upgraded to vite `>=6.4.3` which pulls esbuild `>=0.25.0` (patches GHSA-67mh-4wv8-2f99 — moderate severity CORS bypass during development)
+- **Build and release toolchain**: Upgraded direct tooling (`concurrently`, `electron-builder`, `postcss`, `vite`, and `wait-on`) and pinned patched transitives with `pnpm.overrides` for `form-data`, `js-yaml`, `tar`, `tmp`, `undici`, and `ws`.
 
 ### Accepted Risks
 
@@ -78,7 +79,17 @@ The following advisories are **accepted as low-risk** for this deployment model:
   - The Node.js npm package includes `binaryIntegrityCheck()` and is not affected.
   - Upgrading esbuild directly would conflict with vite's peer dependency constraints.
 - **Risk Assessment**: Low — vulnerable Deno module code path not used
-- **Remediation Path**: Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking Node 20.11.1 compatibility.
+- **Remediation Path**: Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking the current Node `>=22.22.0` baseline.
+
+#### 4. brace-expansion (GHSA-mh99-v99m-4gvg — High, CVE-2026-14257)
+- **Status**: Legacy `brace-expansion` major lines remain reachable only through build/release tooling chains such as `electron-builder` packaging helpers and legacy `minimatch` consumers. The project pins the newest compatible 1.x/2.x/5.x releases through `pnpm.overrides`, but the GHSA-mh99-v99m-4gvg fix is only available in the 5.x line.
+- **Vulnerability**: Unbounded brace expansion length can exhaust memory when attacker-controlled brace patterns reach `expand()`.
+- **Mitigation**:
+  - The dependency is **build-tooling only** and is never bundled into the shipped Electron runtime.
+  - Packaging and file glob patterns are developer-authored. No user-provided contact/import data reaches the glob/brace expansion code paths.
+  - Forcing `brace-expansion@5.0.8` globally breaks legacy `minimatch@3` consumers (`TypeError: expand is not a function`), so the remaining vulnerable build-tooling-only paths are accepted until upstream parent packages migrate to compatible dependencies.
+- **Risk Assessment**: Low — vulnerable code path requires attacker-controlled build glob input, which is not present in this project.
+- **Remediation Path**: Monitor `electron-builder`, `@electron/asar`, `@electron/universal`, `electron-winstaller`, `temp`/`rimraf`/`glob`, and `filelist` for releases that remove legacy `minimatch` consumers or support `brace-expansion >=5.0.8` without API breakage.
 
 ## Import Rate Limiting
 

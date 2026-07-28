@@ -153,29 +153,30 @@ tool was used to generate the manifest on that machine.
 Every file must report `OK`. Any `FAILED` line indicates a corrupted or tampered file.
 Do not hand off the USB if any checksum fails.
 
-### CVE remediation status (as of 2026-06-17)
+### CVE remediation status (as of 2026-07-28)
 
 | GHSA | Package | Status |
 |------|---------|--------|
 | GHSA-5xrq-8626-4rwp | vitest UI RCE | Resolved — vitest 4.1.9 |
 | GHSA-67mh-4wv8-2f99 | esbuild CORS bypass | Resolved — vite 6.4.3 |
 | GHSA-4w7w-66w2-5vf9 | vite path traversal | Resolved — vite 6.x |
-| GHSA-ph9p-34f9-6g65 | tmp path traversal | No upstream patch; allowlisted, monitor below |
+| GHSA-ph9p-34f9-6g65 | tmp path traversal | Resolved by pnpm override to tmp 0.2.7 |
 | GHSA-gv7w-rqvm-qjhr | esbuild Deno binary | Allowlisted — Node npm path unaffected |
+| GHSA-mh99-v99m-4gvg | brace-expansion DoS | Accepted build-tooling-only risk; legacy major lines cannot be upgraded to 5.x without breaking minimatch 3/5 consumers |
 
-### tmp monitoring plan (GHSA-ph9p-34f9-6g65)
+### build-tooling monitoring plan
 
-`tmp@0.2.5` has no patch available. It is a transitive dependency via:
-`electron-builder > app-builder-lib > @malept/flatpak-bundler > tmp-promise > tmp`
+`tmp` is forced to `0.2.7`, and other high-risk build transitive dependencies are forced to patched versions with `pnpm.overrides`.
+`brace-expansion` remains an accepted build-tooling-only risk because legacy `minimatch` consumers still require 1.x/2.x APIs, and forcing `5.0.8` globally breaks `minimatch@3`.
 
-The Flatpak target is not used in this project. Monitor:
-- `electron-builder` changelog for an `app-builder-lib` bump that pulls `tmp >=0.2.6`.
-- `@malept/flatpak-bundler` repository for a direct `tmp-promise` upgrade.
+Monitor:
+- `electron-builder` changelog for upstream dependency bumps that remove local overrides.
+- `@electron/asar`, `@electron/universal`, `electron-winstaller`, `filelist`, and legacy `glob`/`rimraf` chains for migration away from `minimatch@3`/`5`.
 
 When a patched version becomes available:
 1. Upgrade `electron-builder` in `package.json`.
-2. Confirm `pnpm audit` no longer reports GHSA-ph9p-34f9-6g65.
-3. Remove the `GHSA-ph9p-34f9-6g65` entry from `scripts/audit-allowlist.json`.
+2. Confirm `pnpm audit` no longer reports accepted build-tooling advisories.
+3. Remove obsolete entries from `scripts/audit-allowlist.json`.
 4. Run `pnpm run ci` to confirm no regressions.
 
 ### Allowlist review cadence
