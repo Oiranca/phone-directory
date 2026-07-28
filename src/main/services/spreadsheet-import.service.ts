@@ -36,6 +36,11 @@ export { isSerializedPhoneEntry } from "./spreadsheet-normalize.js";
 export { mergeRecordsByDisplayName } from "./spreadsheet-parsers.js";
 
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_SPREADSHEET_ZIP_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
+const MAX_SPREADSHEET_XML_UNCOMPRESSED_BYTES = 20 * 1024 * 1024;
+const MAX_SPREADSHEET_ZIP_COMPRESSION_RATIO = 25;
+const MAX_SPREADSHEET_IMPORT_SHEETS = 100;
+const MAX_SPREADSHEET_IMPORT_CELLS = 250_000;
 export const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
 const MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS = 5_000;
 const IS_VITEST_RUNTIME = process.env.VITEST === "true";
@@ -113,6 +118,21 @@ type SheetData = {
   name: string;
   slug: string;
   rows: string[][];
+};
+
+type SpreadsheetZipPreflightEntry = {
+  fileName: string;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+};
+
+type SpreadsheetZipPreflightSummary = {
+  entries: SpreadsheetZipPreflightEntry[];
+  totalCompressedSize: number;
+  totalUncompressedSize: number;
+  xmlUncompressedSize: number;
+  sheetFileCount: number;
 };
 
 export type SpreadsheetImportNormalizationResult = {
@@ -615,12 +635,211 @@ const readSheetRows = (sheet: XLSX.WorkSheet) =>
     .map((row) => row.map((value) => clean(String(value ?? ""))))
     .filter((row) => row.some((value) => value));
 
+const findZipEndOfCentralDirectory = (buffer: Buffer) => {
+  const eocdMinSize = 22;
+  const maxCommentSize = 0xffff;
+  const searchStart = Math.max(0, buffer.length - eocdMinSize - maxCommentSize);
+
+  for (let offset = buffer.length - eocdMinSize; offset >= searchStart; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50) {
+      return offset;
+    }
+  }
+
+  return -1;
+};
+
+const toSafeInteger = (value: number) => {
+  if (value === 0xffffffff) {
+    throw new Error("El archivo de hoja de cálculo usa ZIP64, que no está permitido para importación.");
+  }
+
+  return value;
+};
+
+const toSafeEntryCount = (value: number) => {
+  if (value === 0xffff) {
+    throw new Error("El archivo de hoja de cálculo usa ZIP64, que no está permitido para importación.");
+  }
+
+  return value;
+};
+
+const assertLocalZipHeaderMatches = (
+  buffer: Buffer,
+  entry: SpreadsheetZipPreflightEntry
+) => {
+  const offset = entry.localHeaderOffset;
+  if (offset < 0 || offset + 30 > buffer.length || buffer.readUInt32LE(offset) !== 0x04034b50) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El encabezado ZIP no es válido.");
+  }
+
+  const flags = buffer.readUInt16LE(offset + 6);
+  const localCompressedSize = toSafeInteger(buffer.readUInt32LE(offset + 18));
+  const localUncompressedSize = toSafeInteger(buffer.readUInt32LE(offset + 22));
+  const fileNameLength = buffer.readUInt16LE(offset + 26);
+  const extraFieldLength = buffer.readUInt16LE(offset + 28);
+  const fileNameStart = offset + 30;
+  const fileNameEnd = fileNameStart + fileNameLength;
+  const dataStart = fileNameEnd + extraFieldLength;
+
+  if (fileNameEnd > buffer.length || dataStart > buffer.length) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El encabezado ZIP no es válido.");
+  }
+
+  const localFileName = buffer.toString("utf-8", fileNameStart, fileNameEnd);
+  if (localFileName !== entry.fileName) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los nombres internos del ZIP no coinciden.");
+  }
+
+  if ((flags & 0x08) !== 0) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El ZIP usa descriptores de datos no permitidos.");
+  }
+
+  if (
+    localCompressedSize !== entry.compressedSize ||
+    localUncompressedSize !== entry.uncompressedSize
+  ) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los tamaños internos del ZIP no coinciden.");
+  }
+
+  if (dataStart + localCompressedSize > buffer.length) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El contenido ZIP está incompleto.");
+  }
+};
+
+const parseZipCentralDirectory = (buffer: Buffer): SpreadsheetZipPreflightSummary => {
+  const eocdOffset = findZipEndOfCentralDirectory(buffer);
+  if (eocdOffset < 0) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El archivo ZIP no es válido.");
+  }
+
+  const entryCount = toSafeEntryCount(buffer.readUInt16LE(eocdOffset + 10));
+  const centralDirectorySize = toSafeInteger(buffer.readUInt32LE(eocdOffset + 12));
+  const centralDirectoryOffset = toSafeInteger(buffer.readUInt32LE(eocdOffset + 16));
+  const zipBaseOffset = eocdOffset - centralDirectorySize - centralDirectoryOffset;
+  const absoluteCentralDirectoryOffset = centralDirectoryOffset + zipBaseOffset;
+  const centralDirectoryEnd = absoluteCentralDirectoryOffset + centralDirectorySize;
+
+  if (
+    zipBaseOffset < 0 ||
+    absoluteCentralDirectoryOffset < 0 ||
+    centralDirectoryEnd > buffer.length ||
+    centralDirectoryEnd > eocdOffset
+  ) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El directorio ZIP no es válido.");
+  }
+
+  const entries: SpreadsheetZipPreflightEntry[] = [];
+  let offset = absoluteCentralDirectoryOffset;
+
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > centralDirectoryEnd || buffer.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error("No se pudo validar la hoja de cálculo seleccionada. El directorio ZIP no es válido.");
+    }
+
+    const compressedSize = toSafeInteger(buffer.readUInt32LE(offset + 20));
+    const uncompressedSize = toSafeInteger(buffer.readUInt32LE(offset + 24));
+    const localHeaderOffset = toSafeInteger(buffer.readUInt32LE(offset + 42)) + zipBaseOffset;
+    const fileNameLength = buffer.readUInt16LE(offset + 28);
+    const extraFieldLength = buffer.readUInt16LE(offset + 30);
+    const fileCommentLength = buffer.readUInt16LE(offset + 32);
+    const fileNameStart = offset + 46;
+    const fileNameEnd = fileNameStart + fileNameLength;
+    const nextOffset = fileNameEnd + extraFieldLength + fileCommentLength;
+
+    if (fileNameEnd > centralDirectoryEnd || nextOffset > centralDirectoryEnd) {
+      throw new Error("No se pudo validar la hoja de cálculo seleccionada. El directorio ZIP no es válido.");
+    }
+
+    const entry = {
+      fileName: buffer.toString("utf-8", fileNameStart, fileNameEnd),
+      compressedSize,
+      uncompressedSize,
+      localHeaderOffset
+    };
+    assertLocalZipHeaderMatches(buffer, entry);
+    entries.push(entry);
+    offset = nextOffset;
+  }
+
+  const xmlEntries = entries.filter((entry) => entry.fileName.toLowerCase().endsWith(".xml"));
+  const sheetFileCount = entries.filter((entry) => {
+    const name = entry.fileName.toLowerCase();
+    return name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml");
+  }).length;
+
+  return {
+    entries,
+    totalCompressedSize: entries.reduce((sum, entry) => sum + entry.compressedSize, 0),
+    totalUncompressedSize: entries.reduce((sum, entry) => sum + entry.uncompressedSize, 0),
+    xmlUncompressedSize: xmlEntries.reduce((sum, entry) => sum + entry.uncompressedSize, 0),
+    sheetFileCount
+  };
+};
+
+const assertSpreadsheetZipPreflight = (sourceFilePath: string, fileBytes: Buffer) => {
+  if (findZipEndOfCentralDirectory(fileBytes) < 0) {
+    return;
+  }
+
+  const summary = parseZipCentralDirectory(fileBytes);
+  const compressedSize = Math.max(summary.totalCompressedSize, 1);
+  const compressionRatio = summary.totalUncompressedSize / compressedSize;
+
+  if (summary.totalUncompressedSize > MAX_SPREADSHEET_ZIP_UNCOMPRESSED_BYTES) {
+    throw new Error("La hoja de cálculo se expande demasiado al abrirse. Divide el archivo antes de importarlo.");
+  }
+
+  if (summary.xmlUncompressedSize > MAX_SPREADSHEET_XML_UNCOMPRESSED_BYTES) {
+    throw new Error("La hoja de cálculo contiene demasiado contenido interno. Divide el archivo antes de importarlo.");
+  }
+
+  if (compressionRatio > MAX_SPREADSHEET_ZIP_COMPRESSION_RATIO) {
+    throw new Error("La hoja de cálculo está demasiado comprimida para importarla con seguridad. Exporta una versión más pequeña.");
+  }
+
+  if (summary.sheetFileCount > MAX_SPREADSHEET_IMPORT_SHEETS) {
+    throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_SHEETS} hojas. Divide el archivo antes de importarlo.`);
+  }
+};
+
+const assertWorkbookShapeWithinLimits = (workbook: XLSX.WorkBook) => {
+  if (workbook.SheetNames.length > MAX_SPREADSHEET_IMPORT_SHEETS) {
+    throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_SHEETS} hojas. Divide el archivo antes de importarlo.`);
+  }
+
+  let totalCells = 0;
+  for (const sheetName of workbook.SheetNames) {
+    const rangeRef = workbook.Sheets[sheetName]?.["!ref"];
+    if (!rangeRef) {
+      continue;
+    }
+    const range = XLSX.utils.decode_range(rangeRef);
+    totalCells += (range.e.r - range.s.r + 1) * (range.e.c - range.s.c + 1);
+
+    if (totalCells > MAX_SPREADSHEET_IMPORT_CELLS) {
+      throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_CELLS} celdas. Divide el archivo antes de importarlo.`);
+    }
+  }
+};
+
+export const isLocalizedSpreadsheetImportErrorMessage = (message: string) =>
+  message.startsWith("No se pudo leer la hoja de cálculo seleccionada.")
+  || message.startsWith("No se pudo validar la hoja de cálculo seleccionada.")
+  || message.startsWith("No se encontraron hojas soportadas para importar.")
+  || message.startsWith("La hoja de cálculo")
+  || message.startsWith("El archivo supera el tamaño máximo permitido")
+  || message.startsWith("El archivo supera el límite máximo");
+
 const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
+  assertSpreadsheetZipPreflight(sourceFilePath, nodeFs.readFileSync(sourceFilePath));
   const workbook = XLSX.readFile(sourceFilePath, {
     dense: true,
     raw: false,
     cellText: false
   });
+  assertWorkbookShapeWithinLimits(workbook);
   const fileSlug = normalizeAscii(path.parse(sourceFilePath).name);
 
   return workbook.SheetNames.map((sheetName) => {
@@ -684,8 +903,11 @@ export const normalizeWorkbookRowsFromFile = (
   try {
     sheets = readWorkbookSheets(sourceFilePath);
   } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "";
     throw new Error(
-      error instanceof Error && error.message.includes("Unsupported")
+      isLocalizedSpreadsheetImportErrorMessage(rawMessage)
+        ? rawMessage
+        : rawMessage.includes("Unsupported")
         ? "No se pudo leer la hoja de cálculo seleccionada. El formato del archivo no es compatible."
         : "No se pudo leer la hoja de cálculo seleccionada."
     );
