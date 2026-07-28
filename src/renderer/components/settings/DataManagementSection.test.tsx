@@ -237,7 +237,8 @@ describe("DataManagementSection (Configuración data section)", () => {
           warningCount: 1,
           invalidRowCount: 0,
           createdCount: 1,
-          updatedCount: 1
+          updatedCount: 1,
+          beeperImportStatus: { status: "not-applicable", parsedCellCount: 0 }
         })
       }
     });
@@ -510,6 +511,48 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
     expect(await screen.findByText("Importación completada. 1 alta y 1 actualización.")).toBeInTheDocument();
+  });
+
+  it("surfaces partial beeper import failure after contacts import succeeds", async () => {
+    window.hospitalDirectory.importCsvDataset = vi.fn().mockResolvedValue({
+      contacts: {
+        ...defaultContacts,
+        records: [
+          {
+            ...defaultContacts.records[0]!,
+            id: "cnt_csv_imported",
+            displayName: "Directorio CSV"
+          }
+        ]
+      },
+      settings: editableSettings,
+      backupPath: "/tmp/backups/contacts-csv-auto.json",
+      importedFilePath: "/tmp/incoming/directory.csv",
+      recordCount: defaultContacts.records.length + 1,
+      warningCount: 0,
+      invalidRowCount: 0,
+      createdCount: 1,
+      updatedCount: 0,
+      conflictCount: 0,
+      rowIssues: [],
+      beeperImportStatus: {
+        status: "partial-failure",
+        parsedCellCount: 1,
+        message: "No se pudieron guardar las buscas importadas."
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    expect(
+      await screen.findByText(/Contactos importados, pero no se pudieron guardar las buscas/)
+    ).toBeInTheDocument();
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
@@ -791,6 +834,7 @@ describe("DataManagementSection (Configuración data section)", () => {
       createdCount: 0,
       updatedCount: 1,
       conflictCount: 0,
+      beeperImportStatus: { status: "not-applicable", parsedCellCount: 0 },
       rowIssues: [
         {
           rowNumber: 3,
