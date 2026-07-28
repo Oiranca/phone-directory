@@ -112,7 +112,7 @@ export const beeperEntrySchema = z.object({
   label: z.string().optional()
 });
 
-export const contactRecordSchema = z.object({
+const contactRecordSchemaBase = z.object({
   id: z.string(),
   externalId: z.string().optional(),
   type: z.enum(RECORD_TYPES),
@@ -179,6 +179,23 @@ export const contactRecordSchema = z.object({
     updatedBy: z.string()
   })
 });
+
+export const contactRecordSchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const record = input as { beepers?: unknown; buscas?: unknown };
+
+  if (record.beepers !== undefined || record.buscas === undefined) {
+    return input;
+  }
+
+  return {
+    ...record,
+    beepers: record.buscas
+  };
+}, contactRecordSchemaBase);
 
 export const directoryDatasetSchema = z.object({
   version: z.string(),

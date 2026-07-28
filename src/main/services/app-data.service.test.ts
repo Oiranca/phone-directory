@@ -122,6 +122,30 @@ describe("AppDataService", () => {
     expect(error.message).not.toContain(missingBackupDirectory);
   });
 
+  it("maps persisted legacy buscas entries onto beepers during bootstrap", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const legacyDataset = JSON.parse(JSON.stringify(defaultContacts)) as typeof defaultContacts;
+    legacyDataset.records[0] = {
+      ...legacyDataset.records[0]!,
+      beepers: undefined,
+      buscas: [{ number: "4321", label: "Guardia" }]
+    };
+
+    await fs.writeFile(
+      path.join(currentUserDataRoot, "data", "contacts.json"),
+      JSON.stringify(legacyDataset, null, 2),
+      "utf-8"
+    );
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.contacts.records[0]!.beepers).toEqual([{ number: "4321", label: "Guardia" }]);
+  });
+
   it("rejects custom backup directories that resolve through symlinks", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
