@@ -209,6 +209,11 @@ export interface CsvImportWarning {
   message: string;
 }
 
+export type BeeperImportStatus =
+  | { status: "not-applicable"; parsedCellCount: 0 }
+  | { status: "success"; parsedCellCount: number; importedRecordCount: number }
+  | { status: "partial-failure"; parsedCellCount: number; message: string };
+
 export type CsvImportRowStatus = "accepted" | "warning" | "rejected";
 
 export interface CsvImportPreviewRow {
@@ -403,6 +408,7 @@ export interface CsvImportResult extends ImportContactsResult {
   updatedCount: number;
   conflictCount: number;
   conflictPolicyCounts?: Partial<Record<MergePolicy, number>>;
+  beeperImportStatus: BeeperImportStatus;
   /**
    * Rejected rows are skipped rather than blocking the whole import.
    * This carries the same per-row reasons already surfaced in the preview

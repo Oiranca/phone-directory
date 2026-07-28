@@ -17,6 +17,7 @@ import type {
   BootstrapData,
   BootstrapResult,
   ContactRecord,
+  BeeperImportStatus,
   CsvImportPolicySelection,
   ConflictType,
   ConflictRecordSummary,
@@ -576,6 +577,36 @@ export class AppDataService {
     const now = new Date().toISOString();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
     this.noteAutoBackupEligibleEdit();
+
+    let beeperImportStatus: BeeperImportStatus = {
+      status: "not-applicable",
+      parsedCellCount: 0
+    };
+
+    // Persist beepers records after contacts are successfully written. This is
+    // an explicit partial-success contract: contacts remain imported, and the
+    // caller receives a machine-readable warning if beepers fail.
+    if (beepersParseResult.parsedCellCount > 0) {
+      try {
+        if (!this.options.beepersService) {
+          throw new Error("No beepers service configured.");
+        }
+        const importedRecordCount = await this.options.beepersService.importFromOds(beepersParseResult);
+        beeperImportStatus = {
+          status: "success",
+          parsedCellCount: beepersParseResult.parsedCellCount,
+          importedRecordCount
+        };
+      } catch {
+        console.error("[BeepersImport] Failed to persist beepers records.");
+        beeperImportStatus = {
+          status: "partial-failure",
+          parsedCellCount: beepersParseResult.parsedCellCount,
+          message: "No se pudieron guardar las buscas importadas."
+        };
+      }
+    }
+
     await this.appendAuditEntry({
       timestamp: now,
       editor: editorName,
@@ -587,22 +618,11 @@ export class AppDataService {
         updatedCount: { new: merged.updatedCount },
         unchangedCount: { new: merged.unchangedCount },
         conflictCount: { new: conflicts.length },
-        conflictPolicyCounts: { new: merged.conflictPolicyCounts }
+        conflictPolicyCounts: { new: merged.conflictPolicyCounts },
+        beeperImportStatus: { new: beeperImportStatus.status },
+        beeperParsedCellCount: { new: beeperImportStatus.parsedCellCount }
       }
     });
-
-    // Persist beepers records after contacts are successfully written.
-    // A beepers failure must NOT roll back or suppress the contacts import result.
-    if (beepersParseResult.parsedCellCount > 0 && this.options.beepersService) {
-      try {
-        await this.options.beepersService.importFromOds(beepersParseResult);
-      } catch (err) {
-        // Non-fatal: contacts import succeeded; log so operators can diagnose.
-        // Surfacing to the UI would require a contract change — out of scope here.
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[BeepersImport] Failed to persist beepers records — ${errMsg}`);
-      }
-    }
 
     const updatedSettings = await this.recordLastImportedAt(settings, now);
 
@@ -618,6 +638,7 @@ export class AppDataService {
       updatedCount: merged.updatedCount,
       conflictCount: conflicts.length,
       conflictPolicyCounts: merged.conflictPolicyCounts,
+      beeperImportStatus,
       // Surface the same per-row rejection reasons already computed
       // for the preview so the renderer can report exactly what was skipped.
       rowIssues: preview.rowIssues

@@ -313,6 +313,12 @@ export const DataManagementSection = () => {
       });
       await refreshBackups();
       setCsvPreview(null);
+      if (result.beeperImportStatus?.status === "partial-failure") {
+        pushToast({
+          type: "warning",
+          message: `Contactos importados, pero no se pudieron guardar las buscas. ${result.beeperImportStatus.message}`
+        });
+      }
       pushToast({
         type: "success",
         message: `Importación completada. ${result.createdCount} ${result.createdCount === 1 ? "alta" : "altas"} y ${result.updatedCount} ${result.updatedCount === 1 ? "actualización" : "actualizaciones"}.${

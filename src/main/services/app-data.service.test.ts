@@ -5116,6 +5116,11 @@ describe("AppDataService", () => {
 
     // Contacts import succeeded.
     expect(result.createdCount).toBeGreaterThan(0);
+    expect(result.beeperImportStatus).toEqual({
+      status: "success",
+      parsedCellCount: 2,
+      importedRecordCount: 2
+    });
 
     // beepers.json now contains the imported pager records.
     const beepersFilePath = path.join(testRoot, "data", "beepers.json");
@@ -5126,8 +5131,9 @@ describe("AppDataService", () => {
     expect(numbers).toContain("7322");
   });
 
-  it("importCsvDataset returns contacts result even when beepers persist fails", async () => {
+  it("importCsvDataset returns explicit partial-success details when beepers persist fails", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     // Inject a beepersService stub that always throws.
     const failingBeepersService = {
@@ -5159,9 +5165,20 @@ describe("AppDataService", () => {
       ]
     );
 
-    // importCsvDataset must NOT throw even though beepers persist throws.
     const result = await service.importCsvDataset(sourceFilePath);
+
     expect(result.createdCount).toBeGreaterThan(0);
+    expect(result.beeperImportStatus).toEqual({
+      status: "partial-failure",
+      parsedCellCount: 1,
+      message: "No se pudieron guardar las buscas importadas."
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith("[BeepersImport] Failed to persist beepers records.");
+    expect(consoleErrorSpy.mock.calls.flat().join("\n")).not.toContain("beepers write failure");
+
+    const audit = await service.getAuditLog({ action: "bulk-import" });
+    expect(audit.entries[0]?.changes?.beeperImportStatus?.new).toBe("partial-failure");
+    expect(audit.entries[0]?.changes?.beeperParsedCellCount?.new).toBe(1);
   });
 
   it("importCsvDataset persists beepers records when workbook has zero contact rows (beepers-only ODS)", async () => {
