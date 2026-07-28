@@ -2,12 +2,22 @@
  * Unit tests for spreadsheet-buscas-parser.ts
  *
  * Covers:
- *   1. detectBuscasHeaderRowIndex — header detection across first 5 rows
- *   2. parseBuscasSheet — column routing, pager extraction, skipped rows
- *   3. parseBuscasSheets — multi-sheet aggregation
- *   4. Edge cases: empty sheets, no holder columns, non-pager cells, COMENTARIOS column
+ *   1. New per-person layout ("Busca 1"/"Busca 2" + Nombre/Categoría/Servicio)
+ *      — OIR-266, the current real-world ODS shape.
+ *   2. detectBuscasHeaderRowIndex — LEGACY header detection across first 5 rows
+ *   3. parseBuscasSheet (legacy path) — column routing, pager extraction, skipped rows
+ *   4. parseBuscasSheets — multi-sheet aggregation (both layouts)
+ *   5. Edge cases: empty sheets, no holder columns, non-pager cells, COMENTARIOS column
  *
- * Real ODS sheet shapes tested:
+ * Real ODS sheet shapes tested (confirmed against
+ * "Agenda Normalizada.ods" on 2026-07-20):
+ *   - Buscas Todos:     Nombre / Categoría / Servicio / Busca 1 / Busca 2 / Número 1 / Corporativo / ...
+ *   - Buscas Usuales:   Nombre / Categoría / Servicio / Busca 1 / Busca 2 / Número 1 / Corporativo / ...
+ *   - Buscas Celadores: Nombre / Categoría / Servicio / Número 1 / Corporativo / Busca 1 / Busca 2 / ...
+ *     (column ORDER differs on this sheet — columns are always located by name)
+ *
+ * LEGACY shapes tested (fallback path, no longer confirmed present in real
+ * source data but kept for backward-compat — see file-header comment):
  *   - Buscas_Facultativos: SERVICIO / PRINCIPAL / RESIDENTE / ADJUNTO 1 / COMENTARIOS
  *   - Buscas_Celadores: SERVICIO / PRINCIPAL / PRINCIPAL 2 / COMENTARIOS
  *   - Buscas_Enfermería: SERVICIO / PRINCIPAL / RESIDENTE
@@ -22,7 +32,273 @@ import {
 } from "./spreadsheet-buscas-parser.js";
 
 // ---------------------------------------------------------------------------
-// detectBuscasHeaderRowIndex
+// New per-person layout ("Busca 1"/"Busca 2") — OIR-266
+// ---------------------------------------------------------------------------
+
+describe("parseBuscasSheet — new per-person layout", () => {
+  it("parses 'Buscas Todos' shape: one record per non-empty Busca cell", () => {
+    const sheet = {
+      name: "Buscas Todos",
+      rows: [
+        [
+          "Nombre",
+          "Categoría",
+          "Servicio",
+          "Busca 1",
+          "Busca 2",
+          "Número 1",
+          "Corporativo",
+          "Horario",
+          "Confidencial",
+          "Edificio",
+          "Planta",
+          "Sector",
+          "Sección",
+          "Comentarios"
+        ],
+        ["", "Doctor/a", "Análisis Clínico", "7153", "", "", "", "", "", "", "", "", "", ""],
+        [
+          "Rodrigo",
+          "Celador/a",
+          "Celador Calidad",
+          "7801",
+          "7695",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "7801 Está averidado"
+        ]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    // Row 0: Busca 1 only → 1 record. Row 1: Busca 1 + Busca 2 → 2 records.
+    expect(result.parsedCellCount).toBe(3);
+    expect(result.records).toHaveLength(3);
+    expect(result.skippedRowCount).toBe(0);
+
+    const first = result.records[0]!;
+    expect(first.deviceNumber).toBe("7153");
+    expect(first.department).toBe("Análisis Clínico");
+    expect(first.category).toBe("Doctor/a");
+    expect(first.name).toBeUndefined();
+    expect(first.holderType).toBeUndefined();
+    expect(first.sourceSheet).toBe("Buscas Todos");
+    expect(first.sourceRow).toBe(0);
+
+    const second = result.records[1]!;
+    expect(second.deviceNumber).toBe("7801");
+    expect(second.department).toBe("Celador Calidad");
+    expect(second.name).toBe("Rodrigo");
+    expect(second.category).toBe("Celador/a");
+    expect(second.sourceRow).toBe(1);
+
+    const third = result.records[2]!;
+    expect(third.deviceNumber).toBe("7695");
+    expect(third.department).toBe("Celador Calidad");
+    expect(third.name).toBe("Rodrigo");
+    expect(third.sourceRow).toBe(1);
+  });
+
+  it("parses 'Buscas Celadores' shape where Busca 1/Busca 2 come AFTER Número 1/Corporativo", () => {
+    // Column order differs from Buscas Todos/Usuales — columns must be
+    // located by name, not fixed index.
+    const sheet = {
+      name: "Buscas Celadores",
+      rows: [
+        [
+          "Nombre",
+          "Categoría",
+          "Servicio",
+          "Número 1",
+          "Corporativo",
+          "Busca 1",
+          "Busca 2",
+          "Horario",
+          "Confidencial",
+          "Edificio",
+          "Planta",
+          "Sector",
+          "Sección",
+          "Comentarios"
+        ],
+        ["Antonioa Fleitas", "Celador/a", "Celador Anatomía Patológica", "79202", "", "7616", "", "", "", "", "", "", "", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records).toHaveLength(1);
+    const record = result.records[0]!;
+    expect(record.deviceNumber).toBe("7616");
+    // "79202" (Número 1) must NOT leak into deviceNumber — it is a phone
+    // extension in a different column, not a pager code.
+    expect(record.deviceNumber).not.toBe("79202");
+    expect(record.department).toBe("Celador Anatomía Patológica");
+    expect(record.name).toBe("Antonioa Fleitas");
+    expect(record.category).toBe("Celador/a");
+  });
+
+  it("accepts a 5-digit Busca code (real-data exception, e.g. Hado sheets)", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "Doctor/a", "Hado – Médico", "79258", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records[0]!.deviceNumber).toBe("79258");
+  });
+
+  it("skips a row with no Servicio value (required identity field)", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "", "", "7000", ""],
+        ["", "", "Fisioterapia", "7445", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.skippedRowCount).toBe(1);
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]!.department).toBe("Fisioterapia");
+  });
+
+  it("skips a row with a Servicio label but no Busca 1/Busca 2 value", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "", "Sin Busca Asignado", "", ""],
+        ["", "", "Geriatria", "7260", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.skippedRowCount).toBe(1);
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records).toHaveLength(1);
+  });
+
+  it("does not treat a non-numeric Busca cell as a pager code", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "", "Pendiente Asignación", "pendiente", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(0);
+    expect(result.skippedRowCount).toBe(1);
+  });
+
+  it("matches 'Categoría'/'Servicio' headers accent-insensitively (e.g. unaccented ODS export)", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "CATEGORIA", "SERVICIO", "Busca 1", "Busca 2"],
+        ["", "Enfermero/a", "Hado - Enfermeria", "79257", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records[0]!.category).toBe("Enfermero/a");
+  });
+
+  it("leaves name/category undefined when their columns are empty", () => {
+    const sheet = {
+      name: "Buscas Usuales",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "", "Cardiología", "7580", ""]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.records[0]!.name).toBeUndefined();
+    expect(result.records[0]!.category).toBeUndefined();
+  });
+
+  it("prefers the new layout over the legacy one when a sheet has both a Busca 1 and PRINCIPAL-like column", () => {
+    // Defensive: a hypothetical sheet with a "Busca 1" column AND a column
+    // whose header happens to contain a legacy holder-type keyword must still
+    // be parsed via the new per-person path (Busca 1 takes precedence).
+    const sheet = {
+      name: "Buscas Hibrida",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2", "Guardia"],
+        ["", "", "Urgencias", "7001", "", "no-pager-comment"]
+      ]
+    };
+
+    const result = parseBuscasSheet(sheet);
+
+    expect(result.parsedCellCount).toBe(1);
+    expect(result.records[0]!.deviceNumber).toBe("7001");
+    // The "Guardia" column is not a recognised new-layout column — ignored.
+    expect(result.records.some((r) => r.deviceNumber === "no-pager-comment")).toBe(false);
+  });
+});
+
+describe("parseBuscasSheets — new per-person layout aggregation", () => {
+  it("aggregates records across the three real buscas sheet names", () => {
+    const sheets = [
+      {
+        name: "Buscas Todos",
+        rows: [
+          ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+          ["", "Doctor/a", "Análisis Clínico", "7153", ""]
+        ]
+      },
+      {
+        name: "Buscas Usuales",
+        rows: [
+          ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+          ["", "", "Anestesia", "7321", ""]
+        ]
+      },
+      {
+        name: "Buscas Celadores",
+        rows: [
+          ["Nombre", "Categoría", "Servicio", "Número 1", "Corporativo", "Busca 1", "Busca 2"],
+          ["", "Celador/a", "Celador Alergia", "", "", "7810", ""]
+        ]
+      }
+    ];
+
+    const result = parseBuscasSheets(sheets);
+
+    expect(result.parsedCellCount).toBe(3);
+    expect(result.records).toHaveLength(3);
+    const sourceSheets = new Set(result.records.map((r) => r.sourceSheet));
+    expect(sourceSheets).toEqual(new Set(["Buscas Todos", "Buscas Usuales", "Buscas Celadores"]));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectBuscasHeaderRowIndex (LEGACY layout — fallback path)
 // ---------------------------------------------------------------------------
 
 describe("detectBuscasHeaderRowIndex", () => {
@@ -122,10 +398,10 @@ describe("detectBuscasHeaderRowIndex", () => {
 });
 
 // ---------------------------------------------------------------------------
-// parseBuscasSheet
+// parseBuscasSheet (LEGACY layout — fallback path)
 // ---------------------------------------------------------------------------
 
-describe("parseBuscasSheet", () => {
+describe("parseBuscasSheet (legacy layout)", () => {
   it("parses a standard Buscas_Facultativos shape correctly", () => {
     const sheet = {
       name: "Buscas_Facultativos",
@@ -348,10 +624,10 @@ describe("parseBuscasSheet", () => {
 });
 
 // ---------------------------------------------------------------------------
-// parseBuscasSheets (multi-sheet aggregation)
+// parseBuscasSheets (legacy layout — multi-sheet aggregation)
 // ---------------------------------------------------------------------------
 
-describe("parseBuscasSheets", () => {
+describe("parseBuscasSheets (legacy layout)", () => {
   it("aggregates records from multiple sheets", () => {
     const sheets = [
       {
