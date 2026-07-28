@@ -35,8 +35,10 @@ The release script runs:
 2. **Dependency audit gate** (`pnpm audit --json` filtered against `scripts/audit-allowlist.json`)
 3. `pnpm test`
 4. `pnpm run build`
-5. `electron-builder --dir` for the selected platform
-6. USB package staging under `dist-portable/usb-package/`
+5. `pnpm run test:e2e`
+6. `electron-builder --dir` for the selected platform
+7. Packaged startup smoke for the selected platform when it matches the host OS
+8. USB package staging under `dist-portable/usb-package/`
 
 The audit gate exits non-zero (aborting the release) if any high- or
 critical-severity advisory is not covered by an unexpired allowlist entry.
@@ -52,6 +54,11 @@ Verify the audit status line in `RELEASE_MANIFEST.txt` after the build:
 - **PASSED** — all advisories accounted for; release is clean.
 - **BYPASSED** — the audit was skipped intentionally; confirm the reason is
   documented and accepted before handing off the USB.
+
+When `release-usb.sh` logs `Running packaged startup smoke`, it has launched
+the packaged executable and verified the renderer loaded from `file://`. If the
+artifact was cross-built and the log says the smoke was skipped, run
+`pnpm run test:e2e:packaged` on the matching target OS before handoff.
 
 If the release is blocked by a `NON-ALLOWLISTED` advisory:
 

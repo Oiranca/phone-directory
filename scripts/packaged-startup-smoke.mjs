@@ -1,0 +1,168 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { _electron as electron } from "@playwright/test";
+
+const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const distRootDir = path.join(repoRootDir, "dist-portable");
+
+const args = new Set(process.argv.slice(2));
+const getArgValue = (name) => {
+  const prefix = `${name}=`;
+  const found = process.argv.slice(2).find((arg) => arg.startsWith(prefix));
+  return found ? found.slice(prefix.length) : null;
+};
+
+const currentPlatform = () => {
+  if (process.platform === "win32") {
+    return "win";
+  }
+  if (process.platform === "darwin") {
+    return "mac";
+  }
+  if (process.platform === "linux") {
+    return "linux";
+  }
+  throw new Error(`Unsupported host platform: ${process.platform}`);
+};
+
+const targetPlatform = getArgValue("--platform") ?? currentPlatform();
+const skipBuild = args.has("--skip-build");
+
+if (!["win", "mac", "linux"].includes(targetPlatform)) {
+  throw new Error(`Unsupported target platform: ${targetPlatform}`);
+}
+
+if (targetPlatform !== currentPlatform()) {
+  throw new Error(
+    `Packaged startup smoke can only launch the current host platform. ` +
+      `Host is ${currentPlatform()}, target is ${targetPlatform}.`
+  );
+}
+
+const pathExists = async (candidate) => {
+  try {
+    await fs.access(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const findFirstExecutable = async (dir, predicate) => {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const candidate = path.join(dir, entry.name);
+    if (predicate(entry.name)) {
+      return candidate;
+    }
+  }
+  throw new Error(`No packaged executable found in ${dir}`);
+};
+
+const findMacExecutable = async () => {
+  const preferredDir = process.arch === "arm64" ? "mac-arm64" : "mac";
+  const appNames = ["HospiAgenda.app", "Phone Directory.app"];
+  const buildDirs = [preferredDir, "mac", "mac-arm64"];
+
+  for (const buildDir of buildDirs) {
+    for (const appName of appNames) {
+      const executableName = path.basename(appName, ".app");
+      const candidate = path.join(
+        distRootDir,
+        buildDir,
+        appName,
+        "Contents",
+        "MacOS",
+        executableName
+      );
+      if (await pathExists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  for (const buildDir of buildDirs) {
+    const platformDir = path.join(distRootDir, buildDir);
+    if (!(await pathExists(platformDir))) {
+      continue;
+    }
+    const appEntries = await fs.readdir(platformDir, { withFileTypes: true });
+    for (const appEntry of appEntries) {
+      if (!appEntry.isDirectory() || !appEntry.name.endsWith(".app")) {
+        continue;
+      }
+      const macOsDir = path.join(platformDir, appEntry.name, "Contents", "MacOS");
+      if (await pathExists(macOsDir)) {
+        return findFirstExecutable(macOsDir, () => true);
+      }
+    }
+  }
+
+  throw new Error("No packaged macOS executable found under dist-portable/mac*");
+};
+
+const findPackagedExecutable = async () => {
+  if (targetPlatform === "mac") {
+    return findMacExecutable();
+  }
+  if (targetPlatform === "win") {
+    return findFirstExecutable(path.join(distRootDir, "win-unpacked"), (name) =>
+      name.toLowerCase().endsWith(".exe")
+    );
+  }
+  return findFirstExecutable(path.join(distRootDir, "linux-unpacked"), (name) =>
+    ["hospiagenda", "phone-directory"].includes(name.toLowerCase())
+  );
+};
+
+if (!skipBuild) {
+  execFileSync("pnpm", ["run", `build:dist:${targetPlatform}`], {
+    cwd: repoRootDir,
+    stdio: "inherit"
+  });
+}
+
+const executablePath = await findPackagedExecutable();
+const workspaceRootDir = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-packaged-smoke-"));
+const userDataPath = path.join(workspaceRootDir, "user-data");
+let electronApp;
+
+try {
+  await fs.mkdir(userDataPath, { recursive: true });
+
+  electronApp = await electron.launch({
+    executablePath,
+    cwd: repoRootDir,
+    timeout: 60_000,
+    env: {
+      ...process.env,
+      ELECTRON_OPEN_DEVTOOLS: "0",
+      ELECTRON_PORTABLE: "1",
+      ELECTRON_PORTABLE_ROOT_PATH: userDataPath
+    }
+  });
+
+  const page = await electronApp.firstWindow();
+  await page.getByPlaceholder("Buscar contacto o servicio").waitFor({
+    state: "visible",
+    timeout: 60_000
+  });
+
+  const pageUrl = page.url();
+  if (!pageUrl.startsWith("file://")) {
+    throw new Error(`Expected packaged app to load file:// renderer, got ${pageUrl}`);
+  }
+
+  console.log(`[packaged-startup-smoke] PASS ${targetPlatform}: renderer loaded via file://`);
+} finally {
+  if (electronApp) {
+    await electronApp.close();
+  }
+  await fs.rm(workspaceRootDir, { recursive: true, force: true });
+}

@@ -20,15 +20,16 @@
  *         builds. Requires vite.config.ts to have base: "./" set.
  *   AC4)  Dev mode uses ELECTRON_RENDERER_URL rather than a hardcoded constant.
  *
- * NOT covered (requires electron-builder packaging to test):
+ * Covered separately by `pnpm run test:e2e:packaged`:
  *   The actual production file:// loadFile() branch at runtime.
  *   In Playwright/Electron E2E, the app is launched against
  *   dist-electron/main/index.js via electron.launch() — NOT a signed,
  *   packaged .app. Because of this, `app.isPackaged` is always false, so
  *   isDev is always true and the dev-server branch is always taken.
  *   Exercising the real loadFile() branch requires `electron-builder --dir`
- *   followed by launching the packaged binary, which is outside the scope
- *   of this unit/E2E suite and is covered by the USB release smoke workflow.
+ *   followed by launching the packaged binary. That path is now covered by
+ *   scripts/packaged-startup-smoke.mjs and by release-usb.sh on host-matching
+ *   release targets.
  */
 import fs from "node:fs/promises";
 import path from "node:path";

@@ -94,6 +94,14 @@ case "$PLATFORM" in
   linux) pnpm exec electron-builder --linux --dir ;;
 esac
 
+HOST_PLATFORM="$(node -p "process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : process.platform === 'linux' ? 'linux' : process.platform")"
+if [[ "$HOST_PLATFORM" == "$PLATFORM" ]]; then
+  log "Running packaged startup smoke ($PLATFORM file:// path)"
+  pnpm run test:e2e:packaged -- --skip-build --platform="$PLATFORM"
+else
+  log "Skipping packaged startup smoke: host platform '$HOST_PLATFORM' cannot launch '$PLATFORM' artifact"
+fi
+
 log "Preparing USB package layout"
 rm -rf "$PACKAGE_ROOT"
 mkdir -p "$PACKAGE_ROOT"
