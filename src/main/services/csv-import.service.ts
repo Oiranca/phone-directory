@@ -5,6 +5,7 @@ import { AREAS, RECORD_TYPES } from "../../shared/constants/catalogs.js";
 import type { AreaType } from "../../shared/constants/catalogs.js";
 import { contactRecordSchema, directoryDatasetSchema, socialPlatformSchema } from "../../shared/schemas/contact.js";
 import type {
+  BuscaEntry,
   ContactRecord,
   CsvImportIssue,
   CsvImportPreview,
@@ -15,8 +16,7 @@ import type {
   PhoneContact,
   EmailContact,
   SocialContact,
-  SocialPlatform,
-  BuscaEntry
+  SocialPlatform
 } from "../../shared/types/contact.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 

@@ -20,7 +20,10 @@ class FakeWorker {
 const sampleResult: SpreadsheetImportNormalizationResult = {
   rows: [],
   detectedFormat: "exportación cruda de hoja de servicios",
-  detectionConfidence: "high"
+  detectionConfidence: "high",
+  buscasParseResult: { records: [], parsedCellCount: 0, skippedRowCount: 0 },
+  buscasSkippedRowCount: 0,
+  socialHandleSkippedRowCount: 0
 };
 
 afterEach(() => {

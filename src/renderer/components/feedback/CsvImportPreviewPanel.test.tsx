@@ -467,6 +467,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "import-1",
             displayName: "Mostrador importado",
             department: "Admisión",
@@ -475,6 +476,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-1",
             displayName: "Mostrador actual",
             department: "Admisión",
@@ -541,6 +543,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "import-1",
             displayName: "Mostrador Central",
             department: "Admisión",
@@ -549,6 +552,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-1",
             displayName: "Mostrador Central",
             department: "Admisión",
@@ -608,6 +612,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "import-ph-1",
             displayName: "Urgencias Importada",
             department: "Urgencias",
@@ -622,6 +627,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: [{ platform: "instagram", handle: "urgencias_h" }]
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-ph-1",
             displayName: "Urgencias Actual",
             department: "Urgencias",
@@ -773,6 +779,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-em-1",
               displayName: "Dr. García Importado",
               phones: [],
@@ -780,6 +787,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-em-1",
               displayName: "Dr. García",
               phones: [],
@@ -821,6 +829,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-fmt-1",
               displayName: "Servicio Importado",
               phones: [
@@ -831,6 +840,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-fmt-1",
               displayName: "Servicio Existente",
               phones: [
@@ -876,6 +886,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-case-em-1",
               displayName: "Dr. López Importado",
               phones: [],
@@ -886,6 +897,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-case-em-1",
               displayName: "Dr. López",
               phones: [],
@@ -933,6 +945,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-dup-1",
               displayName: "Servicio Duplicado",
               // Two entries with the exact same number AND label — the pre-fix key
@@ -945,6 +958,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-dup-1",
               displayName: "Servicio Duplicado Existente",
               phones: [{ number: "12345", kind: "direct" }],
@@ -1040,6 +1054,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "spec-import-1",
             displayName: "Servicio",
             phones: [],
@@ -1048,6 +1063,7 @@ describe("CsvImportPreviewPanel", () => {
             ...overrides
           },
           matchingRecord: {
+            buscas: [],
             id: "spec-existing-1",
             displayName: "Servicio Existente",
             phones: [],
@@ -1786,6 +1802,7 @@ describe("CsvImportPreviewPanel", () => {
       conflictedRecords: Array.from({ length: count }, (_, i) => ({
         recordIndex: i,
         importedRecord: {
+          buscas: [],
           id: `import-pg-${i}`,
           displayName: `Importado ${i + 1}`,
           phones: [],
@@ -1793,6 +1810,7 @@ describe("CsvImportPreviewPanel", () => {
           socials: []
         },
         matchingRecord: {
+          buscas: [],
           id: `existing-pg-${i}`,
           displayName: `Existente ${i + 1}`,
           phones: [],
@@ -1903,6 +1921,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "import-pd-1",
             displayName: "Registro importado",
             phones: [],
@@ -1910,6 +1929,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-pd-1",
             displayName: "Registro existente",
             phones: [],
@@ -2014,6 +2034,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-priv-1",
               displayName: "Consulta Externa",
               phones: [],
@@ -2021,6 +2042,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-priv-1",
               displayName: "Consulta Externa actual",
               phones: [],
@@ -2062,6 +2084,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
+              buscas: [],
               id: "import-jargon-1",
               displayName: "Mostrador importado",
               phones: [],
@@ -2069,6 +2092,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
+              buscas: [],
               id: "existing-jargon-1",
               displayName: "Mostrador actual",
               phones: [],
@@ -2110,6 +2134,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
+            buscas: [],
             id: "import-conflict-ux-0",
             displayName: "Registro ",
             phones: [],
@@ -2117,6 +2142,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-conflict-ux-0",
             displayName: "Registro existente ",
             phones: [],
@@ -2183,6 +2209,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 1,
           importedRecord: {
+            buscas: [],
             id: "import-conflict-ux-1",
             displayName: "Registro  B",
             phones: [],
@@ -2190,6 +2217,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: "existing-conflict-ux-1",
             displayName: "Existente  B",
             phones: [],
@@ -2312,6 +2340,7 @@ describe("CsvImportPreviewPanel", () => {
         conflictedRecords: Array.from({ length: 21 }, (_, i) => ({
           recordIndex: i,
           importedRecord: {
+            buscas: [],
             id: `imp-conflict-ux-${i}`,
             displayName: `Importado  ${i + 1}`,
             phones: [],
@@ -2319,6 +2348,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
+            buscas: [],
             id: `ex-conflict-ux-${i}`,
             displayName: `Existente  ${i + 1}`,
             phones: [],
