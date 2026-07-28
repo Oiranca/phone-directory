@@ -1469,7 +1469,13 @@ export class AppDataService {
         )
       ).filter((entry): entry is { filePath: string; createdAt: number } => entry !== null);
 
-      prefixedBackupFiles.sort((left, right) => right.createdAt - left.createdAt);
+      prefixedBackupFiles.sort((left, right) => {
+        if (right.createdAt !== left.createdAt) {
+          return right.createdAt - left.createdAt;
+        }
+
+        return right.filePath.localeCompare(left.filePath);
+      });
 
       await Promise.all(
         prefixedBackupFiles

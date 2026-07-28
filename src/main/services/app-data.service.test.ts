@@ -4433,6 +4433,21 @@ describe("AppDataService", () => {
     const firstPath = await service.createBackup();
     await new Promise((resolve) => setTimeout(resolve, 20));
     const secondPath = await service.createBackup();
+    const originalStat = fs.stat.bind(fs);
+    vi.spyOn(fs, "stat").mockImplementation(async (filePath) => {
+      const stats = await originalStat(filePath);
+
+      if (typeof filePath === "string" && path.basename(filePath).startsWith("contacts-")) {
+        return {
+          ...stats,
+          birthtimeMs: 1_700_000_000_000,
+          mtimeMs: 1_700_000_000_000
+        };
+      }
+
+      return stats;
+    });
+
     await new Promise((resolve) => setTimeout(resolve, 20));
     const thirdPath = await service.createBackup();
 
