@@ -1,6 +1,6 @@
 import { Navigate, createHashRouter } from "react-router-dom";
 import { App } from "./App";
-import { BuscasPage } from "../pages/BuscasPage";
+import { BeepersPage } from "../pages/BeepersPage";
 import { RecordFormPage } from "../pages/RecordFormPage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -55,8 +55,8 @@ export const router = createHashRouter([
         element: withSuspense(() => import("../pages/SettingsPage").then((mod) => ({ default: mod.SettingsPage })))
       },
       {
-        path: "buscas",
-        element: <BuscasPage />
+        path: "beeper",
+        element: <BeepersPage />
       },
       {
         path: "deduplicate",

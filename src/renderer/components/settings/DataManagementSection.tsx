@@ -213,8 +213,8 @@ export const DataManagementSection = () => {
       setCsvPreview(preview);
 
       // Nothing importable at all is still blocked (no valid contact
-      // rows and no buscas content) — everything else is a partial import.
-      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+      // rows and no beepers content) — everything else is a partial import.
+      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBeepersCellCount > 0;
 
       if (preview.invalidRowCount > 0 && !hasImportableContent) {
         pushToast({
@@ -268,7 +268,7 @@ export const DataManagementSection = () => {
     // Rejected rows no longer block the import — they are skipped. The
     // only remaining hard blocker is having nothing importable at all, mirroring
     // the guard kept in AppDataService.importCsvDataset.
-    const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+    const hasImportableContent = preview.validRowCount > 0 || preview.parsedBeepersCellCount > 0;
 
     if (!hasImportableContent) {
       pushToast({
@@ -616,7 +616,7 @@ export const DataManagementSection = () => {
       </div>
 
       {/* Always rendered with `isOpen` toggled (idiom A), matching the
-          other ConfirmDialog call sites (BuscasPage, DeduplicatePage,
+          other ConfirmDialog call sites (BeepersPage, DeduplicatePage,
           ContactFormPage, App) instead of conditionally mounting/unmounting
           the dialog with `isOpen` hardcoded to `true`. */}
       <ConfirmDialog

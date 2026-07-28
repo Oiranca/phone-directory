@@ -33,7 +33,7 @@ describe("useFocusOnMount", () => {
   });
 
   it("re-focuses when the (still truthy) `when` value changes identity", () => {
-    // Mirrors BuscasPage's "switch from create to edit while form stays open"
+    // Mirrors BeepersPage's "switch from create to edit while form stays open"
     // requirement: `when` stays truthy throughout but its value changes.
     const el = document.createElement("input");
     document.body.appendChild(el);

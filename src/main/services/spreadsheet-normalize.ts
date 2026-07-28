@@ -66,24 +66,24 @@ export const isSerializedPhoneEntry = (value: unknown): value is SerializedPhone
   typeof (value as Record<string, unknown>).noPatientSharing === "boolean";
 
 /**
- * A serialized busca (pager) entry stored as JSON in
- * NormalizedImportRow["buscas"] (OIR-265). Mirrors the SerializedPhoneEntry
- * convention above but with the much smaller shape of `buscaEntrySchema`
+ * A serialized beeper (pager) entry stored as JSON in
+ * NormalizedImportRow["beepers"] (OIR-265). Mirrors the SerializedPhoneEntry
+ * convention above but with the much smaller shape of `beeperEntrySchema`
  * (src/shared/schemas/contact.ts): just a raw pager number and an optional
  * label.
  */
-export type SerializedBuscaEntry = {
+export type SerializedBeeperEntry = {
   number: string;
   label?: string;
 };
 
 /**
- * Runtime type guard for SerializedBuscaEntry, mirroring
+ * Runtime type guard for SerializedBeeperEntry, mirroring
  * isSerializedPhoneEntry above — validates an untrusted JSON-parsed value
- * before it is used so a crafted `buscas` column cannot crash the import
- * pipeline or silently produce invalid ContactRecord.buscas entries.
+ * before it is used so a crafted `beepers` column cannot crash the import
+ * pipeline or silently produce invalid ContactRecord.beepers entries.
  */
-export const isSerializedBuscaEntry = (value: unknown): value is SerializedBuscaEntry =>
+export const isSerializedBeeperEntry = (value: unknown): value is SerializedBeeperEntry =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as Record<string, unknown>).number === "string" &&

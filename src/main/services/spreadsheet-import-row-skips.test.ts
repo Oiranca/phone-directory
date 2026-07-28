@@ -1,5 +1,5 @@
 /**
- * INTERIM — Buscas sheet skip and social-handle row skip.
+ * INTERIM — Beepers sheet skip and social-handle row skip.
  *
  * This file covers row-skipping fixes distinct from the multi-sheet phone
  * merge tests in `spreadsheet-import-multisheet.test.ts`.
@@ -7,7 +7,7 @@
  * Two categories of non-phone-contact rows were blocking the all-or-nothing
  * import preview:
  *
- *   A. Buscas sheets (Buscas_Facultativos, Buscas_Enfermería, etc.) — these
+ *   A. Beepers sheets (Buscas_Facultativos, Buscas_Enfermería, etc.) — these
  *      belong to a separate pager/localizador section that does not yet exist
  *      in this app.  Their "PRINCIPAL / RESIDENTE" header was being parsed as
  *      a rejected contact.  Fix: isDeferredFeatureSheet skips any sheet whose
@@ -60,14 +60,14 @@ afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// A. Buscas sheet skip
+// A. Beepers sheet skip
 // ---------------------------------------------------------------------------
 
-describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
+describe("Beepers sheet skip (isDeferredFeatureSheet)", () => {
   it("produces NO contacts from a Buscas_Celadores sheet", () => {
-    // Buscas sheets use 4-digit pager codes, not phone numbers.
+    // Beepers sheets use 4-digit pager codes, not phone numbers.
     // The "PRINCIPAL / RESIDENTE" header row must NOT become a contact.
-    const filePath = writeWorkbook(testRoot, "buscas-celadores.xlsx", [
+    const filePath = writeWorkbook(testRoot, "beepers-celadores.xlsx", [
       {
         name: "Buscas_Celadores",
         data: [
@@ -84,7 +84,7 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    // Buscas rows must not appear at all.
+    // Beepers rows must not appear at all.
     const names = result.rows.map((r) => r.displayName);
     expect(names).not.toContain("PRINCIPAL / RESIDENTE");
     expect(names).not.toContain("CELADOR CCEE (A+B)");
@@ -94,7 +94,7 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
   });
 
   it("produces NO contacts from a Buscas_Facultativos sheet including its header", () => {
-    const filePath = writeWorkbook(testRoot, "buscas-facultativos.xlsx", [
+    const filePath = writeWorkbook(testRoot, "beepers-facultativos.xlsx", [
       {
         name: "Buscas_Facultativos",
         data: [
@@ -118,19 +118,19 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
   });
 
   it("produces NO contacts from any sheet whose name starts with Buscas_", () => {
-    // All four real Buscas variants must be skipped.
-    const buscasNames = [
+    // All four real Beepers variants must be skipped.
+    const beepersNames = [
       "Buscas_Facultativos",
       "Buscas_Enfermería",
       "Buscas_Celadores",
       "Buscas_Varios"
     ];
-    const filePath = writeWorkbook(testRoot, "all-buscas.xlsx", [
-      ...buscasNames.map((name) => ({
+    const filePath = writeWorkbook(testRoot, "all-beepers.xlsx", [
+      ...beepersNames.map((name) => ({
         name,
         data: [
           ["SERVICIO", "PRINCIPAL"],
-          ["ALGÚN SERVICIO BUSCA", "7000"]
+          ["ALGÚN SERVICIO BEEPER", "7000"]
         ]
       })),
       makeServiceSheet("urgencias", [
@@ -140,7 +140,7 @@ describe("Buscas sheet skip (isDeferredFeatureSheet)", () => {
 
     const result = normalizeWorkbookRowsFromFile(filePath);
     const names = result.rows.map((r) => r.displayName);
-    expect(names).not.toContain("ALGÚN SERVICIO BUSCA");
+    expect(names).not.toContain("ALGÚN SERVICIO BEEPER");
     expect(names).toContain("Triaje");
   });
 });
@@ -250,16 +250,16 @@ describe("Social-handle row import (social rows are first-class contacts)", () =
 });
 
 // ---------------------------------------------------------------------------
-// C. buscasSkippedRowCount / socialHandleSkippedRowCount surface
+// C. beepersSkippedRowCount / socialHandleSkippedRowCount surface
 // ---------------------------------------------------------------------------
 
-describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
-  it("buscasSkippedRowCount counts genuinely-unparseable buscas rows only (empty/comment rows)", () => {
-    // Buscas sheets are now parsed into buscasParseResult, not simply skipped.
-    // buscasSkippedRowCount reflects only rows that yielded no pager record
+describe("beepersSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImportNormalizationResult", () => {
+  it("beepersSkippedRowCount counts genuinely-unparseable beepers rows only (empty/comment rows)", () => {
+    // Beepers sheets are now parsed into beepersParseResult, not simply skipped.
+    // beepersSkippedRowCount reflects only rows that yielded no pager record
     // (empty department label or all holder cells empty/non-numeric).
-    // Buscas_Celadores: 2 data rows, both have pager numbers → 0 skipped buscas rows.
-    const filePath = writeWorkbook(testRoot, "buscas-count.xlsx", [
+    // Buscas_Celadores: 2 data rows, both have pager numbers → 0 skipped beepers rows.
+    const filePath = writeWorkbook(testRoot, "beepers-count.xlsx", [
       {
         name: "Buscas_Celadores",
         data: [
@@ -275,12 +275,12 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    // Both buscas rows have pager numbers → 0 genuinely-skipped buscas rows.
-    expect(result.buscasSkippedRowCount).toBe(0);
+    // Both beepers rows have pager numbers → 0 genuinely-skipped beepers rows.
+    expect(result.beepersSkippedRowCount).toBe(0);
     expect(result.socialHandleSkippedRowCount).toBe(0);
-    // buscasParseResult carries the parsed records.
-    expect(result.buscasParseResult.parsedCellCount).toBe(2);
-    expect(result.buscasParseResult.records).toHaveLength(2);
+    // beepersParseResult carries the parsed records.
+    expect(result.beepersParseResult.parsedCellCount).toBe(2);
+    expect(result.beepersParseResult.records).toHaveLength(2);
     // Real contacts unaffected.
     expect(result.rows.map((r) => r.displayName)).toContain("Triaje");
   });
@@ -307,7 +307,7 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     const result = normalizeWorkbookRowsFromFile(filePath);
 
     // Social rows are now imported — not skipped.
-    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.beepersSkippedRowCount).toBe(0);
     expect(result.socialHandleSkippedRowCount).toBe(0);
     const names = result.rows.map((r) => r.displayName);
     expect(names).toContain("Triaje");
@@ -322,9 +322,9 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
     expect(socialRow?.social1IsPrimary).toBe("true");
   });
 
-  it("buscas rows are parsed into buscasParseResult; social rows are imported as contacts", () => {
-    // Buscas_Varios data rows are parsed into buscasParseResult.records,
-    // not counted in buscasSkippedRowCount (which is now empty/comment-only rows).
+  it("beepers rows are parsed into beepersParseResult; social rows are imported as contacts", () => {
+    // Buscas_Varios data rows are parsed into beepersParseResult.records,
+    // not counted in beepersSkippedRowCount (which is now empty/comment-only rows).
     // Social-handle row is imported as a contact.
     const filePath = writeWorkbook(testRoot, "combined-count.xlsx", [
       {
@@ -349,10 +349,10 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    // All 3 buscas data rows have pager numbers → 0 genuinely-skipped buscas rows.
-    expect(result.buscasSkippedRowCount).toBe(0);
-    expect(result.buscasParseResult.parsedCellCount).toBe(3);
-    expect(result.buscasParseResult.records).toHaveLength(3);
+    // All 3 beepers data rows have pager numbers → 0 genuinely-skipped beepers rows.
+    expect(result.beepersSkippedRowCount).toBe(0);
+    expect(result.beepersParseResult.parsedCellCount).toBe(3);
+    expect(result.beepersParseResult.records).toHaveLength(3);
     // Social row is imported (not skipped), so counter stays 0.
     expect(result.socialHandleSkippedRowCount).toBe(0);
     const names = result.rows.map((r) => r.displayName);
@@ -371,14 +371,14 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
 
     const result = normalizeWorkbookRowsFromFile(filePath);
 
-    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.beepersSkippedRowCount).toBe(0);
     expect(result.socialHandleSkippedRowCount).toBe(0);
     expect(result.rows).toHaveLength(2);
   });
 
-  it("buildSpreadsheetImportPreview returns buscasParseResult with parsed records", async () => {
-    // buildSpreadsheetImportPreview now returns buscasParseResult alongside the preview.
-    // The preview.buscasSkippedRowCount reflects genuinely-unparseable buscas rows only.
+  it("buildSpreadsheetImportPreview returns beepersParseResult with parsed records", async () => {
+    // buildSpreadsheetImportPreview now returns beepersParseResult alongside the preview.
+    // The preview.beepersSkippedRowCount reflects genuinely-unparseable beepers rows only.
     // Buscas_Enfermería: 2 data rows both have pager numbers → 0 skipped.
     const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");
     const filePath = writeWorkbook(testRoot, "preview-count.xlsx", [
@@ -395,15 +395,15 @@ describe("buscasSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImpo
       ])
     ]);
 
-    const { preview, buscasParseResult } = await buildSpreadsheetImportPreview(filePath, "test-editor");
+    const { preview, beepersParseResult } = await buildSpreadsheetImportPreview(filePath, "test-editor");
 
-    // Both buscas rows have pager numbers → parsed, not skipped.
-    expect(buscasParseResult.parsedCellCount).toBe(2);
-    expect(buscasParseResult.records).toHaveLength(2);
-    // preview.buscasSkippedRowCount = genuinely-skipped rows only (0 here).
-    expect(preview.buscasSkippedRowCount).toBe(0);
+    // Both beepers rows have pager numbers → parsed, not skipped.
+    expect(beepersParseResult.parsedCellCount).toBe(2);
+    expect(beepersParseResult.records).toHaveLength(2);
+    // preview.beepersSkippedRowCount = genuinely-skipped rows only (0 here).
+    expect(preview.beepersSkippedRowCount).toBe(0);
     expect(preview.socialHandleSkippedRowCount).toBe(0);
-    // Import is not blocked by buscas rows.
+    // Import is not blocked by beepers rows.
     expect(preview.invalidRowCount).toBe(0);
   });
 });
@@ -432,7 +432,7 @@ describe("Regression: real flat service sheets still import after interim skips"
 
   it("imports contacts from a canonical sheet (rayos) containing mixed-case labels", () => {
     // Regression guard: canonical sheet parsing must not be disrupted by the
-    // buscas-skip or social-handle-skip additions.
+    // beepers-skip or social-handle-skip additions.
     const filePath = writeWorkbook(testRoot, "regression-rayos.xlsx", [
       makeServiceSheet("rayos", [
         { label: "Sala TAC", numbers: ["55555"] },

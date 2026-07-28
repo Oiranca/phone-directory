@@ -101,18 +101,18 @@ export const customFieldSchema = z.object({
 });
 
 /**
- * Persisted "busca" (pager) entry directly on a contact record.
- * Distinct from the manually-managed BuscaRecord / ImportedBuscaRecord
- * catalogs in schemas/busca.schema.ts — this is a first-class field on the
+ * Persisted "beeper" (pager) entry directly on a contact record.
+ * Distinct from the manually-managed BeeperRecord / ImportedBeeperRecord
+ * catalogs in schemas/beeper.schema.ts — this is a first-class field on the
  * contact itself (OIR-264). `number` is a plain free-form string, mirroring
  * phoneContactSchema.number — no digit-count/format validation.
  */
-export const buscaEntrySchema = z.object({
+export const beeperEntrySchema = z.object({
   number: z.string(),
   label: z.string().optional()
 });
 
-export const contactRecordSchema = z.object({
+const contactRecordSchemaBase = z.object({
   id: z.string(),
   externalId: z.string().optional(),
   type: z.enum(RECORD_TYPES),
@@ -154,11 +154,11 @@ export const contactRecordSchema = z.object({
     // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
     socials: z.array(socialContactSchema).default([])
   }),
-  // BACKWARD COMPAT: existing persisted records have no `buscas` field.
+  // BACKWARD COMPAT: existing persisted records have no `beepers` field.
   // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
-  // Top-level sibling of contactMethods (not nested inside it) — buscas are
+  // Top-level sibling of contactMethods (not nested inside it) — beepers are
   // conceptually distinct from phones/emails/socials. See OIR-264.
-  buscas: z.array(buscaEntrySchema).default([]),
+  beepers: z.array(beeperEntrySchema).default([]),
   aliases: z.array(z.string()),
   tags: z.array(z.string()),
   notes: z.string().optional(),
@@ -179,6 +179,23 @@ export const contactRecordSchema = z.object({
     updatedBy: z.string()
   })
 });
+
+export const contactRecordSchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const record = input as { beepers?: unknown; buscas?: unknown };
+
+  if (record.beepers !== undefined || record.buscas === undefined) {
+    return input;
+  }
+
+  return {
+    ...record,
+    beepers: record.buscas
+  };
+}, contactRecordSchemaBase);
 
 export const directoryDatasetSchema = z.object({
   version: z.string(),
@@ -347,8 +364,8 @@ export const editableContactRecordSchema = z.object({
     emails: z.array(editableEmailContactSchema),
     socials: z.array(editableSocialContactSchema).default([])
   }),
-  // See contactRecordSchema.buscas for rationale (OIR-264).
-  buscas: z.array(buscaEntrySchema).default([]),
+  // See contactRecordSchema.beepers for rationale (OIR-264).
+  beepers: z.array(beeperEntrySchema).default([]),
   aliases: z.array(z.string().trim().min(1)).default([]),
   tags: z.array(z.string().trim().min(1)).default([]),
   notes: optionalTextField(),
@@ -380,8 +397,8 @@ export type SocialPlatform = z.infer<typeof socialPlatformSchema>;
 /** Persisted social-media contact entry — derived from the persistence schema. */
 export type SocialContact = z.infer<typeof socialContactSchema>;
 
-/** Persisted busca (pager) entry on a contact record — derived from the persistence schema. */
-export type BuscaEntry = z.infer<typeof buscaEntrySchema>;
+/** Persisted beeper (pager) entry on a contact record — derived from the persistence schema. */
+export type BeeperEntry = z.infer<typeof beeperEntrySchema>;
 
 /** Persisted contact record — derived from the persistence schema. */
 export type ContactRecord = z.infer<typeof contactRecordSchema>;

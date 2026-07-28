@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
 import { registerCrashHandlers } from "./crash-handlers.js";
-import { registerBuscasIpc } from "./ipc/buscas.ipc.js";
+import { registerBeepersIpc } from "./ipc/beeper.ipc.js";
 import { registerContactsIpc } from "./ipc/contacts.ipc.js";
 import { registerSettingsIpc } from "./ipc/settings.ipc.js";
 import { PUSH_CHANNELS } from "../shared/ipc/channels.js";
 import { AppDataService } from "./services/app-data.service.js";
-import { BuscasService } from "./services/buscas.service.js";
+import { BeepersService } from "./services/beeper.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
 import {
@@ -86,18 +86,18 @@ const bootstrap = async () => {
     );
   }
 
-  const buscasService = new BuscasService();
+  const beepersService = new BeepersService();
   const service = new AppDataService({
     onAutoBackupFailure: (message) => {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(PUSH_CHANNELS.autoBackupFailed, { message });
       }
     },
-    buscasService
+    beepersService
   });
   await service.ensureInitialFiles();
   registerContactsIpc(service);
-  registerBuscasIpc(buscasService);
+  registerBeepersIpc(beepersService);
   registerSettingsIpc(service);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const filteredHeaders = Object.fromEntries(

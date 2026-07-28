@@ -33,7 +33,7 @@ describe("NavRail — items", () => {
     renderRail();
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/buscas");
+    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
     expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("href", "/deduplicate");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });

@@ -20,7 +20,7 @@ import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
 import type {
   CONTACTS_CHANNELS as _CanonicalContacts,
   SETTINGS_CHANNELS as _CanonicalSettings,
-  BUSCAS_CHANNELS   as _CanonicalBuscas,
+  BEEPERS_CHANNELS as _CanonicalBeepers,
   PUSH_CHANNELS     as _CanonicalPush
 } from "../shared/ipc/channels.js";
 
@@ -47,13 +47,13 @@ export const SETTINGS_CHANNELS = {
   browsePath: "settings:browse-path"
 } as const satisfies typeof _CanonicalSettings;
 
-export const BUSCAS_CHANNELS = {
-  list:         "buscas:list",
-  add:          "buscas:add",
-  update:       "buscas:update",
-  remove:       "buscas:delete",
-  listImported: "buscas:list-imported"
-} as const satisfies typeof _CanonicalBuscas;
+export const BEEPERS_CHANNELS = {
+  list:         "beepers:list",
+  add:          "beepers:add",
+  update:       "beepers:update",
+  remove:       "beepers:delete",
+  listImported: "beepers:list-imported"
+} as const satisfies typeof _CanonicalBeepers;
 
 export const PUSH_CHANNELS = {
   autoBackupFailed: "app:auto-backup-failed"
@@ -86,13 +86,13 @@ export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
       ipcRenderer.invoke(CONTACTS_CHANNELS.pickAndImportDataset) as ReturnType<HospitalDirectoryApi["pickAndImportDataset"]>,
     browseForPath: (type) =>
       ipcRenderer.invoke(SETTINGS_CHANNELS.browsePath, type) as ReturnType<HospitalDirectoryApi["browseForPath"]>,
-    listBuscas: () => ipcRenderer.invoke(BUSCAS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBuscas"]>,
-    addBusca: (record) =>
-      ipcRenderer.invoke(BUSCAS_CHANNELS.add, record) as ReturnType<HospitalDirectoryApi["addBusca"]>,
-    updateBusca: (id, record) =>
-      ipcRenderer.invoke(BUSCAS_CHANNELS.update, id, record) as ReturnType<HospitalDirectoryApi["updateBusca"]>,
-    deleteBusca: (id) => ipcRenderer.invoke(BUSCAS_CHANNELS.remove, id) as ReturnType<HospitalDirectoryApi["deleteBusca"]>,
-    listImportedBuscas: () => ipcRenderer.invoke(BUSCAS_CHANNELS.listImported) as ReturnType<HospitalDirectoryApi["listImportedBuscas"]>,
+    listBeepers: () => ipcRenderer.invoke(BEEPERS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBeepers"]>,
+    addBeeper: (record) =>
+      ipcRenderer.invoke(BEEPERS_CHANNELS.add, record) as ReturnType<HospitalDirectoryApi["addBeeper"]>,
+    updateBeeper: (id, record) =>
+      ipcRenderer.invoke(BEEPERS_CHANNELS.update, id, record) as ReturnType<HospitalDirectoryApi["updateBeeper"]>,
+    deleteBeeper: (id) => ipcRenderer.invoke(BEEPERS_CHANNELS.remove, id) as ReturnType<HospitalDirectoryApi["deleteBeeper"]>,
+    listImportedBeepers: () => ipcRenderer.invoke(BEEPERS_CHANNELS.listImported) as ReturnType<HospitalDirectoryApi["listImportedBeepers"]>,
     detectDuplicates: () =>
       ipcRenderer.invoke(CONTACTS_CHANNELS.detectDuplicates) as ReturnType<HospitalDirectoryApi["detectDuplicates"]>,
     mergeContacts: (req) =>

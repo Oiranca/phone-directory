@@ -37,7 +37,7 @@ import {
   isExcludedLabel,
   parseSiNoFlag,
 } from "./spreadsheet-normalize.js";
-import type { SerializedPhoneEntry, SerializedBuscaEntry } from "./spreadsheet-normalize.js";
+import type { SerializedPhoneEntry, SerializedBeeperEntry } from "./spreadsheet-normalize.js";
 
 // ---------------------------------------------------------------------------
 // Record construction helpers (moved here from spreadsheet-normalize.ts to
@@ -777,7 +777,7 @@ export type AgendaColumnIndices = {
   // Optional inserted "Busca 1" column (pager code). Absent (undefined) on
   // sheets that don't have one — mirrors the `fax` optional-column pattern
   // (OIR-265).
-  busca1?: number;
+  beeper1?: number;
   // Optional inserted "Corporativo 1" column (corporate mobile phone).
   // Absent (undefined) on sheets that don't have one — mirrors the `fax`
   // optional-column pattern (OIR-265).
@@ -886,7 +886,7 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
   // columns — same optional/graceful pattern as Fax above (OIR-265). Their
   // absence must not fail header detection or change behavior for sheets
   // without them.
-  const busca1Index = normalized.indexOf("BUSCA1", trailerStart);
+  const beeper1Index = normalized.indexOf("BUSCA1", trailerStart);
   const corporativo1Index = normalized.indexOf("CORPORATIVO1", trailerStart);
 
   return {
@@ -896,7 +896,7 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
     numeroStart: 3,
     numeroEnd: 9,
     fax: faxIndex === -1 ? undefined : faxIndex,
-    busca1: busca1Index === -1 ? undefined : busca1Index,
+    beeper1: beeper1Index === -1 ? undefined : beeper1Index,
     corporativo1: corporativo1Index === -1 ? undefined : corporativo1Index,
     horario,
     confidencial,
@@ -1052,7 +1052,7 @@ export const normalizeTabularAgendaSheet = (
     // The "Corporativo 1" column (present on some real sheets, mirrors the
     // Fax column pattern above — OIR-265) holds a real corporate mobile phone
     // number, so it is cleaned up with extractNumbers exactly like Fax and
-    // pushed into contactMethods.phones (not buscas).
+    // pushed into contactMethods.phones (not beepers).
     const corporativoValue = columns.corporativo1 !== undefined ? cells[columns.corporativo1] ?? "" : "";
 
     if (corporativoValue) {
@@ -1072,13 +1072,13 @@ export const normalizeTabularAgendaSheet = (
     // The "Busca 1" column (pager code, OIR-265) is a single raw ~4-digit
     // value — unlike phone columns it is NOT run through extractNumbers
     // (no multi-value splitting/cleanup), and it is stored on the contact's
-    // own `buscas` array, never mixed into contactMethods.phones.
-    const buscaEntries: SerializedBuscaEntry[] = [];
-    const buscaValue = columns.busca1 !== undefined ? cells[columns.busca1] ?? "" : "";
+    // own `beepers` array, never mixed into contactMethods.phones.
+    const beeperEntries: SerializedBeeperEntry[] = [];
+    const beeperValue = columns.beeper1 !== undefined ? cells[columns.beeper1] ?? "" : "";
 
-    if (buscaValue) {
-      buscaEntries.push({
-        number: buscaValue,
+    if (beeperValue) {
+      beeperEntries.push({
+        number: beeperValue,
         label: undefined
       });
     }
@@ -1114,7 +1114,7 @@ export const normalizeTabularAgendaSheet = (
     record.notes = cleanNoteFragments([comentarios]).join(" | ");
     record.status = "active";
     record.phones = JSON.stringify(phoneEntries);
-    record.buscas = JSON.stringify(buscaEntries);
+    record.beepers = JSON.stringify(beeperEntries);
 
     const first = phoneEntries[0];
     const second = phoneEntries[1];

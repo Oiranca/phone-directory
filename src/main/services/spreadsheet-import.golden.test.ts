@@ -923,8 +923,8 @@ describe("golden: error paths", () => {
     }
   });
 
-  it("skips buscas (pager) sheets and counts them in buscasSkippedRowCount", () => {
-    const filePath = writeWorkbook(testRoot, "with-buscas.xlsx", [
+  it("skips beepers (pager) sheets and counts them in beepersSkippedRowCount", () => {
+    const filePath = writeWorkbook(testRoot, "with-beepers.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["90001"] },
       ]),
@@ -939,12 +939,12 @@ describe("golden: error paths", () => {
     ]);
 
     const result = normalizeWorkbookRowsFromFile(filePath);
-    // Buscas rows should NOT appear in records
+    // Beepers rows should NOT appear in records
     for (const row of result.rows) {
       expect(row.displayName).not.toMatch(/PRINCIPAL|RESIDENTE/i);
     }
-    // Buscas count: 2 data rows (buscas sheet had 3 rows total − 1 header)
-    expect(result.buscasSkippedRowCount).toBeGreaterThanOrEqual(2);
+    // Beepers count: 2 data rows (beepers sheet had 3 rows total − 1 header)
+    expect(result.beepersSkippedRowCount).toBeGreaterThanOrEqual(2);
     expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 
@@ -1252,11 +1252,11 @@ describe("golden: isSerializedPhoneEntry type guard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. buscasSkippedRowCount / socialHandleSkippedRowCount aggregation
+// 8. beepersSkippedRowCount / socialHandleSkippedRowCount aggregation
 // ---------------------------------------------------------------------------
 
-describe("golden: buscasSkippedRowCount / socialHandleSkippedRowCount", () => {
-  it("returns both counts as 0 when no Buscas sheets and no social rows", () => {
+describe("golden: beepersSkippedRowCount / socialHandleSkippedRowCount", () => {
+  it("returns both counts as 0 when no Beepers sheets and no social rows", () => {
     const filePath = writeWorkbook(testRoot, "zero-deferred.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["12001"] },
@@ -1264,12 +1264,12 @@ describe("golden: buscasSkippedRowCount / socialHandleSkippedRowCount", () => {
     ]);
 
     const result = normalizeWorkbookRowsFromFile(filePath);
-    expect(result.buscasSkippedRowCount).toBe(0);
+    expect(result.beepersSkippedRowCount).toBe(0);
     expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 
-  it("counts multiple Buscas sheets in buscasSkippedRowCount only", () => {
-    const filePath = writeWorkbook(testRoot, "multi-buscas.xlsx", [
+  it("counts multiple Beepers sheets in beepersSkippedRowCount only", () => {
+    const filePath = writeWorkbook(testRoot, "multi-beepers.xlsx", [
       makeServiceSheet("urgencias", [
         { label: "Control", numbers: ["12001"] },
       ]),
@@ -1294,8 +1294,8 @@ describe("golden: buscasSkippedRowCount / socialHandleSkippedRowCount", () => {
     const result = normalizeWorkbookRowsFromFile(filePath);
     // Buscas_Facultativos: 4 rows total − 1 header = 3 data rows
     // Buscas_Enfermeria: 2 rows total − 1 header = 1 data row
-    // Total buscas: 4, social: 0
-    expect(result.buscasSkippedRowCount).toBeGreaterThanOrEqual(4);
+    // Total beepers: 4, social: 0
+    expect(result.beepersSkippedRowCount).toBeGreaterThanOrEqual(4);
     expect(result.socialHandleSkippedRowCount).toBe(0);
   });
 });

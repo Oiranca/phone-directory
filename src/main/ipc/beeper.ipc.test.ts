@@ -24,7 +24,7 @@ const invoke = async (channel: string, ...args: unknown[]): Promise<unknown> => 
   return fn({} as unknown, ...args);
 };
 
-describe("registerBuscasIpc", () => {
+describe("registerBeepersIpc", () => {
   // Register the handlers once for all tests
   const serviceMock = {
     list: vi.fn().mockResolvedValue([]),
@@ -36,8 +36,8 @@ describe("registerBuscasIpc", () => {
 
   // Dynamic import so the vi.mock above is applied before the module loads
   beforeAll(async () => {
-    const { registerBuscasIpc } = await import("./buscas.ipc.js");
-    registerBuscasIpc(serviceMock as never);
+    const { registerBeepersIpc } = await import("./beeper.ipc.js");
+    registerBeepersIpc(serviceMock as never);
   });
 
   afterEach(() => {
@@ -47,30 +47,30 @@ describe("registerBuscasIpc", () => {
   // ---------------------------------------------------------------------------
   // Handler-registration snapshot
   //
-  // Asserts the EXACT set of channels registerBuscasIpc registers so that:
-  // (a) buscas:search is provably absent, and
+  // Asserts the EXACT set of channels registerBeepersIpc registers so that:
+  // (a) beepers:search is provably absent, and
   // (b) any future dead handler addition is caught automatically.
   // ---------------------------------------------------------------------------
   describe("registered channel set", () => {
     it("registers exactly the expected channels and no others", () => {
       const registeredChannels = Array.from(handlers.keys()).sort();
       expect(registeredChannels).toEqual([
-        "buscas:add",
-        "buscas:delete",
-        "buscas:list",
-        "buscas:list-imported",
-        "buscas:update"
+        "beepers:add",
+        "beepers:delete",
+        "beepers:list",
+        "beepers:list-imported",
+        "beepers:update"
       ]);
     });
 
-    it("does NOT register the removed buscas:search channel", () => {
-      expect(handlers.has("buscas:search")).toBe(false);
+    it("does NOT register the removed beepers:search channel", () => {
+      expect(handlers.has("beepers:search")).toBe(false);
     });
   });
 
-  describe("update channel — buscas:update", () => {
+  describe("update channel — beepers:update", () => {
     it("rejects a non-string ID", async () => {
-      await expect(invoke("buscas:update", 42, {
+      await expect(invoke("beepers:update", 42, {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -80,7 +80,7 @@ describe("registerBuscasIpc", () => {
     });
 
     it("rejects an empty string ID", async () => {
-      await expect(invoke("buscas:update", "   ", {
+      await expect(invoke("beepers:update", "   ", {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -90,7 +90,7 @@ describe("registerBuscasIpc", () => {
     });
 
     it("rejects a null ID", async () => {
-      await expect(invoke("buscas:update", null, {
+      await expect(invoke("beepers:update", null, {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -100,7 +100,7 @@ describe("registerBuscasIpc", () => {
     });
 
     it("rejects a malformed payload — missing required fields", async () => {
-      await expect(invoke("buscas:update", "bsc_abc12345", {
+      await expect(invoke("beepers:update", "bsc_abc12345", {
         deviceNumber: ""  // empty string fails min(1)
       })).rejects.toThrow();
     });
@@ -115,7 +115,7 @@ describe("registerBuscasIpc", () => {
         shift: "mañana"
       });
 
-      await invoke("buscas:update", "bsc_abc12345", {
+      await invoke("beepers:update", "bsc_abc12345", {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -130,38 +130,38 @@ describe("registerBuscasIpc", () => {
     });
   });
 
-  describe("remove channel — buscas:delete", () => {
+  describe("remove channel — beepers:delete", () => {
     it("rejects a non-string ID", async () => {
-      await expect(invoke("buscas:delete", 99)).rejects.toThrow("ID de busca inválido.");
+      await expect(invoke("beepers:delete", 99)).rejects.toThrow("ID de busca inválido.");
     });
 
     it("rejects an empty string ID", async () => {
-      await expect(invoke("buscas:delete", "")).rejects.toThrow("ID de busca inválido.");
+      await expect(invoke("beepers:delete", "")).rejects.toThrow("ID de busca inválido.");
     });
 
     it("rejects undefined ID", async () => {
-      await expect(invoke("buscas:delete", undefined)).rejects.toThrow("ID de busca inválido.");
+      await expect(invoke("beepers:delete", undefined)).rejects.toThrow("ID de busca inválido.");
     });
 
     it("passes valid ID through to service", async () => {
       serviceMock.remove.mockResolvedValue(undefined);
 
-      await invoke("buscas:delete", "bsc_abc12345");
+      await invoke("beepers:delete", "bsc_abc12345");
 
       expect(serviceMock.remove).toHaveBeenCalledWith("bsc_abc12345");
     });
   });
 
-  describe("add channel — buscas:add", () => {
+  describe("add channel — beepers:add", () => {
     it("rejects a malformed payload — missing required field", async () => {
       // Missing assignedTo, department, role, shift — Zod should throw
-      await expect(invoke("buscas:add", {
+      await expect(invoke("beepers:add", {
         deviceNumber: "B-001"
       })).rejects.toThrow();
     });
 
     it("rejects a payload with invalid shift enum", async () => {
-      await expect(invoke("buscas:add", {
+      await expect(invoke("beepers:add", {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -171,11 +171,11 @@ describe("registerBuscasIpc", () => {
     });
 
     it("rejects a completely non-object payload", async () => {
-      await expect(invoke("buscas:add", "not-an-object")).rejects.toThrow();
+      await expect(invoke("beepers:add", "not-an-object")).rejects.toThrow();
     });
 
     it("rejects null payload", async () => {
-      await expect(invoke("buscas:add", null)).rejects.toThrow();
+      await expect(invoke("beepers:add", null)).rejects.toThrow();
     });
 
     it("passes valid payload through to service after Zod validation", async () => {
@@ -189,7 +189,7 @@ describe("registerBuscasIpc", () => {
       };
       serviceMock.add.mockResolvedValue(record);
 
-      await invoke("buscas:add", {
+      await invoke("beepers:add", {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -206,7 +206,7 @@ describe("registerBuscasIpc", () => {
   describe("error mapping — toRendererError", () => {
     it("maps ZodError to the first issue message (no internal paths leaked)", async () => {
       // An invalid payload causes a ZodError; the handler must surface only the first issue message
-      const err = await invoke("buscas:add", {
+      const err = await invoke("beepers:add", {
         deviceNumber: "",       // fails min(1) → "El número de busca es obligatorio."
         assignedTo: "Ana",
         department: "Urgencias",
@@ -220,7 +220,7 @@ describe("registerBuscasIpc", () => {
     it("passes domain Error messages from service through unchanged", async () => {
       serviceMock.add.mockRejectedValueOnce(new Error("El número de busca \"B-001\" ya está registrado."));
 
-      const err = await invoke("buscas:add", {
+      const err = await invoke("beepers:add", {
         deviceNumber: "B-001",
         assignedTo: "Ana",
         department: "Urgencias",
@@ -236,22 +236,22 @@ describe("registerBuscasIpc", () => {
 
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-      const err = await invoke("buscas:delete", "bsc_abc12345").catch((e: unknown) => e);
+      const err = await invoke("beepers:delete", "bsc_abc12345").catch((e: unknown) => e);
 
       expect((err as Error).message).toContain("Error inesperado");
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("buscas:delete"),
+        expect.stringContaining("beepers:delete"),
         "raw string rejection"
       );
       consoleSpy.mockRestore();
     });
   });
 
-  describe("listImported channel — buscas:list-imported", () => {
+  describe("listImported channel — beepers:list-imported", () => {
     it("returns empty array when no ODS import has occurred", async () => {
       serviceMock.listImported.mockResolvedValue([]);
 
-      const result = await invoke("buscas:list-imported");
+      const result = await invoke("beepers:list-imported");
 
       expect(result).toEqual([]);
       expect(serviceMock.listImported).toHaveBeenCalledOnce();
@@ -278,7 +278,7 @@ describe("registerBuscasIpc", () => {
       ];
       serviceMock.listImported.mockResolvedValue(importedRecords);
 
-      const result = await invoke("buscas:list-imported");
+      const result = await invoke("beepers:list-imported");
 
       expect(result).toEqual(importedRecords);
       expect(serviceMock.listImported).toHaveBeenCalledOnce();
@@ -287,7 +287,7 @@ describe("registerBuscasIpc", () => {
     it("propagates service errors through toRendererError", async () => {
       serviceMock.listImported.mockRejectedValueOnce(new Error("permiso denegado"));
 
-      const err = await invoke("buscas:list-imported").catch((e: unknown) => e);
+      const err = await invoke("beepers:list-imported").catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toBe("permiso denegado");

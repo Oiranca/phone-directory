@@ -45,7 +45,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     if ("recovery" in bootstrap) throw new Error("recovery mode unexpected");
 
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión", area: "gestion-administracion" },
@@ -61,7 +61,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     });
 
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: { department: "Admisión", area: "gestion-administracion" },
@@ -112,7 +112,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     await service.ensureInitialFiles();
 
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Registro existente",
       organization: {},
@@ -134,7 +134,7 @@ describe("contacts:merge-duplicates — AppDataService.mergeDuplicates", () => {
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Registro existente",
       organization: {},
@@ -175,7 +175,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión" },
@@ -191,7 +191,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: {},
@@ -214,7 +214,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General",
       organization: { department: "Admisión" },
@@ -226,7 +226,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "department",
       displayName: "Admisión General (duplicado)",
       organization: {},
@@ -253,7 +253,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     await service.ensureInitialFiles();
 
     const keepRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General",
       organization: {},
@@ -269,7 +269,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     });
 
     const discardRecord = await service.createRecord({
-      buscas: [],
+      beepers: [],
       type: "service",
       displayName: "Admisión General (duplicado)",
       organization: {},
@@ -425,7 +425,7 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 // invalidation on navigation/destruction, and concurrency safety.
 //
 // Strategy: register a fresh set of handlers per describe block using a
-// captured ipcMain.handle map (same pattern as buscas.ipc.test.ts).
+// captured ipcMain.handle map (same pattern as beeper.ipc.test.ts).
 // ---------------------------------------------------------------------------
 
 // Helper: build a minimal EventEmitter-style webContents stub
@@ -493,9 +493,9 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     createdCount: 1,
     updatedCount: 0,
     unchangedCount: 0,
-    buscasSkippedRowCount: 0,
+    beepersSkippedRowCount: 0,
     socialHandleSkippedRowCount: 0,
-    parsedBuscasCellCount: 0,
+    parsedBeepersCellCount: 0,
     typeCounts: {},
     areaCounts: {},
     rowIssues: [],
@@ -881,9 +881,9 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     createdCount: 1,
     updatedCount: 0,
     unchangedCount: 0,
-    buscasSkippedRowCount: 0,
+    beepersSkippedRowCount: 0,
     socialHandleSkippedRowCount: 0,
-    parsedBuscasCellCount: 0,
+    parsedBeepersCellCount: 0,
     typeCounts: {},
     areaCounts: {},
     rowIssues: [],
@@ -1128,7 +1128,7 @@ describe("contacts:preview-csv-import — global pending-import cap", () => {
 // csvImportPolicySelectionSchema (Zod) replaces manual
 // typeof/Number.isInteger/Set.has validation of importCsvDataset's policy
 // array, matching this codebase's "every IPC input goes through Zod"
-// convention (createRecord, updateRecord, mergeDuplicates, busca channels).
+// convention (createRecord, updateRecord, mergeDuplicates, beeper channels).
 // ---------------------------------------------------------------------------
 
 describe("csvImportPolicySelectionSchema", () => {

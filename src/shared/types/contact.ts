@@ -8,7 +8,7 @@ export type {
   SocialPlatform,
   SocialContact,
   CustomField,
-  BuscaEntry,
+  BeeperEntry,
   ContactRecord,
   DirectoryDataset,
   AutoBackupTrigger,
@@ -21,7 +21,7 @@ export type {
 } from "../schemas/contact.js";
 
 import type { AreaType, RecordType } from "../constants/catalogs.js";
-import type { AuditLogEntry, BuscaEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
+import type { AuditLogEntry, BeeperEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
 
 // ---------------------------------------------------------------------------
 // UX-only and composite types — not duplicated by any Zod schema.
@@ -118,10 +118,10 @@ export interface EditableCustomField {
 }
 
 /**
- * Editable busca (pager) entry on a contact record. Mirrors the
- * EditablePhoneContact pattern. See ContactRecord.buscas (OIR-264).
+ * Editable beeper (pager) entry on a contact record. Mirrors the
+ * EditablePhoneContact pattern. See ContactRecord.beepers (OIR-264).
  */
-export interface EditableBuscaEntry {
+export interface EditableBeeperEntry {
   number: string;
   label?: string;
 }
@@ -160,8 +160,8 @@ export interface EditableContactRecord {
     emails: EditableEmailContact[];
     socials: EditableSocialContact[];
   };
-  /** See ContactRecord.buscas for rationale (OIR-264). */
-  buscas: EditableBuscaEntry[];
+  /** See ContactRecord.beepers for rationale (OIR-264). */
+  beepers: EditableBeeperEntry[];
   aliases: string[];
   tags: string[];
   notes?: string;
@@ -257,21 +257,21 @@ export interface CsvImportPreview {
   unchangedCount: number;
   /**
    * INTERIM: Rows silently skipped because they belong to
-   * Buscas (pager) sheets — a deferred import path. Always 0 for the CSV path.
+   * Beeper (pager) sheets — a deferred import path. Always 0 for the CSV path.
    */
-  buscasSkippedRowCount: number;
+  beepersSkippedRowCount: number;
   /**
    * INTERIM: Rows silently skipped because they are
    * social-media handle rows inside service sheets. Always 0 for the CSV path.
    */
   socialHandleSkippedRowCount: number;
   /**
-   * Number of buscas (pager) cells successfully parsed from buscas sheets.
-   * A value > 0 means the workbook contained valid buscas content even if validRowCount === 0.
-   * Used by the renderer confirm gate to allow confirming buscas-only workbooks.
-   * Always 0 for the CSV path and for workbooks with no buscas sheets.
+   * Number of beeper (pager) cells successfully parsed from beeper sheets.
+   * A value > 0 means the workbook contained valid beeper content even if validRowCount === 0.
+   * Used by the renderer confirm gate to allow confirming beeper-only workbooks.
+   * Always 0 for the CSV path and for workbooks with no beeper sheets.
    */
-  parsedBuscasCellCount: number;
+  parsedBeepersCellCount: number;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
@@ -339,14 +339,14 @@ export interface ConflictRecordSummary {
   /** Lean social list for field-level diff. */
   socials: ConflictSocialSummary[];
   /**
-   * Lean busca (pager) list, included for display only (see OIR-268).
-   * Busca codes are 4-digit pager numbers that may collide with an
+   * Lean beeper (pager) list, included for display only (see OIR-268).
+   * Beeper codes are 4-digit pager numbers that may collide with an
    * unrelated phone extension by coincidence — they intentionally never
    * participate in match/conflict identification (see
-   * `buildStableMergeKeys` in app-data.service.ts), so a busca-only
+   * `buildStableMergeKeys` in app-data.service.ts), so a beeper-only
    * difference never causes this record to appear here as a conflict.
    */
-  buscas: BuscaEntry[];
+  beepers: BeeperEntry[];
 }
 
 /** Represents a single imported record that collides with an existing record in the directory. */

@@ -1,7 +1,7 @@
 /**
  * Unit tests for src/main/ipc/settings.ipc.ts — registerSettingsIpc.
  *
- * Mirrors the style of buscas.ipc.test.ts: mock electron, collect handlers
+ * Mirrors the style of beeper.ipc.test.ts: mock electron, collect handlers
  * via ipcMain.handle, then invoke them directly.
  *
  * Covers acceptance criterion 2 (settings IPC handlers) and partial coverage

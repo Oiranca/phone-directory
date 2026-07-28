@@ -61,7 +61,7 @@ export const defaultContacts: DirectoryDataset = {
         emails: [],
         socials: []
       },
-      buscas: [],
+      beepers: [],
       aliases: ["mostrador admisión"],
       tags: ["admisión"],
       status: "active",
@@ -105,7 +105,7 @@ export const defaultContacts: DirectoryDataset = {
         emails: [],
         socials: []
       },
-      buscas: [],
+      beepers: [],
       aliases: ["cs demo"],
       tags: [],
       status: "active",

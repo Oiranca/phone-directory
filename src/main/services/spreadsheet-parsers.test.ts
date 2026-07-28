@@ -841,15 +841,15 @@ describe("normalizeTabularAgendaSheet", () => {
   // Inserted "Busca 1" / "Corporativo 1" columns (OIR-265)
   // -------------------------------------------------------------------------
 
-  const AGENDA_HEADER_ROW_WITH_BUSCA_CORPORATIVO = [
+  const AGENDA_HEADER_ROW_WITH_BEEPER_CORPORATIVO = [
     ...AGENDA_HEADER_ROW.slice(0, 10),
     "Busca 1",
     "Corporativo 1",
     ...AGENDA_HEADER_ROW.slice(10),
   ];
 
-  it("maps a value in an inserted 'Busca 1' column onto record.buscas, not phones", () => {
-    const rowWithBusca = [
+  it("maps a value in an inserted 'Busca 1' column onto record.beepers, not phones", () => {
+    const rowWithBeeper = [
       "Juan Pérez", // Nombre
       "Enfermero/a", // Categoría
       "Urgencias", // Servicio
@@ -858,13 +858,13 @@ describe("normalizeTabularAgendaSheet", () => {
       "", // Corporativo 1
       "", "", "", "", "", "", "", // Horario..Comentarios
     ];
-    const sheet = makeSheet("ConBusca", [AGENDA_HEADER_ROW_WITH_BUSCA_CORPORATIVO, rowWithBusca]);
+    const sheet = makeSheet("ConBeeper", [AGENDA_HEADER_ROW_WITH_BEEPER_CORPORATIVO, rowWithBeeper]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     expect(records).toHaveLength(1);
 
-    const buscas = JSON.parse(records[0]!.buscas!) as Array<{ number: string; label?: string }>;
-    expect(buscas).toHaveLength(1);
-    expect(buscas[0]!.number).toBe("4321");
+    const beepers = JSON.parse(records[0]!.beepers!) as Array<{ number: string; label?: string }>;
+    expect(beepers).toHaveLength(1);
+    expect(beepers[0]!.number).toBe("4321");
 
     // Must NOT be present in contactMethods.phones.
     const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string }>;
@@ -881,7 +881,7 @@ describe("normalizeTabularAgendaSheet", () => {
       "656 12 34 56", // Corporativo 1
       "", "", "", "", "", "", "", // Horario..Comentarios
     ];
-    const sheet = makeSheet("ConBusca", [AGENDA_HEADER_ROW_WITH_BUSCA_CORPORATIVO, rowWithCorporativo]);
+    const sheet = makeSheet("ConBeeper", [AGENDA_HEADER_ROW_WITH_BEEPER_CORPORATIVO, rowWithCorporativo]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     expect(records).toHaveLength(1);
 
@@ -892,7 +892,7 @@ describe("normalizeTabularAgendaSheet", () => {
     expect(corporativoEntry?.label).toBe("Corporativo");
   });
 
-  it("does not add a busca entry or a corporativo phone entry when both inserted columns are empty", () => {
+  it("does not add a beeper entry or a corporativo phone entry when both inserted columns are empty", () => {
     const rowWithoutEither = [
       "Juan Pérez", // Nombre
       "Enfermero/a", // Categoría
@@ -902,18 +902,18 @@ describe("normalizeTabularAgendaSheet", () => {
       "", // Corporativo 1 (empty)
       "", "", "", "", "", "", "", // Horario..Comentarios
     ];
-    const sheet = makeSheet("ConBusca", [AGENDA_HEADER_ROW_WITH_BUSCA_CORPORATIVO, rowWithoutEither]);
+    const sheet = makeSheet("ConBeeper", [AGENDA_HEADER_ROW_WITH_BEEPER_CORPORATIVO, rowWithoutEither]);
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     expect(records).toHaveLength(1);
 
-    const buscas = JSON.parse(records[0]!.buscas!) as unknown[];
-    expect(buscas).toHaveLength(0);
+    const beepers = JSON.parse(records[0]!.beepers!) as unknown[];
+    expect(beepers).toHaveLength(0);
 
     const phones = JSON.parse(records[0]!.phones!) as Array<{ kind: string }>;
     expect(phones.some((entry) => entry.kind === "corporativo")).toBe(false);
   });
 
-  it("does not populate record.buscas or an inserted-column phone entry on a sheet without Busca/Corporativo columns (regression guard)", () => {
+  it("does not populate record.beepers or an inserted-column phone entry on a sheet without Busca/Corporativo columns (regression guard)", () => {
     const sheet = makeSheet("Agenda", [
       AGENDA_HEADER_ROW,
       agendaRow({ servicio: "Admisión Central", numero1: "79649" }),
@@ -921,8 +921,8 @@ describe("normalizeTabularAgendaSheet", () => {
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     expect(records).toHaveLength(1);
 
-    const buscas = JSON.parse(records[0]!.buscas!) as unknown[];
-    expect(buscas).toHaveLength(0);
+    const beepers = JSON.parse(records[0]!.beepers!) as unknown[];
+    expect(beepers).toHaveLength(0);
 
     const phones = JSON.parse(records[0]!.phones!) as Array<{ kind: string }>;
     expect(phones.every((entry) => entry.kind !== "corporativo")).toBe(true);

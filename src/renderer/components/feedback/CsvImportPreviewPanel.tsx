@@ -229,9 +229,9 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
   const hasRejectedRows = preview.invalidRowCount > 0;
   const hasUnresolvedConflicts = conflictCount > 0 && !policiesResolved;
-  // A buscas-only workbook has validRowCount === 0 but parsedBuscasCellCount > 0.
-  // Treat it as confirmable. Only block when BOTH contact rows AND buscas content are absent.
-  const hasImportableContent = preview.validRowCount > 0 || preview.parsedBuscasCellCount > 0;
+  // A beepers-only workbook has validRowCount === 0 but parsedBeepersCellCount > 0.
+  // Treat it as confirmable. Only block when BOTH contact rows AND beepers content are absent.
+  const hasImportableContent = preview.validRowCount > 0 || preview.parsedBeepersCellCount > 0;
   // Rejected rows alone no longer block confirmation — they are skipped
   // and imported partially alongside the valid rows. The only real blocker left
   // is having nothing importable at all (see hasImportableContent above).
@@ -478,8 +478,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       )}
 
-      {/* Buscas rows are now parsed and imported into the Buscas section. */}
-      {(preview.buscasSkippedRowCount ?? 0) > 0 && (
+      {/* Beeper rows are now parsed and imported into the Beepers section. */}
+      {(preview.beepersSkippedRowCount ?? 0) > 0 && (
         <div
           role="note"
           aria-live="polite"
@@ -487,7 +487,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
           <span className="font-semibold">
-            {preview.buscasSkippedRowCount} {preview.buscasSkippedRowCount === 1 ? "fila de buscas sin número" : "filas de buscas sin número"}
+            {preview.beepersSkippedRowCount} {preview.beepersSkippedRowCount === 1 ? "fila de buscas sin número" : "filas de buscas sin número"}
           </span>{" "}
           omitidas (filas vacías o solo comentarios en las hojas de buscas)
         </div>

@@ -1,7 +1,7 @@
 /**
  * Shared primitive for the `role="status" aria-live="polite"`
  * + "Cargando…" loading pattern that was hand-rewritten independently across
- * App.tsx, DirectoryPage.tsx, RecordFormPage.tsx, BuscasPage.tsx,
+ * App.tsx, DirectoryPage.tsx, RecordFormPage.tsx, BeepersPage.tsx,
  * SettingsPage.tsx and DataManagementSection.tsx.
  *
  * Intentionally narrow: this only covers the simple "one-line loading

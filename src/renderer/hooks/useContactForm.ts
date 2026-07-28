@@ -153,7 +153,7 @@ const createEmptyFormState = (): ContactFormState => ({
     emails: [],
     socials: []
   },
-  buscas: [],
+  beepers: [],
   aliases: [],
   tags: [],
   notes: "",
@@ -207,7 +207,7 @@ const buildPayload = (state: ContactFormState): EditableContactRecord => ({
   organization: state.organization,
   location: state.location,
   contactMethods: state.contactMethods,
-  buscas: state.buscas,
+  beepers: state.beepers,
   aliases: state.aliases,
   tags: state.tags,
   notes: state.notes,

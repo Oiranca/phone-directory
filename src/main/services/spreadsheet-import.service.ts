@@ -27,8 +27,8 @@ import {
   resolveServiceRowLabel,
   mergeRecordsByDisplayName,
 } from "./spreadsheet-parsers.js";
-import { parseBuscasSheets } from "./spreadsheet-buscas-parser.js";
-import type { BuscasSheetParseResult } from "./spreadsheet-buscas-parser.js";
+import { parseBeeperSheets } from "./spreadsheet-beeper-parser.js";
+import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 
 // Re-export the public symbols that external modules depend on.
 export type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
@@ -120,15 +120,15 @@ export type SpreadsheetImportNormalizationResult = {
   detectedFormat: string;
   detectionConfidence: DetectionConfidence;
   /**
-   * Parse result for buscas sheets found in the workbook.
-   * Populated when one or more sheets with a "buscas" slug prefix are present.
-   * The caller (AppDataService.previewCsvImport) persists these via BuscasService.
-   * buscasSkippedRowCount counts rows that were in buscas sheets but yielded no
+   * Parse result for beepers sheets found in the workbook.
+   * Populated when one or more sheets with a "beepers" slug prefix are present.
+   * The caller (AppDataService.previewCsvImport) persists these via BeepersService.
+   * beepersSkippedRowCount counts rows that were in beepers sheets but yielded no
    * parseable pager record (e.g. empty rows, comment-only rows).
    */
-  buscasParseResult: BuscasSheetParseResult;
-  /** Alias kept for backwards-compat with preview panel display (genuinely-unparseable buscas rows). */
-  buscasSkippedRowCount: number;
+  beepersParseResult: BeepersSheetParseResult;
+  /** Alias kept for backwards-compat with preview panel display (genuinely-unparseable beepers rows). */
+  beepersSkippedRowCount: number;
   /** Rows skipped because they are social-media handles. */
   socialHandleSkippedRowCount: number;
 };
@@ -168,24 +168,24 @@ const isNavigationSheet = (slug: string): boolean => {
 };
 
 /**
- * INTERIM: Slug prefix for Buscas sheets (pager/localizador system).
+ * INTERIM: Slug prefix for Beepers sheets (pager/localizador system).
  *
  * Sheets like Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores, and
- * Buscas_Varios belong to the separate Buscas (pager/localizador) section that
- * has its own data store (BuscasService / buscas.json) and is NOT part of the
+ * Buscas_Varios belong to the separate Beepers (pager/localizador) section that
+ * has its own data store (BeepersService / beepers.json) and is NOT part of the
  * phone-directory contact import pipeline.  Their rows use 4-digit pager codes,
  * not phone numbers, and their column header "PRINCIPAL / RESIDENTE" would be
  * mistakenly parsed as a contact name, causing spurious rejections.
  *
  * These sheets are skipped here — kept distinct from isNavigationSheet so the
- * reason is explicit and easy to remove once a proper Buscas ODS-import path
+ * reason is explicit and easy to remove once a proper Beepers ODS-import path
  * is built.  Tracked as a future feature in the issue tracker.
  */
-const BUSCAS_SHEET_SLUG_PREFIX = "buscas";
+const BEEPERS_SHEET_SLUG_PREFIX = "buscas";
 
-/** Returns true when the sheet is a deferred-feature Buscas (pager) sheet. */
+/** Returns true when the sheet is a deferred-feature Beepers (pager) sheet. */
 const isDeferredFeatureSheet = (slug: string): boolean =>
-  slug.startsWith(BUSCAS_SHEET_SLUG_PREFIX);
+  slug.startsWith(BEEPERS_SHEET_SLUG_PREFIX);
 
 const SAME_AS_CANONICAL = new Set(Object.keys(SERVICE_SHEETS));
 
@@ -435,11 +435,11 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
     };
   }
 
-  // INTERIM: Skip Buscas (pager/localizador) sheets.
+  // INTERIM: Skip Beepers (pager/localizador) sheets.
   // These belong to a separate app section that does not yet have an ODS-import
   // pipeline.  Their column header "PRINCIPAL / RESIDENTE" would be mistakenly
   // parsed as a contact and rejected, blocking the whole import.
-  // Remove this guard when a proper Buscas import path is built.
+  // Remove this guard when a proper Beepers import path is built.
   if (isDeferredFeatureSheet(sheet.slug)) {
     return null;
   }
@@ -693,7 +693,7 @@ export const normalizeWorkbookRowsFromFile = (
 
   const records: NormalizedImportRow[] = [];
   const profiles: SheetProfile[] = [];
-  const buscasSheets: Array<{ name: string; rows: string[][] }> = [];
+  const beepersSheets: Array<{ name: string; rows: string[][] }> = [];
   let socialHandleSkippedRowCount = 0;
 
   for (const sheet of sheets) {
@@ -701,13 +701,13 @@ export const normalizeWorkbookRowsFromFile = (
       continue;
     }
 
-    // Route buscas sheets to the dedicated pager parser instead of skipping.
+    // Route beepers sheets to the dedicated pager parser instead of skipping.
     // These sheets (Buscas_Facultativos, Buscas_Enfermería, Buscas_Celadores,
     // Buscas_Varios) use column-per-holder-type layout and belong to the separate
-    // Buscas section. parseBuscasSheets() is called after the loop with all collected
-    // sheets so a single BuscasSheetParseResult is returned to the caller.
+    // Beepers section. parseBeeperSheets() is called after the loop with all collected
+    // sheets so a single BeepersSheetParseResult is returned to the caller.
     if (isDeferredFeatureSheet(sheet.slug)) {
-      buscasSheets.push({ name: sheet.name, rows: sheet.rows });
+      beepersSheets.push({ name: sheet.name, rows: sheet.rows });
       continue;
     }
 
@@ -734,19 +734,19 @@ export const normalizeWorkbookRowsFromFile = (
     socialHandleSkippedRowCount += serviceResult.socialSkippedRows;
   }
 
-  if (records.length === 0 && buscasSheets.length === 0) {
+  if (records.length === 0 && beepersSheets.length === 0) {
     throw new Error(
       "No se encontraron hojas soportadas para importar. Usa Admisión Central, Urgencias, Rayos, Secretarías, Hospitales de día, UMI o Centros de salud."
     );
   }
 
-  // Parse buscas sheets collected above.
-  const buscasParseResult = parseBuscasSheets(buscasSheets);
+  // Parse beepers sheets collected above.
+  const beepersParseResult = parseBeeperSheets(beepersSheets);
 
-  // Allow import of buscas-only workbooks (no phone contacts) only when at least one
-  // buscas record was parsed. Otherwise the "no supported sheets" error stands for
+  // Allow import of beepers-only workbooks (no phone contacts) only when at least one
+  // beepers record was parsed. Otherwise the "no supported sheets" error stands for
   // workbooks that are genuinely empty.
-  if (records.length === 0 && buscasParseResult.parsedCellCount === 0) {
+  if (records.length === 0 && beepersParseResult.parsedCellCount === 0) {
     throw new Error(
       "No se encontraron hojas soportadas para importar. Usa Admisión Central, Urgencias, Rayos, Secretarías, Hospitales de día, UMI o Centros de salud."
     );
@@ -758,8 +758,8 @@ export const normalizeWorkbookRowsFromFile = (
   return {
     rows: mergedRecords,
     ...summarizeDetectedFormat(profiles.length > 0 ? profiles : []),
-    buscasParseResult,
-    buscasSkippedRowCount: buscasParseResult.skippedRowCount,
+    beepersParseResult,
+    beepersSkippedRowCount: beepersParseResult.skippedRowCount,
     socialHandleSkippedRowCount
   };
 };
@@ -879,7 +879,7 @@ export const readWorkbookRowsInWorker = (
 // Public API entry point
 // ---------------------------------------------------------------------------
 
-const emptyBuscasParseResult = (): BuscasSheetParseResult => ({
+const emptyBeepersParseResult = (): BeepersSheetParseResult => ({
   records: [],
   parsedCellCount: 0,
   skippedRowCount: 0
@@ -888,7 +888,7 @@ const emptyBuscasParseResult = (): BuscasSheetParseResult => ({
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
   editorName: string
-): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal; buscasParseResult: BuscasSheetParseResult }> => {
+): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal; beepersParseResult: BeepersSheetParseResult }> => {
   const extension = path.extname(sourceFilePath).toLowerCase();
   const sourceStats = await fs.stat(sourceFilePath);
 
@@ -910,7 +910,7 @@ export const buildSpreadsheetImportPreview = async (
         detectedFormat: "plantilla normalizada",
         detectionConfidence: "high"
       },
-      buscasParseResult: emptyBuscasParseResult()
+      beepersParseResult: emptyBeepersParseResult()
     };
   }
 
@@ -932,7 +932,7 @@ export const buildSpreadsheetImportPreview = async (
     editorName,
     detectedFormat: normalized.detectedFormat,
     detectionConfidence: normalized.detectionConfidence,
-    buscasSkippedRowCount: normalized.buscasSkippedRowCount,
+    beepersSkippedRowCount: normalized.beepersSkippedRowCount,
     socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount
   });
 
@@ -940,8 +940,8 @@ export const buildSpreadsheetImportPreview = async (
     ...result,
     preview: {
       ...result.preview,
-      parsedBuscasCellCount: normalized.buscasParseResult.parsedCellCount
+      parsedBeepersCellCount: normalized.beepersParseResult.parsedCellCount
     },
-    buscasParseResult: normalized.buscasParseResult
+    beepersParseResult: normalized.beepersParseResult
   };
 };

@@ -53,9 +53,9 @@ const basePreview: CsvImportPreviewWithConflicts = {
   createdCount: 0,
   updatedCount: 0,
   unchangedCount: 0,
-  buscasSkippedRowCount: 0,
+  beepersSkippedRowCount: 0,
   socialHandleSkippedRowCount: 0,
-  parsedBuscasCellCount: 0,
+  parsedBeepersCellCount: 0,
   typeCounts: {},
   areaCounts: {},
   rowIssues: [],
@@ -467,7 +467,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-1",
             displayName: "Mostrador importado",
             department: "Admisión",
@@ -476,7 +476,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-1",
             displayName: "Mostrador actual",
             department: "Admisión",
@@ -543,7 +543,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-1",
             displayName: "Mostrador Central",
             department: "Admisión",
@@ -552,7 +552,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-1",
             displayName: "Mostrador Central",
             department: "Admisión",
@@ -612,7 +612,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-ph-1",
             displayName: "Urgencias Importada",
             department: "Urgencias",
@@ -627,7 +627,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: [{ platform: "instagram", handle: "urgencias_h" }]
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-ph-1",
             displayName: "Urgencias Actual",
             department: "Urgencias",
@@ -779,7 +779,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-em-1",
               displayName: "Dr. García Importado",
               phones: [],
@@ -787,7 +787,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-em-1",
               displayName: "Dr. García",
               phones: [],
@@ -829,7 +829,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-fmt-1",
               displayName: "Servicio Importado",
               phones: [
@@ -840,7 +840,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-fmt-1",
               displayName: "Servicio Existente",
               phones: [
@@ -886,7 +886,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-case-em-1",
               displayName: "Dr. López Importado",
               phones: [],
@@ -897,7 +897,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-case-em-1",
               displayName: "Dr. López",
               phones: [],
@@ -945,7 +945,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-dup-1",
               displayName: "Servicio Duplicado",
               // Two entries with the exact same number AND label — the pre-fix key
@@ -958,7 +958,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-dup-1",
               displayName: "Servicio Duplicado Existente",
               phones: [{ number: "12345", kind: "direct" }],
@@ -1054,7 +1054,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "spec-import-1",
             displayName: "Servicio",
             phones: [],
@@ -1063,7 +1063,7 @@ describe("CsvImportPreviewPanel", () => {
             ...overrides
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "spec-existing-1",
             displayName: "Servicio Existente",
             phones: [],
@@ -1179,11 +1179,11 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   describe("deferred-skip informational notes", () => {
-    it("shows the buscas note when buscasSkippedRowCount > 0 (empty/comment buscas rows)", () => {
+    it("shows the beepers note when beepersSkippedRowCount > 0 (empty/comment beepers rows)", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 3,
-        buscasSkippedRowCount: 5,
+        beepersSkippedRowCount: 5,
         previewRows: []
       });
 
@@ -1207,11 +1207,11 @@ describe("CsvImportPreviewPanel", () => {
       expect(notes[0]).toHaveTextContent("redes sociales");
     });
 
-    it("shows both notes when buscasSkippedRowCount and socialHandleSkippedRowCount are both > 0", () => {
+    it("shows both notes when beepersSkippedRowCount and socialHandleSkippedRowCount are both > 0", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 3,
-        buscasSkippedRowCount: 3,
+        beepersSkippedRowCount: 3,
         socialHandleSkippedRowCount: 1,
         previewRows: []
       });
@@ -1220,11 +1220,11 @@ describe("CsvImportPreviewPanel", () => {
       expect(notes).toHaveLength(2);
     });
 
-    it("uses singular 'fila de buscas sin número' when exactly one buscas row is skipped", () => {
+    it("uses singular 'fila de buscas sin número' when exactly one beepers row is skipped", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 1,
-        buscasSkippedRowCount: 1,
+        beepersSkippedRowCount: 1,
         previewRows: []
       });
 
@@ -1246,7 +1246,7 @@ describe("CsvImportPreviewPanel", () => {
     });
 
     it("does not render any note when both counts are 0", () => {
-      renderPanel({ ...basePreview, buscasSkippedRowCount: 0, socialHandleSkippedRowCount: 0 });
+      renderPanel({ ...basePreview, beepersSkippedRowCount: 0, socialHandleSkippedRowCount: 0 });
 
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
@@ -1255,7 +1255,7 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel({
         ...basePreview,
         validRowCount: 2,
-        buscasSkippedRowCount: 3,
+        beepersSkippedRowCount: 3,
         previewRows: []
       });
 
@@ -1264,25 +1264,25 @@ describe("CsvImportPreviewPanel", () => {
     });
   });
 
-  describe("buscas-only workbook confirm gate", () => {
-    it("enables the confirm button when parsedBuscasCellCount > 0 and validRowCount === 0", () => {
-      // A buscas-only ODS: no contact rows but valid buscas content was parsed.
+  describe("beepers-only workbook confirm gate", () => {
+    it("enables the confirm button when parsedBeepersCellCount > 0 and validRowCount === 0", () => {
+      // A beepers-only ODS: no contact rows but valid beepers content was parsed.
       renderPanel({
         ...basePreview,
         validRowCount: 0,
-        parsedBuscasCellCount: 12,
+        parsedBeepersCellCount: 12,
         previewRows: []
       });
 
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
 
-    it("keeps the confirm button disabled when both validRowCount and parsedBuscasCellCount are 0", () => {
+    it("keeps the confirm button disabled when both validRowCount and parsedBeepersCellCount are 0", () => {
       // A truly empty workbook: nothing to import at all.
       renderPanel({
         ...basePreview,
         validRowCount: 0,
-        parsedBuscasCellCount: 0,
+        parsedBeepersCellCount: 0,
         previewRows: []
       });
 
@@ -1802,7 +1802,7 @@ describe("CsvImportPreviewPanel", () => {
       conflictedRecords: Array.from({ length: count }, (_, i) => ({
         recordIndex: i,
         importedRecord: {
-          buscas: [],
+          beepers: [],
           id: `import-pg-${i}`,
           displayName: `Importado ${i + 1}`,
           phones: [],
@@ -1810,7 +1810,7 @@ describe("CsvImportPreviewPanel", () => {
           socials: []
         },
         matchingRecord: {
-          buscas: [],
+          beepers: [],
           id: `existing-pg-${i}`,
           displayName: `Existente ${i + 1}`,
           phones: [],
@@ -1921,7 +1921,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-pd-1",
             displayName: "Registro importado",
             phones: [],
@@ -1929,7 +1929,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-pd-1",
             displayName: "Registro existente",
             phones: [],
@@ -2034,7 +2034,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-priv-1",
               displayName: "Consulta Externa",
               phones: [],
@@ -2042,7 +2042,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-priv-1",
               displayName: "Consulta Externa actual",
               phones: [],
@@ -2084,7 +2084,7 @@ describe("CsvImportPreviewPanel", () => {
           {
             recordIndex: 0,
             importedRecord: {
-              buscas: [],
+              beepers: [],
               id: "import-jargon-1",
               displayName: "Mostrador importado",
               phones: [],
@@ -2092,7 +2092,7 @@ describe("CsvImportPreviewPanel", () => {
               socials: []
             },
             matchingRecord: {
-              buscas: [],
+              beepers: [],
               id: "existing-jargon-1",
               displayName: "Mostrador actual",
               phones: [],
@@ -2134,7 +2134,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 0,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-conflict-ux-0",
             displayName: "Registro ",
             phones: [],
@@ -2142,7 +2142,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-conflict-ux-0",
             displayName: "Registro existente ",
             phones: [],
@@ -2209,7 +2209,7 @@ describe("CsvImportPreviewPanel", () => {
         {
           recordIndex: 1,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: "import-conflict-ux-1",
             displayName: "Registro  B",
             phones: [],
@@ -2217,7 +2217,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: "existing-conflict-ux-1",
             displayName: "Existente  B",
             phones: [],
@@ -2340,7 +2340,7 @@ describe("CsvImportPreviewPanel", () => {
         conflictedRecords: Array.from({ length: 21 }, (_, i) => ({
           recordIndex: i,
           importedRecord: {
-            buscas: [],
+            beepers: [],
             id: `imp-conflict-ux-${i}`,
             displayName: `Importado  ${i + 1}`,
             phones: [],
@@ -2348,7 +2348,7 @@ describe("CsvImportPreviewPanel", () => {
             socials: []
           },
           matchingRecord: {
-            buscas: [],
+            beepers: [],
             id: `ex-conflict-ux-${i}`,
             displayName: `Existente  ${i + 1}`,
             phones: [],

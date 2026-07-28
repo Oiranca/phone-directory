@@ -842,7 +842,7 @@ describe("DataManagementSection (Configuración data section)", () => {
         mergedRecordCount: defaultContacts.records.length,
         createdCount: 0,
         updatedCount: 0,
-        parsedBuscasCellCount: 0,
+        parsedBeepersCellCount: 0,
         typeCounts: {},
         areaCounts: {},
         rowIssues: [
@@ -1091,9 +1091,9 @@ describe("DataManagementSection (Configuración data section)", () => {
         rowIssues: [],
         warnings: [],
         previewRows: [],
-        buscasSkippedRowCount: 0,
+        beepersSkippedRowCount: 0,
         socialHandleSkippedRowCount: 0,
-        parsedBuscasCellCount: 0,
+        parsedBeepersCellCount: 0,
         conflictCount: 2,
         policiesResolved: false,
         conflictedRecords: [

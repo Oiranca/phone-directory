@@ -37,7 +37,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CONTACTS_CHANNELS,
   SETTINGS_CHANNELS,
-  BUSCAS_CHANNELS,
+  BEEPERS_CHANNELS,
   PUSH_CHANNELS
 } from "../shared/ipc/channels.js";
 
@@ -65,11 +65,11 @@ const EXPECTED_METHODS = [
   "resetDataset",
   "previewCsvImport",
   "importCsvDataset",
-  "listBuscas",
-  "addBusca",
-  "updateBusca",
-  "deleteBusca",
-  "listImportedBuscas",
+  "listBeepers",
+  "addBeeper",
+  "updateBeeper",
+  "deleteBeeper",
+  "listImportedBeepers",
   "detectDuplicates",
   "mergeContacts",
   "onAutoBackupFailure"
@@ -91,7 +91,7 @@ describe("source guard — index.cts channel strings match channels.ts", () => {
   const allCanonical = [
     ...Object.values(CONTACTS_CHANNELS),
     ...Object.values(SETTINGS_CHANNELS),
-    ...Object.values(BUSCAS_CHANNELS),
+    ...Object.values(BEEPERS_CHANNELS),
     ...Object.values(PUSH_CHANNELS)
   ];
 
@@ -139,7 +139,7 @@ describe("source guard — api.cts mirrors index.cts channel strings", () => {
   const allCanonical = [
     ...Object.values(CONTACTS_CHANNELS),
     ...Object.values(SETTINGS_CHANNELS),
-    ...Object.values(BUSCAS_CHANNELS),
+    ...Object.values(BEEPERS_CHANNELS),
     ...Object.values(PUSH_CHANNELS)
   ];
 
@@ -253,20 +253,20 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
     it("mergeContacts → contacts:merge-duplicates", async () => {
       await expectChannel("mergeContacts", CONTACTS_CHANNELS.mergeDuplicates, { keepId: "a", discardId: "b" });
     });
-    it("listBuscas → buscas:list", async () => {
-      await expectChannel("listBuscas", BUSCAS_CHANNELS.list);
+    it("listBeepers → beepers:list", async () => {
+      await expectChannel("listBeepers", BEEPERS_CHANNELS.list);
     });
-    it("addBusca → buscas:add", async () => {
-      await expectChannel("addBusca", BUSCAS_CHANNELS.add, { deviceNumber: "B-01", assignedTo: "Ana", department: "UCI", role: "Enfermera", shift: "mañana" });
+    it("addBeeper → beepers:add", async () => {
+      await expectChannel("addBeeper", BEEPERS_CHANNELS.add, { deviceNumber: "B-01", assignedTo: "Ana", department: "UCI", role: "Enfermera", shift: "mañana" });
     });
-    it("updateBusca → buscas:update", async () => {
-      await expectChannel("updateBusca", BUSCAS_CHANNELS.update, "bsc_abc12345", { deviceNumber: "B-01", assignedTo: "Ana", department: "UCI", role: "Enfermera", shift: "mañana" });
+    it("updateBeeper → beepers:update", async () => {
+      await expectChannel("updateBeeper", BEEPERS_CHANNELS.update, "bsc_abc12345", { deviceNumber: "B-01", assignedTo: "Ana", department: "UCI", role: "Enfermera", shift: "mañana" });
     });
-    it("deleteBusca → buscas:delete", async () => {
-      await expectChannel("deleteBusca", BUSCAS_CHANNELS.remove, "bsc_abc12345");
+    it("deleteBeeper → beepers:delete", async () => {
+      await expectChannel("deleteBeeper", BEEPERS_CHANNELS.remove, "bsc_abc12345");
     });
-    it("listImportedBuscas → buscas:list-imported", async () => {
-      await expectChannel("listImportedBuscas", BUSCAS_CHANNELS.listImported);
+    it("listImportedBeepers → beepers:list-imported", async () => {
+      await expectChannel("listImportedBeepers", BEEPERS_CHANNELS.listImported);
     });
   });
 

@@ -39,12 +39,12 @@ export const SETTINGS_CHANNELS = {
   browsePath: "settings:browse-path"
 } as const;
 
-export const BUSCAS_CHANNELS = {
-  list:          "buscas:list",
-  add:           "buscas:add",
-  update:        "buscas:update",
-  remove:        "buscas:delete",
-  listImported:  "buscas:list-imported"
+export const BEEPERS_CHANNELS = {
+  list:          "beepers:list",
+  add:           "beepers:add",
+  update:        "beepers:update",
+  remove:        "beepers:delete",
+  listImported:  "beepers:list-imported"
 } as const;
 
 export const PUSH_CHANNELS = {
