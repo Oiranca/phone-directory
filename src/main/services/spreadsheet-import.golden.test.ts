@@ -873,17 +873,15 @@ describe("golden: merge identity key includes department", () => {
 
 describe("golden: error paths", () => {
   it("throws a localized error for a file that cannot be parsed as a workbook", () => {
-    // xlsx can parse arbitrary text as a CSV-like sheet, so a plain text
-    // file with no recognizable structure produces "no supported sheets" rather
-    // than a parse error. Both error messages are considered localized / valid.
+    // ZIP-based formats are preflighted before SheetJS. Older SheetJS behavior
+    // could parse arbitrary text as a CSV-like sheet, so both validation and
+    // parser-level localized responses are valid here.
     // This golden test documents the actual runtime behavior.
     const filePath = path.join(testRoot, "bad.xlsx");
     nodeFs.writeFileSync(filePath, "not a workbook at all");
 
     expect(() => normalizeWorkbookRowsFromFile(filePath)).toThrow(
-      // Either "No se pudo leer…" (parse failure) or "No se encontraron hojas…"
-      // (parsed but no canonical sheets detected) are valid localized responses.
-      /No se pudo leer la hoja de cálculo|No se encontraron hojas soportadas/
+      /No se pudo validar la hoja de cálculo|No se pudo leer la hoja de cálculo|No se encontraron hojas soportadas/
     );
   });
 
