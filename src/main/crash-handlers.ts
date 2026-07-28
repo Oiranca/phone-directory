@@ -10,10 +10,13 @@
  * Pure-ish and dependency-injectable (mirrors security.ts's extraction
  * pattern) so it can be unit tested without booting a real Electron app.
  */
-import path from "node:path";
 import type { App } from "electron";
 import { dialog } from "electron";
-import { logCrash, type CrashSource } from "./services/crash-log.service.js";
+import {
+  logCrash,
+  redactCrashLogText,
+  type CrashSource
+} from "./services/crash-log.service.js";
 
 export interface CrashHandlerDeps {
   /** Defaults to the real Node.js `process`. Inject a stub in tests. */
@@ -59,17 +62,6 @@ const describeError = (error: unknown): { message: string; stack?: string } => {
   return { message: typeof error === "string" ? error : safeStringify(error) };
 };
 
-const DIALOG_DIAGNOSTIC_SUFFIX_PATTERNS = [
-  /\s+Ruta afectada:.*$/u,
-  /\s+Ruta de origen:.*$/u,
-  /\s+Ruta de destino:.*$/u,
-  /\s+Archivo afectado:.*$/u
-];
-
-// Matches absolute POSIX paths (leading `/`) and Windows paths (`C:\...`),
-// stopping at whitespace/quote/bracket characters.
-const ABSOLUTE_PATH_PATTERN = /(?:[A-Za-z]:)?[/\\][^\s"'<>]+/gu;
-
 /**
  * Redacts absolute filesystem paths from a crash message before it is shown
  * in a user-facing dialog. Mirrors the diagnostic-suffix stripping already
@@ -78,26 +70,10 @@ const ABSOLUTE_PATH_PATTERN = /(?:[A-Za-z]:)?[/\\][^\s"'<>]+/gu;
  * afectado:" suffixes that can embed absolute paths (and thus the OS
  * username) — plus a generic absolute-path redaction, since a raw
  * uncaughtException/unhandledRejection message is not guaranteed to carry
- * one of those known suffixes. This app is a PII-handling phone directory
- * deployed as a shared-workstation USB install, so the dialog (visible to
- * anyone at the machine) must never surface a raw absolute path. The full,
- * unredacted message is still written to the operator-only crash-log.jsonl
- * via recordCrash() before this redaction is applied.
+ * one of those known suffixes. The persisted crash log uses the same path
+ * redaction before writing JSONL.
  */
-const redactMessageForDialog = (message: string): string => {
-  const withoutDiagnosticSuffixes = DIALOG_DIAGNOSTIC_SUFFIX_PATTERNS.reduce(
-    (current, pattern) => current.replace(pattern, ""),
-    message
-  );
-
-  return withoutDiagnosticSuffixes.replace(ABSOLUTE_PATH_PATTERN, (match) => {
-    try {
-      return path.basename(match) || "<ruta oculta>";
-    } catch {
-      return "<ruta oculta>";
-    }
-  });
-};
+const redactMessageForDialog = redactCrashLogText;
 
 /**
  * Registers process-level crash handlers:

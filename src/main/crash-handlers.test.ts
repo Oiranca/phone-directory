@@ -169,7 +169,7 @@ describe("registerCrashHandlers", () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
-  it("redacts absolute paths from the dialog message but keeps the full message in the crash log", () => {
+  it("redacts absolute paths from the dialog message and crash log payload", () => {
     const fakeProcess = makeFakeProcess();
     const recordCrash = vi.fn();
     const showErrorBox = vi.fn();
@@ -183,14 +183,12 @@ describe("registerCrashHandlers", () => {
 
     fakeProcess.emit("uncaughtException", error);
 
-    // The full, unredacted message must still reach the operator-only
-    // crash-log.jsonl via recordCrash().
     expect(recordCrash).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining(sensitivePath) })
     );
 
-    // But the user-facing dialog must never surface the raw absolute path
-    // (which embeds the OS username) or contact data diagnostic suffix.
+    // registerCrashHandlers passes the raw error into the crash-log service;
+    // the service owns persisted JSONL sanitization.
     expect(showErrorBox).toHaveBeenCalledTimes(1);
     const dialogMessage = showErrorBox.mock.calls[0]![1];
     expect(dialogMessage).not.toContain(sensitivePath);
