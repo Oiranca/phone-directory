@@ -46,7 +46,9 @@ export interface HospitalDirectoryApi {
   updateRecord: (recordId: string, record: EditableContactRecord) => Promise<SaveContactResult>;
 
   // Backups
-  createBackup: () => Promise<string>;
+  // The resolved absolute backup path is main-process-only — no renderer
+  // caller needs it. See contacts.ipc.ts createBackup handler. (OIR-276)
+  createBackup: () => Promise<void>;
   listBackups: () => Promise<BackupListItem[]>;
   restoreBackup: (backupFilePath: string) => Promise<ImportContactsResult>;
 

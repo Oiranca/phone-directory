@@ -178,8 +178,6 @@ describe("App recovery flow", () => {
     window.hospitalDirectory.importDataset = vi.fn().mockResolvedValue({
       contacts: defaultContacts,
       settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-corrupted.json",
-      importedFilePath: "/tmp/recovery.json",
       recordCount: defaultContacts.records.length
     });
 
@@ -216,8 +214,7 @@ describe("App recovery flow", () => {
         },
         records: []
       },
-      settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-corrupted.json"
+      settings: editableSettings
     });
 
     renderApp();
@@ -454,8 +451,7 @@ describe("App recovery flow", () => {
         },
         records: []
       },
-      settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-corrupted.json"
+      settings: editableSettings
     });
   });
 

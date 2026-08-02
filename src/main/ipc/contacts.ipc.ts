@@ -1,4 +1,11 @@
-import type { EditableContactRecord } from "../../shared/types/contact.js";
+import type {
+  EditableContactRecord,
+  BackupListItem,
+  BackupListItemInternal,
+  ExportContactsResult,
+  ExportContactsResultInternal,
+  ResetContactsResultInternal
+} from "../../shared/types/contact.js";
 import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.js";
 import { csvImportPolicySelectionListSchema } from "../../shared/schemas/csv-import-policy.schema.js";
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
@@ -17,6 +24,38 @@ const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 const MAX_PENDING_CSV_IMPORTS = 30;
 // Extensions accepted by the unified pickAndImportDataset dialog filter.
 const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
+
+// ---------------------------------------------------------------------------
+// Renderer-safe result mappers (OIR-276)
+//
+// AppDataService's import/restore/reset/export/listBackups methods return
+// "Internal" result types that carry absolute filesystem paths
+// (backupPath/importedFilePath/filePath) — needed main-process-side (tests,
+// restoreBackup chaining). These helpers strip those fields immediately
+// before a result crosses the IPC boundary into the renderer, mirroring the
+// existing sourceFilePath-stripping pattern already used for CSV preview
+// payloads (see runCsvImportPreview below).
+// ---------------------------------------------------------------------------
+
+const stripImportPaths = <T extends { backupPath: unknown; importedFilePath: unknown }>(
+  result: T
+): Omit<T, "backupPath" | "importedFilePath"> => {
+  const { backupPath: _backupPath, importedFilePath: _importedFilePath, ...safe } = result;
+  return safe;
+};
+
+const toSafeResetResult = (result: ResetContactsResultInternal) => {
+  const { backupPath: _backupPath, ...safe } = result;
+  return safe;
+};
+
+const toSafeBackupListItem = ({ filePath: _filePath, ...safe }: BackupListItemInternal): BackupListItem => safe;
+
+const toSafeExportResult = (result: ExportContactsResultInternal): ExportContactsResult => ({
+  fileName: path.basename(result.filePath),
+  exportedAt: result.exportedAt,
+  recordCount: result.recordCount
+});
 
 export const registerContactsIpc = (service: AppDataService) => {
   // sourceFilePath and senderId identify the import; sender/navListener are held so
@@ -63,21 +102,28 @@ export const registerContactsIpc = (service: AppDataService) => {
   };
 
   ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
-  ipcMain.handle(CHANNELS.createBackup, () => service.createBackup());
-  ipcMain.handle(CHANNELS.resetDataset, () => service.resetDataset());
+  // The resolved backup path is main-process-only — no renderer caller reads
+  // it (DataManagementSection awaits and discards it), so it is never
+  // forwarded across the IPC boundary. (OIR-276)
+  ipcMain.handle(CHANNELS.createBackup, async (): Promise<void> => {
+    await service.createBackup();
+  });
+  ipcMain.handle(CHANNELS.resetDataset, async () => toSafeResetResult(await service.resetDataset()));
   ipcMain.handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
     service.createRecord(payload)
   );
   ipcMain.handle(CHANNELS.updateRecord, (_event, recordId: string, payload: EditableContactRecord) =>
     service.updateRecord(recordId, payload)
   );
-  ipcMain.handle(CHANNELS.listBackups, () => service.listBackups());
-  ipcMain.handle(CHANNELS.restoreBackup, (_event, backupFilePath: string) => service.restoreBackup(backupFilePath));
+  ipcMain.handle(CHANNELS.listBackups, async () => (await service.listBackups()).map(toSafeBackupListItem));
+  ipcMain.handle(CHANNELS.restoreBackup, async (_event, backupFilePath: string) =>
+    stripImportPaths(await service.restoreBackup(backupFilePath))
+  );
   ipcMain.handle(CHANNELS.exportDataset, async (event) => {
     const e2eFilePath = consumeE2eSaveDialogPath();
 
     if (e2eFilePath) {
-      return service.exportDataset(e2eFilePath);
+      return toSafeExportResult(await service.exportDataset(e2eFilePath));
     }
 
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -111,13 +157,13 @@ export const registerContactsIpc = (service: AppDataService) => {
       return null;
     }
 
-    return service.exportDataset(filePath);
+    return toSafeExportResult(await service.exportDataset(filePath));
   });
   ipcMain.handle(CHANNELS.importDataset, async (event) => {
     const e2eFilePath = consumeE2eOpenDialogPath();
 
     if (e2eFilePath) {
-      return service.importDataset(e2eFilePath);
+      return stripImportPaths(await service.importDataset(e2eFilePath));
     }
 
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -134,7 +180,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       return null;
     }
 
-    return service.importDataset(filePaths[0]!);
+    return stripImportPaths(await service.importDataset(filePaths[0]!));
   });
   // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset —
   // both dispatch to the same normalize/validate/preview pipeline and the same
@@ -296,7 +342,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     const extension = path.extname(sourceFilePath).toLowerCase().replace(/^\./, "");
 
     if (extension === "json") {
-      const result = await service.importDataset(sourceFilePath);
+      const result = stripImportPaths(await service.importDataset(sourceFilePath));
       return { kind: "json-import", result } as const;
     }
 
@@ -345,7 +391,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // Synchronously consume the token before the first await so concurrent
     // confirmations cannot race past this point with the same token.
     clearPendingCsvImport(importToken);
-    return service.importCsvDataset(pendingImport.sourceFilePath, policies);
+    return stripImportPaths(await service.importCsvDataset(pendingImport.sourceFilePath, policies));
   });
 
   ipcMain.handle(CHANNELS.detectDuplicates, async () => {

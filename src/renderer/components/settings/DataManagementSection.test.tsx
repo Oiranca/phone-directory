@@ -152,6 +152,10 @@ const defaultCsvPreview = {
   ]
 };
 
+// OIR-276: backupPath/importedFilePath are absolute filesystem paths that
+// AppDataService keeps main-process-only — the IPC boundary strips them
+// before this shape ever reaches the renderer, so the renderer-facing mock
+// fixture below intentionally omits both fields.
 const defaultJsonImportResult = {
   contacts: {
     ...defaultContacts,
@@ -164,8 +168,6 @@ const defaultJsonImportResult = {
     ]
   },
   settings: editableSettings,
-  backupPath: "/tmp/backups/contacts-auto.json",
-  importedFilePath: "/tmp/incoming/replacement.json",
   recordCount: 1
 };
 
@@ -180,17 +182,22 @@ describe("DataManagementSection (Configuración data section)", () => {
           settings: editableSettings
         }),
         saveSettings: vi.fn(),
-        createBackup: vi.fn().mockResolvedValue("/tmp/backups/contacts-1.json"),
+        // OIR-276: createBackup() resolves to void — the absolute backup
+        // path never crosses the IPC boundary into the renderer.
+        createBackup: vi.fn().mockResolvedValue(undefined),
         createRecord: vi.fn(),
         updateRecord: vi.fn(),
+        // OIR-276: listBackups() entries omit the absolute filePath.
         listBackups: vi.fn().mockResolvedValue([
           {
             fileName: "contacts-1.json",
-            filePath: "/tmp/backups/contacts-1.json",
             createdAt: "2026-04-19T18:00:00.000Z",
             sizeBytes: 2048
           }
         ]),
+        // OIR-276: restoreBackup()/importCsvDataset()/exportDataset() below
+        // omit backupPath/importedFilePath/filePath — those absolute paths
+        // stay main-process-only.
         restoreBackup: vi.fn().mockResolvedValue({
           contacts: {
             ...defaultContacts,
@@ -203,12 +210,10 @@ describe("DataManagementSection (Configuración data section)", () => {
             ]
           },
           settings: editableSettings,
-          backupPath: "/tmp/backups/contacts-before-restore.json",
-          importedFilePath: "/tmp/backups/contacts-1.json",
           recordCount: 1
         }),
         exportDataset: vi.fn().mockResolvedValue({
-          filePath: "/tmp/exports/share.json",
+          fileName: "share.json",
           exportedAt: defaultContacts.exportedAt,
           recordCount: defaultContacts.records.length
         }),
@@ -231,8 +236,6 @@ describe("DataManagementSection (Configuración data section)", () => {
             ]
           },
           settings: editableSettings,
-          backupPath: "/tmp/backups/contacts-csv-auto.json",
-          importedFilePath: "/tmp/incoming/directory.csv",
           recordCount: defaultContacts.records.length + 1,
           warningCount: 1,
           invalidRowCount: 0,
@@ -479,7 +482,6 @@ describe("DataManagementSection (Configuración data section)", () => {
     window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue([
       {
         fileName: "broken-date.json",
-        filePath: "/tmp/backups/broken-date.json",
         createdAt: "not-a-date",
         sizeBytes: 1200
       }
@@ -526,8 +528,6 @@ describe("DataManagementSection (Configuración data section)", () => {
         ]
       },
       settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-csv-auto.json",
-      importedFilePath: "/tmp/incoming/directory.csv",
       recordCount: defaultContacts.records.length + 1,
       warningCount: 0,
       invalidRowCount: 0,
@@ -826,8 +826,6 @@ describe("DataManagementSection (Configuración data section)", () => {
         ]
       },
       settings: editableSettings,
-      backupPath: "/tmp/backups/contacts-csv-partial.json",
-      importedFilePath: "/tmp/incoming/broken.csv",
       recordCount: defaultContacts.records.length,
       warningCount: 0,
       invalidRowCount: 1,
@@ -1210,7 +1208,6 @@ describe("DataManagementSection (Configuración data section)", () => {
   const buildBackupList = (count: number) =>
     Array.from({ length: count }, (_, index) => ({
       fileName: `contacts-${count - index}.json`,
-      filePath: `/tmp/backups/contacts-${count - index}.json`,
       createdAt: new Date(2026, 0, count - index).toISOString(),
       sizeBytes: 1024 * (index + 1)
     }));
@@ -1229,9 +1226,9 @@ describe("DataManagementSection (Configuración data section)", () => {
 
   it("the date shown is the MOST RECENT backup's createdAt, regardless of list order", async () => {
     window.hospitalDirectory.listBackups = vi.fn().mockResolvedValue([
-      { fileName: "contacts-old.json", filePath: "/tmp/backups/contacts-old.json", createdAt: "2026-01-01T00:00:00.000Z", sizeBytes: 100 },
-      { fileName: "contacts-newest.json", filePath: "/tmp/backups/contacts-newest.json", createdAt: "2026-06-01T00:00:00.000Z", sizeBytes: 100 },
-      { fileName: "contacts-middle.json", filePath: "/tmp/backups/contacts-middle.json", createdAt: "2026-03-01T00:00:00.000Z", sizeBytes: 100 }
+      { fileName: "contacts-old.json", createdAt: "2026-01-01T00:00:00.000Z", sizeBytes: 100 },
+      { fileName: "contacts-newest.json", createdAt: "2026-06-01T00:00:00.000Z", sizeBytes: 100 },
+      { fileName: "contacts-middle.json", createdAt: "2026-03-01T00:00:00.000Z", sizeBytes: 100 }
     ]);
 
     renderPage();
