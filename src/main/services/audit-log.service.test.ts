@@ -34,6 +34,10 @@ describe("AuditLogService", () => {
     const contents = JSON.parse(await fs.readFile(auditLogPath, "utf-8")) as unknown[];
     expect(Array.isArray(contents)).toBe(true);
     expect(contents).toHaveLength(0);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(path.dirname(auditLogPath))).mode & 0o777).toBe(0o700);
+      expect((await fs.stat(auditLogPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("does not overwrite existing audit log on ensureInitialized", async () => {
@@ -422,6 +426,10 @@ describe("AuditLogService", () => {
 
       const sidecarBytes = await fs.readFile(integrityError.quarantineFilePath!);
       expect(sidecarBytes.toString("utf-8")).toBe(corruptContent);
+      if (process.platform !== "win32") {
+        expect((await fs.stat(path.dirname(integrityError.quarantineFilePath!))).mode & 0o777).toBe(0o700);
+        expect((await fs.stat(integrityError.quarantineFilePath!)).mode & 0o777).toBe(0o600);
+      }
     });
 
     it("quarantine sidecar filename matches expected pattern (audit-log.corrupt-<timestamp>.json)", async () => {

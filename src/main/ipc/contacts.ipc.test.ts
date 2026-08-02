@@ -18,7 +18,8 @@ vi.mock("electron", () => ({
   },
   dialog: {
     showOpenDialog: vi.fn(),
-    showSaveDialog: vi.fn()
+    showSaveDialog: vi.fn(),
+    showMessageBox: vi.fn()
   }
 }));
 
@@ -1326,5 +1327,94 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
     await importHandler({ sender } as unknown, importToken, policies);
 
     expect(serviceMock.importCsvDataset).toHaveBeenCalledWith("/tmp/test.csv", policies);
+  });
+});
+
+describe("contacts:export-dataset — sensitive-data warning", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let showMessageBoxMock: ReturnType<typeof vi.fn>;
+  let showSaveDialogMock: ReturnType<typeof vi.fn>;
+  let exportDatasetMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    handlers = new Map();
+    showMessageBoxMock = vi.fn();
+    showSaveDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePath: "/tmp/exports/contacts.json" });
+    exportDatasetMock = vi.fn().mockResolvedValue({
+      filePath: "/tmp/exports/contacts.json",
+      exportedAt: "2026-07-28T00:00:00.000Z",
+      recordCount: 2
+    });
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: vi.fn(),
+        showSaveDialog: showSaveDialogMock,
+        showMessageBox: showMessageBoxMock
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc({
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn(),
+      resetDataset: vi.fn(),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn(),
+      restoreBackup: vi.fn(),
+      exportDataset: exportDatasetMock,
+      importDataset: vi.fn(),
+      previewCsvImport: vi.fn(),
+      importCsvDataset: vi.fn(),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    } as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("shows a sensitive-data warning before opening the save dialog", async () => {
+    showMessageBoxMock.mockResolvedValue({ response: 1 });
+
+    const handler = handlers.get("contacts:export-dataset");
+    expect(handler).toBeDefined();
+
+    await handler!({ sender: { id: 1 } });
+
+    expect(showMessageBoxMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Exportar datos sensibles",
+        message: "El archivo exportado contiene datos sensibles del directorio."
+      })
+    );
+    expect(showSaveDialogMock).toHaveBeenCalledTimes(1);
+    expect(exportDatasetMock).toHaveBeenCalledWith("/tmp/exports/contacts.json");
+  });
+
+  it("cancels export when the sensitive-data warning is declined", async () => {
+    showMessageBoxMock.mockResolvedValue({ response: 0 });
+
+    const handler = handlers.get("contacts:export-dataset");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(result).toBeNull();
+    expect(showSaveDialogMock).not.toHaveBeenCalled();
+    expect(exportDatasetMock).not.toHaveBeenCalled();
   });
 });

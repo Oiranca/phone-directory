@@ -97,6 +97,10 @@ describe("AppDataAuditFacade", () => {
 
     const stat = await fs.stat(exportPath);
     expect(stat.isFile()).toBe(true);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(exportDir)).mode & 0o777).toBe(0o700);
+      expect(stat.mode & 0o777).toBe(0o600);
+    }
 
     const contents = await fs.readFile(exportPath, "utf-8");
     expect(typeof contents).toBe("string");
@@ -112,6 +116,24 @@ describe("AppDataAuditFacade", () => {
 
     const stat = await fs.stat(exportPath);
     expect(stat.isFile()).toBe(true);
+  });
+
+  it("exportAuditLog re-hardens an existing weak-permission target on POSIX", async () => {
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const facade = new AppDataAuditFacade();
+    const exportPath = path.join(testRoot, "exports", "audit.csv");
+    await fs.mkdir(path.dirname(exportPath), { recursive: true });
+    await fs.writeFile(exportPath, "old", { encoding: "utf-8", mode: 0o644 });
+    if (process.platform !== "win32") {
+      await fs.chmod(exportPath, 0o644);
+    }
+
+    await facade.exportAuditLog(exportPath, { page: 1, pageSize: 100 });
+
+    if (process.platform !== "win32") {
+      expect((await fs.stat(exportPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("getAuditLog reports hasArchivedHistory: false and archivedFileCount: 0 when no rotation has occurred", async () => {

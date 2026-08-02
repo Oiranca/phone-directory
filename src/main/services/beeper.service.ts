@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
-import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
+import { ensurePrivateDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
@@ -110,7 +110,7 @@ export class BeepersService {
       throw err;
     }
 
-    await ensureDirectory(getManagedDataDirectory());
+    await ensurePrivateDirectory(getManagedDataDirectory());
     await writeJsonFile(filePath, legacyDataset);
   }
 
@@ -129,7 +129,7 @@ export class BeepersService {
 
   private async writeDataset(dataset: BeepersDataset): Promise<void> {
     const filePath = getBeepersFilePath();
-    await ensureDirectory(getManagedDataDirectory());
+    await ensurePrivateDirectory(getManagedDataDirectory());
     await writeJsonFile(filePath, dataset);
   }
 

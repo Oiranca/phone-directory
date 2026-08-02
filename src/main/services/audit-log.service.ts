@@ -27,7 +27,13 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { auditLogEntrySchema, auditLogSchema } from "../../shared/schemas/contact.js";
 import type { AuditLogEntry, AuditLogQueryParams, AuditLogResult } from "../../shared/types/contact.js";
-import { ensureDirectory, writeJsonFile } from "../utils/fs-json.js";
+import {
+  ensureDirectory,
+  ensurePrivateDirectory,
+  SENSITIVE_FILE_MODE,
+  supportsPrivateMode,
+  writeJsonFile
+} from "../utils/fs-json.js";
 import { getAuditLogFilePath } from "../utils/paths.js";
 
 /**
@@ -125,7 +131,7 @@ export class AuditLogService {
 
   async ensureInitialized(): Promise<void> {
     const filePath = this.getFilePath();
-    await ensureDirectory(path.dirname(filePath));
+    await ensurePrivateDirectory(path.dirname(filePath));
 
     try {
       await fs.access(filePath);
@@ -250,9 +256,13 @@ export class AuditLogService {
       const dir = path.dirname(originalFilePath);
       const base = path.basename(originalFilePath, ".json");
       const sidecar = path.join(dir, `${base}.corrupt-${safeTs}.json`);
-      await ensureDirectory(dir);
+      await ensurePrivateDirectory(dir);
       // Write exactly the original bytes — faithful copy of what was on disk.
-      await fs.writeFile(sidecar, bytes);
+      await fs.writeFile(
+        sidecar,
+        bytes,
+        supportsPrivateMode() ? { mode: SENSITIVE_FILE_MODE } : undefined
+      );
       return sidecar;
     } catch {
       return null;

@@ -1,8 +1,25 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+export const PRIVATE_DIRECTORY_MODE = 0o700;
+export const SENSITIVE_FILE_MODE = 0o600;
+
 export const ensureDirectory = async (directoryPath: string) => {
   await fs.mkdir(directoryPath, { recursive: true });
+};
+
+export const supportsPrivateMode = (platform: NodeJS.Platform = process.platform): boolean =>
+  platform !== "win32";
+
+export const ensurePrivateDirectory = async (
+  directoryPath: string,
+  platform: NodeJS.Platform = process.platform
+) => {
+  await fs.mkdir(directoryPath, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+
+  if (supportsPrivateMode(platform)) {
+    await fs.chmod(directoryPath, PRIVATE_DIRECTORY_MODE);
+  }
 };
 
 export const readJsonFile = async <T>(filePath: string): Promise<T> => {
@@ -67,7 +84,18 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
   const renameRetryAttempts = options.renameRetryAttempts ?? DEFAULT_RENAME_RETRY_ATTEMPTS;
   const renameRetryDelayMs = options.renameRetryDelayMs ?? DEFAULT_RENAME_RETRY_DELAY_MS;
   const tmp = filePath + ".tmp";
-  await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
+  const writeOptions = supportsPrivateMode(platform)
+    ? { encoding: "utf-8" as const, mode: SENSITIVE_FILE_MODE }
+    : { encoding: "utf-8" as const };
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2), writeOptions);
+  if (supportsPrivateMode(platform)) {
+    // fs.writeFile only applies `mode` when it creates the tmp file. If a stale `.tmp` file
+    // was left behind on disk (e.g. by a crash of a pre-hardening build) at a permissive mode,
+    // writeFile reuses it without touching its mode, and the rename below would then promote
+    // that stale, permissive file to become the final file. Explicitly chmod the tmp file after
+    // writing so its mode is always correct before it is ever renamed into place.
+    await fs.chmod(tmp, SENSITIVE_FILE_MODE);
+  }
   try {
     const fh = await fs.open(tmp, "r+");
     try {
@@ -101,6 +129,15 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
       const staging = filePath + ".new";
       try {
         await fs.copyFile(tmp, staging);
+        if (supportsPrivateMode(platform)) {
+          // fs.copyFile does not change the mode of a pre-existing destination file. If a stale
+          // `.new` staging file was left behind on disk (e.g. by a crash of a pre-hardening build
+          // mid-fallback) at a permissive mode, copyFile overwrites its contents but leaves its
+          // mode untouched, and the rename below would then promote that stale, permissive mode
+          // to become the final file. Explicitly chmod the staging file after copying so its mode
+          // is always correct before it is ever renamed into place.
+          await fs.chmod(staging, SENSITIVE_FILE_MODE);
+        }
         const stagingFh = await fs.open(staging, "r+");
         try {
           await stagingFh.sync();

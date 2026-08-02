@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { shouldFsyncParentDirectory, writeJsonFile } from "./fs-json.js";
+import {
+  ensurePrivateDirectory,
+  PRIVATE_DIRECTORY_MODE,
+  SENSITIVE_FILE_MODE,
+  shouldFsyncParentDirectory,
+  writeJsonFile
+} from "./fs-json.js";
 
 // ---------------------------------------------------------------------------
 // Per-OS release smoke intent
@@ -44,6 +50,102 @@ describe("writeJsonFile", () => {
     expect(shouldFsyncParentDirectory("win32")).toBe(false);
   });
 
+  it("creates private directories on POSIX platforms", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-private-dir-"));
+    const privateDir = path.join(tmpDir, "data");
+
+    try {
+      await ensurePrivateDirectory(privateDir, "linux");
+
+      const mode = (await fs.stat(privateDir)).mode & 0o777;
+      expect(mode).toBe(PRIVATE_DIRECTORY_MODE);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes private JSON files on POSIX platforms", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-private-file-"));
+    const filePath = path.join(tmpDir, "contacts.json");
+
+    try {
+      await writeJsonFile(filePath, { sensitive: true }, { platform: "linux" });
+
+      const mode = (await fs.stat(filePath)).mode & 0o777;
+      expect(mode).toBe(SENSITIVE_FILE_MODE);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform !== "win32")(
+    "chmods a stale pre-existing .tmp file to the private mode before it gets renamed into place",
+    async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-tmp-"));
+      const filePath = path.join(tmpDir, "contacts.json");
+
+      try {
+        // Simulate a `.tmp` file left behind by a crash of a pre-hardening build: it exists
+        // on disk already, at a permissive mode. `fs.writeFile` only applies its `mode` option
+        // when it CREATES the file — since this one already exists, it must be explicitly
+        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
+        const staleTmpPath = filePath + ".tmp";
+        await fs.writeFile(staleTmpPath, "{}", { mode: 0o644 });
+        const staleMode = (await fs.stat(staleTmpPath)).mode & 0o777;
+        expect(staleMode).toBe(0o644);
+
+        await writeJsonFile(filePath, { sensitive: true }, { platform: "linux" });
+
+        const finalMode = (await fs.stat(filePath)).mode & 0o777;
+        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "chmods a stale pre-existing .new staging file to the private mode before it gets renamed into place",
+    async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-new-"));
+      const filePath = path.join(tmpDir, "contacts.json");
+
+      try {
+        // Simulate a `.new` staging file left behind by a crash of a pre-hardening build mid
+        // fallback: it exists on disk already, at a permissive mode. `fs.copyFile` overwrites
+        // its contents but does not change an existing file's mode, so it must be explicitly
+        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
+        const staleNewPath = filePath + ".new";
+        await fs.writeFile(staleNewPath, "{}", { mode: 0o644 });
+        const staleMode = (await fs.stat(staleNewPath)).mode & 0o777;
+        expect(staleMode).toBe(0o644);
+
+        // Force the primary rename (tmp -> filePath) to keep failing transiently so the write
+        // exhausts its retries and falls into the copy-then-replace staging path, while letting
+        // the staging rename (staging -> filePath) actually hit the real filesystem so the final
+        // mode can be asserted.
+        const originalRename = fs.rename.bind(fs);
+        vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
+          if (typeof src === "string" && src.endsWith(".tmp")) {
+            throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+          }
+          return originalRename(src, dest);
+        });
+
+        await writeJsonFile(
+          filePath,
+          { sensitive: true },
+          { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0 }
+        );
+
+        const finalMode = (await fs.stat(filePath)).mode & 0o777;
+        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
+
   // -------------------------------------------------------------------------
   // Per-platform parametrized suite
   // All branches run on every host — no it.runIf guards.
@@ -59,6 +161,7 @@ describe("writeJsonFile", () => {
         const testData = { key: "value" };
 
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+        vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
 
         const openSpy = vi.spyOn(fs, "open").mockImplementation(async () => {
           return mockFileHandle as any;
@@ -81,6 +184,7 @@ describe("writeJsonFile", () => {
 
       it("does NOT fall back to copyFile when rename succeeds", async () => {
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+        vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
         vi.spyOn(fs, "rename").mockResolvedValue(undefined);
 
@@ -93,6 +197,7 @@ describe("writeJsonFile", () => {
 
       it("propagates non-EPERM/EEXIST rename errors without falling back to copyFile", async () => {
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+        vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const enoentErr = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
@@ -108,6 +213,7 @@ describe("writeJsonFile", () => {
       it("removes the tmp file when rename fails with a non-EPERM error", async () => {
         const testFilePath = "/test/data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+        vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const err = Object.assign(new Error("EACCES"), { code: "EACCES" });
@@ -122,6 +228,7 @@ describe("writeJsonFile", () => {
       it("uses a .tmp file as the intermediate (atomic replacement)", async () => {
         const testFilePath = "/test/data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
+        vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const renameSpy = vi.spyOn(fs, "rename").mockResolvedValue(undefined);

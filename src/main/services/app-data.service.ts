@@ -38,7 +38,14 @@ import type {
   SaveContactResult,
   MergePolicy
 } from "../../shared/types/contact.js";
-import { ensureDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
+import {
+  ensureDirectory,
+  ensurePrivateDirectory,
+  readJsonFile,
+  SENSITIVE_FILE_MODE,
+  supportsPrivateMode,
+  writeJsonFile
+} from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
@@ -108,8 +115,8 @@ export class AppDataService {
     const contactsFilePath = managedDefaults.dataFilePath;
     const settingsFilePath = getSettingsFilePath();
 
-    await ensureDirectory(dataDirectory);
-    await ensureDirectory(backupDirectory);
+    await ensurePrivateDirectory(dataDirectory);
+    await ensurePrivateDirectory(backupDirectory);
 
     if (!(await this.fileExists(contactsFilePath))) {
       await writeJsonFile(contactsFilePath, defaultContacts);
@@ -273,7 +280,7 @@ export class AppDataService {
       "No se pudo leer la carpeta de copias de seguridad."
     );
     try {
-      await ensureDirectory(backupDirectory);
+      await ensurePrivateDirectory(backupDirectory);
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
       const backupEntries = await Promise.all(
         entries
@@ -1043,7 +1050,7 @@ export class AppDataService {
       "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
     try {
-      await ensureDirectory(backupDirectory);
+      await ensurePrivateDirectory(backupDirectory);
     } catch (error) {
       throw this.toFilesystemError(
         error,
@@ -1068,7 +1075,7 @@ export class AppDataService {
       try {
         // 'wx' = O_CREAT | O_EXCL | O_WRONLY — fails with EEXIST if the file
         // already exists.  On success we atomically own this path.
-        fileHandle = await fs.open(candidatePath, "wx");
+        fileHandle = await fs.open(candidatePath, "wx", 0o600);
         // Close immediately; the subsequent copyFile will overwrite the empty
         // placeholder we just created (which is safe because we hold the name).
         await fileHandle.close();
@@ -2475,6 +2482,9 @@ export class AppDataService {
       );
 
       await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
+      if (supportsPrivateMode()) {
+        await fs.chmod(canonicalTargetFilePath, SENSITIVE_FILE_MODE);
+      }
     } catch (error) {
       throw this.toFilesystemError(error, message, {
         sourceFilePath,
