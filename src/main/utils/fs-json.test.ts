@@ -104,6 +104,48 @@ describe("writeJsonFile", () => {
     }
   );
 
+  it.runIf(process.platform !== "win32")(
+    "chmods a stale pre-existing .new staging file to the private mode before it gets renamed into place",
+    async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-new-"));
+      const filePath = path.join(tmpDir, "contacts.json");
+
+      try {
+        // Simulate a `.new` staging file left behind by a crash of a pre-hardening build mid
+        // fallback: it exists on disk already, at a permissive mode. `fs.copyFile` overwrites
+        // its contents but does not change an existing file's mode, so it must be explicitly
+        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
+        const staleNewPath = filePath + ".new";
+        await fs.writeFile(staleNewPath, "{}", { mode: 0o644 });
+        const staleMode = (await fs.stat(staleNewPath)).mode & 0o777;
+        expect(staleMode).toBe(0o644);
+
+        // Force the primary rename (tmp -> filePath) to keep failing transiently so the write
+        // exhausts its retries and falls into the copy-then-replace staging path, while letting
+        // the staging rename (staging -> filePath) actually hit the real filesystem so the final
+        // mode can be asserted.
+        const originalRename = fs.rename.bind(fs);
+        vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
+          if (typeof src === "string" && src.endsWith(".tmp")) {
+            throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+          }
+          return originalRename(src, dest);
+        });
+
+        await writeJsonFile(
+          filePath,
+          { sensitive: true },
+          { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0 }
+        );
+
+        const finalMode = (await fs.stat(filePath)).mode & 0o777;
+        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
+
   // -------------------------------------------------------------------------
   // Per-platform parametrized suite
   // All branches run on every host — no it.runIf guards.

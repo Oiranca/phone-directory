@@ -1075,7 +1075,7 @@ export class AppDataService {
       try {
         // 'wx' = O_CREAT | O_EXCL | O_WRONLY — fails with EEXIST if the file
         // already exists.  On success we atomically own this path.
-        fileHandle = await fs.open(candidatePath, "wx");
+        fileHandle = await fs.open(candidatePath, "wx", 0o600);
         // Close immediately; the subsequent copyFile will overwrite the empty
         // placeholder we just created (which is safe because we hold the name).
         await fileHandle.close();
