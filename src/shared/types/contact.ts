@@ -174,28 +174,87 @@ export interface SaveContactResult extends BootstrapData {
   savedRecordId: string;
 }
 
-export interface BackupListItem {
+/**
+ * Main-process-internal shape of a backup listing entry — includes the
+ * absolute filePath so AppDataService (and its tests) can operate on/verify
+ * the real file on disk. The IPC handler (contacts.ipc.ts) strips filePath
+ * before this crosses to the renderer — see BackupListItem below. (OIR-276)
+ */
+export interface BackupListItemInternal {
   fileName: string;
   filePath: string;
   createdAt: string;
   sizeBytes: number;
 }
 
-export interface ExportContactsResult {
+/**
+ * Renderer-facing backup list item. The absolute filePath stays
+ * main-process-only: DataManagementSection only derives a "last backup"
+ * timestamp from createdAt today and never renders/uses individual backup
+ * paths (restoring a specific backup by path is not part of the current UI).
+ * fileName is safe to expose (no directory structure/username). (OIR-276)
+ */
+export type BackupListItem = Omit<BackupListItemInternal, "filePath">;
+
+/**
+ * Main-process-internal shape of an export result — includes the absolute
+ * filePath so AppDataService tests can verify the real file on disk. The IPC
+ * handler strips it down to a basename before this crosses to the renderer.
+ * (OIR-276)
+ */
+export interface ExportContactsResultInternal {
   filePath: string;
   exportedAt: string;
   recordCount: number;
 }
 
-export interface ImportContactsResult extends BootstrapData {
+/**
+ * Renderer-facing export result. Even though the export path was just
+ * chosen by the user via the native Save dialog, the renderer has no
+ * current use for the absolute path (no UI reads it) — only the file name
+ * is exposed. (OIR-276)
+ */
+export interface ExportContactsResult {
+  fileName: string;
+  exportedAt: string;
+  recordCount: number;
+}
+
+/**
+ * Main-process-internal shape of an import/restore result — includes the
+ * absolute backupPath/importedFilePath so AppDataService (and its tests, and
+ * restoreBackup chaining) can operate on the real files on disk. The IPC
+ * handler strips both before this crosses to the renderer — see
+ * ImportContactsResult below. Mirrors the existing sourceFilePath-stripping
+ * pattern already used for CSV preview payloads (see CsvImportPreviewInternal
+ * in csv-import.service.ts). (OIR-276)
+ */
+export interface ImportContactsResultInternal extends BootstrapData {
   backupPath: string;
   importedFilePath: string;
   recordCount: number;
 }
 
-export interface ResetContactsResult extends BootstrapData {
+/**
+ * Renderer-facing result of a full dataset import/restore. Does not carry
+ * the absolute backupPath/importedFilePath — no current UI consumer reads
+ * them (App.tsx/DataManagementSection only use `contacts`/`settings`), and
+ * both fields are main-process-only, deliberately not sent to the renderer.
+ * (OIR-276)
+ */
+export type ImportContactsResult = Omit<ImportContactsResultInternal, "backupPath" | "importedFilePath">;
+
+/**
+ * Main-process-internal shape of a reset result — includes the absolute
+ * backupPath so AppDataService tests can verify the real file on disk. The
+ * IPC handler strips it before this crosses to the renderer. (OIR-276)
+ */
+export interface ResetContactsResultInternal extends BootstrapData {
   backupPath: string | null;
 }
+
+/** Renderer-facing reset result — see ResetContactsResultInternal. (OIR-276) */
+export type ResetContactsResult = Omit<ResetContactsResultInternal, "backupPath">;
 
 export interface CsvImportIssue {
   rowNumber: number;
@@ -401,7 +460,13 @@ export interface CsvImportPreviewWithConflicts extends CsvImportPreview {
   policiesResolved: boolean;
 }
 
-export interface CsvImportResult extends ImportContactsResult {
+/**
+ * Main-process-internal shape of a CSV/ODS/XLS/XLSX import result — extends
+ * ImportContactsResultInternal so AppDataService.importCsvDataset keeps
+ * returning the real backupPath/importedFilePath for tests and internal use.
+ * The IPC handler strips both before this crosses to the renderer. (OIR-276)
+ */
+export interface CsvImportResultInternal extends ImportContactsResultInternal {
   warningCount: number;
   invalidRowCount: number;
   createdCount: number;
@@ -417,6 +482,9 @@ export interface CsvImportResult extends ImportContactsResult {
    */
   rowIssues: CsvImportIssue[];
 }
+
+/** Renderer-facing CSV import result — see CsvImportResultInternal. (OIR-276) */
+export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "importedFilePath">;
 
 /**
  * Discriminated-union response for pickAndImportDataset, the single

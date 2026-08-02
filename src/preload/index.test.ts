@@ -230,7 +230,7 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
       await expectChannel("listBackups", CONTACTS_CHANNELS.listBackups);
     });
     it("restoreBackup → contacts:restore-backup", async () => {
-      await expectChannel("restoreBackup", CONTACTS_CHANNELS.restoreBackup, "/backup.json");
+      await expectChannel("restoreBackup", CONTACTS_CHANNELS.restoreBackup, "backup.json");
     });
     it("exportDataset → contacts:export-dataset", async () => {
       await expectChannel("exportDataset", CONTACTS_CHANNELS.exportDataset);

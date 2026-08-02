@@ -958,7 +958,14 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 
     expect(serviceMock.importDataset).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
     expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
-    expect(response).toEqual({ kind: "json-import", result: jsonImportResult });
+    // backupPath/importedFilePath are absolute filesystem paths and must be
+    // stripped before the result crosses the IPC boundary into the renderer
+    // (OIR-276) — the handler never forwards service.importDataset()'s raw
+    // result, so the response must NOT contain either field.
+    const { backupPath: _backupPath, importedFilePath: _importedFilePath, ...safeJsonImportResult } = jsonImportResult;
+    expect(response).toEqual({ kind: "json-import", result: safeJsonImportResult });
+    expect(response).not.toHaveProperty("result.backupPath");
+    expect(response).not.toHaveProperty("result.importedFilePath");
   });
 
   it("dispatches to the same normalize/validate/preview pipeline as previewCsvImport for a .csv pick", async () => {
@@ -1407,6 +1414,23 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     expect(exportDatasetMock).toHaveBeenCalledWith("/tmp/exports/contacts.json");
   });
 
+  // OIR-276: the absolute export filePath is main-process-only — the
+  // renderer only receives the basename, never the full path (which would
+  // otherwise leak the OS username/filesystem structure).
+  it("strips the absolute filePath from the export result, returning only fileName", async () => {
+    showMessageBoxMock.mockResolvedValue({ response: 1 });
+
+    const handler = handlers.get("contacts:export-dataset");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(result).toEqual({
+      fileName: "contacts.json",
+      exportedAt: "2026-07-28T00:00:00.000Z",
+      recordCount: 2
+    });
+    expect(result).not.toHaveProperty("filePath");
+  });
+
   it("cancels export when the sensitive-data warning is declined", async () => {
     showMessageBoxMock.mockResolvedValue({ response: 0 });
 
@@ -1416,5 +1440,226 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     expect(result).toBeNull();
     expect(showSaveDialogMock).not.toHaveBeenCalled();
     expect(exportDatasetMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIR-276 — absolute filesystem paths must never cross the IPC boundary into
+// the renderer. AppDataService's methods keep returning full backupPath/
+// importedFilePath/filePath internally (needed for tests and restoreBackup
+// chaining); each contacts.ipc.ts handler is responsible for stripping those
+// fields before its result reaches the renderer.
+// ---------------------------------------------------------------------------
+describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
+  let handlers: Map<string, (...args: unknown[]) => unknown>;
+  let serviceMock: {
+    createBackup: ReturnType<typeof vi.fn>;
+    listBackups: ReturnType<typeof vi.fn>;
+    importDataset: ReturnType<typeof vi.fn>;
+    restoreBackup: ReturnType<typeof vi.fn>;
+    resolveBackupDirectory: ReturnType<typeof vi.fn>;
+    resetDataset: ReturnType<typeof vi.fn>;
+    importCsvDataset: ReturnType<typeof vi.fn>;
+    [key: string]: unknown;
+  };
+  let showOpenDialogMock: ReturnType<typeof vi.fn>;
+
+  const importResultInternal = {
+    contacts: { records: [], exportedAt: "2026-08-02T00:00:00.000Z", metadata: {}, catalogs: {} },
+    settings: {},
+    backupPath: "/Users/operator/AppData/backups/contacts-auto.json",
+    importedFilePath: "/Users/operator/Desktop/replacement.json",
+    recordCount: 0
+  };
+
+  beforeEach(async () => {
+    vi.resetModules();
+    handlers = new Map();
+    showOpenDialogMock = vi.fn();
+
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: {
+        fromWebContents: vi.fn().mockReturnValue(null)
+      },
+      dialog: {
+        showOpenDialog: showOpenDialogMock,
+        showSaveDialog: vi.fn(),
+        showMessageBox: vi.fn()
+      },
+      app: {
+        getPath: vi.fn().mockReturnValue("/tmp")
+      }
+    }));
+
+    serviceMock = {
+      getBootstrapData: vi.fn(),
+      createBackup: vi.fn().mockResolvedValue("/Users/operator/AppData/backups/contacts-manual.json"),
+      resetDataset: vi.fn().mockResolvedValue({
+        contacts: { records: [], exportedAt: "2026-08-02T00:00:00.000Z", metadata: {}, catalogs: {} },
+        settings: {},
+        backupPath: "/Users/operator/AppData/backups/contacts-before-reset.json"
+      }),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      listBackups: vi.fn().mockResolvedValue([
+        {
+          fileName: "contacts-1.json",
+          filePath: "/Users/operator/AppData/backups/contacts-1.json",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          sizeBytes: 2048
+        }
+      ]),
+      restoreBackup: vi.fn().mockResolvedValue({ ...importResultInternal }),
+      resolveBackupDirectory: vi.fn().mockResolvedValue("/Users/operator/AppData/backups"),
+      exportDataset: vi.fn(),
+      importDataset: vi.fn().mockResolvedValue({ ...importResultInternal }),
+      previewCsvImport: vi.fn(),
+      importCsvDataset: vi.fn().mockResolvedValue({
+        ...importResultInternal,
+        warningCount: 0,
+        invalidRowCount: 0,
+        createdCount: 0,
+        updatedCount: 0,
+        conflictCount: 0,
+        beeperImportStatus: { status: "not-applicable", parsedCellCount: 0 },
+        rowIssues: []
+      }),
+      detectDuplicates: vi.fn(),
+      mergeDuplicates: vi.fn()
+    };
+
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("createBackup: never forwards the resolved backup path to the renderer", async () => {
+    const handler = handlers.get("contacts:create-backup");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(serviceMock.createBackup).toHaveBeenCalledTimes(1);
+    expect(result).toBeUndefined();
+  });
+
+  it("listBackups: strips filePath from every entry", async () => {
+    const handler = handlers.get("contacts:list-backups");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(result).toEqual([
+      { fileName: "contacts-1.json", createdAt: "2026-08-01T00:00:00.000Z", sizeBytes: 2048 }
+    ]);
+    expect((result as Array<Record<string, unknown>>)[0]).not.toHaveProperty("filePath");
+  });
+
+  it("importDataset (direct channel): strips backupPath/importedFilePath", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/replacement.json"] });
+
+    const handler = handlers.get("contacts:import-dataset");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(result).toEqual({
+      contacts: importResultInternal.contacts,
+      settings: importResultInternal.settings,
+      recordCount: importResultInternal.recordCount
+    });
+    expect(result).not.toHaveProperty("backupPath");
+    expect(result).not.toHaveProperty("importedFilePath");
+  });
+
+  it("restoreBackup: resolves a bare fileName against the backup directory and strips backupPath/importedFilePath", async () => {
+    const handler = handlers.get("contacts:restore-backup");
+    const result = await handler!({ sender: { id: 1 } }, "contacts-1.json");
+
+    expect(serviceMock.resolveBackupDirectory).toHaveBeenCalledTimes(1);
+    expect(serviceMock.restoreBackup).toHaveBeenCalledWith("/Users/operator/AppData/backups/contacts-1.json");
+    expect(result).not.toHaveProperty("backupPath");
+    expect(result).not.toHaveProperty("importedFilePath");
+  });
+
+  it.each([
+    ["parent-directory traversal", "../evil.json"],
+    ["nested path segment", "a/b.json"],
+    ["nested path segment (Windows separator)", "a\\b.json"],
+    ["absolute POSIX path", "/etc/passwd"],
+    ["absolute Windows path", "C:\\Windows\\System32\\config.json"]
+  ])("restoreBackup: rejects %s (%s) before ever resolving/calling the service", async (_label, backupFileName) => {
+    const handler = handlers.get("contacts:restore-backup");
+
+    await expect(handler!({ sender: { id: 1 } }, backupFileName)).rejects.toThrow(
+      "No se pudo restaurar la copia de seguridad seleccionada."
+    );
+    expect(serviceMock.resolveBackupDirectory).not.toHaveBeenCalled();
+    expect(serviceMock.restoreBackup).not.toHaveBeenCalled();
+  });
+
+  it("resetDataset: strips backupPath (including the non-null case)", async () => {
+    const handler = handlers.get("contacts:reset-dataset");
+    const result = await handler!({ sender: { id: 1 } });
+
+    expect(result).not.toHaveProperty("backupPath");
+  });
+
+  it("importCsvDataset: strips backupPath/importedFilePath", async () => {
+    // Set up a pending CSV import the same way previewCsvImport would.
+    serviceMock.previewCsvImport = vi.fn().mockResolvedValue({
+      sourceFilePath: "/Users/operator/Desktop/directory.csv",
+      fileName: "directory.csv",
+      totalRowCount: 0,
+      validRowCount: 0,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 0,
+      mergedRecordCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+      unchangedCount: 0,
+      beepersSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBeepersCellCount: 0,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      conflictCount: 0,
+      conflictedRecords: [],
+      policiesResolved: true
+    });
+    vi.resetModules();
+    handlers = new Map();
+    vi.doMock("electron", () => ({
+      ipcMain: {
+        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
+          handlers.set(channel, fn);
+        }
+      },
+      BrowserWindow: { fromWebContents: vi.fn().mockReturnValue(null) },
+      dialog: { showOpenDialog: showOpenDialogMock, showSaveDialog: vi.fn(), showMessageBox: vi.fn() },
+      app: { getPath: vi.fn().mockReturnValue("/tmp") }
+    }));
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never);
+
+    const sender = { id: 7, on: vi.fn(), once: vi.fn(), removeListener: vi.fn() };
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/directory.csv"] });
+    const previewHandler = handlers.get("contacts:preview-csv-import");
+    const preview = await previewHandler!({ sender });
+    const importToken = (preview as { importToken: string }).importToken;
+
+    const importHandler = handlers.get("contacts:import-csv-dataset");
+    const result = await importHandler!({ sender }, importToken, []);
+
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith("/Users/operator/Desktop/directory.csv", []);
+    expect(result).not.toHaveProperty("backupPath");
+    expect(result).not.toHaveProperty("importedFilePath");
   });
 });

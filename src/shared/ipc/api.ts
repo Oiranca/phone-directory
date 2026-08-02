@@ -46,9 +46,16 @@ export interface HospitalDirectoryApi {
   updateRecord: (recordId: string, record: EditableContactRecord) => Promise<SaveContactResult>;
 
   // Backups
-  createBackup: () => Promise<string>;
+  // The resolved absolute backup path is main-process-only — no renderer
+  // caller needs it. See contacts.ipc.ts createBackup handler. (OIR-276)
+  createBackup: () => Promise<void>;
   listBackups: () => Promise<BackupListItem[]>;
-  restoreBackup: (backupFilePath: string) => Promise<ImportContactsResult>;
+  // Takes a bare backup file name (as returned by listBackups()'s fileName
+  // field) rather than an absolute path — the renderer never resolves or
+  // sees the real backup directory location. The main process resolves the
+  // fileName against the canonical backup directory and rejects any name
+  // containing path separators or "..". (OIR-276)
+  restoreBackup: (backupFileName: string) => Promise<ImportContactsResult>;
 
   // Dataset import/export
   exportDataset: () => Promise<ExportContactsResult | null>;

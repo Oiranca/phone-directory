@@ -74,8 +74,8 @@ export const buildApi = (ipcRenderer: IpcRenderer): HospitalDirectoryApi => {
     updateRecord: (recordId, record) =>
       ipcRenderer.invoke(CONTACTS_CHANNELS.updateRecord, recordId, record) as ReturnType<HospitalDirectoryApi["updateRecord"]>,
     listBackups: () => ipcRenderer.invoke(CONTACTS_CHANNELS.listBackups) as ReturnType<HospitalDirectoryApi["listBackups"]>,
-    restoreBackup: (backupFilePath) =>
-      ipcRenderer.invoke(CONTACTS_CHANNELS.restoreBackup, backupFilePath) as ReturnType<HospitalDirectoryApi["restoreBackup"]>,
+    restoreBackup: (backupFileName) =>
+      ipcRenderer.invoke(CONTACTS_CHANNELS.restoreBackup, backupFileName) as ReturnType<HospitalDirectoryApi["restoreBackup"]>,
     exportDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.exportDataset) as ReturnType<HospitalDirectoryApi["exportDataset"]>,
     importDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.importDataset) as ReturnType<HospitalDirectoryApi["importDataset"]>,
     resetDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.resetDataset) as ReturnType<HospitalDirectoryApi["resetDataset"]>,

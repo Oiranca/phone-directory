@@ -13,7 +13,7 @@ import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import type {
   AutoBackupSettings,
   AppSettings,
-  BackupListItem,
+  BackupListItemInternal,
   BootstrapData,
   BootstrapResult,
   ContactRecord,
@@ -23,17 +23,17 @@ import type {
   ConflictRecordSummary,
   ConflictedImportRecord,
   CsvImportPreviewWithConflicts,
-  CsvImportResult,
+  CsvImportResultInternal,
   DirectoryDataset,
   EditableAppSettings,
   EditableContactRecord,
-  ExportContactsResult,
+  ExportContactsResultInternal,
   AuditLogEntry,
   AuditLogQueryParams,
   AuditLogResult,
-  ImportContactsResult,
+  ImportContactsResultInternal,
   RecoveryState,
-  ResetContactsResult,
+  ResetContactsResultInternal,
   ExportAuditLogResult,
   SaveContactResult,
   MergePolicy
@@ -273,7 +273,7 @@ export class AppDataService {
     return backupFilePath;
   }
 
-  async listBackups(): Promise<BackupListItem[]> {
+  async listBackups(): Promise<BackupListItemInternal[]> {
     const settings = await this.readSettings(true);
     const backupDirectory = await this.resolveCanonicalDirectoryPath(
       settings.backupDirectoryPath,
@@ -305,11 +305,11 @@ export class AppDataService {
               filePath,
               createdAt,
               sizeBytes: stats.size
-            } satisfies BackupListItem;
+            } satisfies BackupListItemInternal;
           })
       );
 
-      const backupFiles = backupEntries.filter((item): item is BackupListItem => item !== null);
+      const backupFiles = backupEntries.filter((item): item is BackupListItemInternal => item !== null);
 
       return backupFiles.sort((left, right) => {
         const createdAtDelta = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
@@ -329,7 +329,7 @@ export class AppDataService {
     }
   }
 
-  async exportDataset(targetFilePath: string): Promise<ExportContactsResult> {
+  async exportDataset(targetFilePath: string): Promise<ExportContactsResultInternal> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
@@ -354,7 +354,7 @@ export class AppDataService {
     });
   }
 
-  async importDataset(sourceFilePath: string): Promise<ImportContactsResult> {
+  async importDataset(sourceFilePath: string): Promise<ImportContactsResultInternal> {
     return this.enqueueWrite(async () => {
     const importedContacts = directoryDatasetSchema.parse(
       await readJsonFile<DirectoryDataset>(sourceFilePath)
@@ -388,7 +388,23 @@ export class AppDataService {
     });
   }
 
-  async restoreBackup(sourceFilePath: string): Promise<ImportContactsResult> {
+  // OIR-276: exposes the canonical backup directory so the IPC layer can
+  // resolve a renderer-supplied bare backupFileName into an absolute path
+  // (path.join(canonicalBackupDirectory, backupFileName)) before delegating
+  // to restoreBackup() below. restoreBackup() keeps re-validating that the
+  // resolved path is actually inside this directory (assertPathWithinDirectory
+  // + symlink/dev-ino checks) as defense-in-depth — this method only saves the
+  // IPC handler from having to reach into private settings/readSettings state.
+  async resolveBackupDirectory(): Promise<string> {
+    const settings = await this.readSettings(true);
+
+    return this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      "No se pudo restaurar la copia de seguridad seleccionada."
+    );
+  }
+
+  async restoreBackup(sourceFilePath: string): Promise<ImportContactsResultInternal> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const message = "No se pudo restaurar la copia de seguridad seleccionada.";
@@ -465,7 +481,7 @@ export class AppDataService {
     });
   }
 
-  async resetDataset(): Promise<ResetContactsResult> {
+  async resetDataset(): Promise<ResetContactsResultInternal> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contactsFilePath = settings.dataFilePath;
@@ -552,7 +568,7 @@ export class AppDataService {
   async importCsvDataset(
     sourceFilePath: string,
     policySelections: CsvImportPolicySelection[] = []
-  ): Promise<CsvImportResult> {
+  ): Promise<CsvImportResultInternal> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
