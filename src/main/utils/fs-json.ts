@@ -88,6 +88,14 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
     ? { encoding: "utf-8" as const, mode: SENSITIVE_FILE_MODE }
     : { encoding: "utf-8" as const };
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), writeOptions);
+  if (supportsPrivateMode(platform)) {
+    // fs.writeFile only applies `mode` when it creates the tmp file. If a stale `.tmp` file
+    // was left behind on disk (e.g. by a crash of a pre-hardening build) at a permissive mode,
+    // writeFile reuses it without touching its mode, and the rename below would then promote
+    // that stale, permissive file to become the final file. Explicitly chmod the tmp file after
+    // writing so its mode is always correct before it is ever renamed into place.
+    await fs.chmod(tmp, SENSITIVE_FILE_MODE);
+  }
   try {
     const fh = await fs.open(tmp, "r+");
     try {

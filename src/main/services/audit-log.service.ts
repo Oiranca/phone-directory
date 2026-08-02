@@ -27,7 +27,13 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { auditLogEntrySchema, auditLogSchema } from "../../shared/schemas/contact.js";
 import type { AuditLogEntry, AuditLogQueryParams, AuditLogResult } from "../../shared/types/contact.js";
-import { ensureDirectory, ensurePrivateDirectory, SENSITIVE_FILE_MODE, writeJsonFile } from "../utils/fs-json.js";
+import {
+  ensureDirectory,
+  ensurePrivateDirectory,
+  SENSITIVE_FILE_MODE,
+  supportsPrivateMode,
+  writeJsonFile
+} from "../utils/fs-json.js";
 import { getAuditLogFilePath } from "../utils/paths.js";
 
 /**
@@ -255,7 +261,7 @@ export class AuditLogService {
       await fs.writeFile(
         sidecar,
         bytes,
-        process.platform !== "win32" ? { mode: SENSITIVE_FILE_MODE } : undefined
+        supportsPrivateMode() ? { mode: SENSITIVE_FILE_MODE } : undefined
       );
       return sidecar;
     } catch {

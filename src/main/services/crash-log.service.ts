@@ -18,7 +18,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { PRIVATE_DIRECTORY_MODE, SENSITIVE_FILE_MODE } from "../utils/fs-json.js";
+import { PRIVATE_DIRECTORY_MODE, SENSITIVE_FILE_MODE, supportsPrivateMode } from "../utils/fs-json.js";
 import { getCrashLogFilePath } from "../utils/paths.js";
 
 export type CrashSource = "uncaughtException" | "unhandledRejection" | "render-process-gone";
@@ -118,10 +118,18 @@ const sanitizeAndRotateCrashLogIfNeeded = (filePath: string): void => {
   fs.writeFileSync(
     tempFilePath,
     retainedLines.length > 0 ? `${retainedLines.join("\n")}\n` : "",
-    process.platform !== "win32"
+    supportsPrivateMode()
       ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
       : "utf-8"
   );
+  if (supportsPrivateMode()) {
+    // fs.writeFileSync only applies `mode` when it creates the tmp file. If a stale `.tmp`
+    // file was left behind on disk (e.g. by a crash of a pre-hardening build) at a permissive
+    // mode, writeFileSync reuses it without touching its mode, and the rename below would then
+    // promote that stale, permissive file to become the final file. Explicitly chmod the tmp
+    // file after writing so its mode is always correct before it is ever renamed into place.
+    fs.chmodSync(tempFilePath, SENSITIVE_FILE_MODE);
+  }
   fs.renameSync(tempFilePath, filePath);
 };
 
@@ -134,7 +142,7 @@ export const logCrash = (entry: CrashLogInput): void => {
   try {
     const filePath = getCrashLogFilePath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
-    if (process.platform !== "win32") {
+    if (supportsPrivateMode()) {
       fs.chmodSync(path.dirname(filePath), PRIVATE_DIRECTORY_MODE);
     }
     sanitizeAndRotateCrashLogIfNeeded(filePath);
@@ -149,11 +157,11 @@ export const logCrash = (entry: CrashLogInput): void => {
     fs.appendFileSync(
       filePath,
       `${JSON.stringify(record)}\n`,
-      process.platform !== "win32"
+      supportsPrivateMode()
         ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
         : "utf-8"
     );
-    if (process.platform !== "win32") {
+    if (supportsPrivateMode()) {
       fs.chmodSync(filePath, SENSITIVE_FILE_MODE);
     }
   } catch {

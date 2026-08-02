@@ -16,7 +16,7 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { ensurePrivateDirectory, SENSITIVE_FILE_MODE } from "../utils/fs-json.js";
+import { ensurePrivateDirectory, SENSITIVE_FILE_MODE, supportsPrivateMode } from "../utils/fs-json.js";
 import { AuditLogIntegrityError, AuditLogService } from "./audit-log.service.js";
 import type {
   AuditLogEntry,
@@ -42,11 +42,11 @@ export class AppDataAuditFacade {
     await fs.writeFile(
       targetFilePath,
       csv,
-      process.platform !== "win32"
+      supportsPrivateMode()
         ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
         : "utf-8"
     );
-    if (process.platform !== "win32") {
+    if (supportsPrivateMode()) {
       await fs.chmod(targetFilePath, SENSITIVE_FILE_MODE);
     }
     return {

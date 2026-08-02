@@ -43,6 +43,7 @@ import {
   ensurePrivateDirectory,
   readJsonFile,
   SENSITIVE_FILE_MODE,
+  supportsPrivateMode,
   writeJsonFile
 } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
@@ -1049,7 +1050,7 @@ export class AppDataService {
       "No se pudo preparar la carpeta de copias de seguridad del directorio."
     );
     try {
-      await ensureDirectory(backupDirectory);
+      await ensurePrivateDirectory(backupDirectory);
     } catch (error) {
       throw this.toFilesystemError(
         error,
@@ -2481,7 +2482,7 @@ export class AppDataService {
       );
 
       await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
-      if (process.platform !== "win32") {
+      if (supportsPrivateMode()) {
         await fs.chmod(canonicalTargetFilePath, SENSITIVE_FILE_MODE);
       }
     } catch (error) {

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -184,6 +185,40 @@ describe("logCrash", () => {
     expect(contents).not.toContain("jdoe");
     expect(contents).toContain("contacts.json");
   });
+
+  it.runIf(process.platform !== "win32")(
+    "chmods a stale pre-existing rotation .tmp file to the private mode before it gets renamed into place",
+    async () => {
+      const { logCrash } = await import("./crash-log.service.js");
+      const crashLogPath = path.join(testRoot, "data", "crash-log.jsonl");
+
+      // First write creates the crash log file so the next logCrash call takes the
+      // sanitize-and-rotate path (which requires the file to already exist).
+      logCrash({ source: "uncaughtException", message: "First" });
+
+      // Simulate a `.tmp` rotation file left behind by a crash of a pre-hardening build: it
+      // exists on disk already, at a permissive mode. `fs.writeFileSync` only applies its
+      // `mode` option when it CREATES the file — since this one already exists, it must be
+      // explicitly chmodded, or the stale permissive mode would be promoted to the final file
+      // by the subsequent rename.
+      const staleTmpPath = `${crashLogPath}.tmp`;
+      await fs.writeFile(staleTmpPath, "", { mode: 0o644 });
+      expect((await fs.stat(staleTmpPath)).mode & 0o777).toBe(0o644);
+
+      // Assert the fix directly: the rotation path must chmod the stale tmp file to the
+      // private mode BEFORE renaming it over the destination — not just rely on a later,
+      // unrelated chmod of the final path masking a stale rotation tmp file.
+      const chmodSpy = vi.spyOn(fsSync, "chmodSync");
+
+      logCrash({ source: "unhandledRejection", message: "Second" });
+
+      const tmpChmodCall = chmodSpy.mock.calls.find(([target]) => target === staleTmpPath);
+      expect(tmpChmodCall).toBeDefined();
+      expect(tmpChmodCall?.[1]).toBe(0o600);
+
+      expect((await fs.stat(crashLogPath)).mode & 0o777).toBe(0o600);
+    }
+  );
 
   it("never throws when the target path cannot be created (best-effort)", async () => {
     // Point getPath at a path that cannot be used as a writable directory root
