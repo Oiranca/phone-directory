@@ -388,6 +388,22 @@ export class AppDataService {
     });
   }
 
+  // OIR-276: exposes the canonical backup directory so the IPC layer can
+  // resolve a renderer-supplied bare backupFileName into an absolute path
+  // (path.join(canonicalBackupDirectory, backupFileName)) before delegating
+  // to restoreBackup() below. restoreBackup() keeps re-validating that the
+  // resolved path is actually inside this directory (assertPathWithinDirectory
+  // + symlink/dev-ino checks) as defense-in-depth — this method only saves the
+  // IPC handler from having to reach into private settings/readSettings state.
+  async resolveBackupDirectory(): Promise<string> {
+    const settings = await this.readSettings(true);
+
+    return this.resolveCanonicalDirectoryPath(
+      settings.backupDirectoryPath,
+      "No se pudo restaurar la copia de seguridad seleccionada."
+    );
+  }
+
   async restoreBackup(sourceFilePath: string): Promise<ImportContactsResultInternal> {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);

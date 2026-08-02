@@ -1457,6 +1457,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     listBackups: ReturnType<typeof vi.fn>;
     importDataset: ReturnType<typeof vi.fn>;
     restoreBackup: ReturnType<typeof vi.fn>;
+    resolveBackupDirectory: ReturnType<typeof vi.fn>;
     resetDataset: ReturnType<typeof vi.fn>;
     importCsvDataset: ReturnType<typeof vi.fn>;
     [key: string]: unknown;
@@ -1514,6 +1515,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
         }
       ]),
       restoreBackup: vi.fn().mockResolvedValue({ ...importResultInternal }),
+      resolveBackupDirectory: vi.fn().mockResolvedValue("/Users/operator/AppData/backups"),
       exportDataset: vi.fn(),
       importDataset: vi.fn().mockResolvedValue({ ...importResultInternal }),
       previewCsvImport: vi.fn(),
@@ -1573,13 +1575,30 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     expect(result).not.toHaveProperty("importedFilePath");
   });
 
-  it("restoreBackup: strips backupPath/importedFilePath", async () => {
+  it("restoreBackup: resolves a bare fileName against the backup directory and strips backupPath/importedFilePath", async () => {
     const handler = handlers.get("contacts:restore-backup");
-    const result = await handler!({ sender: { id: 1 } }, "/Users/operator/AppData/backups/contacts-1.json");
+    const result = await handler!({ sender: { id: 1 } }, "contacts-1.json");
 
+    expect(serviceMock.resolveBackupDirectory).toHaveBeenCalledTimes(1);
     expect(serviceMock.restoreBackup).toHaveBeenCalledWith("/Users/operator/AppData/backups/contacts-1.json");
     expect(result).not.toHaveProperty("backupPath");
     expect(result).not.toHaveProperty("importedFilePath");
+  });
+
+  it.each([
+    ["parent-directory traversal", "../evil.json"],
+    ["nested path segment", "a/b.json"],
+    ["nested path segment (Windows separator)", "a\\b.json"],
+    ["absolute POSIX path", "/etc/passwd"],
+    ["absolute Windows path", "C:\\Windows\\System32\\config.json"]
+  ])("restoreBackup: rejects %s (%s) before ever resolving/calling the service", async (_label, backupFileName) => {
+    const handler = handlers.get("contacts:restore-backup");
+
+    await expect(handler!({ sender: { id: 1 } }, backupFileName)).rejects.toThrow(
+      "No se pudo restaurar la copia de seguridad seleccionada."
+    );
+    expect(serviceMock.resolveBackupDirectory).not.toHaveBeenCalled();
+    expect(serviceMock.restoreBackup).not.toHaveBeenCalled();
   });
 
   it("resetDataset: strips backupPath (including the non-null case)", async () => {

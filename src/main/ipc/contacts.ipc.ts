@@ -51,6 +51,27 @@ const toSafeResetResult = (result: ResetContactsResultInternal) => {
 
 const toSafeBackupListItem = ({ filePath: _filePath, ...safe }: BackupListItemInternal): BackupListItem => safe;
 
+// OIR-276: listBackups() no longer returns filePath to the renderer, so
+// restoreBackup() must accept a bare fileName (as returned by listBackups()'s
+// fileName field) instead of an absolute path. Reject anything that looks
+// like a path — separators or traversal segments — before it is ever joined
+// against the real backup directory. path.basename(name) !== name is the
+// belt-and-braces check: it also catches platform-specific separators
+// (e.g. a literal "\\" on a POSIX host) that the explicit checks below list
+// individually for clarity.
+const isSafeBackupFileName = (fileName: unknown): fileName is string =>
+  typeof fileName === "string" &&
+  fileName.length > 0 &&
+  !fileName.includes("/") &&
+  !fileName.includes("\\") &&
+  !fileName.includes("..") &&
+  path.basename(fileName) === fileName;
+
+// Reused verbatim across every invalid-restore-request rejection in this
+// codebase (see AppDataService.restoreBackup's own defense-in-depth checks)
+// so a renderer-supplied fileName never leaks into the error copy.
+const RESTORE_BACKUP_ERROR_MESSAGE = "No se pudo restaurar la copia de seguridad seleccionada.";
+
 const toSafeExportResult = (result: ExportContactsResultInternal): ExportContactsResult => ({
   fileName: path.basename(result.filePath),
   exportedAt: result.exportedAt,
@@ -116,9 +137,22 @@ export const registerContactsIpc = (service: AppDataService) => {
     service.updateRecord(recordId, payload)
   );
   ipcMain.handle(CHANNELS.listBackups, async () => (await service.listBackups()).map(toSafeBackupListItem));
-  ipcMain.handle(CHANNELS.restoreBackup, async (_event, backupFilePath: string) =>
-    stripImportPaths(await service.restoreBackup(backupFilePath))
-  );
+  // Renderer sends a bare fileName (never an absolute path — listBackups()
+  // no longer returns one). Reject anything path-shaped before it is ever
+  // joined against the real backup directory, then resolve it main-process
+  // side. AppDataService.restoreBackup() still re-validates the resolved
+  // path is inside the backup directory (symlink/dev-ino checks) as
+  // defense-in-depth. (OIR-276)
+  ipcMain.handle(CHANNELS.restoreBackup, async (_event, backupFileName: string) => {
+    if (!isSafeBackupFileName(backupFileName)) {
+      throw new Error(RESTORE_BACKUP_ERROR_MESSAGE);
+    }
+
+    const canonicalBackupDirectory = await service.resolveBackupDirectory();
+    const backupFilePath = path.join(canonicalBackupDirectory, backupFileName);
+
+    return stripImportPaths(await service.restoreBackup(backupFilePath));
+  });
   ipcMain.handle(CHANNELS.exportDataset, async (event) => {
     const e2eFilePath = consumeE2eSaveDialogPath();
 
