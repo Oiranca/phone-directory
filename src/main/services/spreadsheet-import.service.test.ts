@@ -109,7 +109,13 @@ const buildZipWithMismatchedCentralDirectory = () => {
   return Buffer.concat([localData, centralDirectory, eocd]);
 };
 
-const buildZipWithDataDescriptorSizes = () => {
+const buildZipWithDataDescriptorSizes = ({
+  descriptorCompressedSize = 100,
+  descriptorUncompressedSize = 1_000
+}: {
+  descriptorCompressedSize?: number;
+  descriptorUncompressedSize?: number;
+} = {}) => {
   const fileName = Buffer.from("xl/worksheets/sheet1.xml", "utf-8");
   const localHeader = Buffer.alloc(30);
   localHeader.writeUInt32LE(0x04034b50, 0);
@@ -119,8 +125,8 @@ const buildZipWithDataDescriptorSizes = () => {
   const descriptor = Buffer.alloc(16);
   descriptor.writeUInt32LE(0x08074b50, 0);
   descriptor.writeUInt32LE(0, 4);
-  descriptor.writeUInt32LE(100, 8);
-  descriptor.writeUInt32LE(1_000, 12);
+  descriptor.writeUInt32LE(descriptorCompressedSize, 8);
+  descriptor.writeUInt32LE(descriptorUncompressedSize, 12);
   const localData = Buffer.concat([localHeader, fileName, Buffer.alloc(100), descriptor]);
 
   const centralHeader = Buffer.alloc(46);
@@ -128,8 +134,8 @@ const buildZipWithDataDescriptorSizes = () => {
   centralHeader.writeUInt16LE(20, 6);
   centralHeader.writeUInt16LE(0x08, 8);
   centralHeader.writeUInt16LE(8, 10);
-  centralHeader.writeUInt32LE(1, 20);
-  centralHeader.writeUInt32LE(1, 24);
+  centralHeader.writeUInt32LE(100, 20);
+  centralHeader.writeUInt32LE(1_000, 24);
   centralHeader.writeUInt16LE(fileName.length, 28);
   centralHeader.writeUInt32LE(0, 42);
   const centralDirectory = Buffer.concat([centralHeader, fileName]);
@@ -296,6 +302,38 @@ describe("readWorkbookRowsInWorker", () => {
 });
 
 describe("spreadsheet import preflight", () => {
+  it("accepts bounded ODS-like XML compression before SheetJS reads the workbook", async () => {
+    const { normalizeWorkbookRowsFromFile } = await import("./spreadsheet-import.service.js");
+    const readFileSpy = vi.spyOn(XLSX, "readFile").mockReturnValue({
+      SheetNames: ["Urgencias"],
+      Sheets: {
+        Urgencias: XLSX.utils.aoa_to_sheet([
+          ["Servicio", "Número"],
+          ["Admisión", "70001"],
+          ["Triaje", "70002"],
+          ["Observación", "70003"]
+        ])
+      }
+    });
+    const { dir, filePath } = await writeTempFile(
+      "ods-like.xlsx",
+      buildCentralDirectoryOnlyZip([
+        {
+          fileName: "content.xml",
+          compressedSize: 100,
+          uncompressedSize: 4_000
+        }
+      ])
+    );
+
+    try {
+      expect(normalizeWorkbookRowsFromFile(filePath).rows).toHaveLength(3);
+      expect(readFileSpy).toHaveBeenCalledOnce();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects ZIP spreadsheets with suspicious expansion before SheetJS reads the workbook", async () => {
     const { normalizeWorkbookRowsFromFile } = await import("./spreadsheet-import.service.js");
     const readFileSpy = vi.spyOn(XLSX, "readFile");
@@ -386,14 +424,40 @@ describe("spreadsheet import preflight", () => {
     }
   });
 
-  it("rejects ZIP entries that defer sizes to data descriptors before SheetJS reads", async () => {
+  it("accepts bounded ZIP data descriptors and lets SheetJS read the workbook", async () => {
     const { normalizeWorkbookRowsFromFile } = await import("./spreadsheet-import.service.js");
-    const readFileSpy = vi.spyOn(XLSX, "readFile");
+    const readFileSpy = vi.spyOn(XLSX, "readFile").mockReturnValue({
+      SheetNames: ["Urgencias"],
+      Sheets: {
+        Urgencias: XLSX.utils.aoa_to_sheet([
+          ["Servicio", "Número"],
+          ["Admisión", "70001"],
+          ["Triaje", "70002"],
+          ["Observación", "70003"]
+        ])
+      }
+    });
     const { dir, filePath } = await writeTempFile("descriptor.xlsx", buildZipWithDataDescriptorSizes());
 
     try {
+      expect(normalizeWorkbookRowsFromFile(filePath).rows).toHaveLength(3);
+      expect(readFileSpy).toHaveBeenCalledOnce();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects ZIP data descriptors that disagree with the central directory", async () => {
+    const { normalizeWorkbookRowsFromFile } = await import("./spreadsheet-import.service.js");
+    const readFileSpy = vi.spyOn(XLSX, "readFile");
+    const { dir, filePath } = await writeTempFile(
+      "descriptor-mismatch.xlsx",
+      buildZipWithDataDescriptorSizes({ descriptorCompressedSize: 99 })
+    );
+
+    try {
       expect(() => normalizeWorkbookRowsFromFile(filePath)).toThrow(
-        "No se pudo validar la hoja de cálculo seleccionada. El ZIP usa descriptores de datos no permitidos."
+        "No se pudo validar la hoja de cálculo seleccionada. El descriptor de datos del ZIP no coincide."
       );
       expect(readFileSpy).not.toHaveBeenCalled();
     } finally {

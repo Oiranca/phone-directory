@@ -484,6 +484,16 @@ describe("isAgendaTabularHeader", () => {
     [reordered[0], reordered[1]] = [reordered[1]!, reordered[0]!];
     expect(isAgendaTabularHeader(reordered)).toBe(false);
   });
+
+  it("ignores unknown or blank columns and accepts supported contact columns after Comentarios", () => {
+    const flexible = [
+      "Nombre", "Categoría", "Servicio", "Número 1", "", "Email",
+      "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios",
+      "Fax", "Busca 3", "Corporativo 3", "Número 8"
+    ];
+
+    expect(isAgendaTabularHeader(flexible)).toBe(true);
+  });
 });
 
 describe("stripPlantaPrefix", () => {
@@ -889,7 +899,7 @@ describe("normalizeTabularAgendaSheet", () => {
     const corporativoEntry = phones.find((entry) => entry.kind === "corporativo");
     expect(corporativoEntry).toBeDefined();
     expect(corporativoEntry?.number).toBe("656123456");
-    expect(corporativoEntry?.label).toBe("Corporativo");
+    expect(corporativoEntry?.label).toBe("Corporativo 1");
   });
 
   it("does not add a beeper entry or a corporativo phone entry when both inserted columns are empty", () => {
@@ -927,5 +937,86 @@ describe("normalizeTabularAgendaSheet", () => {
     const phones = JSON.parse(records[0]!.phones!) as Array<{ kind: string }>;
     expect(phones.every((entry) => entry.kind !== "corporativo")).toBe(true);
     expect(phones).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      name: "Corporativos",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Corporativo 1", "Corporativo 2",
+        "Número 1", "Número 2", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Centralita", "", "Telefonía", "600000001", "600000002", "70001", "70002",
+        "", "Sí", "Edificio A", "Planta 2", "Norte", "Mesa", ""
+      ],
+      expectedNumbers: ["70001", "70002", "600000001", "600000002"],
+      expectedBeepers: []
+    },
+    {
+      name: "Sindicatos",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Fax",
+        "Corporativo 1", "Busca 1", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Sección sindical", "", "Sindicato", "71001", "71002", "922000000",
+        "600000003", "4100", "", "", "Edificio B", "Baja", "", "", ""
+      ],
+      expectedNumbers: ["71001", "71002", "922000000", "600000003"],
+      expectedBeepers: ["4100"]
+    },
+    {
+      name: "Supervisores-as",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Número 2", "Número 3", "Número 4",
+        "Corporativo 1", "Busca 1", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Supervisión", "Supervisor/a", "Hospitalización", "72002", "72003", "72004",
+        "600000004", "4200", "", "", "Edificio C", "Planta 3", "Este", "", ""
+      ],
+      expectedNumbers: ["72002", "72003", "72004", "600000004"],
+      expectedBeepers: ["4200"]
+    }
+  ])("parses the variable-width $name header by column meaning", ({ name, header, row, expectedNumbers, expectedBeepers }) => {
+    expect(isAgendaTabularHeader(header)).toBe(true);
+    const records = normalizeTabularAgendaSheet(makeSheet(name, [header, row]), makeAgendaProfile());
+    expect(records).toHaveLength(1);
+
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string }>;
+    const beepers = JSON.parse(records[0]!.beepers!) as Array<{ number: string }>;
+    expect(phones.map((entry) => entry.number)).toEqual(expectedNumbers);
+    expect(beepers.map((entry) => entry.number)).toEqual(expectedBeepers);
+    expect(records[0]!.building).toMatch(/^Edificio/);
+    expect(records[0]!.floor).not.toMatch(/^Planta /i);
+  });
+
+  it("imports supported contact columns after Comentarios and ignores unrelated columns", () => {
+    const header = [
+      "Nombre", "Categoría", "Servicio", "Número 1", "", "Email",
+      "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios",
+      "Fax", "Busca 3", "Corporativo 1", "Corporativo 2", "Corporativo 3", "Número 8"
+    ];
+    const row = [
+      "Centralita", "", "Telefonía", "70001", "ignorado", "centralita@example.test",
+      "24 horas", "", "Edificio A", "Baja", "", "", "Operativa",
+      "922000000", "4300", "600000001", "600000002", "600000003", "70008"
+    ];
+
+    const records = normalizeTabularAgendaSheet(makeSheet("Flexible", [header, row]), makeAgendaProfile());
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string; kind: string; label: string }>;
+    const beepers = JSON.parse(records[0]!.beepers!) as Array<{ number: string }>;
+
+    expect(phones.map(({ number }) => number)).toEqual([
+      "70001", "70008", "922000000", "600000001", "600000002", "600000003"
+    ]);
+    expect(phones.filter(({ kind }) => kind === "corporativo").map(({ label }) => label)).toEqual([
+      "Corporativo 1", "Corporativo 2", "Corporativo 3"
+    ]);
+    expect(beepers).toEqual([{ number: "4300" }]);
   });
 });

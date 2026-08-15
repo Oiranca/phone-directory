@@ -599,6 +599,25 @@ describe("golden: tabular Agenda-sheet format", () => {
     const phones = JSON.parse(result.rows[0]!.phones ?? "[]") as Array<{ number: string }>;
     expect(phones.map((p) => p.number)).toEqual(["79649", "79650"]);
   });
+
+  it("explicitly ignores reconciliation audit sheets even when their rows look like flat contacts", () => {
+    const auditRows = [
+      ["Registro A", "70001"],
+      ["Registro B", "70002"],
+      ["Registro C", "70003"]
+    ];
+    const filePath = writeWorkbook(testRoot, "agenda-with-audit-sheets.xlsx", [
+      makeAgendaSheet("Agenda", [
+        ["", "", "Admisión Central", "79649", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+      ]),
+      { name: "Importación JSON", data: auditRows },
+      { name: "Conflictos", data: auditRows }
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.displayName).toBe("Admisión Central");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1139,6 +1158,18 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     // multi-primary conflicts like this one at import-apply time.)
     expect(merged[0]!.isPrimary).toBe(true);
     expect(merged[1]!.isPrimary).toBe(true);
+  });
+
+  it("preserves each merged phone kind in the flat phone mirrors", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "922000000", kind: "fax" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "600000001", kind: "corporativo" })]);
+    const r1 = makeRow({ displayName: "Centralita", phones: phones1 });
+    const r2 = makeRow({ displayName: "Centralita", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+
+    expect(result[0]!.phone1Kind).toBe("fax");
+    expect(result[0]!.phone2Kind).toBe("corporativo");
   });
 
   it("deduplicates by normalized phone number (strips non-digits)", () => {

@@ -759,29 +759,18 @@ export const AGENDA_TABULAR_HEADER_MARKERS = [
 ] as const;
 
 /**
- * Column indices within a tabular Agenda-sheet data row, matching
- * AGENDA_TABULAR_HEADER_MARKERS above 1:1 by position. Kept as the fallback
- * shape returned by resolveAgendaColumnIndices for the canonical 17-column
- * header.
+ * Resolved column indices within a tabular Agenda-sheet data row. Identity
+ * and trailer fields retain stable positions; numbered phone, fax, corporate,
+ * and beeper columns are collected by exact normalized header name.
  */
 export type AgendaColumnIndices = {
   nombre: number;
   categoria: number;
   servicio: number;
-  numeroStart: number;
-  numeroEnd: number; // inclusive — Número 1..7
-  // Optional inserted "Fax" column (e.g. the real "Sindicatos" sheet). Absent
-  // (undefined) on sheets that don't have one — the canonical 17-column
-  // header falls into this case.
-  fax?: number;
-  // Optional inserted "Busca 1" column (pager code). Absent (undefined) on
-  // sheets that don't have one — mirrors the `fax` optional-column pattern
-  // (OIR-265).
-  beeper1?: number;
-  // Optional inserted "Corporativo 1" column (corporate mobile phone).
-  // Absent (undefined) on sheets that don't have one — mirrors the `fax`
-  // optional-column pattern (OIR-265).
-  corporativo1?: number;
+  numeros: Array<{ index: number; label: string }>;
+  faxes: Array<{ index: number; label: string }>;
+  beepers: Array<{ index: number; label: string }>;
+  corporativos: Array<{ index: number; label: string }>;
   horario: number;
   confidencial: number;
   edificio: number;
@@ -795,8 +784,13 @@ const AGENDA_COLUMN: AgendaColumnIndices = {
   nombre: 0,
   categoria: 1,
   servicio: 2,
-  numeroStart: 3,
-  numeroEnd: 9, // inclusive — Número 1..7
+  numeros: Array.from({ length: 7 }, (_, offset) => ({
+    index: offset + 3,
+    label: `Número ${offset + 1}`
+  })),
+  faxes: [],
+  beepers: [],
+  corporativos: [],
   horario: 10,
   confidencial: 11,
   edificio: 12,
@@ -807,23 +801,14 @@ const AGENDA_COLUMN: AgendaColumnIndices = {
 };
 
 /**
- * The first 10 columns (Nombre, Categoría, Servicio, Número 1-7) MUST appear
- * at these exact fixed positions for a sheet to be treated as Agenda-tabular
- * at all — this positional guarantee is what lets normalizeTabularAgendaSheet
- * read Nombre/Categoría/Servicio/Número by fixed index instead of guessing
- * from cell content.
+ * The identity prefix remains fixed, while phone/pager columns are resolved by
+ * exact header name. The consolidated production workbook contains legitimate
+ * department sheets that omit unused Número columns or start at Número 2.
  */
 const AGENDA_FIXED_PREFIX_MARKERS = [
   "NOMBRE",
   "CATEGORIA",
-  "SERVICIO",
-  "NUMERO1",
-  "NUMERO2",
-  "NUMERO3",
-  "NUMERO4",
-  "NUMERO5",
-  "NUMERO6",
-  "NUMERO7"
+  "SERVICIO"
 ] as const;
 
 /**
@@ -863,7 +848,10 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
   const trailerStart = AGENDA_FIXED_PREFIX_MARKERS.length;
   const trailerIndexes = AGENDA_TRAILER_MARKERS.map((marker) => normalized.indexOf(marker, trailerStart));
 
-  if (trailerIndexes.some((index) => index === -1)) {
+  if (
+    trailerIndexes.some((index) => index === -1) ||
+    trailerIndexes.some((index, position) => position > 0 && index <= trailerIndexes[position - 1]!)
+  ) {
     return null;
   }
 
@@ -877,27 +865,38 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
     number
   ];
 
-  // Optional extra "Fax" column (e.g. the real "Sindicatos" sheet — see
-  // AGENDA_TRAILER_MARKERS comment above). Not part of the required trailer
-  // shape, so its absence must not fail header detection.
-  const faxIndex = normalized.indexOf("FAX", trailerStart);
+  const dynamicColumns = normalized
+    .map((marker, index) => ({ marker, index }))
+    .filter(({ marker, index }) =>
+      index >= trailerStart &&
+      /^(?:NUMERO[1-9]\d*|FAX|BUSCA[1-9]\d*|CORPORATIVO(?:[1-9]\d*)?)$/.test(marker)
+    );
 
-  // Optional extra "Busca 1" (pager) and "Corporativo 1" (corporate mobile)
-  // columns — same optional/graceful pattern as Fax above (OIR-265). Their
-  // absence must not fail header detection or change behavior for sheets
-  // without them.
-  const beeper1Index = normalized.indexOf("BUSCA1", trailerStart);
-  const corporativo1Index = normalized.indexOf("CORPORATIVO1", trailerStart);
+  if (dynamicColumns.length === 0) {
+    return null;
+  }
+
+  const select = (pattern: RegExp, labelFor: (marker: string) => string) =>
+    dynamicColumns
+      .filter(({ marker }) => pattern.test(marker))
+      .map(({ marker, index }) => ({ index, label: labelFor(marker) }));
+
+  const numeros = select(/^NUMERO[1-9]\d*$/, (marker) => `Número ${marker.slice("NUMERO".length)}`);
+  const faxes = select(/^FAX$/, () => "Fax");
+  const beepers = select(/^BUSCA[1-9]\d*$/, (marker) => `Busca ${marker.slice("BUSCA".length)}`);
+  const corporativos = select(/^CORPORATIVO(?:[1-9]\d*)?$/, (marker) => {
+    const suffix = marker.slice("CORPORATIVO".length);
+    return suffix ? `Corporativo ${suffix}` : "Corporativo";
+  });
 
   return {
     nombre: 0,
     categoria: 1,
     servicio: 2,
-    numeroStart: 3,
-    numeroEnd: 9,
-    fax: faxIndex === -1 ? undefined : faxIndex,
-    beeper1: beeper1Index === -1 ? undefined : beeper1Index,
-    corporativo1: corporativo1Index === -1 ? undefined : corporativo1Index,
+    numeros,
+    faxes,
+    beepers,
+    corporativos,
     horario,
     confidencial,
     edificio,
@@ -929,12 +928,10 @@ export const stripPlantaPrefix = (value: string): string => {
 };
 
 /**
- * Parses a tabular Agenda-format sheet: a flat table with an exact
- * 17-column header (Nombre, Categoría, Servicio, Número 1..7, Horario,
- * Confidencial, Edificio, Planta, Sector, Sección, Comentarios), one contact
- * per data row. Unlike normalizeServiceSheet, columns are read by FIXED INDEX
- * (not inferred from cell content) because the header guarantees positional
- * meaning.
+ * Parses a tabular Agenda-format sheet: a flat table with Nombre/Categoría/
+ * Servicio, one or more supported contact columns, and the required metadata
+ * trailer. Columns are resolved from exact headers, never inferred from row
+ * content, so variable-width department sheets remain deterministic.
  *
  * Row exclusions (confirmed against the real file):
  *   - the header row itself (handled by profile.rowsToSkip)
@@ -1001,8 +998,8 @@ export const normalizeTabularAgendaSheet = (
 
     const phoneEntries: SerializedPhoneEntry[] = [];
 
-    for (let column = columns.numeroStart; column <= columns.numeroEnd; column += 1) {
-      const cellValue = cells[column] ?? "";
+    for (const column of columns.numeros) {
+      const cellValue = cells[column.index] ?? "";
 
       if (!cellValue) {
         continue;
@@ -1011,7 +1008,7 @@ export const normalizeTabularAgendaSheet = (
       extractNumbers(cellValue).forEach((number) => {
         phoneEntries.push({
           number,
-          label: `Número ${column - columns.numeroStart + 1}`,
+          label: column.label,
           kind: "internal",
           // "Principal" is a manual, user-editable choice made on
           // the contact's edit form — the Agenda sheet has no such column,
@@ -1033,13 +1030,12 @@ export const normalizeTabularAgendaSheet = (
     // resolveAgendaColumnIndices above) is a distinct, optional trailing
     // column beyond Número 1..7. Without this, any value entered there was
     // silently dropped instead of being imported as a fax phone entry.
-    const faxValue = columns.fax !== undefined ? cells[columns.fax] ?? "" : "";
-
-    if (faxValue) {
+    for (const column of columns.faxes) {
+      const faxValue = cells[column.index] ?? "";
       extractNumbers(faxValue).forEach((number) => {
         phoneEntries.push({
           number,
-          label: "Fax",
+          label: column.label,
           kind: "fax",
           isPrimary: false,
           confidential,
@@ -1053,13 +1049,12 @@ export const normalizeTabularAgendaSheet = (
     // Fax column pattern above — OIR-265) holds a real corporate mobile phone
     // number, so it is cleaned up with extractNumbers exactly like Fax and
     // pushed into contactMethods.phones (not beepers).
-    const corporativoValue = columns.corporativo1 !== undefined ? cells[columns.corporativo1] ?? "" : "";
-
-    if (corporativoValue) {
+    for (const column of columns.corporativos) {
+      const corporativoValue = cells[column.index] ?? "";
       extractNumbers(corporativoValue).forEach((number) => {
         phoneEntries.push({
           number,
-          label: "Corporativo",
+          label: column.label,
           kind: "corporativo",
           isPrimary: false,
           confidential,
@@ -1073,15 +1068,10 @@ export const normalizeTabularAgendaSheet = (
     // value — unlike phone columns it is NOT run through extractNumbers
     // (no multi-value splitting/cleanup), and it is stored on the contact's
     // own `beepers` array, never mixed into contactMethods.phones.
-    const beeperEntries: SerializedBeeperEntry[] = [];
-    const beeperValue = columns.beeper1 !== undefined ? cells[columns.beeper1] ?? "" : "";
-
-    if (beeperValue) {
-      beeperEntries.push({
-        number: beeperValue,
-        label: undefined
-      });
-    }
+    const beeperEntries: SerializedBeeperEntry[] = columns.beepers.flatMap((column) => {
+      const beeperValue = cells[column.index] ?? "";
+      return beeperValue ? [{ number: beeperValue, label: undefined }] : [];
+    });
 
     const record = blankRecord();
 
@@ -1121,7 +1111,7 @@ export const normalizeTabularAgendaSheet = (
 
     record.phone1Label = first ? first.label : "";
     record.phone1Number = first?.number ?? "";
-    record.phone1Kind = first ? "internal" : "";
+    record.phone1Kind = first?.kind ?? "";
     // Do not auto-assign "Principal" on import (see comment above).
     record.phone1IsPrimary = "false";
     record.phone1Confidential = first?.confidential ? "true" : "false";
@@ -1131,7 +1121,7 @@ export const normalizeTabularAgendaSheet = (
     if (second) {
       record.phone2Label = second.label;
       record.phone2Number = second.number;
-      record.phone2Kind = "internal";
+      record.phone2Kind = second.kind;
       record.phone2IsPrimary = "false";
       record.phone2Confidential = second.confidential ? "true" : "false";
       record.phone2NoPatientSharing = second.noPatientSharing ? "true" : "false";
@@ -1419,7 +1409,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
 
     base.phone1Label = first ? "Principal" : "";
     base.phone1Number = first?.number ?? "";
-    base.phone1Kind = first ? "internal" : "";
+    base.phone1Kind = first?.kind ?? "";
     // Reflect the phone's actual isPrimary value
     // instead of assuming "true" whenever a first phone exists — keeps this
     // flat mirror field consistent with the reasserted `phones` JSON above.
@@ -1429,7 +1419,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     base.phone1Notes = first?.notes ?? "";
     base.phone2Label = second ? "Secundario" : "";
     base.phone2Number = second?.number ?? "";
-    base.phone2Kind = second ? "internal" : "";
+    base.phone2Kind = second?.kind ?? "";
     base.phone2IsPrimary = "false";
     base.phone2Confidential = second?.confidential ? "true" : "false";
     base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";
