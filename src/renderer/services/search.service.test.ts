@@ -89,6 +89,7 @@ describe("searchRecords", () => {
     expect(fuseInstanceAfterFirst).toBeDefined();
     expect(fuseInstanceAfterSecond).toBeDefined();
     expect(fuseInstanceAfterFirst).toBe(fuseInstanceAfterSecond);
+    expect(fuseInstanceAfterSecond?.options.includeMatches).toBe(false);
   });
 
   it("creates a new Fuse instance for a different records array reference", () => {

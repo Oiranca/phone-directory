@@ -14,7 +14,6 @@ export type PrivacyFlag = "Confidencial" | "No facilitar a pacientes";
 
 const fuseOptions: IFuseOptions<ContactRecord> = {
   distance: 120,
-  includeMatches: true,
   ignoreLocation: false,
   location: 0,
   threshold: 0.22,
@@ -38,6 +37,11 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
   ]
 };
 
+const shortTextFuseOptions: IFuseOptions<ContactRecord> = {
+  ...fuseOptions,
+  includeMatches: true
+};
+
 const SHORT_TEXT_QUERY_MAX_LENGTH = 4;
 
 const normalizeSearchText = (value: string) =>
@@ -58,6 +62,7 @@ const hasShortTextBoundaryMatch = (result: FuseResult<ContactRecord>, query: str
   result.matches?.some((match) => match.value && startsAtTokenBoundary(match.value, query)) ?? false;
 
 const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
+const shortTextFuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
 export const normalizeTag = (value: string) => value.trim().toLocaleLowerCase("es");
 
@@ -104,9 +109,21 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     fuseCache.set(records, fuse);
   }
 
-  const fuseResults = fuse.search(normalizedQuery);
   const normalizedSearchQuery = normalizeSearchText(normalizedQuery);
-  const matchingResults = isShortTextQuery(normalizedSearchQuery)
+  const usesShortTextBoundaryMatching = isShortTextQuery(normalizedSearchQuery);
+  let searchFuse = fuse;
+
+  if (usesShortTextBoundaryMatching) {
+    const cachedShortTextFuse = shortTextFuseCache.get(records);
+    searchFuse = cachedShortTextFuse ?? new Fuse(records, shortTextFuseOptions, fuse.getIndex());
+
+    if (!cachedShortTextFuse) {
+      shortTextFuseCache.set(records, searchFuse);
+    }
+  }
+
+  const fuseResults = searchFuse.search(normalizedQuery);
+  const matchingResults = usesShortTextBoundaryMatching
     ? fuseResults.filter((result) => hasShortTextBoundaryMatch(result, normalizedSearchQuery))
     : fuseResults;
 
