@@ -1,5 +1,5 @@
 import Fuse from "fuse.js";
-import type { IFuseOptions } from "fuse.js";
+import type { FuseResult, IFuseOptions } from "fuse.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import type { ContactRecord } from "../../shared/types/contact.js";
 
@@ -14,6 +14,7 @@ export type PrivacyFlag = "Confidencial" | "No facilitar a pacientes";
 
 const fuseOptions: IFuseOptions<ContactRecord> = {
   distance: 120,
+  includeMatches: true,
   ignoreLocation: false,
   location: 0,
   threshold: 0.22,
@@ -36,6 +37,25 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
     { name: "notes", weight: 1 }
   ]
 };
+
+const SHORT_TEXT_QUERY_MAX_LENGTH = 4;
+
+const normalizeSearchText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("es");
+
+const isShortTextQuery = (query: string) =>
+  query.length <= SHORT_TEXT_QUERY_MAX_LENGTH && /^\p{L}[\p{L}\p{N}]*$/u.test(query);
+
+const startsAtTokenBoundary = (value: string, query: string) =>
+  normalizeSearchText(value)
+    .split(/[^\p{L}\p{N}]+/u)
+    .some((token) => token.startsWith(query));
+
+const hasShortTextBoundaryMatch = (result: FuseResult<ContactRecord>, query: string) =>
+  result.matches?.some((match) => match.value && startsAtTokenBoundary(match.value, query)) ?? false;
 
 const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
@@ -84,10 +104,13 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     fuseCache.set(records, fuse);
   }
 
-  return applyFilters(
-    fuse.search(normalizedQuery).map((result) => result.item),
-    filters
-  );
+  const fuseResults = fuse.search(normalizedQuery);
+  const normalizedSearchQuery = normalizeSearchText(normalizedQuery);
+  const matchingResults = isShortTextQuery(normalizedSearchQuery)
+    ? fuseResults.filter((result) => hasShortTextBoundaryMatch(result, normalizedSearchQuery))
+    : fuseResults;
+
+  return applyFilters(matchingResults.map((result) => result.item), filters);
 };
 
 export const getPreferredResultPhone = (record: ContactRecord) =>

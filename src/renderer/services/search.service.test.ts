@@ -194,6 +194,57 @@ describe("searchRecords", () => {
     expect(result[0]?.id).toBe("extension-match");
   });
 
+  it("matches short text queries at token boundaries instead of inside unrelated words", () => {
+    const shortQueryRecords: ContactRecord[] = [
+      {
+        ...structuredClone(records[0]),
+        id: "umi-record",
+        displayName: "UMI Norte",
+        aliases: [],
+        tags: [],
+        notes: ""
+      },
+      {
+        ...structuredClone(records[1]),
+        id: "supplies-record",
+        displayName: "Suministros – Enfermería",
+        aliases: [],
+        tags: [],
+        notes: ""
+      },
+      {
+        ...structuredClone(records[1]),
+        id: "umi-tag-record",
+        displayName: "Coordinación nocturna",
+        aliases: [],
+        tags: ["UMI"],
+        notes: ""
+      }
+    ];
+
+    const result = searchRecords(shortQueryRecords, "UMI", defaultFilters);
+
+    expect(result.map((record) => record.id).sort()).toEqual(["umi-record", "umi-tag-record"]);
+  });
+
+  it("keeps accent-insensitive matching", () => {
+    const result = searchRecords(records, "admision", defaultFilters);
+
+    expect(result[0]?.displayName).toBe("Admisión General");
+  });
+
+  it("keeps fuzzy matching for longer text queries", () => {
+    const result = searchRecords(records, "Admsion General", defaultFilters);
+
+    expect(result[0]?.displayName).toBe("Admisión General");
+  });
+
+  it("keeps partial numeric lookup for short queries", () => {
+    const result = searchRecords(records, "0000", defaultFilters);
+
+    expect(result.map((record) => record.displayName)).toContain("Centro de Salud Demo - Información");
+  });
+
   it("finds records by location text and notes", () => {
     const rankingRecords: ContactRecord[] = [
       {
