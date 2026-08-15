@@ -123,7 +123,7 @@ describe("beepers pipeline — (a) Agenda-tabular row through the real import co
     const corporativoPhone = record.contactMethods.phones.find((phone) => phone.kind === "corporativo");
     expect(corporativoPhone).toBeDefined();
     expect(corporativoPhone?.number).toBe("656123456");
-    expect(corporativoPhone?.label).toBe("Corporativo");
+    expect(corporativoPhone?.label).toBe("Corporativo 1");
   });
 
   it("produces an empty ContactRecord.beepers array when the row's 'Busca 1'/'Corporativo 1' cells are blank", async () => {

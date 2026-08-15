@@ -865,16 +865,14 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
     number
   ];
 
-  const dynamicEnd = horario;
   const dynamicColumns = normalized
     .map((marker, index) => ({ marker, index }))
-    .filter(({ index }) => index >= trailerStart && index < dynamicEnd);
-  const supportedDynamicMarker = /^(?:NUMERO[1-7]|FAX|BUSCA[12]|CORPORATIVO(?:[12])?)$/;
+    .filter(({ marker, index }) =>
+      index >= trailerStart &&
+      /^(?:NUMERO[1-9]\d*|FAX|BUSCA[1-9]\d*|CORPORATIVO(?:[1-9]\d*)?)$/.test(marker)
+    );
 
-  if (
-    dynamicColumns.length === 0 ||
-    dynamicColumns.some(({ marker }) => !supportedDynamicMarker.test(marker))
-  ) {
+  if (dynamicColumns.length === 0) {
     return null;
   }
 
@@ -883,12 +881,12 @@ export const resolveAgendaColumnIndices = (headerRow: string[]): AgendaColumnInd
       .filter(({ marker }) => pattern.test(marker))
       .map(({ marker, index }) => ({ index, label: labelFor(marker) }));
 
-  const numeros = select(/^NUMERO[1-7]$/, (marker) => `Número ${marker.slice("NUMERO".length)}`);
+  const numeros = select(/^NUMERO[1-9]\d*$/, (marker) => `Número ${marker.slice("NUMERO".length)}`);
   const faxes = select(/^FAX$/, () => "Fax");
-  const beepers = select(/^BUSCA[12]$/, (marker) => `Busca ${marker.slice("BUSCA".length)}`);
-  const corporativos = select(/^CORPORATIVO(?:[12])?$/, (marker) => {
+  const beepers = select(/^BUSCA[1-9]\d*$/, (marker) => `Busca ${marker.slice("BUSCA".length)}`);
+  const corporativos = select(/^CORPORATIVO(?:[1-9]\d*)?$/, (marker) => {
     const suffix = marker.slice("CORPORATIVO".length);
-    return suffix && suffix !== "1" ? `Corporativo ${suffix}` : "Corporativo";
+    return suffix ? `Corporativo ${suffix}` : "Corporativo";
   });
 
   return {
@@ -1411,7 +1409,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
 
     base.phone1Label = first ? "Principal" : "";
     base.phone1Number = first?.number ?? "";
-    base.phone1Kind = first ? "internal" : "";
+    base.phone1Kind = first?.kind ?? "";
     // Reflect the phone's actual isPrimary value
     // instead of assuming "true" whenever a first phone exists — keeps this
     // flat mirror field consistent with the reasserted `phones` JSON above.
@@ -1421,7 +1419,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     base.phone1Notes = first?.notes ?? "";
     base.phone2Label = second ? "Secundario" : "";
     base.phone2Number = second?.number ?? "";
-    base.phone2Kind = second ? "internal" : "";
+    base.phone2Kind = second?.kind ?? "";
     base.phone2IsPrimary = "false";
     base.phone2Confidential = second?.confidential ? "true" : "false";
     base.phone2NoPatientSharing = second?.noPatientSharing ? "true" : "false";

@@ -1160,6 +1160,18 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(merged[1]!.isPrimary).toBe(true);
   });
 
+  it("preserves each merged phone kind in the flat phone mirrors", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "922000000", kind: "fax" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "600000001", kind: "corporativo" })]);
+    const r1 = makeRow({ displayName: "Centralita", phones: phones1 });
+    const r2 = makeRow({ displayName: "Centralita", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+
+    expect(result[0]!.phone1Kind).toBe("fax");
+    expect(result[0]!.phone2Kind).toBe("corporativo");
+  });
+
   it("deduplicates by normalized phone number (strips non-digits)", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "928-10-10-10" })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "928101010" })]);
