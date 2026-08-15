@@ -1,5 +1,5 @@
 import Fuse from "fuse.js";
-import type { IFuseOptions } from "fuse.js";
+import type { FuseResult, IFuseOptions } from "fuse.js";
 import type { AreaType, RecordType } from "../../shared/constants/catalogs.js";
 import type { ContactRecord } from "../../shared/types/contact.js";
 
@@ -37,7 +37,32 @@ const fuseOptions: IFuseOptions<ContactRecord> = {
   ]
 };
 
+const shortTextFuseOptions: IFuseOptions<ContactRecord> = {
+  ...fuseOptions,
+  includeMatches: true
+};
+
+const SHORT_TEXT_QUERY_MAX_LENGTH = 4;
+
+const normalizeSearchText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("es");
+
+const isShortTextQuery = (query: string) =>
+  query.length <= SHORT_TEXT_QUERY_MAX_LENGTH && /^\p{L}[\p{L}\p{N}]*$/u.test(query);
+
+const startsAtTokenBoundary = (value: string, query: string) =>
+  normalizeSearchText(value)
+    .split(/[^\p{L}\p{N}]+/u)
+    .some((token) => token.startsWith(query));
+
+const hasShortTextBoundaryMatch = (result: FuseResult<ContactRecord>, query: string) =>
+  result.matches?.some((match) => match.value && startsAtTokenBoundary(match.value, query)) ?? false;
+
 const fuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
+const shortTextFuseCache = new WeakMap<ContactRecord[], Fuse<ContactRecord>>();
 
 export const normalizeTag = (value: string) => value.trim().toLocaleLowerCase("es");
 
@@ -84,10 +109,25 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     fuseCache.set(records, fuse);
   }
 
-  return applyFilters(
-    fuse.search(normalizedQuery).map((result) => result.item),
-    filters
-  );
+  const normalizedSearchQuery = normalizeSearchText(normalizedQuery);
+  const usesShortTextBoundaryMatching = isShortTextQuery(normalizedSearchQuery);
+  let searchFuse = fuse;
+
+  if (usesShortTextBoundaryMatching) {
+    const cachedShortTextFuse = shortTextFuseCache.get(records);
+    searchFuse = cachedShortTextFuse ?? new Fuse(records, shortTextFuseOptions, fuse.getIndex());
+
+    if (!cachedShortTextFuse) {
+      shortTextFuseCache.set(records, searchFuse);
+    }
+  }
+
+  const fuseResults = searchFuse.search(normalizedQuery);
+  const matchingResults = usesShortTextBoundaryMatching
+    ? fuseResults.filter((result) => hasShortTextBoundaryMatch(result, normalizedSearchQuery))
+    : fuseResults;
+
+  return applyFilters(matchingResults.map((result) => result.item), filters);
 };
 
 export const getPreferredResultPhone = (record: ContactRecord) =>
