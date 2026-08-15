@@ -928,4 +928,60 @@ describe("normalizeTabularAgendaSheet", () => {
     expect(phones.every((entry) => entry.kind !== "corporativo")).toBe(true);
     expect(phones).toHaveLength(1);
   });
+
+  it.each([
+    {
+      name: "Corporativos",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Corporativo 1", "Corporativo 2",
+        "Número 1", "Número 2", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Centralita", "", "Telefonía", "600000001", "600000002", "70001", "70002",
+        "", "Sí", "Edificio A", "Planta 2", "Norte", "Mesa", ""
+      ],
+      expectedNumbers: ["70001", "70002", "600000001", "600000002"],
+      expectedBeepers: []
+    },
+    {
+      name: "Sindicatos",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Fax",
+        "Corporativo 1", "Busca 1", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Sección sindical", "", "Sindicato", "71001", "71002", "922000000",
+        "600000003", "4100", "", "", "Edificio B", "Baja", "", "", ""
+      ],
+      expectedNumbers: ["71001", "71002", "922000000", "600000003"],
+      expectedBeepers: ["4100"]
+    },
+    {
+      name: "Supervisores-as",
+      header: [
+        "Nombre", "Categoría", "Servicio", "Número 2", "Número 3", "Número 4",
+        "Corporativo 1", "Busca 1", "Horario", "Confidencial", "Edificio", "Planta",
+        "Sector", "Sección", "Comentarios"
+      ],
+      row: [
+        "Supervisión", "Supervisor/a", "Hospitalización", "72002", "72003", "72004",
+        "600000004", "4200", "", "", "Edificio C", "Planta 3", "Este", "", ""
+      ],
+      expectedNumbers: ["72002", "72003", "72004", "600000004"],
+      expectedBeepers: ["4200"]
+    }
+  ])("parses the variable-width $name header by column meaning", ({ name, header, row, expectedNumbers, expectedBeepers }) => {
+    expect(isAgendaTabularHeader(header)).toBe(true);
+    const records = normalizeTabularAgendaSheet(makeSheet(name, [header, row]), makeAgendaProfile());
+    expect(records).toHaveLength(1);
+
+    const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string }>;
+    const beepers = JSON.parse(records[0]!.beepers!) as Array<{ number: string }>;
+    expect(phones.map((entry) => entry.number)).toEqual(expectedNumbers);
+    expect(beepers.map((entry) => entry.number)).toEqual(expectedBeepers);
+    expect(records[0]!.building).toMatch(/^Edificio/);
+    expect(records[0]!.floor).not.toMatch(/^Planta /i);
+  });
 });

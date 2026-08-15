@@ -38,7 +38,11 @@ export { mergeRecordsByDisplayName } from "./spreadsheet-parsers.js";
 const MAX_SPREADSHEET_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_SPREADSHEET_ZIP_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
 const MAX_SPREADSHEET_XML_UNCOMPRESSED_BYTES = 20 * 1024 * 1024;
-const MAX_SPREADSHEET_ZIP_COMPRESSION_RATIO = 25;
+// Text-heavy ODS exports can legitimately exceed 30:1 (the consolidated
+// production agenda is ~31:1). Absolute expanded/XML byte caps, cell limits,
+// and the worker timeout remain the primary bounds; 50:1 still rejects
+// extreme expansion while admitting normal LibreOffice output.
+const MAX_SPREADSHEET_ZIP_COMPRESSION_RATIO = 50;
 const MAX_SPREADSHEET_IMPORT_SHEETS = 100;
 const MAX_SPREADSHEET_IMPORT_CELLS = 250_000;
 export const MAX_SPREADSHEET_IMPORT_ROWS = 5000;
@@ -122,6 +126,8 @@ type SheetData = {
 
 type SpreadsheetZipPreflightEntry = {
   fileName: string;
+  flags: number;
+  crc32: number;
   compressedSize: number;
   uncompressedSize: number;
   localHeaderOffset: number;
@@ -178,7 +184,14 @@ const isMeaningfulServiceLabel = (value: string) =>
  * "original" covers a literal sheet named "Original" used as a reference copy.
  */
 const NAVIGATION_SHEET_SLUG_PREFIXES = ["indice"];
-const NAVIGATION_SHEET_SLUG_EXACT = new Set(["original"]);
+const NAVIGATION_SHEET_SLUG_EXACT = new Set([
+  "original",
+  // Reconciliation/audit output embedded in the consolidated production ODS.
+  // These rows explain how the JSON source was merged; they are not live
+  // directory sources and must never be imported as contacts.
+  "importacion-json",
+  "conflictos"
+]);
 
 const isNavigationSheet = (slug: string): boolean => {
   if (NAVIGATION_SHEET_SLUG_EXACT.has(slug)) {
@@ -415,8 +428,8 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
   }
 
   // A sheet whose header matches the Agenda tabular format
-  // (see resolveAgendaColumnIndices — tolerates extra inserted columns, e.g.
-  // the real "Sindicatos" sheet's Fax column). The canonical directory sheet
+  // (see resolveAgendaColumnIndices — resolves variable phone/fax/corporate/
+  // beeper columns by exact header). The canonical directory sheet
   // (slug "agenda") is routed to the dedicated tabular parser with a blank
   // department. Two known non-department artifacts (a byte-identical
   // duplicate and a TOC sheet — AGENDA_TABULAR_NON_DEPARTMENT_SLUGS) are
@@ -667,7 +680,8 @@ const toSafeEntryCount = (value: number) => {
 
 const assertLocalZipHeaderMatches = (
   buffer: Buffer,
-  entry: SpreadsheetZipPreflightEntry
+  entry: SpreadsheetZipPreflightEntry,
+  localEntryBoundary: number
 ) => {
   const offset = entry.localHeaderOffset;
   if (offset < 0 || offset + 30 > buffer.length || buffer.readUInt32LE(offset) !== 0x04034b50) {
@@ -675,6 +689,7 @@ const assertLocalZipHeaderMatches = (
   }
 
   const flags = buffer.readUInt16LE(offset + 6);
+  const localCrc32 = buffer.readUInt32LE(offset + 14);
   const localCompressedSize = toSafeInteger(buffer.readUInt32LE(offset + 18));
   const localUncompressedSize = toSafeInteger(buffer.readUInt32LE(offset + 22));
   const fileNameLength = buffer.readUInt16LE(offset + 26);
@@ -692,19 +707,52 @@ const assertLocalZipHeaderMatches = (
     throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los nombres internos del ZIP no coinciden.");
   }
 
-  if ((flags & 0x08) !== 0) {
-    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El ZIP usa descriptores de datos no permitidos.");
+  if ((flags & 0x08) !== (entry.flags & 0x08)) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los indicadores internos del ZIP no coinciden.");
+  }
+
+  const dataEnd = dataStart + entry.compressedSize;
+  if (dataEnd > localEntryBoundary || dataEnd > buffer.length) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El contenido ZIP está incompleto.");
+  }
+
+  if ((flags & 0x08) === 0) {
+    if (
+      localCrc32 !== entry.crc32 ||
+      localCompressedSize !== entry.compressedSize ||
+      localUncompressedSize !== entry.uncompressedSize
+    ) {
+      throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los tamaños internos del ZIP no coinciden.");
+    }
+    return;
   }
 
   if (
-    localCompressedSize !== entry.compressedSize ||
-    localUncompressedSize !== entry.uncompressedSize
+    (localCrc32 !== 0 && localCrc32 !== entry.crc32) ||
+    (localCompressedSize !== 0 && localCompressedSize !== entry.compressedSize) ||
+    (localUncompressedSize !== 0 && localUncompressedSize !== entry.uncompressedSize)
   ) {
     throw new Error("No se pudo validar la hoja de cálculo seleccionada. Los tamaños internos del ZIP no coinciden.");
   }
 
-  if (dataStart + localCompressedSize > buffer.length) {
-    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El contenido ZIP está incompleto.");
+  const hasSignature = dataEnd + 4 <= localEntryBoundary && buffer.readUInt32LE(dataEnd) === 0x08074b50;
+  const descriptorOffset = dataEnd + (hasSignature ? 4 : 0);
+  const descriptorEnd = descriptorOffset + 12;
+
+  if (descriptorEnd > localEntryBoundary || descriptorEnd > buffer.length) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El descriptor de datos del ZIP está incompleto.");
+  }
+
+  const descriptorCrc32 = buffer.readUInt32LE(descriptorOffset);
+  const descriptorCompressedSize = toSafeInteger(buffer.readUInt32LE(descriptorOffset + 4));
+  const descriptorUncompressedSize = toSafeInteger(buffer.readUInt32LE(descriptorOffset + 8));
+
+  if (
+    descriptorCrc32 !== entry.crc32 ||
+    descriptorCompressedSize !== entry.compressedSize ||
+    descriptorUncompressedSize !== entry.uncompressedSize
+  ) {
+    throw new Error("No se pudo validar la hoja de cálculo seleccionada. El descriptor de datos del ZIP no coincide.");
   }
 };
 
@@ -754,14 +802,21 @@ const parseZipCentralDirectory = (buffer: Buffer): SpreadsheetZipPreflightSummar
 
     const entry = {
       fileName: buffer.toString("utf-8", fileNameStart, fileNameEnd),
+      flags: buffer.readUInt16LE(offset + 8),
+      crc32: buffer.readUInt32LE(offset + 16),
       compressedSize,
       uncompressedSize,
       localHeaderOffset
     };
-    assertLocalZipHeaderMatches(buffer, entry);
     entries.push(entry);
     offset = nextOffset;
   }
+
+  const entriesByLocalOffset = [...entries].sort((left, right) => left.localHeaderOffset - right.localHeaderOffset);
+  entriesByLocalOffset.forEach((entry, index) => {
+    const localEntryBoundary = entriesByLocalOffset[index + 1]?.localHeaderOffset ?? absoluteCentralDirectoryOffset;
+    assertLocalZipHeaderMatches(buffer, entry, localEntryBoundary);
+  });
 
   const xmlEntries = entries.filter((entry) => entry.fileName.toLowerCase().endsWith(".xml"));
   const sheetFileCount = entries.filter((entry) => {
