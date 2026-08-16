@@ -11,6 +11,18 @@ pnpm run release:usb -- linux
 pnpm run release:usb -- win
 ```
 
+To produce an initialized USB containing the current managed contacts and
+beepers, pass the app-managed data directory explicitly:
+
+```bash
+pnpm run release:usb -- win --data-dir "$HOME/Library/Application Support/hospiagenda/data"
+```
+
+`--data-dir` requires valid `contacts.json` and `beepers.json`. It also stages
+`settings.json` when present, but only when both `managedPaths` flags are
+`true`, so machine-specific paths cannot leak into the portable release.
+Without this flag, the package intentionally contains no user data.
+
 The command runs typecheck, tests, the production build, dev-mode E2E, and
 `electron-builder --dir` for the target platform. When the target platform
 matches the host platform, it also launches the packaged binary and verifies the
@@ -24,7 +36,9 @@ Copy the contents of that directory to the USB root.
 
 The staged package includes the platform payload folder, the platform launcher,
 `README.txt`, and a generated `RELEASE_MANIFEST.txt` with the build timestamp,
-version, and source commit. Linux packages may also include
+version, source commit, and initialized-data status. Initialized packages also
+contain `portable-data/data/`; only the supported managed files are copied and
+all are covered by the checksum manifest. Linux packages may also include
 `HospiAgenda.AppImage` when the build configuration produces it.
 
 For the full packaging and operator handoff process, see

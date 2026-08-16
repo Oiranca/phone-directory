@@ -29,6 +29,18 @@ pnpm run release:usb -- mac
 pnpm run release:usb -- linux
 ```
 
+For a preloaded operator USB, explicitly provide the app-managed data directory:
+
+```bash
+pnpm run release:usb -- win --data-dir "$HOME/Library/Application Support/hospiagenda/data"
+```
+
+Never copy profile data implicitly. `--data-dir` requires `contacts.json` and
+`beepers.json`; optional `settings.json` is accepted only with both managed-path
+flags enabled. The script snapshots these files before the build, stages only
+those supported files, and records their names—not the source path—in the
+release manifest. Without `--data-dir`, the release is intentionally blank.
+
 The release script runs:
 
 1. `pnpm typecheck`
@@ -83,6 +95,11 @@ Expected USB root files vary by platform:
 
 Linux may also include `HospiAgenda.AppImage` when the build configuration produces the versioned AppImage artifact.
 
+Initialized releases additionally require `portable-data/data/contacts.json`
+and `portable-data/data/beepers.json`; `settings.json` may also be present.
+Confirm `RELEASE_MANIFEST.txt` says `Initial data: INCLUDED (...)`. Blank
+releases must say `Initial data: EMPTY (created on first launch)`.
+
 If the USB filesystem strips executable bits, restore them after copying:
 
 ```bash
@@ -102,6 +119,7 @@ Confirm:
 
 - the app opens without launcher errors
 - `portable-data/` is created at the USB root
+- initialized contacts and buscas are visible when the manifest says data was included
 - a new or existing contact can be viewed
 - settings show usable data and backup paths
 - closing and reopening preserves the same data

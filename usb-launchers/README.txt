@@ -50,6 +50,7 @@ written to your computer's home directory or application data folders.
   portable-data/
     data/
       contacts.json
+      beepers.json
       settings.json
     backups/
 

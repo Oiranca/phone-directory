@@ -2,9 +2,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PLATFORM="${1:-current}"
+PLATFORM="current"
+PLATFORM_SET=0
+DATA_SOURCE_DIR=""
 DIST_ROOT="$REPO_ROOT/dist-portable"
 PACKAGE_ROOT="$DIST_ROOT/usb-package"
+INITIAL_DATA_SNAPSHOT=""
+INITIAL_DATA_STATUS="EMPTY (created on first launch)"
 
 log() {
   printf '[release-usb] %s\n' "$1"
@@ -19,6 +23,23 @@ detect_platform() {
   esac
 }
 
+usage() {
+  cat >&2 <<'EOF'
+Usage: pnpm run release:usb -- [current|win|mac|linux] [--data-dir <managed-data-directory>]
+
+--data-dir must point to the app-managed data directory containing contacts.json
+and beepers.json. settings.json is optional and must use managed portable paths.
+EOF
+}
+
+cleanup() {
+  if [[ -n "$INITIAL_DATA_SNAPSHOT" && -d "$INITIAL_DATA_SNAPSHOT" ]]; then
+    rm -rf "$INITIAL_DATA_SNAPSHOT"
+  fi
+}
+
+trap cleanup EXIT
+
 # Read package version without require() so it works under Node 22+ ESM projects.
 # node --input-type=module feeds the snippet as an ES module — no CJS assumption.
 read_package_version() {
@@ -29,13 +50,66 @@ process.stdout.write(pkg.version);
 NODESCRIPT
 }
 
-if [[ "$PLATFORM" == "--platform" ]]; then
-  PLATFORM="${2:-}"
-elif [[ "$PLATFORM" == --platform=* ]]; then
-  PLATFORM="${PLATFORM#--platform=}"
-elif [[ "$PLATFORM" == "--" ]]; then
-  PLATFORM="${2:-current}"
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --)
+      shift
+      ;;
+    current|win|mac|linux)
+      if [[ $PLATFORM_SET -eq 1 ]]; then
+        echo "Target platform was specified more than once." >&2
+        usage
+        exit 2
+      fi
+      PLATFORM="$1"
+      PLATFORM_SET=1
+      shift
+      ;;
+    --platform)
+      if [[ $# -lt 2 || -z "$2" || $PLATFORM_SET -eq 1 ]]; then
+        usage
+        exit 2
+      fi
+      PLATFORM="$2"
+      PLATFORM_SET=1
+      shift 2
+      ;;
+    --platform=*)
+      if [[ $PLATFORM_SET -eq 1 ]]; then
+        usage
+        exit 2
+      fi
+      PLATFORM="${1#--platform=}"
+      PLATFORM_SET=1
+      shift
+      ;;
+    --data-dir)
+      if [[ $# -lt 2 || -z "$2" || -n "$DATA_SOURCE_DIR" ]]; then
+        usage
+        exit 2
+      fi
+      DATA_SOURCE_DIR="$2"
+      shift 2
+      ;;
+    --data-dir=*)
+      if [[ -n "$DATA_SOURCE_DIR" || -z "${1#--data-dir=}" ]]; then
+        usage
+        exit 2
+      fi
+      DATA_SOURCE_DIR="${1#--data-dir=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown release argument: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
 
 if [[ "$PLATFORM" == "current" || -z "$PLATFORM" ]]; then
   PLATFORM="$(detect_platform)"
@@ -50,6 +124,103 @@ case "$PLATFORM" in
 esac
 
 cd "$REPO_ROOT"
+
+if [[ -n "$DATA_SOURCE_DIR" ]]; then
+  DATA_SOURCE_DIR="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(process.argv[1]));' "$DATA_SOURCE_DIR")"
+  case "$DATA_SOURCE_DIR" in
+    "$DIST_ROOT"|"$DIST_ROOT"/*)
+      echo "The initialized data source cannot be inside dist-portable because release cleanup removes that directory." >&2
+      exit 2
+      ;;
+  esac
+
+  INITIAL_DATA_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/hospiagenda-release-data.XXXXXX")"
+  INITIAL_DATA_FILES="$(
+    USB_RELEASE_DATA_SOURCE="$DATA_SOURCE_DIR" \
+    USB_RELEASE_DATA_SNAPSHOT="$INITIAL_DATA_SNAPSHOT" \
+    node --input-type=module <<'NODESCRIPT'
+import fs from "node:fs";
+import path from "node:path";
+
+const source = process.env.USB_RELEASE_DATA_SOURCE;
+const snapshot = process.env.USB_RELEASE_DATA_SNAPSHOT;
+const fail = (message) => {
+  console.error(`[release-usb] Invalid initialized data: ${message}`);
+  process.exit(2);
+};
+
+if (!source || !snapshot) fail("internal source configuration is missing.");
+
+let sourceStat;
+try {
+  sourceStat = fs.lstatSync(source);
+} catch {
+  fail("source directory does not exist or cannot be read.");
+}
+if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+  fail("source must be a real directory, not a file or symbolic link.");
+}
+
+const readManagedJson = (name, required) => {
+  const filePath = path.join(source, name);
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch (error) {
+    if (!required && error?.code === "ENOENT") return null;
+    fail(`${name} is required and must be readable.`);
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    fail(`${name} must be a regular file, not a symbolic link.`);
+  }
+  try {
+    return { filePath, value: JSON.parse(fs.readFileSync(filePath, "utf8")) };
+  } catch {
+    fail(`${name} is not valid JSON.`);
+  }
+};
+
+const contacts = readManagedJson("contacts.json", true);
+if (!contacts.value || typeof contacts.value !== "object" || Array.isArray(contacts.value) || !Array.isArray(contacts.value.records)) {
+  fail("contacts.json must be a directory dataset with a records array.");
+}
+
+const beepers = readManagedJson("beepers.json", true);
+if (
+  !beepers.value ||
+  typeof beepers.value !== "object" ||
+  Array.isArray(beepers.value) ||
+  !Array.isArray(beepers.value.records) ||
+  (beepers.value.importedRecords !== undefined && !Array.isArray(beepers.value.importedRecords))
+) {
+  fail("beepers.json must contain records and optional importedRecords arrays.");
+}
+
+const settings = readManagedJson("settings.json", false);
+if (settings) {
+  const managed = settings.value?.managedPaths;
+  if (
+    !settings.value ||
+    typeof settings.value !== "object" ||
+    Array.isArray(settings.value) ||
+    managed?.dataFilePath !== true ||
+    managed?.backupDirectoryPath !== true
+  ) {
+    fail("settings.json can only be packaged when both managedPaths flags are true.");
+  }
+}
+
+const files = [contacts, beepers, settings].filter(Boolean);
+for (const file of files) {
+  fs.copyFileSync(file.filePath, path.join(snapshot, path.basename(file.filePath)));
+  fs.chmodSync(path.join(snapshot, path.basename(file.filePath)), 0o600);
+}
+process.stdout.write(files.map((file) => path.basename(file.filePath)).join(", "));
+NODESCRIPT
+  )"
+  INITIAL_DATA_STATUS="INCLUDED ($INITIAL_DATA_FILES)"
+  log "Initialized data validated and snapshotted: $INITIAL_DATA_FILES"
+fi
 
 log "Target platform: $PLATFORM"
 log "Cleaning previous portable output"
@@ -159,6 +330,17 @@ esac
 
 copy_required "$REPO_ROOT/usb-launchers/README.txt" "$PACKAGE_ROOT/README.txt"
 
+if [[ -n "$INITIAL_DATA_SNAPSHOT" ]]; then
+  log "Staging initialized portable data"
+  mkdir -p "$PACKAGE_ROOT/portable-data/data"
+  for data_file in contacts.json beepers.json settings.json; do
+    if [[ -f "$INITIAL_DATA_SNAPSHOT/$data_file" ]]; then
+      cp "$INITIAL_DATA_SNAPSHOT/$data_file" "$PACKAGE_ROOT/portable-data/data/$data_file"
+      chmod 600 "$PACKAGE_ROOT/portable-data/data/$data_file"
+    fi
+  done
+fi
+
 PKG_VERSION="$(read_package_version)"
 
 cat > "$PACKAGE_ROOT/RELEASE_MANIFEST.txt" <<EOF
@@ -168,9 +350,10 @@ Platform: $PLATFORM
 Version: $PKG_VERSION
 Source commit: $(git rev-parse --short HEAD)
 ${AUDIT_STATUS_LINE}
+Initial data: ${INITIAL_DATA_STATUS}
 
 Copy the contents of this directory to the USB root.
-Data will be created under portable-data/ on first launch.
+Always start the app through the platform launcher at the USB root.
 EOF
 
 # ---------------------------------------------------------------------------

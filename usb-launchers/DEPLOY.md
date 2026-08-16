@@ -12,6 +12,16 @@ pnpm run release:usb -- mac
 pnpm run release:usb -- linux
 ```
 
+For an initialized USB containing existing contacts and beepers:
+
+```bash
+pnpm run release:usb -- win --data-dir "/path/to/hospiagenda/data"
+```
+
+The directory must contain `contacts.json` and `beepers.json`. An optional
+`settings.json` is included only when it uses app-managed paths. Releases made
+without `--data-dir` remain blank and create their data on first launch.
+
 The command runs typecheck, tests, the production build, `electron-builder --dir`,
 and USB package staging. The copy-ready output is:
 
@@ -82,7 +92,12 @@ USB_ROOT/
 ├── launch.sh
 ├── launch.command
 ├── README.txt
-└── RELEASE_MANIFEST.txt
+├── RELEASE_MANIFEST.txt
+└── portable-data/           (initialized releases only)
+    └── data/
+        ├── contacts.json
+        ├── beepers.json
+        └── settings.json    (optional)
 ```
 
 ## Notes
@@ -92,6 +107,7 @@ USB_ROOT/
   portable-data/
     data/
       contacts.json
+      beepers.json
       settings.json
     backups/
   ```

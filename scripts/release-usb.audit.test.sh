@@ -4037,6 +4037,121 @@ else
 fi
 rm -rf "$SANDBOX97" "$BIN97"
 
+# --- Initialized portable-data coverage (Tests 98-102) ------------------------
+
+# Test 98: an explicit managed data directory stages only supported files,
+# records the initialized state without leaking the source path, and includes
+# the staged data in the checksum set.
+printf '\nTest 98 (initialized data): --data-dir stages managed files and records them safely\n'
+SANDBOX98="$(build_sandbox_repo)"
+BIN98="$(mktemp -d "$TEST_FIXTURE_ROOT/bin98-XXXXXX")"
+DATA98="$(mktemp -d "$TEST_FIXTURE_ROOT/data98-XXXXXX")"
+write_sandbox_bin "$BIN98" "$SANDBOX98" "$CLEAN_JSON" 0 win
+printf '{"version":"1.0.0","records":[]}\n' > "$DATA98/contacts.json"
+printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA98/beepers.json"
+printf '{"editorName":"","dataFilePath":"/managed/contacts.json","backupDirectoryPath":"/managed/backups","managedPaths":{"dataFilePath":true,"backupDirectoryPath":true},"ui":{"showInactiveByDefault":false}}\n' > "$DATA98/settings.json"
+printf 'must not be packaged\n' > "$DATA98/crash-log.jsonl"
+rc_98=0
+env PATH="$BIN98:$PATH" bash "$SANDBOX98/scripts/release-usb.sh" win --data-dir "$DATA98" >/dev/null 2>&1 || rc_98=$?
+PKG98="$SANDBOX98/dist-portable/usb-package"
+MANIFEST98="$PKG98/RELEASE_MANIFEST.txt"
+SHA256FILE98="$PKG98/RELEASE_MANIFEST.txt.sha256"
+if [[ $rc_98 -eq 0 ]]; then
+  pass "Test 98: initialized release completed"
+else
+  fail "Test 98: initialized release exited non-zero ($rc_98)"
+fi
+if [[ -f "$PKG98/portable-data/data/contacts.json" && -f "$PKG98/portable-data/data/beepers.json" && -f "$PKG98/portable-data/data/settings.json" ]]; then
+  pass "Test 98: contacts, beepers, and settings staged"
+else
+  fail "Test 98: one or more managed data files missing"
+fi
+if [[ ! -e "$PKG98/portable-data/data/crash-log.jsonl" ]]; then
+  pass "Test 98: unsupported source files excluded"
+else
+  fail "Test 98: unsupported crash log was packaged"
+fi
+if [[ -f "$MANIFEST98" ]] && grep -qF 'Initial data: INCLUDED (contacts.json, beepers.json, settings.json)' "$MANIFEST98" && ! grep -qF "$DATA98" "$MANIFEST98"; then
+  pass "Test 98: manifest records data file names without source path"
+else
+  fail "Test 98: manifest data status missing or leaks source path"
+fi
+if [[ -f "$SHA256FILE98" ]] && grep -qF 'portable-data/data/beepers.json' "$SHA256FILE98"; then
+  pass "Test 98: staged beepers included in checksum manifest"
+else
+  fail "Test 98: beepers missing from checksum manifest"
+fi
+rm -rf "$SANDBOX98" "$BIN98" "$DATA98"
+
+# Test 99: default releases remain blank and state that explicitly, preventing
+# accidental packaging of the developer profile.
+printf '\nTest 99 (blank data): release without --data-dir stays empty\n'
+SANDBOX99="$(build_sandbox_repo)"
+BIN99="$(mktemp -d "$TEST_FIXTURE_ROOT/bin99-XXXXXX")"
+write_sandbox_bin "$BIN99" "$SANDBOX99" "$CLEAN_JSON" 0 win
+env PATH="$BIN99:$PATH" bash "$SANDBOX99/scripts/release-usb.sh" win >/dev/null 2>&1 || true
+PKG99="$SANDBOX99/dist-portable/usb-package"
+MANIFEST99="$PKG99/RELEASE_MANIFEST.txt"
+if [[ ! -e "$PKG99/portable-data" ]] && [[ -f "$MANIFEST99" ]] && grep -qF 'Initial data: EMPTY (created on first launch)' "$MANIFEST99"; then
+  pass "Test 99: default release contains no data and manifest says EMPTY"
+else
+  fail "Test 99: default release data state is not safely empty"
+fi
+rm -rf "$SANDBOX99" "$BIN99"
+
+# Test 100: contacts and beepers are an atomic initialized dataset contract;
+# omitting either file aborts instead of producing a partially initialized USB.
+printf '\nTest 100 (incomplete data): --data-dir without beepers.json aborts\n'
+SANDBOX100="$(build_sandbox_repo)"
+BIN100="$(mktemp -d "$TEST_FIXTURE_ROOT/bin100-XXXXXX")"
+DATA100="$(mktemp -d "$TEST_FIXTURE_ROOT/data100-XXXXXX")"
+write_sandbox_bin "$BIN100" "$SANDBOX100" "$CLEAN_JSON" 0 win
+printf '{"version":"1.0.0","records":[]}\n' > "$DATA100/contacts.json"
+rc_100=0
+env PATH="$BIN100:$PATH" bash "$SANDBOX100/scripts/release-usb.sh" win --data-dir "$DATA100" >/dev/null 2>&1 || rc_100=$?
+if [[ $rc_100 -ne 0 ]]; then
+  pass "Test 100: incomplete initialized dataset rejected"
+else
+  fail "Test 100: incomplete initialized dataset unexpectedly accepted"
+fi
+rm -rf "$SANDBOX100" "$BIN100" "$DATA100"
+
+# Test 101: malformed JSON aborts before a release can be handed off.
+printf '\nTest 101 (invalid data): malformed managed JSON aborts\n'
+SANDBOX101="$(build_sandbox_repo)"
+BIN101="$(mktemp -d "$TEST_FIXTURE_ROOT/bin101-XXXXXX")"
+DATA101="$(mktemp -d "$TEST_FIXTURE_ROOT/data101-XXXXXX")"
+write_sandbox_bin "$BIN101" "$SANDBOX101" "$CLEAN_JSON" 0 win
+printf '{not-json}\n' > "$DATA101/contacts.json"
+printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA101/beepers.json"
+rc_101=0
+env PATH="$BIN101:$PATH" bash "$SANDBOX101/scripts/release-usb.sh" win --data-dir "$DATA101" >/dev/null 2>&1 || rc_101=$?
+if [[ $rc_101 -ne 0 ]]; then
+  pass "Test 101: malformed initialized dataset rejected"
+else
+  fail "Test 101: malformed initialized dataset unexpectedly accepted"
+fi
+rm -rf "$SANDBOX101" "$BIN101" "$DATA101"
+
+# Test 102: settings with machine-specific paths must never cross into a
+# portable release. Both managed-path flags are required when settings exists.
+printf '\nTest 102 (unsafe settings): machine-specific settings paths abort\n'
+SANDBOX102="$(build_sandbox_repo)"
+BIN102="$(mktemp -d "$TEST_FIXTURE_ROOT/bin102-XXXXXX")"
+DATA102="$(mktemp -d "$TEST_FIXTURE_ROOT/data102-XXXXXX")"
+write_sandbox_bin "$BIN102" "$SANDBOX102" "$CLEAN_JSON" 0 win
+printf '{"version":"1.0.0","records":[]}\n' > "$DATA102/contacts.json"
+printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA102/beepers.json"
+printf '{"editorName":"","dataFilePath":"/Users/operator/contacts.json","backupDirectoryPath":"/Users/operator/backups","managedPaths":{"dataFilePath":false,"backupDirectoryPath":false},"ui":{"showInactiveByDefault":false}}\n' > "$DATA102/settings.json"
+rc_102=0
+env PATH="$BIN102:$PATH" bash "$SANDBOX102/scripts/release-usb.sh" win --data-dir "$DATA102" >/dev/null 2>&1 || rc_102=$?
+if [[ $rc_102 -ne 0 ]]; then
+  pass "Test 102: machine-specific settings rejected"
+else
+  fail "Test 102: machine-specific settings unexpectedly accepted"
+fi
+rm -rf "$SANDBOX102" "$BIN102" "$DATA102"
+
 # --- summary -------------------------------------------------------------------
 
 printf '\n================================\n'
