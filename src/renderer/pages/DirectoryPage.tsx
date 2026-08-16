@@ -10,6 +10,8 @@ import { StatePanel } from "../components/feedback/StatePanel";
 import { normalizeDisplayName } from "../../shared/utils/matching";
 import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/contacts";
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
+import { DirectoryHighlightCard } from "../components/directory/DirectoryHighlightCard";
+import { GENERIC_CCEE_APPOINTMENTS } from "../../shared/constants/directoryHighlights";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -463,6 +465,7 @@ export const DirectoryPage = () => {
             was only reachable via page-level scroll that the internal list's own
             scrollbar silently absorbed. */}
         <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 flex-col gap-3">
+          <DirectoryHighlightCard highlight={GENERIC_CCEE_APPOINTMENTS} />
           <ul
             ref={listRef}
             onKeyDown={handleListKeyDown}

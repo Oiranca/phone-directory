@@ -164,6 +164,39 @@ describe("DirectoryPage", () => {
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
+  it("keeps the generic CCEE appointments line visible without adding it to search results", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+    renderPage();
+
+    const highlight = await screen.findByRole("complementary", { name: "Contacto destacado de citas" });
+    expect(within(highlight).getByText("Citas CCEE")).toBeInTheDocument();
+    expect(within(highlight).getByText("CAE Gáldar y CAE Arucas")).toBeInTheDocument();
+    expect(within(highlight).getByText("79178")).toBeInTheDocument();
+    expect(within(highlight).getByText("L–V 08:00–21:00")).toBeInTheDocument();
+    expect(highlight).toHaveTextContent("No gestiona");
+    expect(highlight).toHaveTextContent("Rehabilitación, Tórax, RXVI, Dermatología, RX y Banco de Sangre.");
+
+    const resultsList = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(highlight.parentElement).toBe(resultsList.parentElement);
+    expect(highlight.nextElementSibling).toBe(resultsList);
+
+    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+      target: { value: "consulta inexistente 79178" }
+    });
+
+    expect(screen.getByText("0 resultados")).toBeInTheDocument();
+    expect(within(highlight).getByText("79178")).toBeInTheDocument();
+    expect(within(resultsList).queryByText("79178")).not.toBeInTheDocument();
+  });
+
   it("shows inactive records without any way to hide them (filters removed)", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
