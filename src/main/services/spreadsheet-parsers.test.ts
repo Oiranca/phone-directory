@@ -364,6 +364,12 @@ describe("normalizeServiceSheet — rowHasPhone gating regression", () => {
     expect(records).toHaveLength(0);
   });
 
+  it("does NOT treat a generic three-digit code as a phone", () => {
+    const sheet = makeSheet("CONTROL", [["CONTROL", "123"]]);
+    const { records } = normalizeServiceSheet(sheet, makeProfile("CONTROL"));
+    expect(records).toHaveLength(0);
+  });
+
   it("DOES emit a contact when an ALL-CAPS excluded-label row has a real 4–9 digit phone (positive control)", () => {
     // "URGENCIAS" is all-caps → isExcludedLabel() returns true. But "928123456"
     // is 9 digits (within 4–9 range) and not a date → rowHasPhone=true.
@@ -654,6 +660,18 @@ describe("normalizeTabularAgendaSheet", () => {
     const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
     const phones = JSON.parse(records[0]!.phones!) as Array<{ number: string }>;
     expect(phones.map((p) => p.number)).toEqual(["79543", "79544", "79545"]);
+  });
+
+  it("imports three-digit phones and preserves leading zeroes", () => {
+    const sheet = makeSheet("Agenda", [
+      AGENDA_HEADER_ROW,
+      agendaRow({ servicio: "Cibercentro", numero1: "912" }),
+      agendaRow({ servicio: "Policía Local", numero1: "092" }),
+      agendaRow({ servicio: "Policía Nacional", numero1: "091" }),
+    ]);
+    const records = normalizeTabularAgendaSheet(sheet, makeAgendaProfile());
+
+    expect(records.map((record) => JSON.parse(record.phones!)[0].number)).toEqual(["912", "092", "091"]);
   });
 
   it("Confidencial 'Si' sets confidential=true on ALL phones for that row, not just the first", () => {

@@ -293,7 +293,12 @@ describe("extractNumbers", () => {
     expect(extractNumbers("928123456 / 928123456")).toEqual(["928123456"]);
   });
 
-  it("ignores fragments shorter than 4 digits that cannot be expanded", () => {
+  it("accepts useful three-digit phone numbers", () => {
+    expect(extractNumbers("912 / 092 / 091", 3)).toEqual(["912", "092", "091"]);
+  });
+
+  it("keeps the generic four-digit minimum unless explicitly overridden", () => {
+    expect(extractNumbers("912")).toEqual([]);
     expect(extractNumbers("12")).toEqual([]);
   });
 
@@ -401,6 +406,7 @@ describe("looksLikeDateValue", () => {
 describe("hasPhoneLikeNumber", () => {
   it("returns true for a value containing a 4-9 digit number", () => {
     expect(hasPhoneLikeNumber("Llamar al 928123")).toBe(true);
+    expect(hasPhoneLikeNumber("092")).toBe(false);
   });
 
   it("returns false for a value that looks like a date", () => {

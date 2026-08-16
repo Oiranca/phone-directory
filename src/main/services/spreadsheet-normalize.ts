@@ -216,9 +216,11 @@ export const expandCompactSuffix = (previousDigits: string | undefined, currentP
 /**
  * Extracts all phone-like digit strings from a cell value.
  * Handles slash-separated lists, compact ranges, and compact suffixes.
- * Returns an ordered, deduplicated list of digit strings (≥4 digits each).
+ * Returns an ordered, deduplicated list of digit strings matching the requested
+ * minimum length. Generic heuristic parsers keep the default 4-digit minimum;
+ * explicit Agenda phone columns opt into 3 digits.
  */
-export const extractNumbers = (text: string) => {
+export const extractNumbers = (text: string, minimumDigits = 4) => {
   const value = clean(text);
 
   if (!value) {
@@ -245,7 +247,7 @@ export const extractNumbers = (text: string) => {
 
     const digits = normalizedPart.replace(/\D/g, "");
 
-    if (digits.length >= 4) {
+    if (digits.length >= minimumDigits) {
       results.push(digits);
       previousDigits = digits;
       continue;
@@ -436,4 +438,3 @@ export const inferAreaFromLabel = (value: string) => {
 
   return undefined;
 };
-

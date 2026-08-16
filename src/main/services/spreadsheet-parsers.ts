@@ -1005,7 +1005,7 @@ export const normalizeTabularAgendaSheet = (
         continue;
       }
 
-      extractNumbers(cellValue).forEach((number) => {
+      extractNumbers(cellValue, 3).forEach((number) => {
         phoneEntries.push({
           number,
           label: column.label,
@@ -1032,7 +1032,7 @@ export const normalizeTabularAgendaSheet = (
     // silently dropped instead of being imported as a fax phone entry.
     for (const column of columns.faxes) {
       const faxValue = cells[column.index] ?? "";
-      extractNumbers(faxValue).forEach((number) => {
+      extractNumbers(faxValue, 3).forEach((number) => {
         phoneEntries.push({
           number,
           label: column.label,
@@ -1051,7 +1051,7 @@ export const normalizeTabularAgendaSheet = (
     // pushed into contactMethods.phones (not beepers).
     for (const column of columns.corporativos) {
       const corporativoValue = cells[column.index] ?? "";
-      extractNumbers(corporativoValue).forEach((number) => {
+      extractNumbers(corporativoValue, 3).forEach((number) => {
         phoneEntries.push({
           number,
           label: column.label,
