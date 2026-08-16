@@ -155,7 +155,7 @@ build_sandbox_repo() {
 #   - `pnpm exec electron-builder --<platform> ...` → fabricates the per-platform
 #     output dir(s) that release-usb.sh's copy step expects:
 #       linux → dist-portable/linux-unpacked
-#       win   → dist-portable/HospiAgenda.exe
+#       win   → dist-portable/win-unpacked
 #       mac   → dist-portable/mac AND dist-portable/mac-arm64 (dual-arch)
 #   - everything else (typecheck, test, run build) → no-op success
 # write_sandbox_bin <bindir> <sandbox> <audit_json> [audit_exit] [platform]
@@ -194,12 +194,13 @@ case "\${1:-}" in
     fi
     case "${platform}" in
       win)
-        if ! printf '%s' "\$eb_argv" | grep -qw -- 'portable'; then
-          printf 'FAKE-PNPM: Windows electron-builder missing portable target (argv: %s)\n' "\$eb_argv" >&2
+        if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
+          printf 'FAKE-PNPM: Windows electron-builder missing --dir target (argv: %s)\n' "\$eb_argv" >&2
           exit 92
         fi
-        mkdir -p '${sandbox}/dist-portable'
-        printf 'fake.exe\n' > '${sandbox}/dist-portable/HospiAgenda.exe'
+        mkdir -p '${sandbox}/dist-portable/win-unpacked/resources'
+        printf 'fake.exe\n' > '${sandbox}/dist-portable/win-unpacked/HospiAgenda.exe'
+        printf 'runtime\n' > '${sandbox}/dist-portable/win-unpacked/resources/app.asar'
         ;;
       mac)
         if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
@@ -3883,6 +3884,11 @@ if [[ -f "$PKG91/HospiAgenda.exe" ]]; then
   pass "Commit2 e2e win: direct HospiAgenda.exe staged into usb-package"
 else
   fail "Commit2 e2e win: HospiAgenda.exe missing from usb-package"
+fi
+if [[ -f "$PKG91/resources/app.asar" ]]; then
+  pass "Commit2 e2e win: required Electron runtime staged beside direct executable"
+else
+  fail "Commit2 e2e win: Electron runtime missing beside direct executable"
 fi
 if [[ ! -e "$PKG91/launch.bat" ]]; then
   pass "Commit2 e2e win: obsolete launch.bat not staged"

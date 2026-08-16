@@ -8,12 +8,11 @@ const usbRoot = isWindows ? "C:\\HospitalUSB" : "/Volumes/HospitalUSB";
 const portableDataPath = platformPath.join(usbRoot, "portable-data");
 
 describe("resolvePortableUserDataPath", () => {
-  it("uses the Windows portable executable directory when launched directly", () => {
+  it("uses the USB root for a directly launched Windows executable without wrapper environment", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: platformPath.join(usbRoot, "temporary", "HospiAgenda.exe"),
-        isPackaged: true,
-        portableExecutableDirectory: usbRoot
+        execPath: platformPath.join(usbRoot, "HospiAgenda.exe"),
+        isPackaged: true
       })
     ).toBe(portableDataPath);
   });
@@ -22,8 +21,7 @@ describe("resolvePortableUserDataPath", () => {
     expect(
       resolvePortableUserDataPath({
         execPath: platformPath.join(usbRoot, "win-unpacked", "HospiAgenda.exe"),
-        isPackaged: true,
-        portableExecutableDirectory: null
+        isPackaged: true
       })
     ).toBe(portableDataPath);
   });
@@ -33,8 +31,7 @@ describe("resolvePortableUserDataPath", () => {
       resolvePortableUserDataPath({
         execPath: platformPath.join("/tmp", ".mount_Hospi", "usr", "bin", "hospiagenda"),
         appImagePath: platformPath.join(usbRoot, "HospiAgenda.AppImage"),
-        isPackaged: true,
-        portableExecutableDirectory: null
+        isPackaged: true
       })
     ).toBe(portableDataPath);
   });
@@ -52,8 +49,7 @@ describe("resolvePortableUserDataPath", () => {
             "MacOS",
             "HospiAgenda"
           ),
-          isPackaged: true,
-          portableExecutableDirectory: null
+          isPackaged: true
         })
       ).toBe(portableDataPath);
     }
@@ -63,8 +59,7 @@ describe("resolvePortableUserDataPath", () => {
     expect(
       resolvePortableUserDataPath({
         execPath: platformPath.join(usbRoot, "linux-unpacked", "hospiagenda"),
-        isPackaged: true,
-        portableExecutableDirectory: null
+        isPackaged: true
       })
     ).toBe(portableDataPath);
   });
@@ -73,8 +68,7 @@ describe("resolvePortableUserDataPath", () => {
     expect(
       resolvePortableUserDataPath({
         execPath: platformPath.join(usbRoot, "HospiAgenda.exe"),
-        isPackaged: false,
-        portableExecutableDirectory: usbRoot
+        isPackaged: false
       })
     ).toBeNull();
   });

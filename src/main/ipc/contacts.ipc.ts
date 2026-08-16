@@ -376,8 +376,13 @@ export const registerContactsIpc = (service: AppDataService) => {
     const extension = path.extname(sourceFilePath).toLowerCase().replace(/^\./, "");
 
     if (extension === "json") {
-      const result = stripImportPaths(await service.importDataset(sourceFilePath));
-      return { kind: "json-import", result } as const;
+      const result = await service.importJsonFile(sourceFilePath);
+
+      if (result.kind === "contacts-import") {
+        return { kind: "json-import", result: stripImportPaths(result.result) } as const;
+      }
+
+      return result;
     }
 
     if (CSV_LIKE_EXTENSIONS.has(extension)) {

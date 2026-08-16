@@ -857,6 +857,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     importDataset: ReturnType<typeof vi.fn>;
+    importJsonFile: ReturnType<typeof vi.fn>;
     previewCsvImport: ReturnType<typeof vi.fn>;
     [key: string]: unknown;
   };
@@ -921,6 +922,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 
     serviceMock = {
       importDataset: vi.fn().mockResolvedValue(jsonImportResult),
+      importJsonFile: vi.fn().mockResolvedValue({ kind: "contacts-import", result: jsonImportResult }),
       previewCsvImport: vi.fn().mockResolvedValue({ ...csvPreviewStub }),
       getBootstrapData: vi.fn(),
       createBackup: vi.fn(),
@@ -950,13 +952,13 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     return handler;
   };
 
-  it("dispatches to service.importDataset() (unchanged full-replace pipeline) for a .json pick", async () => {
+  it("classifies and imports a contacts JSON file", async () => {
     showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
     const sender = makeWebContentsSender(1);
 
     const response = await getHandler()({ sender } as unknown);
 
-    expect(serviceMock.importDataset).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
+    expect(serviceMock.importJsonFile).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
     expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
     // backupPath/importedFilePath are absolute filesystem paths and must be
     // stripped before the result crosses the IPC boundary into the renderer
@@ -966,6 +968,36 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     expect(response).toEqual({ kind: "json-import", result: safeJsonImportResult });
     expect(response).not.toHaveProperty("result.backupPath");
     expect(response).not.toHaveProperty("result.importedFilePath");
+  });
+
+  it("routes a beepers JSON file to the beepers store", async () => {
+    serviceMock.importJsonFile.mockResolvedValueOnce({
+      kind: "beepers-import",
+      recordCount: 0,
+      importedRecordCount: 231
+    });
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/beepers.json"] });
+
+    const response = await getHandler()({ sender: makeWebContentsSender(7) } as unknown);
+
+    expect(response).toEqual({ kind: "beepers-import", recordCount: 0, importedRecordCount: 231 });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
+  });
+
+  it("routes a settings JSON file while returning managed settings", async () => {
+    const settings = {
+      editorName: "Operador",
+      dataFilePath: "/usb/portable-data/data/contacts.json",
+      backupDirectoryPath: "/usb/portable-data/backups",
+      ui: { showInactiveByDefault: false, autoBackup: { enabled: true, trigger: "launch", intervalHours: 24, editCountThreshold: 20, retentionCount: 10 } }
+    };
+    serviceMock.importJsonFile.mockResolvedValueOnce({ kind: "settings-import", settings });
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/settings.json"] });
+
+    const response = await getHandler()({ sender: makeWebContentsSender(8) } as unknown);
+
+    expect(response).toEqual({ kind: "settings-import", settings });
+    expect(serviceMock.importDataset).not.toHaveBeenCalled();
   });
 
   it("dispatches to the same normalize/validate/preview pipeline as previewCsvImport for a .csv pick", async () => {

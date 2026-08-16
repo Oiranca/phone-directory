@@ -89,7 +89,7 @@ Expected USB root files vary by platform:
 
 | Platform | Required payload |
 | --- | --- |
-| Windows | `HospiAgenda.exe`, `README.txt`, `RELEASE_MANIFEST.txt` |
+| Windows | `HospiAgenda.exe`, `resources/`, adjacent DLL/PAK runtime files, `README.txt`, `RELEASE_MANIFEST.txt` |
 | macOS | `mac/` and/or `mac-arm64/`, `README.txt`, `RELEASE_MANIFEST.txt` |
 | Linux | `linux-unpacked/`, `launch.sh`, `README.txt`, `RELEASE_MANIFEST.txt` |
 
@@ -136,6 +136,7 @@ Before handoff, confirm the USB root contains:
 Tell the operator:
 
 - open the platform executable directly
+- on Windows, keep `HospiAgenda.exe` beside `resources/` and its DLL/PAK runtime files
 - keep `portable-data/` with the USB drive
 - back up `portable-data/` before major imports or cleanup work
 - do not delete `RELEASE_MANIFEST.txt`; it identifies the build

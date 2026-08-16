@@ -34,8 +34,7 @@ const APP_ICON_PATH = path.join(__dirname, "../../build-resources/icon.png");
 const portableUserDataPath = resolvePortableUserDataPath({
   execPath: process.execPath,
   appImagePath: process.env.APPIMAGE,
-  isPackaged: app.isPackaged,
-  portableExecutableDirectory: process.env.PORTABLE_EXECUTABLE_DIR
+  isPackaged: app.isPackaged
 });
 
 if (portableUserDataPath) {

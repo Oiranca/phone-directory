@@ -244,6 +244,11 @@ export interface ImportContactsResultInternal extends BootstrapData {
  */
 export type ImportContactsResult = Omit<ImportContactsResultInternal, "backupPath" | "importedFilePath">;
 
+export type JsonFileImportResultInternal =
+  | { kind: "contacts-import"; result: ImportContactsResultInternal }
+  | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
+  | { kind: "settings-import"; settings: EditableAppSettings };
+
 /**
  * Main-process-internal shape of a reset result — includes the absolute
  * backupPath so AppDataService tests can verify the real file on disk. The
@@ -491,13 +496,17 @@ export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "impo
  * unified "Importar" entry point. Lets the renderer route to whichever
  * existing UI matches the flow that main actually dispatched to, without ever
  * receiving a file path back:
- *   - "json-import"           → reuse the existing JSON full-replace result handling
+ *   - "json-import"           → replace the contacts dataset
+ *   - "beepers-import"        → replace the beepers dataset
+ *   - "settings-import"       → import preferences while preserving managed paths
  *   - "csv-preview"           → reuse the existing CsvImportPreviewPanel/confirm flow
  *   - "unsupported-extension" → the OS dialog filter was somehow bypassed
  *   - "cancelled"             → the user closed the dialog without picking a file
  */
 export type PickAndImportDatasetResult =
   | { kind: "json-import"; result: ImportContactsResult }
+  | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
+  | { kind: "settings-import"; settings: EditableAppSettings }
   | { kind: "csv-preview"; preview: CsvImportPreviewWithConflicts }
   | { kind: "unsupported-extension"; extension: string }
   | { kind: "cancelled" };

@@ -8,6 +8,8 @@ at the USB root. No launcher or installation is required.
 WINDOWS
 -------
 Double-click HospiAgenda.exe at the USB root.
+Keep resources, DLL, and PAK files beside HospiAgenda.exe; together they are
+the portable Windows runtime.
 
 MACOS
 -----

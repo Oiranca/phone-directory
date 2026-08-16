@@ -45,19 +45,12 @@ type PendingConfirmation =
  *   one native file dialog (filtered to .json/.csv/.ods/.xls/.xlsx) via
  *   window.hospitalDirectory.pickAndImportDataset(). The main process
  *   determines the picked file's extension and dispatches internally to the
- *   existing importDataset() (JSON full-replace) or previewCsvImport()
- *   (CSV/ODS/XLS/XLSX normalize/validate/preview) pipelines — this component
- *   only renders whichever existing result/preview UI matches the returned
- *   `kind`.
+ *   schema-aware JSON import (contacts, beepers, or settings) or
+ *   previewCsvImport() (CSV/ODS/XLS/XLSX normalize/validate/preview)
+ *   pipelines — this component renders the matching result/preview UI.
  *
- *   Because the destructive JSON full-replace path can only be identified
- *   *after* the file is picked (main dispatches by extension, not before),
- *   the safety confirmation for that path is shown *before* the native
- *   dialog opens: a single generic warning covering both possible outcomes
- *   (picking a JSON replaces everything with an automatic backup; picking a
- *   spreadsheet goes through its own additional preview/confirm step below,
- *   unchanged). This preserves the original destructive-replace confirmation
- *   semantics while still allowing one unified button/dialog.
+ *   The JSON schema can only be identified after the file is picked, so the
+ *   pre-selection confirmation explains every supported JSON outcome.
  *
  * The "Recuperación / Copias de seguridad locales" list
  * (with its "Mostrar más" bounded-list toggle) is REMOVED entirely,
@@ -77,8 +70,8 @@ export const DataManagementSection = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   // Covers the whole pickAndImportDataset() round-trip — the native dialog is
-  // open and, once a file is picked, either the JSON full-replace or the CSV
-  // preview generation is still running. We only find out which one after the
+  // open and, once a file is picked, either JSON import or CSV preview
+  // generation is still running. We only find out which one after the
   // call resolves, so this single flag drives both the button label and the
   // "processing" status region below.
   const [isImporting, setIsImporting] = useState(false);
@@ -166,9 +159,8 @@ export const DataManagementSection = () => {
 
   // Single unified "Importar" entry point. Opens exactly one native
   // dialog (via pickAndImportDataset) and renders whichever existing flow
-  // matches the returned `kind` — the JSON full-replace result handling
-  // (previously handleImport) or the CSV preview handling (previously
-  // handlePreviewCsvImport), both reused verbatim below.
+  // matches the returned `kind`: contacts, beepers, settings, or a spreadsheet
+  // preview requiring a second confirmation.
   const handlePickAndImport = async () => {
     try {
       setIsImporting(true);
@@ -202,6 +194,28 @@ export const DataManagementSection = () => {
         pushToast({
           type: "success",
           message: "Importación completada."
+        });
+        return;
+      }
+
+      if (response.kind === "beepers-import") {
+        await refreshBackups();
+        pushToast({
+          type: "success",
+          message: `Buscas importadas: ${response.recordCount + response.importedRecordCount}.`
+        });
+        return;
+      }
+
+      if (response.kind === "settings-import") {
+        if (!contacts) {
+          throw new Error("No se pudo conservar el directorio actual al importar la configuración.");
+        }
+        initialize({ contacts, settings: response.settings });
+        await refreshBackups();
+        pushToast({
+          type: "success",
+          message: "Configuración importada. Las rutas portables del USB se han conservado."
         });
         return;
       }
@@ -397,7 +411,7 @@ export const DataManagementSection = () => {
       return {
         title: "Seleccionar archivo para importar",
         message:
-          "Vas a elegir un archivo para importar. Si eliges una copia de seguridad completa, se reemplazarán los datos actuales del directorio (se creará una copia de seguridad automática antes de continuar). Si eliges una hoja de cálculo (CSV, ODS, XLS o XLSX), primero verás una vista previa para revisar y confirmar los cambios. ¿Deseas continuar y elegir un archivo?",
+          "Vas a elegir un archivo para importar. Un JSON de agenda o buscas reemplazará esos datos después de crear su copia de seguridad. Un JSON de configuración importará las preferencias después de respaldarlas y conservará las rutas portables del USB. Las hojas de cálculo (CSV, ODS, XLS o XLSX) mostrarán una vista previa antes de aplicar cambios. ¿Deseas continuar?",
         confirmLabel: "Elegir archivo"
       };
     }
@@ -515,17 +529,11 @@ export const DataManagementSection = () => {
             </div>
           </div>
 
-          {/* "Importar" is a single unified entry point. One
-              button opens exactly one native dialog (json/csv/ods/xls/xlsx
-              filter) via pickAndImportDataset(); main dispatches by extension
-              to the existing JSON full-replace or CSV preview pipelines and
-              this component renders whichever existing UI matches the
-              result. The card copy was shortened to two short lines (no
-              "JSON" wording, no full outcome explainer). */}
+          {/* One picker supports typed JSON stores and spreadsheet previews. */}
           <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
-              Selecciona un archivo para importar. Se generará una copia de seguridad automática.
+              Importa agenda, buscas o configuración. Los datos reemplazados se respaldan antes.
             </p>
             <p className="mt-1 text-xs text-amber-900/60">
               Formatos admitidos: JSON, CSV, ODS, XLS, XLSX

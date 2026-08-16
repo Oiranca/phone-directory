@@ -111,7 +111,7 @@ test.describe("critical MVP flows", () => {
 
       // Relaunch with the native file dialog stubbed to return the backup
       // file that was just created, then re-import it via the unified
-      // "Importar" entry point (JSON full-replace path).
+      // "Importar" entry point (contacts JSON path).
       launched = await launchElectronApp({
         userDataPath: workspace.userDataPath,
         openDialogPaths: [backupFilePath]

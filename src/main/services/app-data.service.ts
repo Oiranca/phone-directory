@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
+import { beepersDatasetSchema } from "../../shared/schemas/beeper.schema.js";
 import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts.schema.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
@@ -32,6 +33,7 @@ import type {
   AuditLogQueryParams,
   AuditLogResult,
   ImportContactsResultInternal,
+  JsonFileImportResultInternal,
   RecoveryState,
   ResetContactsResultInternal,
   ExportAuditLogResult,
@@ -171,7 +173,10 @@ export class AppDataService {
   }
 
   async saveSettings(settings: EditableAppSettings) {
-    return this.enqueueWrite(async () => {
+    return this.enqueueWrite(() => this.saveSettingsInner(settings));
+  }
+
+  private async saveSettingsInner(settings: EditableAppSettings) {
     const parsed = editableAppSettingsSchema.parse(settings);
     const normalizedDataFilePath = parsed.dataFilePath.trim();
     const normalizedBackupDirectoryPath = parsed.backupDirectoryPath.trim();
@@ -211,7 +216,6 @@ export class AppDataService {
       )
     });
     return nextSettings;
-    });
   }
 
   getEditableSettingsDefaults(): EditableAppSettings {
@@ -260,12 +264,21 @@ export class AppDataService {
    * Must only be called from inside an enqueueWrite slot.
    */
   private async createBackupCore(settings: AppSettings, prefix: string, errorMessage: string) {
+    return this.createManagedBackupCopy(settings, prefix, errorMessage, settings.dataFilePath);
+  }
+
+  private async createManagedBackupCopy(
+    settings: AppSettings,
+    prefix: string,
+    errorMessage: string,
+    sourceFilePath: string
+  ) {
     const backupFilePath = await this.createBackupFilePathUnique(settings, prefix);
     // The atomic open in createBackupFilePathUnique left a 0-byte placeholder
-    // at backupFilePath.  If the copy fails we must remove that placeholder so
-    // it does not appear in listBackups as a valid (but empty) backup file.
+    // at backupFilePath. If the copy fails we must remove that placeholder so
+    // it does not appear as a valid (but empty) backup artifact.
     try {
-      await this.copyFileWithContext(settings.dataFilePath, backupFilePath, errorMessage);
+      await this.copyFileWithContext(sourceFilePath, backupFilePath, errorMessage);
     } catch (error) {
       await fs.unlink(backupFilePath).catch(() => undefined);
       throw error;
@@ -284,7 +297,11 @@ export class AppDataService {
       const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
       const backupEntries = await Promise.all(
         entries
-          .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+          .filter((entry) =>
+            entry.isFile() &&
+            entry.name.endsWith(".json") &&
+            (entry.name.startsWith("contacts-") || entry.name.startsWith("auto-backup-"))
+          )
           .map(async (entry) => {
             const filePath = path.join(backupDirectory, entry.name);
             const stats = await fs.stat(filePath);
@@ -355,10 +372,17 @@ export class AppDataService {
   }
 
   async importDataset(sourceFilePath: string): Promise<ImportContactsResultInternal> {
-    return this.enqueueWrite(async () => {
     const importedContacts = directoryDatasetSchema.parse(
       await readJsonFile<DirectoryDataset>(sourceFilePath)
     );
+    return this.importParsedContactsDataset(importedContacts, sourceFilePath);
+  }
+
+  private async importParsedContactsDataset(
+    importedContacts: DirectoryDataset,
+    sourceFilePath: string
+  ): Promise<ImportContactsResultInternal> {
+    return this.enqueueWrite(async () => {
     const backupPath = await this.createBackupInner();
     const settings = await this.readSettings(true);
     const now = new Date().toISOString();
@@ -386,6 +410,74 @@ export class AppDataService {
       recordCount: importedContacts.records.length
     };
     });
+  }
+
+  async importJsonFile(sourceFilePath: string): Promise<JsonFileImportResultInternal> {
+    const raw = await readJsonFile<unknown>(sourceFilePath);
+    const contacts = directoryDatasetSchema.safeParse(raw);
+
+    if (contacts.success) {
+      return {
+        kind: "contacts-import",
+        result: await this.importParsedContactsDataset(contacts.data, sourceFilePath)
+      };
+    }
+
+    const beepers = beepersDatasetSchema.safeParse(raw);
+
+    if (beepers.success) {
+      if (!this.options.beepersService) {
+        throw new Error("El servicio de buscas no está disponible.");
+      }
+
+      const settings = await this.readSettings(true);
+      const counts = await this.options.beepersService.importDataset(beepers.data, {
+        backupDirectoryPath: settings.backupDirectoryPath,
+        retentionCount: settings.ui.autoBackup.retentionCount
+      });
+      return { kind: "beepers-import", ...counts };
+    }
+
+    const importedSettings = appSettingsSchema.safeParse(raw);
+
+    if (importedSettings.success) {
+      return this.enqueueWrite(async () => {
+        const managedDefaults = this.getManagedSettingsDefaults();
+        const currentSettings = await this.readSettings(true);
+
+        await this.createManagedBackupCopy(
+          currentSettings,
+          "settings-before-import",
+          "No se pudo crear la copia de seguridad de la configuración.",
+          getSettingsFilePath()
+        );
+
+        const settings = await this.saveSettingsInner({
+          editorName: importedSettings.data.editorName,
+          dataFilePath: managedDefaults.dataFilePath,
+          backupDirectoryPath: managedDefaults.backupDirectoryPath,
+          ui: importedSettings.data.ui,
+          lastImportedAt: importedSettings.data.lastImportedAt
+        });
+
+        try {
+          await this.pruneBackupsByPrefix(
+            currentSettings,
+            "settings-before-import-",
+            "No se pudo rotar las copias de seguridad de la configuración."
+          );
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error(`[BackupRetention] Failed to prune settings-before-import-* backups — ${errMsg}`);
+        }
+
+        return { kind: "settings-import", settings: this.toEditableSettings(settings) } as const;
+      });
+    }
+
+    throw new Error(
+      "El JSON no es una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+    );
   }
 
   // OIR-276: exposes the canonical backup directory so the IPC layer can

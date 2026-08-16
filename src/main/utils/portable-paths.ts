@@ -26,12 +26,7 @@ const resolveExecutableRoot = (execPath: string) => {
 const resolveAutomaticPortableRoot = (options: {
   execPath: string;
   appImagePath?: string | null;
-  portableExecutableDirectory?: string | null;
 }) => {
-  if (options.portableExecutableDirectory && path.isAbsolute(options.portableExecutableDirectory)) {
-    return path.normalize(options.portableExecutableDirectory);
-  }
-
   if (options.appImagePath && path.isAbsolute(options.appImagePath)) {
     return path.dirname(path.resolve(options.appImagePath));
   }
@@ -48,7 +43,6 @@ export const resolvePortableUserDataPath = (options: {
   execPath: string;
   appImagePath?: string | null;
   isPackaged: boolean;
-  portableExecutableDirectory?: string | null;
 }) => {
   if (!options.isPackaged) {
     return null;

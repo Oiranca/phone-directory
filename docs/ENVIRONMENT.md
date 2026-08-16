@@ -84,22 +84,20 @@ Set to a non-empty string by most CI providers (GitHub Actions, CircleCI, etc.).
 Packaged builds are always portable. They derive `<USB_ROOT>/portable-data` from the directly
 opened platform executable; no environment variable activates portable mode.
 
-### PORTABLE_EXECUTABLE_DIR
-
-Set internally by electron-builder's Windows `portable` executable to the directory containing
-`HospiAgenda.exe`. The main process uses it to locate `<USB_ROOT>/portable-data` after the
-single-file executable extracts its runtime to a temporary directory.
-
-- **Type:** absolute path string
-- **Default:** unset outside the Windows portable runtime
-- **Set by:** electron-builder runtime — do not set manually
-
----
-
 ## E2E-Only
 
 Variables consumed exclusively by the Playwright E2E test harness. They are injected by the
 test runner and must never be set in production or developer `.env` files.
+
+### USB_IMPORT_FIXTURE_ROOT
+
+Opt-in path to an existing USB `portable-data/data` directory for the Vitest JSON import
+integration test. When unset, that hardware-dependent test is skipped; normal test runs do
+not require a mounted USB.
+
+- **Type:** absolute directory path
+- **Default:** unset
+- **Example:** `USB_IMPORT_FIXTURE_ROOT=/Volumes/Agenda/portable-data/data`
 
 ### ELECTRON_E2E
 

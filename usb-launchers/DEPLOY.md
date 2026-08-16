@@ -23,8 +23,8 @@ The directory must contain `contacts.json` and `beepers.json`. An optional
 without `--data-dir` remain blank and create their data on first launch.
 
 The command runs typecheck, tests, the production build, platform packaging,
-and USB package staging. Windows uses electron-builder's single-file `portable`
-target; macOS and Linux use unpacked application bundles. The copy-ready output is:
+and USB package staging. Windows stages the unpacked x64 runtime directly at
+the USB root; macOS and Linux use unpacked application bundles. The copy-ready output is:
 
 ```bash
 dist-portable/usb-package/
@@ -61,6 +61,8 @@ The release package includes the platform executable and `README.txt`:
 ```
 <USB_ROOT>/
 ├── HospiAgenda.exe     (Windows)
+├── resources/          (Windows runtime; keep beside the EXE)
+├── *.dll / *.pak       (Windows runtime; keep beside the EXE)
 ├── mac*/HospiAgenda.app (macOS)
 ├── linux-unpacked/hospiagenda (Linux)
 ├── launch.sh           (Linux FUSE-less fallback only)
@@ -81,6 +83,8 @@ A fully populated multi-platform drive looks like this:
 ```
 USB_ROOT/
 ├── HospiAgenda.exe
+├── resources/
+├── *.dll / *.pak
 ├── mac/
 │   └── HospiAgenda.app/
 ├── mac-arm64/
@@ -109,6 +113,7 @@ USB_ROOT/
       settings.json
     backups/
   ```
-- Every packaged executable derives `<USB_ROOT>/portable-data` automatically. No launcher environment variables are required.
+- Every packaged executable derives `<USB_ROOT>/portable-data` from its real executable location. No launcher environment variables are required.
+- On Windows, `HospiAgenda.exe`, `resources/`, DLLs, and PAK files form one runtime; do not move the EXE away from them.
 - To back up user data, copy the `portable-data/` folder to a safe location.
 - For the release checklist and operator handoff steps, see [`../docs/USB_RELEASE_HANDOFF_CHECKLIST.md`](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).

@@ -94,8 +94,8 @@ const renderPage = () =>
   );
 
 // The "Importar" card is now a single button. Clicking it opens the
-// pre-selection safety confirmation (generic — covers both the JSON
-// full-replace and the CSV preview outcomes) before pickAndImportDataset()
+// pre-selection safety confirmation (covers typed JSON imports and CSV
+// preview outcomes) before pickAndImportDataset()
 // is actually invoked. Tests drive that two-click sequence through this helper.
 const openImportPicker = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Importar" }));
@@ -219,7 +219,7 @@ describe("DataManagementSection (Configuración data section)", () => {
         }),
         // The component only calls pickAndImportDataset() — default to
         // the CSV-preview flow since most tests exercise it. Tests that need the
-        // JSON full-replace flow override this per-test with a "json-import" kind.
+        // JSON flows override this per-test with their schema-specific kind.
         pickAndImportDataset: vi.fn().mockResolvedValue({
           kind: "csv-preview",
           preview: { ...defaultCsvPreview }
@@ -274,18 +274,17 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(importBtn.className).toContain("focus-ring");
   });
 
-  it("shows the shortened Import card copy (accurate format list including JSON, no full outcome explainer)", async () => {
+  it("explains the supported imported data and formats", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     expect(
-      screen.getByText("Selecciona un archivo para importar. Se generará una copia de seguridad automática.")
+      screen.getByText("Importa agenda, buscas o configuración. Los datos reemplazados se respaldan antes.")
     ).toBeInTheDocument();
     // pickAndImportDataset's native dialog filter also accepts .json
     // (it doubles as the backup-restore entry point) — the visible format
     // list must say so, otherwise the restore path looks unsupported.
     expect(screen.getByText("Formatos admitidos: JSON, CSV, ODS, XLS, XLSX")).toBeInTheDocument();
-    expect(screen.queryByText(/reemplaza los datos/)).not.toBeInTheDocument();
   });
 
   it("removes the 'Guardar la copia en otra carpeta' secondary link from the backup card", async () => {
@@ -354,6 +353,51 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
+  });
+
+  it("imports a beepers JSON dataset through the unified picker", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "beepers-import",
+      recordCount: 0,
+      importedRecordCount: 231
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Buscas importadas: 231.")).toBeInTheDocument();
+  });
+
+  it("imports settings while keeping the current contacts loaded", async () => {
+    const importedSettings = {
+      ...editableSettings,
+      editorName: "Configuración importada",
+      ui: {
+        ...editableSettings.ui,
+        showInactiveByDefault: true
+      }
+    };
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "settings-import",
+      settings: importedSettings
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+
+    await waitFor(() => {
+      expect(useAppStore.getState().settings?.editorName).toBe("Configuración importada");
+    });
+    expect(useAppStore.getState().contacts?.records).toHaveLength(defaultContacts.records.length);
+    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2);
+    expect(
+      await screen.findByText("Configuración importada. Las rutas portables del USB se han conservado.")
+    ).toBeInTheDocument();
   });
 
   it("shows a cancellation toast when the file dialog is dismissed", async () => {

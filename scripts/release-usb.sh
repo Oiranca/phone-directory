@@ -260,7 +260,7 @@ pnpm run test:e2e
 
 log "Building portable app artifact"
 case "$PLATFORM" in
-  win) pnpm exec electron-builder --win portable --x64 ;;
+  win) pnpm exec electron-builder --win --x64 --dir ;;
   mac) pnpm exec electron-builder --mac --dir ;;
   linux) pnpm exec electron-builder --linux --dir ;;
 esac
@@ -289,6 +289,19 @@ copy_required() {
   cp -R "$source" "$target"
 }
 
+copy_directory_contents_required() {
+  local source="$1"
+  local target="$2"
+
+  if [[ ! -d "$source" ]]; then
+    echo "Missing expected build directory: $source" >&2
+    exit 1
+  fi
+
+  mkdir -p "$target"
+  cp -R "$source/." "$target/"
+}
+
 copy_linux_appimage() {
   local version
   local source
@@ -303,7 +316,7 @@ copy_linux_appimage() {
 
 case "$PLATFORM" in
   win)
-    copy_required "$DIST_ROOT/HospiAgenda.exe" "$PACKAGE_ROOT/HospiAgenda.exe"
+    copy_directory_contents_required "$DIST_ROOT/win-unpacked" "$PACKAGE_ROOT"
     ;;
   mac)
     if [[ -d "$DIST_ROOT/mac" ]]; then

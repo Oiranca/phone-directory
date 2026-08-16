@@ -111,11 +111,9 @@ const findPackagedExecutable = async () => {
     return findMacExecutable();
   }
   if (targetPlatform === "win") {
-    const portableExecutable = path.join(distRootDir, "HospiAgenda.exe");
-    if (!(await pathExists(portableExecutable))) {
-      throw new Error("No packaged Windows portable executable found at dist-portable/HospiAgenda.exe");
-    }
-    return portableExecutable;
+    return findFirstExecutable(path.join(distRootDir, "win-unpacked"), (name) =>
+      name.toLowerCase() === "hospiagenda.exe"
+    );
   }
   return findFirstExecutable(path.join(distRootDir, "linux-unpacked"), (name) =>
     ["hospiagenda", "phone-directory"].includes(name.toLowerCase())
@@ -133,7 +131,6 @@ const executablePath = await findPackagedExecutable();
 const userDataPath = path.join(distRootDir, "portable-data");
 const directLaunchEnv = { ...process.env };
 delete directLaunchEnv.ELECTRON_PORTABLE_ROOT_PATH;
-delete directLaunchEnv.PORTABLE_EXECUTABLE_DIR;
 delete directLaunchEnv.APPIMAGE;
 let electronApp;
 

@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableImportedBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
 import { ensurePrivateDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
+import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
 
@@ -76,10 +78,8 @@ const createUniqueImportedId = (existingIds: Set<string>): string => {
   return candidate;
 };
 
-// NOTE: beepers.json is stored in the managed data directory alongside contacts.json but is
-// currently outside the backup/restore scope. AppDataService backups only cover contacts.json.
-// If backup coverage for pager-registry data is needed in the future, this service will need
-// to be wired into the backup pipeline.
+// beepers.json is stored beside contacts.json. Whole-dataset JSON imports create
+// their own beepers-before-import backup; contact backups remain independent.
 export class BeepersService {
   private writeQueue: Promise<void> = Promise.resolve();
 
@@ -150,6 +150,97 @@ export class BeepersService {
   async list(): Promise<BeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.records;
+  }
+
+  private async createImportBackup(
+    dataset: BeepersDataset,
+    backupDirectoryPath: string
+  ): Promise<string> {
+    const errorMessage = "No se pudo crear la copia de seguridad de las buscas.";
+    await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage, true);
+    await ensurePrivateDirectory(backupDirectoryPath);
+    await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage);
+    const canonicalBackupDirectory = await fs.realpath(backupDirectoryPath);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const backupPath = path.join(
+        canonicalBackupDirectory,
+        `beepers-before-import-${timestamp}-${randomUUID().slice(0, 8)}.json`
+      );
+      let handle: fs.FileHandle | undefined;
+
+      try {
+        handle = await fs.open(backupPath, "wx", 0o600);
+        await handle.writeFile(JSON.stringify(dataset, null, 2), "utf8");
+        await handle.sync();
+        await handle.close();
+        return backupPath;
+      } catch (error) {
+        await handle?.close().catch(() => undefined);
+        await fs.unlink(backupPath).catch(() => undefined);
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error("No se pudo generar un nombre único para la copia de seguridad de las buscas.");
+  }
+
+  private async pruneImportBackups(backupDirectoryPath: string, retentionCount: number): Promise<void> {
+    const errorMessage = "No se pudieron rotar las copias de seguridad de las buscas.";
+    await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage);
+    const canonicalBackupDirectory = await fs.realpath(backupDirectoryPath);
+    const entries = await fs.readdir(canonicalBackupDirectory, { withFileTypes: true });
+    const backups = await Promise.all(
+      entries
+        .filter((entry) =>
+          entry.isFile() && entry.name.startsWith("beepers-before-import-") && entry.name.endsWith(".json")
+        )
+        .map(async (entry) => {
+          const filePath = path.join(canonicalBackupDirectory, entry.name);
+          const stats = await fs.stat(filePath);
+          return { filePath, createdAt: stats.birthtimeMs > 1000 ? stats.birthtimeMs : stats.mtimeMs };
+        })
+    );
+
+    backups.sort((left, right) =>
+      right.createdAt - left.createdAt || right.filePath.localeCompare(left.filePath)
+    );
+    await Promise.all(backups.slice(retentionCount).map((backup) => fs.unlink(backup.filePath)));
+  }
+
+  async importDataset(
+    dataset: BeepersDataset,
+    options: { backupDirectoryPath: string; retentionCount: number }
+  ): Promise<{ recordCount: number; importedRecordCount: number }> {
+    return this.enqueueWrite(async () => {
+      const parsed = beepersDatasetSchema.parse(dataset);
+      const totalRecords = parsed.records.length + parsed.importedRecords.length;
+
+      if (totalRecords > MAX_SPREADSHEET_IMPORT_ROWS) {
+        throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} buscas.`);
+      }
+
+      const current = await this.readDataset();
+      const backupDirectoryPath = options.backupDirectoryPath;
+      await this.createImportBackup(current, backupDirectoryPath);
+      await this.writeDataset(parsed);
+
+      try {
+        await this.pruneImportBackups(backupDirectoryPath, options.retentionCount);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[BackupRetention] Failed to prune beepers-before-import-* backups — ${errMsg}`);
+      }
+
+      return {
+        recordCount: parsed.records.length,
+        importedRecordCount: parsed.importedRecords.length
+      };
+    });
   }
 
   async add(payload: EditableBeeperRecord): Promise<BeeperRecord> {
