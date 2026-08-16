@@ -96,11 +96,12 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
   const pushToast = useCallback((toast: ToastInput) => {
     const id = nextToastId.current++;
     const durationMs = toast.durationMs ?? DEFAULT_DURATION_MS;
+    const isPersistentAlert = (toast.type === "error" || toast.type === "warning") && toast.durationMs === undefined;
 
     setToasts((current) => [
       ...current,
       {
-        durationMs: toast.type === "error" || toast.type === "warning" ? undefined : durationMs,
+        durationMs: isPersistentAlert ? undefined : durationMs,
         id,
         type: toast.type ?? "info",
         title: toast.title,
@@ -108,7 +109,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
       }
     ]);
 
-    if (toast.type === "error" || toast.type === "warning") {
+    if (isPersistentAlert) {
       return;
     }
 

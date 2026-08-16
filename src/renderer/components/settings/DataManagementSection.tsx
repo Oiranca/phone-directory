@@ -234,7 +234,8 @@ export const DataManagementSection = () => {
       if (preview.invalidRowCount > 0) {
         pushToast({
           type: "warning",
-          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`
+          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`,
+          durationMs: 4000
         });
       } else if (unresolvedCount > 0) {
         // Item 10: "Todo listo" is contradictory when conflicts still need resolving.

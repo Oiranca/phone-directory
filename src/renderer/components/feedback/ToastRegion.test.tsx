@@ -85,6 +85,17 @@ describe("ToastRegion", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 
+  it("auto-dismisses a warning when an explicit duration is provided", () => {
+    vi.useFakeTimers();
+    renderWithProvider({ message: "Aviso temporal", type: "warning", durationMs: 4000 });
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    expect(screen.getByText("Aviso temporal")).toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(4001); });
+
+    expect(screen.queryByText("Aviso temporal")).not.toBeInTheDocument();
+  });
+
   it("empty region renders no ARIA landmark when no toasts", () => {
     render(<ToastProvider><div /></ToastProvider>);
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
