@@ -70,6 +70,7 @@ const EXPECTED_METHODS = [
   "updateBeeper",
   "deleteBeeper",
   "listImportedBeepers",
+  "updateImportedBeeper",
   "detectDuplicates",
   "mergeContacts",
   "onAutoBackupFailure"
@@ -267,6 +268,9 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
     });
     it("listImportedBeepers → beepers:list-imported", async () => {
       await expectChannel("listImportedBeepers", BEEPERS_CHANNELS.listImported);
+    });
+    it("updateImportedBeeper → beepers:update-imported", async () => {
+      await expectChannel("updateImportedBeeper", BEEPERS_CHANNELS.updateImported, "ibsc_aabbccdd", { deviceNumber: "7182", department: "Esterilización" });
     });
   });
 

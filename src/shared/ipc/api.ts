@@ -28,7 +28,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
-import type { BeeperRecord, EditableBeeperRecord, ImportedBeeperRecord } from "../schemas/beeper.schema.js";
+import type { BeeperRecord, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../schemas/beeper.schema.js";
 import type { MergeContactsOverrides } from "../schemas/merge-contacts.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
@@ -76,8 +76,9 @@ export interface HospitalDirectoryApi {
   updateBeeper: (id: string, record: EditableBeeperRecord) => Promise<BeeperRecord>;
   deleteBeeper: (id: string) => Promise<void>;
 
-  // Beepers — ODS-imported (read-only from renderer side)
+  // Beepers — ODS-imported
   listImportedBeepers: () => Promise<ImportedBeeperRecord[]>;
+  updateImportedBeeper: (id: string, record: EditableImportedBeeperRecord) => Promise<ImportedBeeperRecord>;
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;

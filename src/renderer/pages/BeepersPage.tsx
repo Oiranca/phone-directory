@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { BeeperRecord, EditableBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
+import type { BeeperRecord, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -21,6 +21,18 @@ const SHIFT_LABELS: Record<string, string> = {
 // BEEPER_SHIFTS.
 const SHIFT_OPTIONS = BEEPER_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));
 
+const EditIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487 19.5 7.125M6.75 20.25H3.75v-3L15.878 5.122a1.864 1.864 0 0 1 2.637 0l.363.363a1.864 1.864 0 0 1 0 2.637L6.75 20.25Z" />
+  </svg>
+);
+
+const DeleteIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 7.5h12m-10.5 0 .75 12h7.5l.75-12M9.75 7.5V4.875h4.5V7.5" />
+  </svg>
+);
+
 const emptyForm = (): EditableBeeperRecord => ({
   deviceNumber: "",
   assignedTo: "",
@@ -39,6 +51,7 @@ export const BeepersPage = () => {
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingImportedId, setEditingImportedId] = useState<string | null>(null);
   const [formData, setFormData] = useState<EditableBeeperRecord>(emptyForm());
   const [formError, setFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -73,7 +86,7 @@ export const BeepersPage = () => {
   // `when` combines showForm with editingId so switching from "create" to
   // "edit" (or vice versa) while the form stays open re-triggers focus, not
   // just the initial open — see useFocusOnMount's docstring.
-  useFocusOnMount(firstFieldRef, showForm && (editingId ?? "new"));
+  useFocusOnMount(firstFieldRef, showForm && (editingId ?? editingImportedId ?? "new"));
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -103,6 +116,7 @@ export const BeepersPage = () => {
 
   const handleCreateNew = () => {
     setEditingId(null);
+    setEditingImportedId(null);
     setFormData(emptyForm());
     setFormError("");
     setShowForm(true);
@@ -110,6 +124,7 @@ export const BeepersPage = () => {
 
   const handleEdit = (record: BeeperRecord) => {
     setEditingId(record.id);
+    setEditingImportedId(null);
     setFormData({
       deviceNumber: record.deviceNumber,
       assignedTo: record.assignedTo,
@@ -122,10 +137,25 @@ export const BeepersPage = () => {
     setShowForm(true);
   };
 
+  const handleEditImported = (record: ImportedBeeperRecord) => {
+    setEditingId(null);
+    setEditingImportedId(record.id);
+    setFormData({
+      ...emptyForm(),
+      deviceNumber: record.deviceNumber,
+      assignedTo: record.name ?? record.holderType ?? "",
+      department: record.department,
+      role: record.category ?? ""
+    });
+    setFormError("");
+    setShowForm(true);
+  };
+
   const handleCancel = () => {
     if (isSaving) return;
     setShowForm(false);
     setEditingId(null);
+    setEditingImportedId(null);
     setFormError("");
   };
 
@@ -135,7 +165,16 @@ export const BeepersPage = () => {
     setFormError("");
     setIsSaving(true);
     try {
-      if (editingId) {
+      if (editingImportedId) {
+        const importedPayload: EditableImportedBeeperRecord = {
+          deviceNumber: formData.deviceNumber,
+          assignedTo: formData.assignedTo,
+          department: formData.department,
+          role: formData.role
+        };
+        const updated = await window.hospitalDirectory.updateImportedBeeper(editingImportedId, importedPayload);
+        setImportedRecords((prev) => prev.map((record) => (record.id === editingImportedId ? updated : record)));
+      } else if (editingId) {
         const updated = await window.hospitalDirectory.updateBeeper(editingId, formData);
         setRecords((prev) => prev.map((r) => (r.id === editingId ? updated : r)));
       } else {
@@ -144,11 +183,12 @@ export const BeepersPage = () => {
       }
       setShowForm(false);
       setEditingId(null);
+      setEditingImportedId(null);
     } catch (err) {
       setFormError(
         toCompactToastMessage(
           err,
-          editingId ? "Error al actualizar la busca." : "Error al crear la busca."
+          editingId || editingImportedId ? "Error al actualizar la busca." : "Error al crear la busca."
         )
       );
     } finally {
@@ -227,7 +267,7 @@ export const BeepersPage = () => {
                 data-page-search
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Número, asignado, departamento, rol, titular u hoja ODS…"
+                placeholder="Número, titular, departamento o rol…"
                 type="search"
                 title="Buscar buscas — pulsa / para enfocar"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
@@ -260,10 +300,10 @@ export const BeepersPage = () => {
           data-keyboard-submit
           onSubmit={(e) => { if (!isSaving) void handleSubmit(e); }}
           className="rounded-3xl bg-white p-6 shadow-panel"
-          aria-label={editingId ? "Editar busca" : "Nueva busca"}
+          aria-label={editingId || editingImportedId ? "Editar busca" : "Nueva busca"}
         >
           <h3 className="mb-5 text-lg font-semibold text-scs-blueDark">
-            {editingId ? "Editar busca" : "Nueva busca"}
+            {editingId || editingImportedId ? "Editar busca" : "Nueva busca"}
           </h3>
           {formError && <StatusBanner type="error" message={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -283,12 +323,12 @@ export const BeepersPage = () => {
             </div>
             <div>
               <label htmlFor="form-assigned-to" className="mb-2 block text-sm font-medium text-slate-700">
-                Asignado a <span aria-hidden="true" className="text-red-600">*</span>
+                Asignado a / Titular {!editingImportedId && <span aria-hidden="true" className="text-red-600">*</span>}
               </label>
               <input
                 id="form-assigned-to"
                 type="text"
-                required
+                required={!editingImportedId}
                 value={formData.assignedTo}
                 onChange={(e) => setField("assignedTo", e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
@@ -309,38 +349,42 @@ export const BeepersPage = () => {
             </div>
             <div>
               <label htmlFor="form-role" className="mb-2 block text-sm font-medium text-slate-700">
-                Rol <span aria-hidden="true" className="text-red-600">*</span>
+                Rol {!editingImportedId && <span aria-hidden="true" className="text-red-600">*</span>}
               </label>
               <input
                 id="form-role"
                 type="text"
-                required
+                required={!editingImportedId}
                 value={formData.role}
                 onChange={(e) => setField("role", e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            <div>
-              <SelectField
-                id="form-shift"
-                label="Turno"
-                value={formData.shift}
-                onChange={(value) => setField("shift", value as EditableBeeperRecord["shift"])}
-                options={SHIFT_OPTIONS}
-              />
-            </div>
-            <div>
-              <label htmlFor="form-group" className="mb-2 block text-sm font-medium text-slate-700">
-                Grupo
-              </label>
-              <input
-                id="form-group"
-                type="text"
-                value={formData.group ?? ""}
-                onChange={(e) => setField("group", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
-              />
-            </div>
+            {!editingImportedId && (
+              <>
+                <div>
+                  <SelectField
+                    id="form-shift"
+                    label="Turno"
+                    value={formData.shift}
+                    onChange={(value) => setField("shift", value as EditableBeeperRecord["shift"])}
+                    options={SHIFT_OPTIONS}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="form-group" className="mb-2 block text-sm font-medium text-slate-700">
+                    Grupo
+                  </label>
+                  <input
+                    id="form-group"
+                    type="text"
+                    value={formData.group ?? ""}
+                    onChange={(e) => setField("group", e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                  />
+                </div>
+              </>
+            )}
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <button
@@ -357,7 +401,7 @@ export const BeepersPage = () => {
               disabled={isSaving}
               className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
             >
-              {isSaving ? "Guardando…" : editingId ? "Guardar cambios" : "Crear busca"}
+              {isSaving ? "Guardando…" : editingId || editingImportedId ? "Guardar cambios" : "Crear busca"}
             </button>
           </div>
         </form>
@@ -393,12 +437,6 @@ export const BeepersPage = () => {
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Rol
                   </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Turno / Origen
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Grupo / Hoja
-                  </th>
                   <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Acciones
                   </th>
@@ -411,31 +449,25 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-slate-700">{record.assignedTo}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="px-4 py-3 text-slate-600">{record.role}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {SHIFT_LABELS[record.shift] ?? record.shift}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{record.group ?? "—"}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => !isSaving && handleEdit(record)}
                           disabled={isSaving}
-                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
+                          className="focus-ring inline-flex size-11 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
                           aria-label={`Editar busca ${record.deviceNumber}`}
                         >
-                          Editar
+                          <EditIcon />
                         </button>
                         <button
                           type="button"
                           onClick={() => !isSaving && handleDeleteClick(record)}
                           disabled={isSaving}
-                          className="focus-ring rounded-lg px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                          className="focus-ring inline-flex size-11 items-center justify-center rounded-full text-red-700 transition hover:bg-red-50 disabled:opacity-60"
                           aria-label={`Eliminar busca ${record.deviceNumber}`}
                         >
-                          Eliminar
+                          <DeleteIcon />
                         </button>
                       </div>
                     </td>
@@ -447,13 +479,17 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="px-4 py-3 text-slate-600">{record.category ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                        ODS
-                      </span>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => !isSaving && handleEditImported(record)}
+                        disabled={isSaving}
+                        className="focus-ring inline-flex size-11 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
+                        aria-label={`Editar busca ${record.deviceNumber}`}
+                      >
+                        <EditIcon />
+                      </button>
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{record.sourceSheet}</td>
-                    <td className="px-4 py-3 text-right" />
                   </tr>
                 ))}
               </tbody>

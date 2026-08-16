@@ -55,6 +55,7 @@ const API_METHOD_MAP: Record<keyof HospitalDirectoryApi, true> = {
   updateBeeper:          true,
   deleteBeeper:          true,
   listImportedBeepers:   true,
+  updateImportedBeeper:  true,
   detectDuplicates:      true,
   mergeContacts:         true,
   onAutoBackupFailure:   true
@@ -189,6 +190,7 @@ describe("Renderer mock helper — typed as HospitalDirectoryApi", () => {
       updateBeeper:        vi.fn(),
       deleteBeeper:        vi.fn(),
       listImportedBeepers: vi.fn(),
+      updateImportedBeeper: vi.fn(),
       detectDuplicates:    vi.fn(),
       mergeContacts:       vi.fn(),
       onAutoBackupFailure: vi.fn().mockReturnValue(() => undefined)

@@ -44,7 +44,8 @@ export const BEEPERS_CHANNELS = {
   add:           "beepers:add",
   update:        "beepers:update",
   remove:        "beepers:delete",
-  listImported:  "beepers:list-imported"
+  listImported:  "beepers:list-imported",
+  updateImported:"beepers:update-imported"
 } as const;
 
 export const PUSH_CHANNELS = {

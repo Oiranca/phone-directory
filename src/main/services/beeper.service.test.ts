@@ -398,6 +398,114 @@ describe("BeepersService — importFromOds + listImported", () => {
     expect(imported).toEqual([]);
   });
 
+  it("updateImported — persists editable fields and preserves ODS traceability", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    await service.importFromOds({
+      records: [{
+        deviceNumber: "7182",
+        department: "Esterilización",
+        category: "Celador/a",
+        sourceSheet: "Buscas_Celadores",
+        sourceRow: 4
+      }],
+      parsedCellCount: 1,
+      skippedRowCount: 0
+    });
+    const [record] = await service.listImported();
+    const updated = await service.updateImported(record!.id, {
+      deviceNumber: "7183",
+      assignedTo: "Carlos",
+      department: "Esterilización Central",
+      role: "Celador/a"
+    });
+
+    expect(updated).toMatchObject({
+      id: record!.id,
+      deviceNumber: "7183",
+      name: "Carlos",
+      department: "Esterilización Central",
+      category: "Celador/a",
+      sourceSheet: "Buscas_Celadores",
+      sourceRow: 4
+    });
+    expect(await service.listImported()).toEqual([updated]);
+  });
+
+  it("updateImported — persists role edits for legacy holder-type rows", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    await service.importFromOds({
+      records: [{
+        deviceNumber: "7321",
+        department: "Anestesia",
+        holderType: "Principal",
+        sourceSheet: "Buscas_Facultativos",
+        sourceRow: 2
+      }],
+      parsedCellCount: 1,
+      skippedRowCount: 0
+    });
+    const [record] = await service.listImported();
+    const updated = await service.updateImported(record!.id, {
+      deviceNumber: "7321",
+      assignedTo: "Principal",
+      department: "Anestesia",
+      role: "Médico/a"
+    });
+
+    expect(updated.holderType).toBe("Principal");
+    expect(updated.category).toBe("Médico/a");
+  });
+
+  it("importFromOds — preserves manual corrections for the same source row", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const sourceRecord = {
+      deviceNumber: "7182",
+      department: "Esterilización",
+      category: "Celador/a",
+      sourceSheet: "Buscas_Celadores",
+      sourceRow: 4
+    };
+    const siblingFromSameRow = {
+      ...sourceRecord,
+      deviceNumber: "7934"
+    };
+
+    await service.importFromOds({ records: [sourceRecord, siblingFromSameRow], parsedCellCount: 2, skippedRowCount: 0 });
+    const [original] = await service.listImported();
+    await service.updateImported(original!.id, {
+      deviceNumber: "7183",
+      assignedTo: "Carlos",
+      department: "Esterilización Central",
+      role: "Celador/a"
+    });
+
+    await service.importFromOds({ records: [sourceRecord, siblingFromSameRow], parsedCellCount: 2, skippedRowCount: 0 });
+    const [reimported, sibling] = await service.listImported();
+
+    expect(reimported).toMatchObject({
+      id: original!.id,
+      deviceNumber: "7183",
+      name: "Carlos",
+      department: "Esterilización Central",
+      category: "Celador/a",
+      sourceSheet: "Buscas_Celadores",
+      sourceRow: 4,
+      manuallyEdited: true
+    });
+    expect(sibling).toMatchObject({
+      deviceNumber: "7934",
+      department: "Esterilización",
+      sourceSheet: "Buscas_Celadores",
+      sourceRow: 4
+    });
+    expect(sibling!.manuallyEdited).not.toBe(true);
+  });
+
   it("importFromOds — persists imported records with ibsc_ IDs and returns count", async () => {
     const { BeepersService } = await import("./beeper.service.js");
     const service = new BeepersService();

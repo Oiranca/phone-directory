@@ -59,7 +59,17 @@ export const importedBeeperRecordSchema = z.object({
   // distinguishes the two (e.g. a department with multiple services).
   service: z.string().trim().max(255).optional(),
   sourceSheet: z.string().trim().min(1).max(255),
-  sourceRow: z.number().int().nonnegative()
+  sourceRow: z.number().int().nonnegative(),
+  sourceFingerprint: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  // Manual corrections are reapplied when the same source record is imported again.
+  manuallyEdited: z.boolean().optional()
+});
+
+export const editableImportedBeeperRecordSchema = z.object({
+  deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
+  assignedTo: z.string().trim().max(255).optional().transform((v) => v || undefined),
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255),
+  role: z.string().trim().max(255).optional().transform((v) => v || undefined)
 });
 
 export const beepersDatasetSchema = z.object({
@@ -75,4 +85,5 @@ export const beepersDatasetSchema = z.object({
 export type BeeperRecord = z.infer<typeof beeperRecordSchema>;
 export type EditableBeeperRecord = z.infer<typeof editableBeeperRecordSchema>;
 export type ImportedBeeperRecord = z.infer<typeof importedBeeperRecordSchema>;
+export type EditableImportedBeeperRecord = z.infer<typeof editableImportedBeeperRecordSchema>;
 export type BeepersDataset = z.infer<typeof beepersDatasetSchema>;

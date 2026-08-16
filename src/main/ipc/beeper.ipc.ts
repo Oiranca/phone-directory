@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import { ZodError } from "zod";
-import { editableBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
+import { editableBeeperRecordSchema, editableImportedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeepersService } from "../services/beeper.service.js";
 import { BEEPERS_CHANNELS } from "../../shared/ipc/channels.js";
 
@@ -69,6 +69,18 @@ export const registerBeepersIpc = (service: BeepersService) => {
       return await service.listImported();
     } catch (err) {
       throw toRendererError(err, BEEPERS_CHANNELS.listImported);
+    }
+  });
+
+  ipcMain.handle(BEEPERS_CHANNELS.updateImported, async (_event, id: unknown, rawPayload: unknown) => {
+    if (typeof id !== "string" || !id.trim()) {
+      throw new Error("ID de busca importada inválido.");
+    }
+    try {
+      const parsed = editableImportedBeeperRecordSchema.parse(rawPayload);
+      return await service.updateImported(id, parsed);
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.updateImported);
     }
   });
 

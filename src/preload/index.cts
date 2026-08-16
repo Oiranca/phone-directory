@@ -57,7 +57,8 @@ const BEEPERS_CHANNELS = {
   add:          "beepers:add",
   update:       "beepers:update",
   remove:       "beepers:delete",
-  listImported: "beepers:list-imported"
+  listImported: "beepers:list-imported",
+  updateImported: "beepers:update-imported"
 } as const satisfies typeof _CanonicalBeepers;
 
 const PUSH_CHANNELS = {
@@ -97,6 +98,8 @@ const api: HospitalDirectoryApi = {
     ipcRenderer.invoke(BEEPERS_CHANNELS.update, id, record) as ReturnType<HospitalDirectoryApi["updateBeeper"]>,
   deleteBeeper: (id) => ipcRenderer.invoke(BEEPERS_CHANNELS.remove, id) as ReturnType<HospitalDirectoryApi["deleteBeeper"]>,
   listImportedBeepers: () => ipcRenderer.invoke(BEEPERS_CHANNELS.listImported) as ReturnType<HospitalDirectoryApi["listImportedBeepers"]>,
+  updateImportedBeeper: (id, record) =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.updateImported, id, record) as ReturnType<HospitalDirectoryApi["updateImportedBeeper"]>,
   detectDuplicates: () =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.detectDuplicates) as ReturnType<HospitalDirectoryApi["detectDuplicates"]>,
   mergeContacts: (req) =>

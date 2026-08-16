@@ -89,6 +89,7 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
       addBeeper: vi.fn(),
       updateBeeper: vi.fn(),
       deleteBeeper: vi.fn(),
+      updateImportedBeeper: vi.fn(),
       ...overrides
     }
   });
@@ -170,8 +171,6 @@ describe("BeepersPage", () => {
       expect(screen.getByText("Ana García")).toBeInTheDocument();
       expect(screen.getByText("Urgencias")).toBeInTheDocument();
       expect(screen.getByText("Enfermera")).toBeInTheDocument();
-      expect(screen.getByText("Mañana")).toBeInTheDocument();
-      expect(screen.getByText("Equipo A")).toBeInTheDocument();
     });
   });
 
@@ -530,7 +529,7 @@ describe("BeepersPage", () => {
     expect(screen.queryByText("ODS")).not.toBeInTheDocument();
   });
 
-  it("shows imported ODS records with ODS badge in the table", async () => {
+  it("shows imported ODS records in the simplified table with edit actions", async () => {
     setupWindowApi({
       listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords)
     });
@@ -541,9 +540,40 @@ describe("BeepersPage", () => {
       expect(screen.getByText("Principal")).toBeInTheDocument();
       expect(screen.getByText("Residente")).toBeInTheDocument();
     });
-    // Both ODS badges must be present
-    const odsBadges = screen.getAllByText("ODS");
-    expect(odsBadges.length).toBe(2);
+    expect(screen.queryByRole("columnheader", { name: /Turno|Origen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Grupo|Hoja/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Editar busca 5001" })).toBeInTheDocument();
+  });
+
+  it("edits an imported ODS record from the actions column", async () => {
+    const updatedRecord: ImportedBeeperRecord = {
+      ...mockImportedRecords[0]!,
+      deviceNumber: "5009",
+      department: "Cardiología Intervencionista"
+    };
+    const updateImportedBeeper = vi.fn().mockResolvedValue(updatedRecord);
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+      updateImportedBeeper
+    });
+    renderPage();
+
+    await waitFor(() => screen.getByRole("button", { name: "Editar busca 5001" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar busca 5001" }));
+    const form = screen.getByRole("form", { name: /Editar busca/i });
+    expect(screen.queryByLabelText(/^Turno$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Grupo$/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Número de busca/i), { target: { value: "5009" } });
+    fireEvent.change(screen.getByLabelText(/Departamento/i), { target: { value: "Cardiología Intervencionista" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(updateImportedBeeper).toHaveBeenCalledWith("ibsc_00000001", expect.objectContaining({
+        deviceNumber: "5009",
+        department: "Cardiología Intervencionista"
+      }));
+      expect(screen.getByText("5009")).toBeInTheDocument();
+    });
   });
 
   it("includes imported records in the result count", async () => {
@@ -668,11 +698,11 @@ describe("BeepersPage", () => {
     });
   });
 
-  it("search label and placeholder mention ODS holder and source-sheet fields", async () => {
+  it("search label and placeholder describe visible searchable fields", async () => {
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
     const searchInput = screen.getByLabelText(/Buscar buscas/i);
     expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/titular/i));
-    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/hoja ods/i));
+    expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/departamento/i));
   });
 });

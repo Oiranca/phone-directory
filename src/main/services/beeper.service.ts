@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
-import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
-import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
+import { createHash } from "node:crypto";
+import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableImportedBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
+import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
 import { ensurePrivateDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
@@ -15,6 +16,19 @@ const emptyDataset = (): BeepersDataset => ({
 });
 
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
+const buildImportedSourceFingerprint = (record: Omit<ImportedBeeperRecord, "id">): string =>
+  createHash("sha256")
+    .update(JSON.stringify([
+      record.sourceSheet.trim().toLowerCase(),
+      record.sourceRow,
+      normalizeDeviceNumber(record.deviceNumber),
+      record.department.trim().toLowerCase(),
+      record.holderType?.trim().toLowerCase() ?? "",
+      record.name?.trim().toLowerCase() ?? "",
+      record.category?.trim().toLowerCase() ?? "",
+      record.service?.trim().toLowerCase() ?? ""
+    ]))
+    .digest("hex");
 
 const assertUniqueDeviceNumber = (records: BeeperRecord[], deviceNumber: string, excludeId?: string): void => {
   const normalized = normalizeDeviceNumber(deviceNumber);
@@ -189,6 +203,44 @@ export class BeepersService {
     return dataset.importedRecords ?? [];
   }
 
+  async updateImported(id: string, payload: EditableImportedBeeperRecord): Promise<ImportedBeeperRecord> {
+    return this.enqueueWrite(async () => {
+      const parsed = editableImportedBeeperRecordSchema.parse(payload);
+      const dataset = await this.readDataset();
+      const importedRecords = dataset.importedRecords ?? [];
+      const index = importedRecords.findIndex((record) => record.id === id);
+
+      if (index === -1) {
+        throw new Error("No se encontró la busca importada solicitada.");
+      }
+
+      const current = importedRecords[index]!;
+      const usesNamedLayout = current.name !== undefined || current.category !== undefined || current.holderType === undefined;
+
+      if (!usesNamedLayout && !parsed.assignedTo) {
+        throw new Error("El titular de la busca es obligatorio.");
+      }
+
+      const updatedRecord = importedBeeperRecordSchema.parse({
+        ...current,
+        deviceNumber: parsed.deviceNumber,
+        department: parsed.department,
+        sourceFingerprint: current.sourceFingerprint ?? buildImportedSourceFingerprint(current),
+        manuallyEdited: true,
+        ...(usesNamedLayout
+          ? { name: parsed.assignedTo, category: parsed.role }
+          : { holderType: parsed.assignedTo, category: parsed.role })
+      });
+      const nextImportedRecords = importedRecords.map((record, recordIndex) =>
+        recordIndex === index ? updatedRecord : record
+      );
+      const nextDataset = beepersDatasetSchema.parse({ ...dataset, importedRecords: nextImportedRecords });
+
+      await this.writeDataset(nextDataset);
+      return updatedRecord;
+    });
+  }
+
   /**
    * Replaces all ODS-imported beeper records with the result of a fresh parse.
    * Existing manually-managed records (in `records`) are untouched.
@@ -206,11 +258,35 @@ export class BeepersService {
       }
 
       const dataset = await this.readDataset();
-      const existingIds = new Set<string>();
+      const editedBySource = new Map(
+        (dataset.importedRecords ?? [])
+          .filter((record): record is ImportedBeeperRecord & { sourceFingerprint: string } =>
+            record.manuallyEdited === true && record.sourceFingerprint !== undefined
+          )
+          .map((record) => [record.sourceFingerprint, record] as const)
+      );
+      const existingIds = new Set(Array.from(editedBySource.values(), (record) => record.id));
 
       const importedRecords: ImportedBeeperRecord[] = parseResult.records.map((raw) => {
+        const sourceFingerprint = buildImportedSourceFingerprint(raw);
+        const edited = editedBySource.get(sourceFingerprint);
+
+        if (edited) {
+          return importedBeeperRecordSchema.parse({
+            ...raw,
+            id: edited.id,
+            deviceNumber: edited.deviceNumber,
+            department: edited.department,
+            holderType: edited.holderType,
+            name: edited.name,
+            category: edited.category,
+            sourceFingerprint,
+            manuallyEdited: true
+          });
+        }
+
         const id = createUniqueImportedId(existingIds);
-        return importedBeeperRecordSchema.parse({ ...raw, id });
+        return importedBeeperRecordSchema.parse({ ...raw, id, sourceFingerprint });
       });
 
       const nextDataset = beepersDatasetSchema.parse({

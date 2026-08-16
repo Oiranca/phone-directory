@@ -31,7 +31,8 @@ describe("registerBeepersIpc", () => {
     add: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
-    listImported: vi.fn().mockResolvedValue([])
+    listImported: vi.fn().mockResolvedValue([]),
+    updateImported: vi.fn()
   };
 
   // Dynamic import so the vi.mock above is applied before the module loads
@@ -59,7 +60,8 @@ describe("registerBeepersIpc", () => {
         "beepers:delete",
         "beepers:list",
         "beepers:list-imported",
-        "beepers:update"
+        "beepers:update",
+        "beepers:update-imported"
       ]);
     });
 
@@ -291,6 +293,36 @@ describe("registerBeepersIpc", () => {
 
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toBe("permiso denegado");
+    });
+  });
+
+  describe("updateImported channel — beepers:update-imported", () => {
+    it("rejects an invalid imported ID", async () => {
+      await expect(invoke("beepers:update-imported", "", {
+        deviceNumber: "7182",
+        department: "Esterilización"
+      })).rejects.toThrow("ID de busca importada inválido.");
+    });
+
+    it("validates and passes an imported edit to the service", async () => {
+      const payload = {
+        deviceNumber: "7182",
+        assignedTo: "Carlos",
+        department: "Esterilización",
+        role: "Celador/a"
+      };
+      serviceMock.updateImported.mockResolvedValue({
+        id: "ibsc_aabbccdd",
+        ...payload,
+        name: payload.assignedTo,
+        category: payload.role,
+        sourceSheet: "Buscas_Celadores",
+        sourceRow: 4
+      });
+
+      await invoke("beepers:update-imported", "ibsc_aabbccdd", payload);
+
+      expect(serviceMock.updateImported).toHaveBeenCalledWith("ibsc_aabbccdd", payload);
     });
   });
 });
