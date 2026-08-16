@@ -58,15 +58,5 @@
     "expires": "2027-01-14",
     "cve": null,
     "remediationPath": "Monitor jsdom for an update that pulls in ws >=8.21.0."
-  },
-  {
-    "id": "GHSA-mh99-v99m-4gvg",
-    "package": "brace-expansion",
-    "severity": "high",
-    "reason": "brace-expansion remains present through build/release tooling paths (electron-builder packaging helpers, legacy minimatch/glob/filelist chains). It is never bundled into the shipped Electron runtime. The vulnerable DoS requires attacker-influenced brace patterns reaching expand(); this project passes developer-authored packaging/file glob patterns only. The project pins compatible latest major-line releases (1.1.16, 2.1.2, 5.0.8), but GHSA-mh99-v99m-4gvg is still unresolved for the legacy 1.x/2.x major lines. Forcing brace-expansion 5.0.8 globally breaks minimatch 3 consumers with TypeError: expand is not a function, so the remaining vulnerable build-tooling-only paths are accepted until upstream parent packages migrate off minimatch 3/5 or publish compatible patches.",
-    "reviewDate": "2026-07-28",
-    "expires": "2026-10-28",
-    "cve": "CVE-2026-14257",
-    "remediationPath": "Monitor electron-builder, @electron/asar, @electron/universal, electron-winstaller, temp/rimraf/glob, and filelist for releases that remove minimatch 3/5 or support brace-expansion >=5.0.8 without API breakage."
   }
 ]

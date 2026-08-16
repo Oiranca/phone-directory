@@ -195,3 +195,10 @@ explicit anti-pattern warning below.
   user/session identity model (replacing the free-text `editorName`), a defined conflict
   resolution strategy for concurrent edits (not just import-time merge policies, which
   today only cover the CSV import flow), and a network/sync transport layer.
+# 2026-08-16 — Patch release-blocking advisories without new exceptions
+
+The USB release gate blocked on new high-severity advisories. Dependencies with
+published fixes are pinned to patched versions. Moving Electron from 40 to 43
+also removed vulnerable `extract-zip` from the resolved dependency graph. Raw
+audit now reports zero high/critical advisories; no new allowlist entry or audit
+bypass was introduced.
