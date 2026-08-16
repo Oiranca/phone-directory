@@ -61,8 +61,8 @@ fs-heavy code paths that are not meaningful inside a test runner.
 
 ### APPIMAGE
 
-Set by the AppImage launcher on Linux to the path of the `.AppImage` file. Read by the
-main process to expose the launcher path for self-update or portable-mode detection.
+Set by the AppImage runtime on Linux to the path of the `.AppImage` file. The main process
+uses its parent directory as the USB root for `portable-data`.
 
 - **Type:** absolute path string (or unset on non-AppImage platforms)
 - **Set by:** AppImage runtime — do not set manually
@@ -81,25 +81,18 @@ Set to a non-empty string by most CI providers (GitHub Actions, CircleCI, etc.).
 
 ## Release / Portable
 
-Variables used by the portable USB build to locate data outside the application bundle.
+Packaged builds are always portable. They derive `<USB_ROOT>/portable-data` from the directly
+opened platform executable; no environment variable activates portable mode.
 
-### ELECTRON_PORTABLE
+### PORTABLE_EXECUTABLE_DIR
 
-Enables portable mode. When set to a truthy value the application stores its data relative to
-the executable rather than in the OS user-data directory.
-
-- **Type:** boolean flag — truthy values: `1`, `true`
-- **Default:** unset (standard install mode)
-- **Example:** `ELECTRON_PORTABLE=1`
-
-### ELECTRON_PORTABLE_ROOT_PATH
-
-Absolute path to the portable root directory. Only meaningful when `ELECTRON_PORTABLE=1`. The
-path is trimmed; an empty or whitespace-only value is treated as unset.
+Set internally by electron-builder's Windows `portable` executable to the directory containing
+`HospiAgenda.exe`. The main process uses it to locate `<USB_ROOT>/portable-data` after the
+single-file executable extracts its runtime to a temporary directory.
 
 - **Type:** absolute path string
-- **Default:** unset
-- **Example:** `ELECTRON_PORTABLE_ROOT_PATH=/path/to/portable-root`
+- **Default:** unset outside the Windows portable runtime
+- **Set by:** electron-builder runtime — do not set manually
 
 ---
 

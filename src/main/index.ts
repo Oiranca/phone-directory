@@ -35,8 +35,7 @@ const portableUserDataPath = resolvePortableUserDataPath({
   execPath: process.execPath,
   appImagePath: process.env.APPIMAGE,
   isPackaged: app.isPackaged,
-  portableMode: env.portableMode,
-  portableRootPath: env.portableRootPath
+  portableExecutableDirectory: process.env.PORTABLE_EXECUTABLE_DIR
 });
 
 if (portableUserDataPath) {

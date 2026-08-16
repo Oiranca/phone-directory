@@ -4,95 +4,77 @@ import { resolvePortableUserDataPath } from "./portable-paths.js";
 
 const isWindows = process.platform === "win32";
 const platformPath = isWindows ? path.win32 : path.posix;
-
-const macPortableRoot = isWindows ? "C:\\HospitalUSB\\mac" : "/Volumes/HospitalUSB/mac";
-const macArm64PortableRoot = isWindows ? "C:\\HospitalUSB\\mac-arm64" : "/Volumes/HospitalUSB/mac-arm64";
-const macArm64ExecPath = platformPath.join(
-  macArm64PortableRoot,
-  "Phone Directory.app",
-  "Contents",
-  "MacOS",
-  "Phone Directory"
-);
-const macExecPath = platformPath.join(
-  macPortableRoot,
-  "Phone Directory.app",
-  "Contents",
-  "MacOS",
-  "Phone Directory"
-);
-const winPortableRoot = isWindows ? "C:\\HospitalUSB\\win-unpacked" : "/Volumes/HospitalUSB/win-unpacked";
-const winExecPath = platformPath.join(winPortableRoot, "Phone Directory.exe");
-const linuxPortableRoot = isWindows ? "C:\\USB\\linux-unpacked" : "/media/USB/linux-unpacked";
-const linuxExecPath = isWindows
-  ? "C:\\tmp\\.mount_PhoneD\\usr\\bin\\phone-directory"
-  : "/tmp/.mount_PhoneD/usr/bin/phone-directory";
-const appImagePath = platformPath.join(linuxPortableRoot, "Phone Directory.AppImage");
+const usbRoot = isWindows ? "C:\\HospitalUSB" : "/Volumes/HospitalUSB";
+const portableDataPath = platformPath.join(usbRoot, "portable-data");
 
 describe("resolvePortableUserDataPath", () => {
-  it("prefers an explicit portable root path override", () => {
+  it("uses the Windows portable executable directory when launched directly", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: macExecPath,
+        execPath: platformPath.join(usbRoot, "temporary", "HospiAgenda.exe"),
         isPackaged: true,
-        portableMode: true,
-        portableRootPath: "../shared-data"
+        portableExecutableDirectory: usbRoot
       })
-    ).toBe(platformPath.resolve(macPortableRoot, "..", "shared-data"));
+    ).toBe(portableDataPath);
   });
 
-  it("returns the executable directory for packaged portable builds", () => {
+  it("uses the USB root for a directly launched Windows unpacked executable", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: winExecPath,
+        execPath: platformPath.join(usbRoot, "win-unpacked", "HospiAgenda.exe"),
         isPackaged: true,
-        portableMode: true,
-        portableRootPath: null
+        portableExecutableDirectory: null
       })
-    ).toBe(platformPath.resolve(winPortableRoot));
+    ).toBe(portableDataPath);
   });
 
-  it("prefers the AppImage parent directory when Linux exposes APPIMAGE", () => {
+  it("uses the AppImage parent directory when launched directly", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: linuxExecPath,
-        appImagePath,
+        execPath: platformPath.join("/tmp", ".mount_Hospi", "usr", "bin", "hospiagenda"),
+        appImagePath: platformPath.join(usbRoot, "HospiAgenda.AppImage"),
         isPackaged: true,
-        portableMode: true,
-        portableRootPath: null
+        portableExecutableDirectory: null
       })
-    ).toBe(platformPath.resolve(linuxPortableRoot));
+    ).toBe(portableDataPath);
   });
 
-  it("returns the app bundle parent directory for packaged macOS portable builds", () => {
+  it.each(["mac", "mac-arm64"])(
+    "uses the USB root for a directly launched macOS app inside %s",
+    (containerName) => {
+      expect(
+        resolvePortableUserDataPath({
+          execPath: platformPath.join(
+            usbRoot,
+            containerName,
+            "HospiAgenda.app",
+            "Contents",
+            "MacOS",
+            "HospiAgenda"
+          ),
+          isPackaged: true,
+          portableExecutableDirectory: null
+        })
+      ).toBe(portableDataPath);
+    }
+  );
+
+  it("uses the USB root for a directly launched Linux unpacked executable", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: macExecPath,
+        execPath: platformPath.join(usbRoot, "linux-unpacked", "hospiagenda"),
         isPackaged: true,
-        portableMode: true,
-        portableRootPath: null
+        portableExecutableDirectory: null
       })
-    ).toBe(platformPath.resolve(macPortableRoot));
+    ).toBe(portableDataPath);
   });
 
-  it("returns the app bundle parent directory for packaged macOS arm64 portable builds", () => {
+  it("keeps Electron's default userData path during development", () => {
     expect(
       resolvePortableUserDataPath({
-        execPath: macArm64ExecPath,
-        isPackaged: true,
-        portableMode: true,
-        portableRootPath: null
-      })
-    ).toBe(platformPath.resolve(macArm64PortableRoot));
-  });
-
-  it("keeps the default Electron userData path when portable mode is inactive", () => {
-    expect(
-      resolvePortableUserDataPath({
-        execPath: winExecPath,
-        isPackaged: true,
-        portableMode: false,
-        portableRootPath: null
+        execPath: platformPath.join(usbRoot, "HospiAgenda.exe"),
+        isPackaged: false,
+        portableExecutableDirectory: usbRoot
       })
     ).toBeNull();
   });

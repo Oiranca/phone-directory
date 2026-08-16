@@ -260,7 +260,7 @@ pnpm run test:e2e
 
 log "Building portable app artifact"
 case "$PLATFORM" in
-  win) pnpm exec electron-builder --win --x64 --dir ;;
+  win) pnpm exec electron-builder --win portable --x64 ;;
   mac) pnpm exec electron-builder --mac --dir ;;
   linux) pnpm exec electron-builder --linux --dir ;;
 esac
@@ -303,8 +303,7 @@ copy_linux_appimage() {
 
 case "$PLATFORM" in
   win)
-    copy_required "$DIST_ROOT/win-unpacked" "$PACKAGE_ROOT/win-unpacked"
-    copy_required "$REPO_ROOT/usb-launchers/launch.bat" "$PACKAGE_ROOT/launch.bat"
+    copy_required "$DIST_ROOT/HospiAgenda.exe" "$PACKAGE_ROOT/HospiAgenda.exe"
     ;;
   mac)
     if [[ -d "$DIST_ROOT/mac" ]]; then
@@ -317,8 +316,6 @@ case "$PLATFORM" in
       echo "Missing expected mac build artifacts in $DIST_ROOT" >&2
       exit 1
     fi
-    copy_required "$REPO_ROOT/usb-launchers/launch.command" "$PACKAGE_ROOT/launch.command"
-    chmod +x "$PACKAGE_ROOT/launch.command"
     ;;
   linux)
     copy_required "$DIST_ROOT/linux-unpacked" "$PACKAGE_ROOT/linux-unpacked"
@@ -353,7 +350,7 @@ ${AUDIT_STATUS_LINE}
 Initial data: ${INITIAL_DATA_STATUS}
 
 Copy the contents of this directory to the USB root.
-Always start the app through the platform launcher at the USB root.
+Open the platform executable directly. It stores data in portable-data at the USB root.
 EOF
 
 # ---------------------------------------------------------------------------

@@ -129,7 +129,7 @@ run_gate_in_subshell() {
 #
 # Build a self-contained sandbox repo under TEST_FIXTURE_ROOT and echo its path.
 # The sandbox mirrors only what release-usb.sh needs: scripts/ (release script +
-# gate lib + allowlist), usb-launchers/ (all three launchers), and a package.json.
+# gate lib + allowlist), usb-launchers/ (Linux fallback + README), and package.json.
 # release-usb.sh computes REPO_ROOT from its own location, so running the sandbox
 # copy keeps all output (dist-portable/) inside the sandbox — never touching the
 # real repo.
@@ -141,10 +141,8 @@ build_sandbox_repo() {
   cp "$REPO_ROOT/scripts/lib/audit-gate.sh" "$sandbox/scripts/lib/audit-gate.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate-core.mjs" "$sandbox/scripts/lib/audit-gate-core.mjs"
   cp "$REPO_ROOT/scripts/audit-allowlist.json" "$sandbox/scripts/audit-allowlist.json"
-  # Copy ALL platform launchers so win/mac/linux paths can each be exercised.
+  # Linux retains a FUSE-less fallback. Windows and macOS launch directly.
   cp "$REPO_ROOT/usb-launchers/launch.sh" "$sandbox/usb-launchers/launch.sh"
-  cp "$REPO_ROOT/usb-launchers/launch.bat" "$sandbox/usb-launchers/launch.bat"
-  cp "$REPO_ROOT/usb-launchers/launch.command" "$sandbox/usb-launchers/launch.command"
   cp "$REPO_ROOT/usb-launchers/README.txt" "$sandbox/usb-launchers/README.txt"
   # Minimal package.json — release-usb.sh reads only .version via `node -p`.
   printf '{"name":"sandbox","version":"9.9.9"}\n' > "$sandbox/package.json"
@@ -154,10 +152,10 @@ build_sandbox_repo() {
 # Write a fake `pnpm`, `electron-builder`, and `git` into a bin dir for the
 # wrapper to use.  The fake pnpm:
 #   - `pnpm audit --json` → emits the supplied audit JSON + exit code
-#   - `pnpm exec electron-builder --<platform> --dir` → fabricates the per-platform
+#   - `pnpm exec electron-builder --<platform> ...` → fabricates the per-platform
 #     output dir(s) that release-usb.sh's copy step expects:
 #       linux → dist-portable/linux-unpacked
-#       win   → dist-portable/win-unpacked
+#       win   → dist-portable/HospiAgenda.exe
 #       mac   → dist-portable/mac AND dist-portable/mac-arm64 (dual-arch)
 #   - everything else (typecheck, test, run build) → no-op success
 # write_sandbox_bin <bindir> <sandbox> <audit_json> [audit_exit] [platform]
@@ -176,11 +174,11 @@ case "\${1:-}" in
     exit ${audit_exit}
     ;;
   exec)
-    # pnpm exec electron-builder --<platform> --dir → fabricate build artifact(s).
+    # pnpm exec electron-builder --<platform> ... → fabricate build artifact(s).
     # First VALIDATE the real argv release-usb.sh passed: it must invoke
     # electron-builder with the EXPECTED platform flag (--<expected-platform>)
-    # and --dir.  If the wrapper used the wrong builder target (e.g. --linux on
-    # the win branch) or dropped --dir, FAIL here (non-zero, diagnostic) BEFORE
+    # and the expected target. If the wrapper used the wrong builder target,
+    # FAIL here (non-zero, diagnostic) BEFORE
     # fabricating any artifacts so the e2e test goes red.  Without this, the stub
     # would fabricate artifacts from the injected platform regardless of argv and
     # mask a wrong/dropped builder target.
@@ -194,22 +192,30 @@ case "\${1:-}" in
       printf 'FAKE-PNPM: electron-builder missing expected --${platform} flag (argv: %s)\n' "\$eb_argv" >&2
       exit 91
     fi
-    if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
-      printf 'FAKE-PNPM: electron-builder missing --dir flag (argv: %s)\n' "\$eb_argv" >&2
-      exit 92
-    fi
     case "${platform}" in
       win)
-        mkdir -p '${sandbox}/dist-portable/win-unpacked'
-        printf 'fake.exe\n' > '${sandbox}/dist-portable/win-unpacked/Phone Directory.exe'
+        if ! printf '%s' "\$eb_argv" | grep -qw -- 'portable'; then
+          printf 'FAKE-PNPM: Windows electron-builder missing portable target (argv: %s)\n' "\$eb_argv" >&2
+          exit 92
+        fi
+        mkdir -p '${sandbox}/dist-portable'
+        printf 'fake.exe\n' > '${sandbox}/dist-portable/HospiAgenda.exe'
         ;;
       mac)
+        if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
+          printf 'FAKE-PNPM: macOS electron-builder missing --dir (argv: %s)\n' "\$eb_argv" >&2
+          exit 92
+        fi
         mkdir -p '${sandbox}/dist-portable/mac/Phone Directory.app/Contents/MacOS'
         printf 'fake binary\n' > '${sandbox}/dist-portable/mac/Phone Directory.app/Contents/MacOS/Phone Directory'
         mkdir -p '${sandbox}/dist-portable/mac-arm64/Phone Directory.app/Contents/MacOS'
         printf 'fake binary\n' > '${sandbox}/dist-portable/mac-arm64/Phone Directory.app/Contents/MacOS/Phone Directory'
         ;;
       *)
+        if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
+          printf 'FAKE-PNPM: Linux electron-builder missing --dir (argv: %s)\n' "\$eb_argv" >&2
+          exit 92
+        fi
         mkdir -p '${sandbox}/dist-portable/linux-unpacked'
         printf 'fake binary\n' > '${sandbox}/dist-portable/linux-unpacked/phone-directory'
         ;;
@@ -3843,14 +3849,14 @@ rm -rf "$SANDBOX90" "$BIN90"
 # --- Commit 2 (win + mac coverage): per-platform wrapper e2e -------------------
 #
 # Tests 89/90 only exercised `release-usb.sh linux`, leaving the win and mac
-# branches (launch.bat copy; launch.command copy + chmod; dual mac / mac-arm64
-# bundle handling) hidden behind a green Linux-only suite.  Tests 91–93 invoke
+# direct-executable packaging branches hidden behind a green Linux-only suite.
+# Tests 91–93 invoke
 # release-usb.sh win and mac with the same hermetic stubs, asserting both the
-# Dependency-audit manifest line AND the platform-specific launcher/bundle output
+# Dependency-audit manifest line AND the platform-specific executable/bundle output
 # produced in the sandboxed usb-package staging dir.
 
-# Test 91 (Commit2 e2e, win audited PASS): clean deps → manifest PASSED + win-unpacked + launch.bat
-printf '\nTest 91 (Commit2 e2e win): release-usb.sh win → manifest PASSED, win-unpacked + launch.bat staged\n'
+# Test 91 (Commit2 e2e, win audited PASS): clean deps → manifest PASSED + direct executable
+printf '\nTest 91 (Commit2 e2e win): release-usb.sh win → manifest PASSED + HospiAgenda.exe staged\n'
 SANDBOX91="$(build_sandbox_repo)"
 BIN91="$(mktemp -d "$TEST_FIXTURE_ROOT/bin91-XXXXXX")"
 write_sandbox_bin "$BIN91" "$SANDBOX91" "$CLEAN_JSON" 0 win
@@ -3873,21 +3879,21 @@ if [[ -f "$MANIFEST91" ]] && grep -q '^Platform: win$' "$MANIFEST91"; then
 else
   fail "Commit2 e2e win: manifest missing 'Platform: win'"
 fi
-if [[ -d "$PKG91/win-unpacked" ]]; then
-  pass "Commit2 e2e win: win-unpacked/ bundle staged into usb-package"
+if [[ -f "$PKG91/HospiAgenda.exe" ]]; then
+  pass "Commit2 e2e win: direct HospiAgenda.exe staged into usb-package"
 else
-  fail "Commit2 e2e win: win-unpacked/ missing from usb-package"
+  fail "Commit2 e2e win: HospiAgenda.exe missing from usb-package"
 fi
-if [[ -f "$PKG91/launch.bat" ]]; then
-  pass "Commit2 e2e win: launch.bat launcher staged into usb-package"
+if [[ ! -e "$PKG91/launch.bat" ]]; then
+  pass "Commit2 e2e win: obsolete launch.bat not staged"
 else
-  fail "Commit2 e2e win: launch.bat missing from usb-package"
+  fail "Commit2 e2e win: obsolete launch.bat was staged"
 fi
 assert_packaged_smoke_gate "$SANDBOX91" win "Commit2 e2e win"
 rm -rf "$SANDBOX91" "$BIN91"
 
-# Test 92 (Commit2 e2e, mac audited PASS): clean deps → manifest PASSED + dual mac bundles + launch.command (executable)
-printf '\nTest 92 (Commit2 e2e mac): release-usb.sh mac → manifest PASSED, mac + mac-arm64 + launch.command staged\n'
+# Test 92 (Commit2 e2e, mac audited PASS): clean deps → manifest PASSED + direct app bundles
+printf '\nTest 92 (Commit2 e2e mac): release-usb.sh mac → manifest PASSED + mac app bundles staged\n'
 SANDBOX92="$(build_sandbox_repo)"
 BIN92="$(mktemp -d "$TEST_FIXTURE_ROOT/bin92-XXXXXX")"
 write_sandbox_bin "$BIN92" "$SANDBOX92" "$CLEAN_JSON" 0 mac
@@ -3915,10 +3921,10 @@ if [[ -d "$PKG92/mac-arm64" ]]; then
 else
   fail "Commit2 e2e mac: mac-arm64/ bundle missing from usb-package"
 fi
-if [[ -f "$PKG92/launch.command" ]] && [[ -x "$PKG92/launch.command" ]]; then
-  pass "Commit2 e2e mac: launch.command staged and is executable (chmod +x ran)"
+if [[ ! -e "$PKG92/launch.command" ]]; then
+  pass "Commit2 e2e mac: obsolete launch.command not staged"
 else
-  fail "Commit2 e2e mac: launch.command missing or not executable in usb-package"
+  fail "Commit2 e2e mac: obsolete launch.command was staged"
 fi
 assert_packaged_smoke_gate "$SANDBOX92" mac "Commit2 e2e mac"
 rm -rf "$SANDBOX92" "$BIN92"
@@ -3947,10 +3953,10 @@ if [[ -f "$MANIFEST93" ]] && grep -qF "Dependency audit: BYPASSED — reason: $B
 else
   fail "Commit2 e2e win bypass: manifest missing BYPASSED line (got: $(cat "$MANIFEST93" 2>/dev/null || echo MISSING))"
 fi
-if [[ -f "$PKG93/launch.bat" ]]; then
-  pass "Commit2 e2e win bypass: launch.bat still staged on the bypassed win path"
+if [[ -f "$PKG93/HospiAgenda.exe" ]]; then
+  pass "Commit2 e2e win bypass: direct HospiAgenda.exe staged"
 else
-  fail "Commit2 e2e win bypass: launch.bat missing from usb-package"
+  fail "Commit2 e2e win bypass: HospiAgenda.exe missing from usb-package"
 fi
 rm -rf "$SANDBOX93" "$BIN93"
 

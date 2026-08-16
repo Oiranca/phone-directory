@@ -22,8 +22,9 @@ The directory must contain `contacts.json` and `beepers.json`. An optional
 `settings.json` is included only when it uses app-managed paths. Releases made
 without `--data-dir` remain blank and create their data on first launch.
 
-The command runs typecheck, tests, the production build, `electron-builder --dir`,
-and USB package staging. The copy-ready output is:
+The command runs typecheck, tests, the production build, platform packaging,
+and USB package staging. Windows uses electron-builder's single-file `portable`
+target; macOS and Linux use unpacked application bundles. The copy-ready output is:
 
 ```bash
 dist-portable/usb-package/
@@ -53,24 +54,24 @@ Copy the contents of `dist-portable/usb-package/` to the root of the USB drive.
 
 You do not need to include all platforms on a single drive. Include only the platforms your target users need.
 
-## Step 3 — Verify launcher files
+## Step 3 — Verify direct executables
 
-The release package includes the relevant launcher and `README.txt`:
+The release package includes the platform executable and `README.txt`:
 
 ```
 <USB_ROOT>/
-├── launch.bat          (Windows)
-├── launch.sh           (Linux)
-├── launch.command      (macOS)
-└── README.txt          (all platforms)
+├── HospiAgenda.exe     (Windows)
+├── mac*/HospiAgenda.app (macOS)
+├── linux-unpacked/hospiagenda (Linux)
+├── launch.sh           (Linux FUSE-less fallback only)
+└── README.txt
 ```
 
-On Linux and macOS, the release script marks the staged launcher executable. If the
-USB filesystem strips executable bits, restore them after copying:
+If the USB filesystem strips Linux executable bits, restore them after copying:
 
 ```bash
 chmod +x <USB_MOUNT>/launch.sh
-chmod +x <USB_MOUNT>/launch.command
+chmod +x <USB_MOUNT>/linux-unpacked/hospiagenda
 ```
 
 ## Final USB layout
@@ -79,8 +80,7 @@ A fully populated multi-platform drive looks like this:
 
 ```
 USB_ROOT/
-├── win-unpacked/
-│   └── HospiAgenda.exe
+├── HospiAgenda.exe
 ├── mac/
 │   └── HospiAgenda.app/
 ├── mac-arm64/
@@ -88,9 +88,7 @@ USB_ROOT/
 ├── linux-unpacked/
 │   └── hospiagenda
 ├── HospiAgenda.AppImage     (optional)
-├── launch.bat
 ├── launch.sh
-├── launch.command
 ├── README.txt
 ├── RELEASE_MANIFEST.txt
 └── portable-data/           (initialized releases only)
@@ -111,6 +109,6 @@ USB_ROOT/
       settings.json
     backups/
   ```
-- The launchers set both `ELECTRON_PORTABLE=1` (activates portable mode) and `ELECTRON_PORTABLE_ROOT_PATH` (points Electron userData to `<USB_ROOT>/portable-data`).
+- Every packaged executable derives `<USB_ROOT>/portable-data` automatically. No launcher environment variables are required.
 - To back up user data, copy the `portable-data/` folder to a safe location.
 - For the release checklist and operator handoff steps, see [`../docs/USB_RELEASE_HANDOFF_CHECKLIST.md`](../docs/USB_RELEASE_HANDOFF_CHECKLIST.md).

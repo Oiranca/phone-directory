@@ -1,51 +1,30 @@
-HospiAgenda -- USB Launcher Instructions
-============================================
+HospiAgenda -- USB Instructions
+================================
 
-This USB drive contains a portable build of HospiAgenda.
-Your contacts, settings, and backups are stored in a "portable-data" folder
-on this drive alongside the launcher files.
-
+This USB drive contains a portable build of HospiAgenda. The packaged app
+automatically stores contacts, buscas, settings, and backups in portable-data
+at the USB root. No launcher or installation is required.
 
 WINDOWS
 -------
-Double-click "launch.bat" in Windows Explorer, or run it from a Command Prompt.
-
-No installation required. The app will start and all data will be written to
-the portable-data folder on this drive.
-
+Double-click HospiAgenda.exe at the USB root.
 
 MACOS
 -----
-Double-click "launch.command". macOS may ask for permission the first time.
-
-If macOS blocks it with "cannot be opened because the developer cannot be verified":
-  1. Right-click (or Control-click) "launch.command"
-  2. Choose "Open" from the context menu
-  3. Click "Open" in the security dialog
-
-You may also need to make the file executable first. Open Terminal and run:
-  chmod +x /Volumes/<YourUSBName>/launch.command
-
+Open HospiAgenda.app inside mac/ (Intel) or mac-arm64/ (Apple Silicon).
+If macOS blocks the unsigned app, Control-click it, choose Open, then Open.
 
 LINUX
 -----
-Open a terminal, navigate to the USB drive, and run:
-  chmod +x launch.sh
-  ./launch.sh
+Run linux-unpacked/hospiagenda directly. If its executable bit was lost:
+  chmod +x linux-unpacked/hospiagenda
 
-The USB drive is usually mounted at /media/<YourUser>/<DriveName> or
-/run/media/<YourUser>/<DriveName>. Run "lsblk" or "df -h" to find the exact path.
-
-The launcher tries "linux-unpacked/hospiagenda" first. If that is not
-present it falls back to "HospiAgenda.AppImage" at the USB root.
-The AppImage launcher uses --appimage-extract-and-run, which extracts to /tmp
-and runs without requiring libfuse2 (needed on Ubuntu 22.04+, Fedora 37+).
-
+launch.sh remains only as a compatibility fallback for systems that cannot
+mount AppImages with FUSE. Normal launches do not require it.
 
 DATA STORAGE
 ------------
-All data is kept in a "portable-data" folder on this USB drive. Nothing is
-written to your computer's home directory or application data folders.
+All persistent data stays in portable-data on this USB drive:
 
   portable-data/
     data/
@@ -54,4 +33,4 @@ written to your computer's home directory or application data folders.
       settings.json
     backups/
 
-To back up your data, copy the "portable-data" folder to a safe location.
+To back up your data, copy portable-data to a safe location.

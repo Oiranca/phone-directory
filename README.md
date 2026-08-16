@@ -79,8 +79,7 @@ cp .env.example .env.local
 Available development variables:
 
 - `ELECTRON_OPEN_DEVTOOLS=1` opens Electron DevTools automatically in development.
-- `ELECTRON_PORTABLE=1` makes packaged builds store Electron `userData` next to the executable.
-- `ELECTRON_PORTABLE_ROOT_PATH=/absolute/path` overrides the portable data root for launcher-driven USB layouts. Relative values resolve from the packaged portable root.
+- Packaged builds automatically store Electron `userData` in `<USB_ROOT>/portable-data` when the platform executable is opened directly.
 - Linux AppImage portable runs also honor `APPIMAGE` so data stays beside the real USB-hosted `.AppImage`, not the temporary mount path.
 - Legacy portable installs without `managedPaths` metadata auto-rebase only when the old paths match the canonical `win` / `linux` / `mac` portable layout (`data/contacts.json` plus `backups`).
 - Electron `40.x` requires packaged macOS builds to enforce a macOS 12+ minimum; set Electron Builder `mac.minimumSystemVersion` to `12.0.0` so unsupported older macOS versions cannot install or launch the app.

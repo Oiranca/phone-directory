@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -112,9 +111,11 @@ const findPackagedExecutable = async () => {
     return findMacExecutable();
   }
   if (targetPlatform === "win") {
-    return findFirstExecutable(path.join(distRootDir, "win-unpacked"), (name) =>
-      name.toLowerCase().endsWith(".exe")
-    );
+    const portableExecutable = path.join(distRootDir, "HospiAgenda.exe");
+    if (!(await pathExists(portableExecutable))) {
+      throw new Error("No packaged Windows portable executable found at dist-portable/HospiAgenda.exe");
+    }
+    return portableExecutable;
   }
   return findFirstExecutable(path.join(distRootDir, "linux-unpacked"), (name) =>
     ["hospiagenda", "phone-directory"].includes(name.toLowerCase())
@@ -129,22 +130,23 @@ if (!skipBuild) {
 }
 
 const executablePath = await findPackagedExecutable();
-const workspaceRootDir = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-packaged-smoke-"));
-const userDataPath = path.join(workspaceRootDir, "user-data");
+const userDataPath = path.join(distRootDir, "portable-data");
+const directLaunchEnv = { ...process.env };
+delete directLaunchEnv.ELECTRON_PORTABLE_ROOT_PATH;
+delete directLaunchEnv.PORTABLE_EXECUTABLE_DIR;
+delete directLaunchEnv.APPIMAGE;
 let electronApp;
 
 try {
-  await fs.mkdir(userDataPath, { recursive: true });
+  await fs.rm(userDataPath, { recursive: true, force: true });
 
   electronApp = await electron.launch({
     executablePath,
     cwd: repoRootDir,
     timeout: 60_000,
     env: {
-      ...process.env,
-      ELECTRON_OPEN_DEVTOOLS: "0",
-      ELECTRON_PORTABLE: "1",
-      ELECTRON_PORTABLE_ROOT_PATH: userDataPath
+      ...directLaunchEnv,
+      ELECTRON_OPEN_DEVTOOLS: "0"
     }
   });
 
@@ -159,10 +161,16 @@ try {
     throw new Error(`Expected packaged app to load file:// renderer, got ${pageUrl}`);
   }
 
-  console.log(`[packaged-startup-smoke] PASS ${targetPlatform}: renderer loaded via file://`);
+  if (!(await pathExists(userDataPath))) {
+    throw new Error(`Direct packaged launch did not create portable data at ${userDataPath}`);
+  }
+
+  console.log(
+    `[packaged-startup-smoke] PASS ${targetPlatform}: direct executable loaded via file:// and created portable-data`
+  );
 } finally {
   if (electronApp) {
     await electronApp.close();
   }
-  await fs.rm(workspaceRootDir, { recursive: true, force: true });
+  await fs.rm(userDataPath, { recursive: true, force: true });
 }

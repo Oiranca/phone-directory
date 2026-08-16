@@ -48,7 +48,7 @@ The release script runs:
 3. `pnpm test`
 4. `pnpm run build`
 5. `pnpm run test:e2e`
-6. `electron-builder --dir` for the selected platform
+6. `electron-builder` direct-executable packaging for the selected platform
 7. Packaged startup smoke for the selected platform when it matches the host OS
 8. USB package staging under `dist-portable/usb-package/`
 
@@ -89,8 +89,8 @@ Expected USB root files vary by platform:
 
 | Platform | Required payload |
 | --- | --- |
-| Windows | `win-unpacked/`, `launch.bat`, `README.txt`, `RELEASE_MANIFEST.txt` |
-| macOS | `mac/` and/or `mac-arm64/`, `launch.command`, `README.txt`, `RELEASE_MANIFEST.txt` |
+| Windows | `HospiAgenda.exe`, `README.txt`, `RELEASE_MANIFEST.txt` |
+| macOS | `mac/` and/or `mac-arm64/`, `README.txt`, `RELEASE_MANIFEST.txt` |
 | Linux | `linux-unpacked/`, `launch.sh`, `README.txt`, `RELEASE_MANIFEST.txt` |
 
 Linux may also include `HospiAgenda.AppImage` when the build configuration produces the versioned AppImage artifact.
@@ -104,20 +104,20 @@ If the USB filesystem strips executable bits, restore them after copying:
 
 ```bash
 chmod +x <USB_MOUNT>/launch.sh
-chmod +x <USB_MOUNT>/launch.command
+chmod +x <USB_MOUNT>/linux-unpacked/hospiagenda
 ```
 
 ## 4. Smoke test from USB
 
-Run the launcher from the USB root on the target platform:
+Open the packaged application directly:
 
-- Windows: double-click `launch.bat`
-- macOS: double-click `launch.command`
-- Linux: run `./launch.sh`
+- Windows: double-click `HospiAgenda.exe`
+- macOS: open `mac/HospiAgenda.app` (Intel) or `mac-arm64/HospiAgenda.app` (Apple Silicon)
+- Linux: run `./linux-unpacked/hospiagenda`; use `launch.sh` only as the FUSE-less AppImage fallback
 
 Confirm:
 
-- the app opens without launcher errors
+- the app opens directly without launcher errors
 - `portable-data/` is created at the USB root
 - initialized contacts and buscas are visible when the manifest says data was included
 - a new or existing contact can be viewed
@@ -128,15 +128,14 @@ Confirm:
 
 Before handoff, confirm the USB root contains:
 
-- the platform payload folder
-- the platform launcher
+- the direct platform executable payload
 - `README.txt`
 - `RELEASE_MANIFEST.txt`
 - `portable-data/` when handing off an initialized drive
 
 Tell the operator:
 
-- launch the app only through the launcher file
+- open the platform executable directly
 - keep `portable-data/` with the USB drive
 - back up `portable-data/` before major imports or cleanup work
 - do not delete `RELEASE_MANIFEST.txt`; it identifies the build
@@ -146,7 +145,7 @@ Tell the operator:
 If the app does not open:
 
 - keep the USB contents unchanged
-- capture the platform and launcher used
+- capture the platform and executable used
 - on Windows or Linux, capture any terminal output
 - on macOS, capture any visible Terminal, Finder, Gatekeeper, or launch dialog text
 - retry on the same machine after ejecting and remounting the USB drive

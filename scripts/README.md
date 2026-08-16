@@ -34,7 +34,7 @@ dist-portable/usb-package/
 
 Copy the contents of that directory to the USB root.
 
-The staged package includes the platform payload folder, the platform launcher,
+The staged package includes the direct platform executable payload,
 `README.txt`, and a generated `RELEASE_MANIFEST.txt` with the build timestamp,
 version, source commit, and initialized-data status. Initialized packages also
 contain `portable-data/data/`; only the supported managed files are copied and
