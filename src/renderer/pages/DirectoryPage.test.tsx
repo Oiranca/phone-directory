@@ -560,17 +560,14 @@ describe("DirectoryPage", () => {
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
     // displayName exactly duplicates the service — "Helipuerto
-    // (Secretaría)" must now appear only ONCE in the detail view (the
-    // uncomposed title); the Nombre y Apellidos card must NOT repeat it and
-    // instead shows the empty-state placeholder.
+    // (Secretaría)" must appear only ONCE in the detail view. With no real
+    // name value, the entire Nombre y Apellidos section stays hidden.
     expect(within(detail).getAllByText("Helipuerto (Secretaría)").length).toBe(1);
-    // "Nombre y Apellidos" is now its own always-visible card (no longer
-    // conditional on the title being composed), so it must still render here.
-    expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
-    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
+    expect(within(detail).queryByText("Nombre y Apellidos")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("Sin nombre y apellidos registrado")).not.toBeInTheDocument();
   });
 
-  it("shows the empty-state placeholder in Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column", async () => {
+  it("omits Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Sindicato Médico";
     contacts.records[0]!.organization.service = "Sindicato Médico";
@@ -593,10 +590,9 @@ describe("DirectoryPage", () => {
     // The title correctly shows just "Sindicato Médico" (exact-match, no
     // composition) exactly once.
     expect(within(detail).getAllByText("Sindicato Médico").length).toBe(1);
-    // The Nombre y Apellidos card must NOT duplicate the service label as if
-    // it were a real person's name — it renders the empty-state placeholder.
-    expect(within(detail).getByText("Nombre y Apellidos")).toBeInTheDocument();
-    expect(within(detail).getByText("Sin nombre y apellidos registrado")).toBeInTheDocument();
+    // The Nombre y Apellidos card must not render without a real name.
+    expect(within(detail).queryByText("Nombre y Apellidos")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("Sin nombre y apellidos registrado")).not.toBeInTheDocument();
   });
 
   it("leaves the title unchanged when organization.service is absent", async () => {
@@ -689,7 +685,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Avenida de ejemplo, 10")).toBeInTheDocument();
   });
 
-  it("shows the Ubicación card with a placeholder when no location data is present", async () => {
+  it("omits the Ubicación card when no location data is present", async () => {
     const contacts = structuredClone(defaultContacts);
 
     useAppStore.setState({
@@ -713,8 +709,8 @@ describe("DirectoryPage", () => {
 
     const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
 
-    expect(within(detail).getByText("Ubicación")).toBeInTheDocument();
-    expect(within(detail).getByText("Sin ubicación detallada")).toBeInTheDocument();
+    expect(within(detail).queryByText("Ubicación")).not.toBeInTheDocument();
+    expect(within(detail).queryByText("Sin ubicación detallada")).not.toBeInTheDocument();
   });
 
   // ODS parsing intentionally stores the bare floor/room value (e.g.

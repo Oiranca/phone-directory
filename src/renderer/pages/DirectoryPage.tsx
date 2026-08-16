@@ -365,6 +365,16 @@ export const DirectoryPage = () => {
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
+  const selectedRecordLocation = selectedRecord
+    ? [
+        selectedRecord.location?.building,
+        formatLocationFloor(selectedRecord.location?.floor),
+        formatLocationRoom(selectedRecord.location?.room),
+        selectedRecord.location?.text
+      ]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join(" · ")
+    : "";
 
   return (
     <section
@@ -664,11 +674,8 @@ export const DirectoryPage = () => {
                   </div>
                 </div>
 
-                {/* Promoted from a conditional inline subtitle to its
-                    own always-visible card, matching Ubicación below — the composed
-                    title (buildDisplayTitle) can obscure or reshape the raw name, so the
-                    canonical displayName should always be visible on its own, not just
-                    when the title happens to be composed.
+                {/* The composed title (buildDisplayTitle) can obscure or reshape
+                    a real raw name, so render it separately when it carries data.
 
                     Regression fix: an earlier version rendered selectedRecord.displayName
                     unconditionally, which duplicates the Servicio value whenever
@@ -688,28 +695,24 @@ export const DirectoryPage = () => {
                     (the exact-equality helper above), not serviceContainsDisplayName.
                     buildDisplayTitle's use of serviceContainsDisplayName for title
                     composition is a separate concern and is unaffected. */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
-                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                    {isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName)
-                      ? "Sin nombre y apellidos registrado"
-                      : selectedRecord.displayName}
-                  </p>
-                </div>
+                {selectedRecord.displayName.trim() &&
+                  !isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName) && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
+                    <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                      {selectedRecord.displayName}
+                    </p>
+                  </div>
+                )}
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
-                  <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
-                    {[
-                      selectedRecord.location?.building,
-                      formatLocationFloor(selectedRecord.location?.floor),
-                      formatLocationRoom(selectedRecord.location?.room),
-                      selectedRecord.location?.text
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "Sin ubicación detallada"}
-                  </p>
-                </div>
+                {selectedRecordLocation && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>
+                    <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                      {selectedRecordLocation}
+                    </p>
+                  </div>
+                )}
 
                 {selectedRecord.contactMethods.phones.length > 0 && (
                   <div className="space-y-3">

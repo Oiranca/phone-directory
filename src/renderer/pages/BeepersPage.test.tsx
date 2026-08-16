@@ -604,6 +604,51 @@ describe("BeepersPage", () => {
     });
   });
 
+  it("deduplicates imported search rows when every visible data column matches", async () => {
+    const duplicateSourceRecords: ImportedBeeperRecord[] = [
+      {
+        id: "ibsc_duplicate_1",
+        deviceNumber: "7958",
+        department: "Traumatología",
+        category: "Residente/a",
+        sourceSheet: "Buscas_Celadores",
+        sourceRow: 2
+      },
+      {
+        id: "ibsc_duplicate_2",
+        deviceNumber: " 7958 ",
+        department: " traumatología ",
+        category: "residente/a",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 8
+      },
+      {
+        id: "ibsc_distinct_role",
+        deviceNumber: "7958",
+        department: "Traumatología",
+        category: "Adjunto/a",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 9
+      }
+    ];
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue([]),
+      listImportedBeepers: vi.fn().mockResolvedValue(duplicateSourceRecords)
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText(/Buscar buscas/i), {
+      target: { value: "Traumatología" }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("2 resultados")).toBeInTheDocument();
+      expect(screen.getAllByText("7958")).toHaveLength(2);
+      expect(screen.getByText("Residente/a")).toBeInTheDocument();
+      expect(screen.getByText("Adjunto/a")).toBeInTheDocument();
+    });
+  });
+
   it("shows name/category for new-layout imported records and finds them by search", async () => {
     const newLayoutRecord: ImportedBeeperRecord = {
       id: "ibsc_00000003",

@@ -42,6 +42,14 @@ const emptyForm = (): EditableBeeperRecord => ({
   group: ""
 });
 
+const normalizeVisibleBeeperCell = (value: string): string =>
+  value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
+
+const importedBeeperDisplayKey = (record: ImportedBeeperRecord): string =>
+  [record.deviceNumber, record.name ?? record.holderType ?? "", record.department, record.category ?? ""]
+    .map(normalizeVisibleBeeperCell)
+    .join("\u0000");
+
 export const BeepersPage = () => {
   const { pushToast } = useToast();
   const [records, setRecords] = useState<BeeperRecord[]>([]);
@@ -113,6 +121,16 @@ export const BeepersPage = () => {
         r.sourceSheet.toLowerCase().includes(q)
     );
   }, [importedRecords, deferredQuery]);
+
+  const visibleImportedRecords = useMemo(() => {
+    const visibleKeys = new Set<string>();
+    return filteredImportedRecords.filter((record) => {
+      const key = importedBeeperDisplayKey(record);
+      if (visibleKeys.has(key)) return false;
+      visibleKeys.add(key);
+      return true;
+    });
+  }, [filteredImportedRecords]);
 
   const handleCreateNew = () => {
     setEditingId(null);
@@ -288,8 +306,8 @@ export const BeepersPage = () => {
             aria-atomic="true"
             className="text-xs font-medium text-slate-500"
           >
-            {filteredRecords.length + filteredImportedRecords.length}{" "}
-            {filteredRecords.length + filteredImportedRecords.length === 1 ? "resultado" : "resultados"}
+            {filteredRecords.length + visibleImportedRecords.length}{" "}
+            {filteredRecords.length + visibleImportedRecords.length === 1 ? "resultado" : "resultados"}
           </p>
         </div>
       </div>
@@ -408,7 +426,7 @@ export const BeepersPage = () => {
       )}
 
       {/* Empty state */}
-      {filteredRecords.length === 0 && filteredImportedRecords.length === 0 && !showForm && (
+      {filteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
         <StatePanel
           title={query ? "Sin resultados" : "Sin registros"}
           message={query
@@ -418,7 +436,7 @@ export const BeepersPage = () => {
       )}
 
       {/* Records table */}
-      {(filteredRecords.length > 0 || filteredImportedRecords.length > 0) && (
+      {(filteredRecords.length > 0 || visibleImportedRecords.length > 0) && (
         <div className="rounded-3xl bg-white shadow-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -473,7 +491,7 @@ export const BeepersPage = () => {
                     </td>
                   </tr>
                 ))}
-                {filteredImportedRecords.map((record) => (
+                {visibleImportedRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 bg-blue-50/30 transition hover:bg-blue-50/60">
                     <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
                     <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
