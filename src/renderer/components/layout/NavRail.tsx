@@ -37,13 +37,6 @@ const BeepersIcon = () => (
   </svg>
 );
 
-const DuplicatesIcon = () => (
-  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
-    <path d="M3 6h6l-2-2M3 6l2 2" />
-    <path d="M17 14h-6l2 2M17 14l-2-2" />
-  </svg>
-);
-
 const SettingsIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
     <circle cx="10" cy="10" r="3" />
@@ -78,9 +71,8 @@ interface RailNavItem {
 // visual grouping (Configuración pinned to the bottom) differs from it.
 const primaryNavItems: RailNavItem[] = [
   { to: "/", label: "Directorio", title: "Directorio — Alt+1", icon: <DirectoryIcon /> },
-  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
   { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> },
-  { to: "/deduplicate", label: "Duplicados", title: "Duplicados — Alt+5", icon: <DuplicatesIcon /> }
+  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> }
 ];
 
 const settingsNavItem: RailNavItem = {

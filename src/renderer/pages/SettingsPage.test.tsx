@@ -560,4 +560,11 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("Estado actual")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Qué cambia al guardar" })).not.toBeInTheDocument();
   });
+
+  it("offers duplicate search as a dedicated settings section", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Buscar duplicados" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Buscar duplicados" })).toHaveAttribute("href", "/deduplicate");
+  });
 });

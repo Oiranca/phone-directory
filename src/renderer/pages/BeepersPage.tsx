@@ -447,13 +447,13 @@ export const BeepersPage = () => {
                     Número
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Asignado a / Titular
+                    Rol
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Departamento
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Rol
+                    Asignado a / Titular
                   </th>
                   <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Acciones
@@ -463,10 +463,14 @@ export const BeepersPage = () => {
               <tbody>
                 {filteredRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 transition hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
-                    <td className="px-4 py-3 text-slate-700">{record.assignedTo}</td>
-                    <td className="px-4 py-3 text-slate-600">{record.department}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-xl bg-scs-mist px-3 py-1.5 text-base font-bold text-scs-blueDark ring-1 ring-scs-blue/15">
+                        {record.deviceNumber}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{record.role}</td>
+                    <td className="px-4 py-3 text-slate-600">{record.department}</td>
+                    <td className="px-4 py-3 text-slate-700">{record.assignedTo}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button
@@ -493,10 +497,14 @@ export const BeepersPage = () => {
                 ))}
                 {visibleImportedRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 bg-blue-50/30 transition hover:bg-blue-50/60">
-                    <td className="px-4 py-3 font-semibold text-scs-blueDark">{record.deviceNumber}</td>
-                    <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-600">{record.department}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-xl bg-scs-mist px-3 py-1.5 text-base font-bold text-scs-blueDark ring-1 ring-scs-blue/15">
+                        {record.deviceNumber}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{record.category ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{record.department}</td>
+                    <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"

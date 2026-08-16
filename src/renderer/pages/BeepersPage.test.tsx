@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
@@ -172,6 +172,24 @@ describe("BeepersPage", () => {
       expect(screen.getByText("Urgencias")).toBeInTheDocument();
       expect(screen.getByText("Enfermera")).toBeInTheDocument();
     });
+  });
+
+  it("orders visible columns for fast scanning and emphasizes the beeper number", async () => {
+    renderPage();
+    await screen.findByText("B-001");
+
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent?.trim())).toEqual([
+      "Número",
+      "Rol",
+      "Departamento",
+      "Asignado a / Titular",
+      "Acciones"
+    ]);
+    const emphasizedNumber = screen.getByText("B-001");
+    expect(emphasizedNumber).toHaveClass("bg-scs-mist", "font-bold");
+    expect(
+      within(emphasizedNumber.closest("tr")!).getAllByRole("cell").slice(0, 4).map((cell) => cell.textContent?.trim())
+    ).toEqual(["B-001", "Enfermera", "Urgencias", "Ana García"]);
   });
 
   it("filters records by search query", async () => {

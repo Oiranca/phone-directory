@@ -29,13 +29,14 @@ afterEach(() => {
 });
 
 describe("AppShell — default mode", () => {
-  it("renders nav with all 5 links", () => {
+  it("renders nav without a standalone duplicates link", () => {
     renderShell();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
     // "Importar/Exportar" was folded into Configuración; the tab no longer exists.
     expect(screen.queryByRole("link", { name: "Importar/Exportar" })).not.toBeInTheDocument();
   });
@@ -53,7 +54,6 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
-    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("title", "Duplicados — Alt+5");
   });
 
   it("nav links keep the shared focus visibility class", () => {

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { NavRail } from "./NavRail";
@@ -18,15 +18,17 @@ afterEach(() => {
 });
 
 describe("NavRail — items", () => {
-  it("renders all 5 nav items inside the primary navigation landmark", () => {
+  it("renders four nav items with Buscas immediately below Directorio", () => {
     renderRail();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Buscas" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Duplicados" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Directorio",
+      "Buscas",
+      "Nuevo registro",
+      "Configuración"
+    ]);
+    expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
   });
 
   it("routes each item to the expected href", () => {
@@ -34,7 +36,6 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
-    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("href", "/deduplicate");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
@@ -44,7 +45,6 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
-    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("title", "Duplicados — Alt+5");
   });
 });
 
@@ -61,9 +61,9 @@ describe("NavRail — active route highlighting", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
   });
 
-  it("marks Duplicados active at /deduplicate", () => {
+  it("does not expose a separate Duplicados item at /deduplicate", () => {
     renderRail(["/deduplicate"]);
-    expect(screen.getByRole("link", { name: "Duplicados" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
   });
 });
 
