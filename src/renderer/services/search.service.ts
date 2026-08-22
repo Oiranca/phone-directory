@@ -50,6 +50,28 @@ const normalizeSearchText = (value: string) =>
     .replace(/\p{M}/gu, "")
     .toLocaleLowerCase("es");
 
+const normalizeSearchQuery = (value: string) =>
+  normalizeSearchText(value).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+const recordSearchText = (record: ContactRecord) => normalizeSearchText([
+  record.displayName,
+  record.organization.service,
+  record.organization.department,
+  record.organization.specialty,
+  record.location?.building,
+  record.location?.floor,
+  record.location?.room,
+  record.location?.text,
+  record.aliases.join(" "),
+  record.tags.join(" "),
+  record.notes,
+  ...record.contactMethods.phones.flatMap((phone) => [phone.number, phone.extension, phone.label]),
+  ...record.contactMethods.emails.flatMap((email) => [email.address, email.label])
+].filter(Boolean).join(" "));
+
+const hasFlexibleTokenMatch = (record: ContactRecord, query: string) =>
+  query.split(" ").every((token) => recordSearchText(record).includes(token));
+
 const isShortTextQuery = (query: string) =>
   query.length <= SHORT_TEXT_QUERY_MAX_LENGTH && /^\p{L}[\p{L}\p{N}]*$/u.test(query);
 
@@ -109,7 +131,7 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     fuseCache.set(records, fuse);
   }
 
-  const normalizedSearchQuery = normalizeSearchText(normalizedQuery);
+  const normalizedSearchQuery = normalizeSearchQuery(normalizedQuery);
   const usesShortTextBoundaryMatching = isShortTextQuery(normalizedSearchQuery);
   let searchFuse = fuse;
 
@@ -122,10 +144,14 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     }
   }
 
-  const fuseResults = searchFuse.search(normalizedQuery);
+  const fuseResults = searchFuse.search(normalizedSearchQuery);
   const matchingResults = usesShortTextBoundaryMatching
     ? fuseResults.filter((result) => hasShortTextBoundaryMatch(result, normalizedSearchQuery))
     : fuseResults;
+
+  if (matchingResults.length === 0 && normalizedSearchQuery.includes(" ")) {
+    return applyFilters(records.filter((record) => hasFlexibleTokenMatch(record, normalizedSearchQuery)), filters);
+  }
 
   return applyFilters(matchingResults.map((result) => result.item), filters);
 };

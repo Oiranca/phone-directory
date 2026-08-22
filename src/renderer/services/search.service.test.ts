@@ -234,6 +234,21 @@ describe("searchRecords", () => {
     expect(result[0]?.displayName).toBe("Admisión General");
   });
 
+  it("ignores punctuation and accents in equivalent queries", () => {
+    const flexibleRecords: ContactRecord[] = [{
+      ...structuredClone(records[0]),
+      id: "oncology-roberto",
+      displayName: "Roberto",
+      organization: {
+        ...structuredClone(records[0]!.organization),
+        service: "Oncología"
+      }
+    }];
+
+    expect(searchRecords(flexibleRecords, "oncologia-roberto", defaultFilters).map((record) => record.id))
+      .toEqual(["oncology-roberto"]);
+  });
+
   it("keeps fuzzy matching for longer text queries", () => {
     const result = searchRecords(records, "Admsion General", defaultFilters);
 
