@@ -144,6 +144,12 @@ const socialPlatformLabels: Record<SocialPlatform, string> = {
   other: "Otro"
 };
 
+const EditIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487 19.5 7.125M6.75 20.25H3.75v-3L15.878 5.122a1.864 1.864 0 0 1 2.637 0l.363.363a1.864 1.864 0 0 1 0 2.637L6.75 20.25Z" />
+  </svg>
+);
+
 /**
  * Derives a safe external URL for a social contact.
  * XSS-safe approach: only `http:` and `https:` schemes are allowed.
@@ -670,9 +676,9 @@ export const DirectoryPage = () => {
                       to={`/contacts/${selectedRecord.id}/edit`}
                       reloadDocument
                       aria-label={`Editar: ${selectedRecord.displayName}`}
-                      className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center self-start whitespace-nowrap rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      className="focus-ring inline-flex size-11 shrink-0 items-center justify-center self-start rounded-full text-scs-blue transition hover:bg-scs-mist"
                     >
-                      Editar
+                      <EditIcon />
                     </Link>
                   </div>
                 </div>

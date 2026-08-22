@@ -1468,7 +1468,8 @@ describe("DirectoryPage", () => {
     const firstRecord = defaultContacts.records[0]!;
     const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
-    expect(editLink).toHaveTextContent("Editar");
+    expect(editLink.querySelector("svg")).toBeInTheDocument();
+    expect(editLink).not.toHaveTextContent("Editar");
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
