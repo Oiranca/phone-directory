@@ -18,6 +18,33 @@ const emptyDataset = (): BeepersDataset => ({
 });
 
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
+
+type ImportableBeeperRecord = Omit<ImportedBeeperRecord, "id">;
+
+const preferNonBlank = (current: string | undefined, incoming: string | undefined): string | undefined =>
+  current?.trim() ? current : incoming?.trim() ? incoming : undefined;
+
+/**
+ * Combines two references to the same pager without discarding information
+ * already stored by the first record. Imported files frequently list the same
+ * pager on complementary sheets, with different optional holder fields.
+ */
+const mergeImportedBeeperFields = (
+  current: ImportableBeeperRecord,
+  incoming: ImportableBeeperRecord
+): ImportableBeeperRecord => ({
+  ...incoming,
+  ...current,
+  deviceNumber: preferNonBlank(current.deviceNumber, incoming.deviceNumber)!,
+  department: preferNonBlank(current.department, incoming.department)!,
+  holderType: preferNonBlank(current.holderType, incoming.holderType),
+  name: preferNonBlank(current.name, incoming.name),
+  category: preferNonBlank(current.category, incoming.category),
+  service: preferNonBlank(current.service, incoming.service),
+  sourceSheet: preferNonBlank(current.sourceSheet, incoming.sourceSheet)!,
+  sourceRow: current.sourceRow
+});
+
 const buildImportedSourceFingerprint = (record: Omit<ImportedBeeperRecord, "id">): string =>
   createHash("sha256")
     .update(JSON.stringify([
@@ -349,6 +376,24 @@ export class BeepersService {
       }
 
       const dataset = await this.readDataset();
+      const incomingByDeviceNumber = new Map<string, ImportableBeeperRecord>();
+
+      for (const raw of parseResult.records) {
+        const deviceNumberKey = normalizeDeviceNumber(raw.deviceNumber);
+        const existing = incomingByDeviceNumber.get(deviceNumberKey);
+        incomingByDeviceNumber.set(
+          deviceNumberKey,
+          existing ? mergeImportedBeeperFields(existing, raw) : raw
+        );
+      }
+
+      const existingByDeviceNumber = new Map<string, ImportedBeeperRecord>();
+      for (const record of dataset.importedRecords ?? []) {
+        const deviceNumberKey = normalizeDeviceNumber(record.deviceNumber);
+        if (!existingByDeviceNumber.has(deviceNumberKey)) {
+          existingByDeviceNumber.set(deviceNumberKey, record);
+        }
+      }
       const editedBySource = new Map(
         (dataset.importedRecords ?? [])
           .filter((record): record is ImportedBeeperRecord & { sourceFingerprint: string } =>
@@ -356,23 +401,24 @@ export class BeepersService {
           )
           .map((record) => [record.sourceFingerprint, record] as const)
       );
-      const existingIds = new Set(Array.from(editedBySource.values(), (record) => record.id));
+      const existingIds = new Set((dataset.importedRecords ?? []).map((record) => record.id));
 
-      const importedRecords: ImportedBeeperRecord[] = parseResult.records.map((raw) => {
+      const importedRecords: ImportedBeeperRecord[] = Array.from(incomingByDeviceNumber.values()).map((raw) => {
         const sourceFingerprint = buildImportedSourceFingerprint(raw);
-        const edited = editedBySource.get(sourceFingerprint);
+        // Match by pager number first: a repeated or complementary import must
+        // keep one record and only fill its blank columns. Source identity is
+        // the fallback needed when a manually corrected pager number differs
+        // from its original ODS value.
+        const existing = existingByDeviceNumber.get(normalizeDeviceNumber(raw.deviceNumber));
+        const edited = existing ?? editedBySource.get(sourceFingerprint);
 
         if (edited) {
+          const merged = mergeImportedBeeperFields(edited, raw);
           return importedBeeperRecordSchema.parse({
-            ...raw,
+            ...merged,
             id: edited.id,
-            deviceNumber: edited.deviceNumber,
-            department: edited.department,
-            holderType: edited.holderType,
-            name: edited.name,
-            category: edited.category,
-            sourceFingerprint,
-            manuallyEdited: true
+            sourceFingerprint: edited.sourceFingerprint ?? sourceFingerprint,
+            manuallyEdited: edited.manuallyEdited
           });
         }
 

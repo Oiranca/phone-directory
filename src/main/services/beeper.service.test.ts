@@ -550,6 +550,82 @@ describe("BeepersService — importFromOds + listImported", () => {
     expect(first?.sourceRow).toBe(0);
   });
 
+  it("importFromOds — merges duplicate pager numbers from complementary source rows", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    const count = await service.importFromOds({
+      records: [
+        {
+          deviceNumber: "7321",
+          department: "Anestesia",
+          holderType: "Principal",
+          sourceSheet: "Buscas_Facultativos",
+          sourceRow: 0
+        },
+        {
+          deviceNumber: "7321",
+          department: "Anestesia",
+          name: "Roberto",
+          category: "Médico/a",
+          service: "Quirófano",
+          sourceSheet: "Buscas_Usuales",
+          sourceRow: 3
+        }
+      ],
+      parsedCellCount: 2,
+      skippedRowCount: 0
+    });
+
+    expect(count).toBe(1);
+    expect(await service.listImported()).toMatchObject([{
+      deviceNumber: "7321",
+      department: "Anestesia",
+      holderType: "Principal",
+      name: "Roberto",
+      category: "Médico/a",
+      service: "Quirófano"
+    }]);
+  });
+
+  it("importFromOds — keeps useful data and fills gaps on a repeated import", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    await service.importFromOds({
+      records: [{
+        deviceNumber: "7400",
+        department: "UCI",
+        name: "Ana",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 1
+      }],
+      parsedCellCount: 1,
+      skippedRowCount: 0
+    });
+
+    await service.importFromOds({
+      records: [{
+        deviceNumber: "7400",
+        department: "UCI",
+        category: "Enfermera",
+        service: "Críticos",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 1
+      }],
+      parsedCellCount: 1,
+      skippedRowCount: 0
+    });
+
+    expect(await service.listImported()).toMatchObject([{
+      deviceNumber: "7400",
+      department: "UCI",
+      name: "Ana",
+      category: "Enfermera",
+      service: "Críticos"
+    }]);
+  });
+
   it("importFromOds — replaces all previously-imported records on second call", async () => {
     const { BeepersService } = await import("./beeper.service.js");
     const service = new BeepersService();
