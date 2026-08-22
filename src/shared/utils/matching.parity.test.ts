@@ -23,7 +23,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { normalizePhoneForDedup, normalizePhoneForMergeDedup, computeMetadataCounts, normalizeDisplayName } from "./matching.js";
+import {
+  normalizePhoneForDedup,
+  normalizePhoneForMergeDedup,
+  normalizePhoneForStorage,
+  computeMetadataCounts,
+  normalizeDisplayName
+} from "./matching.js";
 import type { ContactRecord } from "../types/contact.js";
 
 // ---------------------------------------------------------------------------
@@ -100,6 +106,16 @@ describe("normalizePhoneForDedup", () => {
     // Parity: matches original from app-data buildStableMergeKeys / mergeImportedRecordFields
     const originalAppData = (phone: string) => phone.replace(/\D/g, "");
     expect(normalizePhoneForDedup(input)).toBe(originalAppData(input));
+  });
+});
+
+describe("normalizePhoneForStorage", () => {
+  it.each([
+    ["123 456 789", "123456789"],
+    ["+34 (928) 700-000", "+34928700000"],
+    ["  123.456-789  ", "123456789"]
+  ])("removes display separators from %j", (input, expected) => {
+    expect(normalizePhoneForStorage(input)).toBe(expected);
   });
 });
 

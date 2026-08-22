@@ -26,7 +26,7 @@ describe("buildCsvImportPreview", () => {
       "valid.csv",
       [
         "type,displayName,phone1Number",
-        "person,Ana Pérez,12345",
+        "person,Ana Pérez,123 45",
         "service,Mostrador,55555"
       ].join("\n") + "\n"
     );
@@ -39,6 +39,7 @@ describe("buildCsvImportPreview", () => {
     expect(preview.rowIssues).toHaveLength(0);
     expect(dataset.records).toHaveLength(2);
     expect(dataset.records[0]?.displayName).toBe("Ana Pérez");
+    expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("12345");
     expect(dataset.records[1]?.displayName).toBe("Mostrador");
   });
 
@@ -357,6 +358,22 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
     const phones = dataset.records[0]!.contactMethods.phones;
     expect(phones).toHaveLength(2);
     expect(phones.every((p) => p.isPrimary === false)).toBe(true);
+  });
+
+  it("normalizes separators in Agenda and spreadsheet phone entries", async () => {
+    const { dataset } = await buildImportPreviewFromRows([{
+      type: "service",
+      displayName: "Admisión Central",
+      phones: JSON.stringify([
+        { number: "+34 (928) 700-000", label: "Número 1", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+      ])
+    }], {
+      sourceFilePath: "/tmp/test.ods",
+      fileName: "test.ods",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("+34928700000");
   });
 
   it("does not force phone1 to be primary on the flat CSV column path when phone1IsPrimary is absent", async () => {

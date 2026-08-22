@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { EditablePhoneContact } from "../../../shared/types/contact";
+import { normalizePhoneForStorage } from "../../../shared/utils/matching";
 import { SelectField } from "../inputs/SelectField";
 import type { ContactFormState, PendingFocusTarget } from "../../hooks/useContactForm";
 import { createPhoneDraft, phoneKindOptions } from "../../hooks/useContactForm";
@@ -16,6 +18,14 @@ type Props = {
   clearFieldError?: (path: string) => void;
 };
 
+export const normalizePastedPhone = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || !/^\+?[\d\s().-]+$/.test(trimmed)) return null;
+
+  const normalized = normalizePhoneForStorage(trimmed);
+  return /^\+?\d+$/.test(normalized) ? normalized : null;
+};
+
 export const PhonesSection = ({
   phones,
   fieldErrors,
@@ -27,7 +37,10 @@ export const PhonesSection = ({
   updatePhone,
   removePhone,
   clearFieldError
-}: Props) => (
+}: Props) => {
+  const [pasteErrors, setPasteErrors] = useState<Record<string, string>>({});
+
+  return (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
@@ -103,7 +116,25 @@ export const PhonesSection = ({
                 value={phone.number}
                 onChange={(event) => {
                   clearFieldError?.(`contactMethods.phones.${index}.number`);
+                  setPasteErrors((current) => {
+                    const { [phone.id]: _removed, ...rest } = current;
+                    return rest;
+                  });
                   updatePhone(phone.id, { number: event.target.value });
+                }}
+                onPaste={(event) => {
+                  const normalized = normalizePastedPhone(event.clipboardData.getData("text"));
+                  event.preventDefault();
+                  if (!normalized) {
+                    setPasteErrors((current) => ({ ...current, [phone.id]: "El número pegado contiene caracteres no válidos." }));
+                    return;
+                  }
+                  clearFieldError?.(`contactMethods.phones.${index}.number`);
+                  setPasteErrors((current) => {
+                    const { [phone.id]: _removed, ...rest } = current;
+                    return rest;
+                  });
+                  updatePhone(phone.id, { number: normalized });
                 }}
                 required
                 aria-required="true"
@@ -115,6 +146,9 @@ export const PhonesSection = ({
                 <p id={`phone-number-${phone.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
                   {fieldErrors[`contactMethods.phones.${index}.number`]}
                 </p>
+              )}
+              {pasteErrors[phone.id] && (
+                <p role="alert" className="mt-2 text-sm text-red-600">{pasteErrors[phone.id]}</p>
               )}
             </div>
             <div>
@@ -174,4 +208,5 @@ export const PhonesSection = ({
       ))}
     </ul>
   </section>
-);
+  );
+};
