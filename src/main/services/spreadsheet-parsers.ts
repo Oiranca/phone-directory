@@ -1199,6 +1199,10 @@ export const normalizeTabularAgendaSheet = (
  * "Agenda" sheet itself has a blank department too, so it is unaffected
  * either way.
  */
+const GENERIC_AGENDA_DISPLAY_NAMES = new Set([
+  normalizeDisplayNameForMerge("Facultativo/a"),
+]);
+
 const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
   const displayNameKey = normalizeDisplayNameForMerge(record.displayName);
 
@@ -1213,10 +1217,25 @@ const buildMergeIdentityKey = (record: NormalizedImportRow): string => {
   const floorKey = normalizeDisplayNameForMerge(record.floor ?? "");
   const sectorKey = normalizeDisplayNameForMerge(record.sector ?? "");
   const sectionKey = normalizeDisplayNameForMerge(record.section ?? "");
+  // "Facultativo/a" is a placeholder used by Agenda rows, not a stable
+  // contact identity. Those rows may share every location field while
+  // representing different extensions, so retain the source-row identifier
+  // to keep them separate during import.
+  const sourceRowKey =
+    isTabularAgendaRow && GENERIC_AGENDA_DISPLAY_NAMES.has(displayNameKey)
+      ? record.externalId
+      : "";
 
-  return [displayNameKey, departmentKey, serviceKey, buildingKey, floorKey, sectorKey, sectionKey].join(
-    "::"
-  );
+  return [
+    displayNameKey,
+    departmentKey,
+    serviceKey,
+    buildingKey,
+    floorKey,
+    sectorKey,
+    sectionKey,
+    sourceRowKey,
+  ].join("::");
 };
 
 /**

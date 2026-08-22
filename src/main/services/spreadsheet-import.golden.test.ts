@@ -1117,6 +1117,34 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(result.map((r) => r.department).sort()).toEqual(["Corporativos", "Sindicatos"]);
   });
 
+  it("does NOT merge generic Facultativo/a Agenda rows from the same location", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "70944", label: "Número 1" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "70938", label: "Número 1" })]);
+    // "Facultativo/a" is a category-like placeholder, not a contact identity.
+    // Rows with that name can share department and location while referring to
+    // different extensions, so combining them creates a misleading contact.
+    const r1 = makeRow({
+      externalId: "agenda-1",
+      displayName: "Facultativo/a",
+      area: "",
+      department: "Agenda",
+      building: "Hospital Doctor Negrín",
+      floor: "6",
+      phones: phones1,
+    });
+    const r2 = makeRow({
+      externalId: "agenda-2",
+      displayName: "Facultativo/a",
+      area: "",
+      department: "Agenda",
+      building: "Hospital Doctor Negrín",
+      floor: "6",
+      phones: phones2,
+    });
+
+    expect(mergeRecordsByDisplayName([r1, r2])).toHaveLength(2);
+  });
+
   it("still merges two service-sheet records (non-blank area) with the same displayName even when department differs (department is not a discriminator outside the tabular book-sheet parser)", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);
