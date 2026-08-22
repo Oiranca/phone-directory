@@ -18,6 +18,7 @@ export const CONTACTS_CHANNELS = {
   resetDataset:     "contacts:reset-dataset",
   createRecord:     "contacts:create-record",
   updateRecord:     "contacts:update-record",
+  deleteRecord:     "contacts:delete-record",
   listBackups:      "contacts:list-backups",
   restoreBackup:    "contacts:restore-backup",
   exportDataset:    "contacts:export-dataset",

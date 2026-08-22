@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useBlocker } from "react-router";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -44,7 +44,8 @@ export const RecordFormPage = () => {
     updateCustomField,
     removeCustomField,
     setPendingFocusTarget,
-    handleSubmit
+    handleSubmit,
+    handleDelete
   } = useContactForm();
 
   /**
@@ -56,6 +57,7 @@ export const RecordFormPage = () => {
   const shouldBlock = useCallback(() => isDirtyRef.current, [isDirtyRef]);
   const blocker = useBlocker(shouldBlock);
   const notFoundTitleRef = useRef<HTMLHeadingElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   /**
    * Guard window close / reload / browser unload when the form is dirty.
@@ -212,6 +214,16 @@ export const RecordFormPage = () => {
         </div>
 
         <div className="flex flex-col gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={isSubmitting}
+              className="w-full rounded-2xl border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 sm:mr-auto sm:w-auto"
+            >
+              Eliminar contacto
+            </button>
+          ) : null}
           <Link
             to="/"
             aria-label="Cancelar sin guardar los cambios"
@@ -239,6 +251,18 @@ export const RecordFormPage = () => {
         cancelLabel="Seguir editando"
         onConfirm={() => blocker.proceed?.()}
         onCancel={() => blocker.reset?.()}
+      />
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        title="Confirmar eliminación"
+        message="Se creará una copia de seguridad antes de eliminar este contacto. Esta acción no se puede deshacer."
+        confirmLabel={isSubmitting ? "Eliminando…" : "Eliminar contacto"}
+        cancelLabel="Cancelar"
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setDeleteConfirmOpen(false)}
+        isDestructive
+        confirmDisabled={isSubmitting}
+        cancelDisabled={isSubmitting}
       />
     </section>
   );

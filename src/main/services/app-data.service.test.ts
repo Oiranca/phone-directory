@@ -751,6 +751,20 @@ describe("AppDataService", () => {
     expect(created.contacts.records[0]?.id).toBe(created.savedRecordId);
   });
 
+  it("backs up contacts before deleting a record", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const bootstrap = await service.getBootstrapData();
+    if ("recovery" in bootstrap) throw new Error("Recovery mode unexpected");
+    const recordId = bootstrap.contacts.records[0]!.id;
+
+    const result = await service.deleteRecord(recordId);
+
+    expect(result.contacts.records.some((record) => record.id === recordId)).toBe(false);
+    expect((await fs.readdir(path.join(testRoot, "backups"))).some((name) => name.startsWith("contacts-before-delete-"))).toBe(true);
+  });
+
   it("creates and rotates launch auto-backups when enabled", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 

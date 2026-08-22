@@ -179,9 +179,10 @@ export class BeepersService {
     return dataset.records;
   }
 
-  private async createImportBackup(
+  private async createBackup(
     dataset: BeepersDataset,
-    backupDirectoryPath: string
+    backupDirectoryPath: string,
+    prefix: string
   ): Promise<string> {
     const errorMessage = "No se pudo crear la copia de seguridad de las buscas.";
     await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage, true);
@@ -193,7 +194,7 @@ export class BeepersService {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const backupPath = path.join(
         canonicalBackupDirectory,
-        `beepers-before-import-${timestamp}-${randomUUID().slice(0, 8)}.json`
+        `${prefix}-${timestamp}-${randomUUID().slice(0, 8)}.json`
       );
       let handle: fs.FileHandle | undefined;
 
@@ -216,7 +217,7 @@ export class BeepersService {
     throw new Error("No se pudo generar un nombre único para la copia de seguridad de las buscas.");
   }
 
-  private async pruneImportBackups(backupDirectoryPath: string, retentionCount: number): Promise<void> {
+  private async pruneBackups(backupDirectoryPath: string, retentionCount: number, prefix: string): Promise<void> {
     const errorMessage = "No se pudieron rotar las copias de seguridad de las buscas.";
     await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage);
     const canonicalBackupDirectory = await fs.realpath(backupDirectoryPath);
@@ -224,7 +225,7 @@ export class BeepersService {
     const backups = await Promise.all(
       entries
         .filter((entry) =>
-          entry.isFile() && entry.name.startsWith("beepers-before-import-") && entry.name.endsWith(".json")
+          entry.isFile() && entry.name.startsWith(`${prefix}-`) && entry.name.endsWith(".json")
         )
         .map(async (entry) => {
           const filePath = path.join(canonicalBackupDirectory, entry.name);
@@ -253,11 +254,11 @@ export class BeepersService {
 
       const current = await this.readDataset();
       const backupDirectoryPath = options.backupDirectoryPath;
-      await this.createImportBackup(current, backupDirectoryPath);
+      await this.createBackup(current, backupDirectoryPath, "beepers-before-import");
       await this.writeDataset(parsed);
 
       try {
-        await this.pruneImportBackups(backupDirectoryPath, options.retentionCount);
+        await this.pruneBackups(backupDirectoryPath, options.retentionCount, "beepers-before-import");
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);
         console.error(`[BackupRetention] Failed to prune beepers-before-import-* backups — ${errMsg}`);
@@ -303,16 +304,23 @@ export class BeepersService {
     });
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, options: { backupDirectoryPath: string; retentionCount: number }): Promise<void> {
     return this.enqueueWrite(async () => {
       const dataset = await this.readDataset();
       const index = dataset.records.findIndex((r) => r.id === id);
       if (index === -1) {
         throw new Error("No se encontró la busca solicitada.");
       }
+      await this.createBackup(dataset, options.backupDirectoryPath, "beepers-before-delete");
       const nextRecords = dataset.records.filter((r) => r.id !== id);
       const nextDataset = beepersDatasetSchema.parse({ ...dataset, records: nextRecords });
       await this.writeDataset(nextDataset);
+      try {
+        await this.pruneBackups(options.backupDirectoryPath, options.retentionCount, "beepers-before-delete");
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[BackupRetention] Failed to prune beepers-before-delete-* backups — ${errMsg}`);
+      }
     });
   }
 

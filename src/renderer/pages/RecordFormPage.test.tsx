@@ -118,7 +118,8 @@ describe("RecordFormPage", () => {
           contacts: defaultContacts,
           settings: editableSettings,
           savedRecordId: defaultContacts.records[0].id
-        })
+        }),
+        deleteRecord: vi.fn().mockResolvedValue({ contacts: defaultContacts, settings: editableSettings })
       }
     });
   });
@@ -249,6 +250,13 @@ describe("RecordFormPage", () => {
 
     expect(await screen.findByDisplayValue(defaultContacts.records[0].displayName)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar contacto" })).toBeInTheDocument();
+  });
+
+  it("confirms deletion before deleting an edited record", async () => {
+    renderWithRoute(`/contacts/${defaultContacts.records[0].id}/edit`);
+    fireEvent.click(await screen.findByRole("button", { name: "Eliminar contacto" }));
+    expect(screen.getByText(/Se creará una copia de seguridad antes de eliminar/i)).toBeInTheDocument();
   });
 
   it("updates an existing record from the edit route", async () => {

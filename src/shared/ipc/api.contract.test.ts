@@ -41,6 +41,7 @@ const API_METHOD_MAP: Record<keyof HospitalDirectoryApi, true> = {
   browseForPath:         true,
   createRecord:          true,
   updateRecord:          true,
+  deleteRecord:          true,
   createBackup:          true,
   listBackups:           true,
   restoreBackup:         true,
@@ -118,7 +119,7 @@ describe("Handler registration coverage — every renderer-invokable channel has
 
     registerContactsIpc(serviceStub);
     registerSettingsIpc(serviceStub);
-    registerBeepersIpc(serviceStub);
+    registerBeepersIpc(serviceStub, serviceStub);
   });
 
   it("REQUIRED_CHANNELS is non-empty (derived from shared channel objects)", () => {
@@ -176,6 +177,7 @@ describe("Renderer mock helper — typed as HospitalDirectoryApi", () => {
       browseForPath:       vi.fn(),
       createRecord:        vi.fn(),
       updateRecord:        vi.fn(),
+      deleteRecord:        vi.fn(),
       createBackup:        vi.fn(),
       listBackups:         vi.fn(),
       restoreBackup:       vi.fn(),

@@ -15,6 +15,7 @@
 import type {
   AutoBackupFailureEvent,
   BackupListItem,
+  BootstrapData,
   BootstrapResult,
   ContactRecord,
   CsvImportPolicySelection,
@@ -44,6 +45,7 @@ export interface HospitalDirectoryApi {
   // Contacts — CRUD
   createRecord: (record: EditableContactRecord) => Promise<SaveContactResult>;
   updateRecord: (recordId: string, record: EditableContactRecord) => Promise<SaveContactResult>;
+  deleteRecord: (recordId: string) => Promise<BootstrapData>;
 
   // Backups
   // The resolved absolute backup path is main-process-only — no renderer

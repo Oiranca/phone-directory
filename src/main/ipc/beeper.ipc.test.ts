@@ -34,11 +34,14 @@ describe("registerBeepersIpc", () => {
     listImported: vi.fn().mockResolvedValue([]),
     updateImported: vi.fn()
   };
+  const appDataServiceMock = {
+    getBeeperBackupOptions: vi.fn().mockResolvedValue({ backupDirectoryPath: "/tmp/backups", retentionCount: 5 })
+  };
 
   // Dynamic import so the vi.mock above is applied before the module loads
   beforeAll(async () => {
     const { registerBeepersIpc } = await import("./beeper.ipc.js");
-    registerBeepersIpc(serviceMock as never);
+    registerBeepersIpc(serviceMock as never, appDataServiceMock as never);
   });
 
   afterEach(() => {
@@ -150,7 +153,10 @@ describe("registerBeepersIpc", () => {
 
       await invoke("beepers:delete", "bsc_abc12345");
 
-      expect(serviceMock.remove).toHaveBeenCalledWith("bsc_abc12345");
+      expect(serviceMock.remove).toHaveBeenCalledWith("bsc_abc12345", {
+        backupDirectoryPath: "/tmp/backups",
+        retentionCount: 5
+      });
     });
   });
 

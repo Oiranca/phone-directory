@@ -95,7 +95,7 @@ const bootstrap = async () => {
   });
   await service.ensureInitialFiles();
   registerContactsIpc(service);
-  registerBeepersIpc(beepersService);
+  registerBeepersIpc(beepersService, service);
   registerSettingsIpc(service);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const filteredHeaders = Object.fromEntries(

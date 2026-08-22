@@ -136,6 +136,7 @@ export const registerContactsIpc = (service: AppDataService) => {
   ipcMain.handle(CHANNELS.updateRecord, (_event, recordId: string, payload: EditableContactRecord) =>
     service.updateRecord(recordId, payload)
   );
+  ipcMain.handle(CHANNELS.deleteRecord, (_event, recordId: string) => service.deleteRecord(recordId));
   ipcMain.handle(CHANNELS.listBackups, async () => (await service.listBackups()).map(toSafeBackupListItem));
   // Renderer sends a bare fileName (never an absolute path — listBackups()
   // no longer returns one). Reject anything path-shaped before it is ever
