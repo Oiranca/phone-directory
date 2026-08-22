@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
+import { useAppStore } from "../../store/useAppStore";
 
 /**
  * localStorage key persisting the rail's collapsed/expanded preference.
@@ -99,10 +100,15 @@ const readStoredCollapsed = (): boolean => {
   }
 };
 
-const RailNavLink = ({ item, collapsed }: { item: RailNavItem; collapsed: boolean }) => (
+const RailNavLink = ({ item, collapsed }: { item: RailNavItem; collapsed: boolean }) => {
+  const setQuery = useAppStore((state) => state.setQuery);
+  const clearsSearch = item.to === "/" || item.to === "/beeper";
+
+  return (
   <NavLink
     to={item.to}
     title={item.title}
+    onClick={clearsSearch ? () => setQuery("") : undefined}
     className={({ isActive }) =>
       [baseItemClasses, collapsed ? collapsedItemClasses : expandedItemClasses, isActive ? activeItemClasses : inactiveItemClasses].join(
         " "
@@ -112,7 +118,8 @@ const RailNavLink = ({ item, collapsed }: { item: RailNavItem; collapsed: boolea
     {item.icon}
     <span className={collapsed ? "hidden" : "inline"}>{item.label}</span>
   </NavLink>
-);
+  );
+};
 
 export const NavRail = () => {
   const [collapsed, setCollapsed] = useState<boolean>(readStoredCollapsed);

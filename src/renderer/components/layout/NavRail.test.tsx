@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { NavRail } from "./NavRail";
+import { useAppStore } from "../../store/useAppStore";
 
 const future = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
@@ -15,6 +16,7 @@ const renderRail = (initialEntries = ["/"]) =>
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  useAppStore.setState({ query: "" });
 });
 
 describe("NavRail — items", () => {
@@ -37,6 +39,17 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("clears the directory query when entering Agenda or Buscas", () => {
+    renderRail();
+    useAppStore.setState({ query: "filtro anterior" });
+    fireEvent.click(screen.getByRole("link", { name: "Buscas" }));
+    expect(useAppStore.getState().query).toBe("");
+
+    useAppStore.setState({ query: "otro filtro" });
+    fireEvent.click(screen.getByRole("link", { name: "Directorio" }));
+    expect(useAppStore.getState().query).toBe("");
   });
 
   it("exposes the Alt+N shortcut hint via the title attribute, unchanged from the previous nav", () => {
