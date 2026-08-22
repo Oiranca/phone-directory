@@ -47,6 +47,9 @@ import type { ContactRecord } from "../types/contact.js";
  */
 export const normalizePhoneForDedup = (phone: string): string => phone.replace(/\D/g, "");
 
+/** Removes display separators while preserving a leading international `+`. */
+export const normalizePhoneForStorage = (phone: string): string => phone.trim().replace(/[\s().-]/g, "");
+
 /**
  * Strips all non-digit characters from a phone string, then retains only the
  * last 9 digits.

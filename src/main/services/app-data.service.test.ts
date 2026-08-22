@@ -703,7 +703,7 @@ describe("AppDataService", () => {
           {
             id: "ph_new_1",
             label: "Principal",
-            number: "12345",
+            number: "123 45",
             extension: "89",
             kind: "internal",
             isPrimary: true,
@@ -726,6 +726,7 @@ describe("AppDataService", () => {
     expect(result.contacts.metadata.typeCounts.person).toBe(1);
     expect(result.contacts.metadata.areaCounts["sanitaria-asistencial"]).toBe(1);
     expect(result.contacts.records[0]?.audit.createdBy).toBe("Samuel");
+    expect(result.contacts.records.find((record) => record.id === result.savedRecordId)?.contactMethods.phones[0]?.number).toBe("12345");
   });
 
   it("orders a newly created contact by its visible service-and-name title", async () => {
@@ -1446,6 +1447,7 @@ describe("AppDataService", () => {
         phones: [
           {
             ...existing.contactMethods.phones[0],
+            number: "123 456-789",
             isPrimary: true,
             noPatientSharing: false
           }
@@ -1467,6 +1469,7 @@ describe("AppDataService", () => {
     expect(updated?.audit.createdBy).toBe(existing.audit.createdBy);
     expect(updated?.audit.updatedBy).toBe("Samuel");
     expect(result.contacts.metadata.areaCounts.especialidades).toBe(1);
+    expect(updated?.contactMethods.phones[0]?.number).toBe("123456789");
   });
 
   it("does not invent a primary phone on createRecord when none is marked", async () => {
@@ -1783,7 +1786,7 @@ describe("AppDataService", () => {
                 phones: [
                   {
                     id: "ph_imported_1",
-                    number: "44556",
+                    number: "44 556",
                     kind: "internal",
                     isPrimary: true,
                     confidential: false,
@@ -1819,8 +1822,9 @@ describe("AppDataService", () => {
 
     const persisted = JSON.parse(
       await fs.readFile(path.join(testRoot, "data", "contacts.json"), "utf-8")
-    ) as { records: Array<{ displayName: string }> };
+    ) as { records: Array<{ displayName: string; contactMethods: { phones: Array<{ number: string }> } }> };
     expect(persisted.records[0]?.displayName).toBe("Importado");
+    expect(persisted.records[0]?.contactMethods.phones[0]?.number).toBe("44556");
   });
 
   // Last-import watermark shown in the app header.

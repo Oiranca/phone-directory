@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AREAS, RECORD_TYPES } from "../constants/catalogs.js";
+import { normalizePhoneForStorage } from "../utils/matching.js";
 
 const isoDateTimeString = z.string().datetime({ offset: true });
 const autoBackupDefaults = {
@@ -13,7 +14,9 @@ const autoBackupDefaults = {
 export const phoneContactSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
-  number: z.string(),
+  number: z.string()
+    .transform(normalizePhoneForStorage)
+    .pipe(z.string().min(1, "El teléfono es obligatorio.")),
   extension: z.string().optional(),
   kind: z.string(),
   isPrimary: z.boolean(),
@@ -254,7 +257,9 @@ const optionalTextField = () =>
 export const editablePhoneContactSchema = z.object({
   id: z.string().min(1),
   label: optionalTextField(),
-  number: z.string().trim().min(1, "El teléfono es obligatorio."),
+  number: z.string()
+    .transform(normalizePhoneForStorage)
+    .pipe(z.string().min(1, "El teléfono es obligatorio.")),
   extension: optionalTextField(),
   kind: z.string().trim().min(1, "El tipo de teléfono es obligatorio."),
   isPrimary: z.boolean(),

@@ -253,6 +253,21 @@ describe("RecordFormPage", () => {
     expect(screen.getByRole("button", { name: "Eliminar contacto" })).toBeInTheDocument();
   });
 
+  it("normalizes allowed separators when pasting a phone number", async () => {
+    renderWithRoute("/contacts/new");
+    const numberInput = await screen.findByLabelText(/^Número/);
+    fireEvent.paste(numberInput, { clipboardData: { getData: () => "928 700-000" } });
+    expect(numberInput).toHaveValue("928700000");
+  });
+
+  it("rejects invalid pasted phone content", async () => {
+    renderWithRoute("/contacts/new");
+    const numberInput = await screen.findByLabelText(/^Número/);
+    fireEvent.paste(numberInput, { clipboardData: { getData: () => "928 oficina" } });
+    expect(await screen.findByText("El número pegado contiene caracteres no válidos.")).toBeInTheDocument();
+    expect(numberInput).toHaveValue("");
+  });
+
   it("confirms deletion before deleting an edited record", async () => {
     renderWithRoute(`/contacts/${defaultContacts.records[0].id}/edit`);
     fireEvent.click(await screen.findByRole("button", { name: "Eliminar contacto" }));

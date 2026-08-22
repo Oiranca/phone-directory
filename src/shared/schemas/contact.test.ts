@@ -82,6 +82,15 @@ describe("serialization parity — derived types round-trip identically", () => 
     expect(reparsed).toEqual(parsed);
   });
 
+  it("normalizes display separators in imported phone data", () => {
+    const parsed = phoneContactSchema.parse({
+      ...phoneFixture,
+      number: "+34 (928) 700-000"
+    });
+
+    expect(parsed.number).toBe("+34928700000");
+  });
+
   it("EmailContact shape matches emailContactSchema output", () => {
     const emailFixture = { id: "em_001", address: "test@example.com", isPrimary: true };
     const parsed: EmailContact = emailContactSchema.parse(emailFixture);
@@ -264,5 +273,46 @@ describe("editableContactRecordSchema.customFields", () => {
   it("omitting customFields entirely is valid", () => {
     const result = editableContactRecordSchema.safeParse(baseEditable);
     expect(result.success).toBe(true);
+  });
+
+  it("normalizes phone separators submitted from create or edit forms", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      contactMethods: {
+        phones: [{
+          id: "ph_001",
+          number: "123 456-789",
+          kind: "interno",
+          isPrimary: true,
+          confidential: false,
+          noPatientSharing: false
+        }],
+        emails: []
+      }
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.contactMethods.phones[0]?.number).toBe("123456789");
+    }
+  });
+
+  it("rejects phone input that becomes empty after normalization", () => {
+    const result = editableContactRecordSchema.safeParse({
+      ...baseEditable,
+      contactMethods: {
+        phones: [{
+          id: "ph_001",
+          number: " - . () ",
+          kind: "interno",
+          isPrimary: true,
+          confidential: false,
+          noPatientSharing: false
+        }],
+        emails: []
+      }
+    });
+
+    expect(result.success).toBe(false);
   });
 });
