@@ -51,7 +51,7 @@ import {
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
-import { computeMetadataCounts, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
+import { computeMetadataCounts, normalizeDisplayName, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 
 /**
  * Union `customFields` from both records of a duplicate-merge pair.
@@ -789,7 +789,16 @@ export class AppDataService {
       }
     });
 
-    const nextContacts = this.buildNextDataset([nextRecord, ...contacts.records], contacts, editorName, now);
+    const nextContacts = this.buildNextDataset(
+      [...contacts.records, nextRecord].sort((left, right) =>
+        this.buildVisibleTitle(left).localeCompare(this.buildVisibleTitle(right), "es", {
+          sensitivity: "base"
+        })
+      ),
+      contacts,
+      editorName,
+      now
+    );
     await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
     this.noteAutoBackupEligibleEdit();
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
@@ -1735,6 +1744,20 @@ export class AppDataService {
       },
       records
     });
+  }
+
+  private buildVisibleTitle(record: ContactRecord): string {
+    const displayName = record.displayName.trim();
+    const service = record.organization.service?.trim() ?? "";
+
+    if (!service) {
+      return displayName;
+    }
+
+    const normalizedName = normalizeDisplayName(displayName);
+    return normalizedName && normalizeDisplayName(service).includes(normalizedName)
+      ? service
+      : `${service} - ${displayName}`;
   }
 
   private mergeImportedDataset(

@@ -721,11 +721,34 @@ describe("AppDataService", () => {
     });
 
     expect(result.savedRecordId).toMatch(/^cnt_/);
-    expect(result.contacts.records[0]?.displayName).toBe("Ana Pérez");
+    expect(result.contacts.records.find((record) => record.id === result.savedRecordId)?.displayName).toBe("Ana Pérez");
     expect(result.contacts.metadata.recordCount).toBe(3);
     expect(result.contacts.metadata.typeCounts.person).toBe(1);
     expect(result.contacts.metadata.areaCounts["sanitaria-asistencial"]).toBe(1);
     expect(result.contacts.records[0]?.audit.createdBy).toBe("Samuel");
+  });
+
+  it("orders a newly created contact by its visible service-and-name title", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const created = await service.createRecord({
+      beepers: [],
+      type: "person",
+      displayName: "Zorro",
+      person: { firstName: "Zorro", lastName: "" },
+      organization: { department: "Pruebas", service: "Alergia", area: "otros" },
+      location: {},
+      contactMethods: { phones: [], emails: [], socials: [] },
+      aliases: [],
+      tags: [],
+      status: "active",
+      notes: ""
+    });
+
+    expect(created.contacts.records[0]?.id).toBe(created.savedRecordId);
   });
 
   it("creates and rotates launch auto-backups when enabled", async () => {
@@ -1474,8 +1497,9 @@ describe("AppDataService", () => {
       status: "active"
     });
 
-    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
-    expect(result.contacts.records[0]?.contactMethods.phones[1]?.isPrimary).toBe(false);
+    const created = result.contacts.records.find((record) => record.id === result.savedRecordId)!;
+    expect(created.contactMethods.phones[0]?.isPrimary).toBe(false);
+    expect(created.contactMethods.phones[1]?.isPrimary).toBe(false);
   });
 
   it("persists a single explicit isPrimary: false phone on createRecord without re-forcing it to true", async () => {
@@ -1511,7 +1535,8 @@ describe("AppDataService", () => {
       status: "active"
     });
 
-    expect(result.contacts.records[0]?.contactMethods.phones[0]?.isPrimary).toBe(false);
+    const created = result.contacts.records.find((record) => record.id === result.savedRecordId)!;
+    expect(created.contactMethods.phones[0]?.isPrimary).toBe(false);
   });
 
   it("persists a single explicit isPrimary: false phone on updateRecord without re-forcing it to true", async () => {
