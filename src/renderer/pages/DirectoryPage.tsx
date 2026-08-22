@@ -708,6 +708,15 @@ export const DirectoryPage = () => {
                   </div>
                 )}
 
+                {selectedRecord.organization.schedule?.trim() && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Horario</p>
+                    <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                      {selectedRecord.organization.schedule}
+                    </p>
+                  </div>
+                )}
+
                 {selectedRecordLocation && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ubicación</p>

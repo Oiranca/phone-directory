@@ -718,6 +718,61 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Avenida de ejemplo, 10")).toBeInTheDocument();
   });
 
+  it("shows the imported schedule when present", async () => {
+    const contacts = structuredClone(defaultContacts);
+    const target = contacts.records[1]!;
+    target.organization.schedule = "L-V 08:00-15:00";
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      },
+      selectedRecordId: target.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).getByText("Horario")).toBeInTheDocument();
+    expect(within(detail).getByText("L-V 08:00-15:00")).toBeInTheDocument();
+  });
+
+  it("omits the schedule card when no schedule is present", async () => {
+    const contacts = structuredClone(defaultContacts);
+    const target = contacts.records[1]!;
+    target.organization.schedule = "";
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      },
+      selectedRecordId: target.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).queryByText("Horario")).not.toBeInTheDocument();
+  });
+
   it("shows custom fields on the selected contact detail", async () => {
     const contacts = structuredClone(defaultContacts);
     const target = contacts.records[1]!;
