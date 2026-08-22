@@ -57,6 +57,7 @@ const EXPECTED_METHODS = [
   "browseForPath",
   "createRecord",
   "updateRecord",
+  "deleteRecord",
   "createBackup",
   "listBackups",
   "restoreBackup",
@@ -223,6 +224,9 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
     });
     it("updateRecord → contacts:update-record", async () => {
       await expectChannel("updateRecord", CONTACTS_CHANNELS.updateRecord, "id-1", { displayName: "Updated" });
+    });
+    it("deleteRecord → contacts:delete-record", async () => {
+      await expectChannel("deleteRecord", CONTACTS_CHANNELS.deleteRecord, "id-1");
     });
     it("createBackup → contacts:create-backup", async () => {
       await expectChannel("createBackup", CONTACTS_CHANNELS.createBackup);

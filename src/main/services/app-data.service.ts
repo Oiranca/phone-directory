@@ -222,6 +222,14 @@ export class AppDataService {
     return this.toEditableSettings(this.getManagedSettingsDefaults());
   }
 
+  async getBeeperBackupOptions(): Promise<{ backupDirectoryPath: string; retentionCount: number }> {
+    const settings = await this.readSettings(true);
+    return {
+      backupDirectoryPath: settings.backupDirectoryPath,
+      retentionCount: settings.ui.autoBackup.retentionCount
+    };
+  }
+
   async createBackup() {
     return this.enqueueWrite(() => this.createBackupInner());
   }
@@ -869,6 +877,42 @@ export class AppDataService {
       settings: this.toEditableSettings(settings),
       savedRecordId: currentRecord.id
     };
+    });
+  }
+
+  async deleteRecord(recordId: string): Promise<BootstrapData> {
+    return this.enqueueWrite(async () => {
+      const settings = await this.readSettings(true);
+      const contacts = await this.readContacts(settings);
+
+      if (!contacts.records.some((record) => record.id === recordId)) {
+        throw new Error("No se encontró el registro solicitado.");
+      }
+
+      const now = new Date().toISOString();
+      const editorName = this.getEditorName(settings);
+      await this.createBackupCore(
+        settings,
+        "contacts-before-delete",
+        "No se pudo crear la copia de seguridad antes de eliminar el registro."
+      );
+
+      const nextContacts = this.buildNextDataset(
+        contacts.records.filter((record) => record.id !== recordId),
+        contacts,
+        editorName,
+        now
+      );
+      await this.writeDatasetToPath(settings.dataFilePath, nextContacts);
+      await this.appendAuditEntry({
+        timestamp: now,
+        editor: editorName,
+        action: "delete",
+        recordId,
+        recordsAffected: 1
+      });
+
+      return { contacts: nextContacts, settings: this.toEditableSettings(settings) };
     });
   }
 

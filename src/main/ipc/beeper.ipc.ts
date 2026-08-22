@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { ZodError } from "zod";
 import { editableBeeperRecordSchema, editableImportedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeepersService } from "../services/beeper.service.js";
+import type { AppDataService } from "../services/app-data.service.js";
 import { BEEPERS_CHANNELS } from "../../shared/ipc/channels.js";
 
 /**
@@ -23,7 +24,7 @@ const toRendererError = (err: unknown, channel: string): Error => {
   return new Error("Error inesperado. Consulte los registros del proceso principal.");
 };
 
-export const registerBeepersIpc = (service: BeepersService) => {
+export const registerBeepersIpc = (service: BeepersService, appDataService: AppDataService) => {
   ipcMain.handle(BEEPERS_CHANNELS.list, async () => {
     try {
       return await service.list();
@@ -58,7 +59,7 @@ export const registerBeepersIpc = (service: BeepersService) => {
       throw new Error("ID de busca inválido.");
     }
     try {
-      return await service.remove(id);
+      return await service.remove(id, await appDataService.getBeeperBackupOptions());
     } catch (err) {
       throw toRendererError(err, BEEPERS_CHANNELS.remove);
     }

@@ -545,6 +545,7 @@ describe("contacts:import-csv-dataset — sender binding", () => {
       resetDataset: vi.fn(),
       createRecord: vi.fn(),
       updateRecord: vi.fn(),
+      deleteRecord: vi.fn(),
       listBackups: vi.fn(),
       restoreBackup: vi.fn(),
       exportDataset: vi.fn(),

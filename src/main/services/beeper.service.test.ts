@@ -150,19 +150,20 @@ describe("BeepersService", () => {
       shift: "mañana"
     });
 
-    await service.remove(first.id);
+    await service.remove(first.id, { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 5 });
 
     const listed = await service.list();
     expect(listed).toHaveLength(1);
     expect(listed[0]?.id).toBe(second.id);
     expect(listed.find((r) => r.id === first.id)).toBeUndefined();
+    expect((await fs.readdir(path.join(testRoot, "backups"))).some((name) => name.startsWith("beepers-before-delete-"))).toBe(true);
   });
 
   it("remove throws when record ID does not exist", async () => {
     const { BeepersService } = await import("./beeper.service.js");
     const service = new BeepersService();
 
-    await expect(service.remove("bsc_nonexist")).rejects.toThrow(
+    await expect(service.remove("bsc_nonexist", { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 5 })).rejects.toThrow(
       "No se encontró la busca solicitada."
     );
   });

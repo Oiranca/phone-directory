@@ -225,6 +225,7 @@ export const BeepersPage = () => {
       await window.hospitalDirectory.deleteBeeper(deleteConfirm.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteConfirm.id));
       setDeleteConfirm(null);
+      pushToast({ type: "success", message: "Busca eliminada. Se creó una copia de seguridad previa." });
     } catch {
       pushToast({ type: "error", message: "Error al eliminar la busca." });
       setDeleteConfirm(null);
@@ -405,6 +406,16 @@ export const BeepersPage = () => {
             )}
           </div>
           <div className="mt-6 flex justify-end gap-3">
+            {editingId ? (
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm({ id: editingId, deviceNumber: formData.deviceNumber })}
+                disabled={isSaving}
+                className="focus-ring mr-auto rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                Eliminar busca
+              </button>
+            ) : null}
             <button
               type="button"
               data-keyboard-cancel

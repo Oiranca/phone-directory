@@ -297,6 +297,7 @@ export type UseContactFormResult = {
   removeCustomField: (fieldId: string) => void;
   setPendingFocusTarget: React.Dispatch<React.SetStateAction<PendingFocusTarget | null>>;
   handleSubmit: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  handleDelete: () => Promise<void>;
 };
 
 export const useContactForm = (): UseContactFormResult => {
@@ -681,6 +682,28 @@ export const useContactForm = (): UseContactFormResult => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!id || isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+      const result = await window.hospitalDirectory.deleteRecord(id);
+      setContacts(result.contacts);
+      setSettings(result.settings);
+      setSelectedRecordId(null);
+      isDirtyRef.current = false;
+      pushToast({ type: "success", message: "Contacto eliminado. Se creó una copia de seguridad previa." });
+      navigate("/");
+    } catch (error) {
+      pushToast({
+        type: "error",
+        message: toCompactToastMessage(error, "No se pudo eliminar el contacto. No se realizó ningún cambio.")
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     isEditing,
     isLoading,
@@ -714,6 +737,7 @@ export const useContactForm = (): UseContactFormResult => {
     updateCustomField,
     removeCustomField,
     setPendingFocusTarget,
-    handleSubmit
+    handleSubmit,
+    handleDelete
   };
 };
