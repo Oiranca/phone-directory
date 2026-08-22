@@ -718,6 +718,35 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Avenida de ejemplo, 10")).toBeInTheDocument();
   });
 
+  it("shows custom fields on the selected contact detail", async () => {
+    const contacts = structuredClone(defaultContacts);
+    const target = contacts.records[1]!;
+    target.customFields = [{ id: "cf-test", key: "Horario especial", value: "L-V 08:00-15:00" }];
+
+    useAppStore.setState({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      },
+      selectedRecordId: target.id,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+
+    expect(within(detail).getByText("Campos personalizados")).toBeInTheDocument();
+    expect(within(detail).getByText("Horario especial")).toBeInTheDocument();
+    expect(within(detail).getByText("L-V 08:00-15:00")).toBeInTheDocument();
+  });
+
   it("omits the Ubicación card when no location data is present", async () => {
     const contacts = structuredClone(defaultContacts);
 

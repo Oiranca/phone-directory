@@ -846,6 +846,22 @@ export const DirectoryPage = () => {
                   </div>
                 )}
 
+                {(selectedRecord.customFields ?? []).length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Campos personalizados</p>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {selectedRecord.customFields!.map((field) => (
+                        <div key={field.id} className="min-w-0 rounded-xl bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-semibold text-slate-600">{field.key}</dt>
+                          <dd className="mt-1 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
+                            {field.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+
                 {selectedRecord.notes && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notas</p>
