@@ -258,9 +258,11 @@ describe("AppDataService — mutation audit coverage", () => {
     const service = new AppDataService();
     await service.ensureInitialFiles();
 
-    // Export the current dataset to a temp file, then import it back
+    // Persist a legacy contacts-only dataset, then import it back.
     const exportPath = path.join(testRoot, "export-for-import.json");
-    await service.exportDataset(exportPath);
+    const bootstrap = await service.getBootstrapData();
+    if ("recovery" in bootstrap) throw new Error("recovery mode unexpected");
+    await fs.writeFile(exportPath, JSON.stringify(bootstrap.contacts), "utf-8");
     await fs.writeFile(path.join(testRoot, "data", "audit-log.json"), "[]", "utf-8");
 
     await service.importDataset(exportPath);

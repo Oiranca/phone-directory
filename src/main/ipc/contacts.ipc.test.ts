@@ -971,6 +971,35 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     expect(response).not.toHaveProperty("result.importedFilePath");
   });
 
+  it("strips every internal path from a combined JSON import", async () => {
+    serviceMock.importJsonFile.mockResolvedValueOnce({
+      kind: "combined-import",
+      result: {
+        ...jsonImportResult,
+        beeperBackupPath: "/tmp/backups/beepers.json",
+        beeperRecordCount: 4,
+        importedBeeperRecordCount: 5
+      }
+    });
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/combined.json"] });
+
+    const response = await getHandler()({ sender: makeWebContentsSender(8) } as unknown);
+
+    expect(response).toEqual({
+      kind: "combined-import",
+      result: {
+        contacts: jsonImportResult.contacts,
+        settings: jsonImportResult.settings,
+        recordCount: 0,
+        beeperRecordCount: 4,
+        importedBeeperRecordCount: 5
+      }
+    });
+    expect(response).not.toHaveProperty("result.backupPath");
+    expect(response).not.toHaveProperty("result.beeperBackupPath");
+    expect(response).not.toHaveProperty("result.importedFilePath");
+  });
+
   it("routes a beepers JSON file to the beepers store", async () => {
     serviceMock.importJsonFile.mockResolvedValueOnce({
       kind: "beepers-import",
@@ -1384,7 +1413,9 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     exportDatasetMock = vi.fn().mockResolvedValue({
       filePath: "/tmp/exports/contacts.json",
       exportedAt: "2026-07-28T00:00:00.000Z",
-      recordCount: 2
+      recordCount: 2,
+      beeperRecordCount: 3,
+      importedBeeperRecordCount: 4
     });
 
     vi.doMock("electron", () => ({
@@ -1440,7 +1471,7 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     expect(showMessageBoxMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Exportar datos sensibles",
-        message: "El archivo exportado contiene datos sensibles del directorio."
+        message: "El archivo exportado contiene datos sensibles de la agenda y las buscas."
       })
     );
     expect(showSaveDialogMock).toHaveBeenCalledTimes(1);
@@ -1459,7 +1490,9 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     expect(result).toEqual({
       fileName: "contacts.json",
       exportedAt: "2026-07-28T00:00:00.000Z",
-      recordCount: 2
+      recordCount: 2,
+      beeperRecordCount: 3,
+      importedBeeperRecordCount: 4
     });
     expect(result).not.toHaveProperty("filePath");
   });

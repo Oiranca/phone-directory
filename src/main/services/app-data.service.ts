@@ -4,6 +4,11 @@ import path from "node:path";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { beepersDatasetSchema } from "../../shared/schemas/beeper.schema.js";
+import {
+  COMBINED_DATA_FORMAT,
+  COMBINED_DATA_VERSION,
+  combinedDataEnvelopeSchema
+} from "../../shared/schemas/combined-data.schema.js";
 import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts.schema.js";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
@@ -33,6 +38,7 @@ import type {
   AuditLogQueryParams,
   AuditLogResult,
   ImportContactsResultInternal,
+  ImportCombinedDataResultInternal,
   JsonFileImportResultInternal,
   RecoveryState,
   ResetContactsResultInternal,
@@ -83,6 +89,12 @@ const mergeCustomFields = (
   }
 
   return merged;
+};
+
+const stripAbsoluteLocalPath = (value: string): string => {
+  if (path.win32.isAbsolute(value)) return path.win32.basename(value);
+  if (path.posix.isAbsolute(value)) return path.posix.basename(value);
+  return value;
 };
 
 export class AppDataService {
@@ -358,11 +370,34 @@ export class AppDataService {
     return this.enqueueWrite(async () => {
     const settings = await this.readSettings(true);
     const contacts = await this.readContacts(settings);
+    const beepersService = this.options.beepersService;
+
+    if (!beepersService) {
+      throw new Error("El servicio de buscas no está disponible.");
+    }
+
+    const beepers = await beepersService.exportDataset();
+    const exportedAt = new Date().toISOString();
+    const portableContacts: DirectoryDataset = {
+      ...contacts,
+      metadata: {
+        ...contacts.metadata,
+        generatedFrom: stripAbsoluteLocalPath(contacts.metadata.generatedFrom),
+        generatedBy: stripAbsoluteLocalPath(contacts.metadata.generatedBy)
+      }
+    };
+    const envelope = combinedDataEnvelopeSchema.parse({
+      format: COMBINED_DATA_FORMAT,
+      version: COMBINED_DATA_VERSION,
+      exportedAt,
+      contacts: portableContacts,
+      beepers
+    });
     const directory = path.dirname(targetFilePath);
 
     try {
       await ensureDirectory(directory);
-      await writeJsonFile(targetFilePath, contacts);
+      await writeJsonFile(targetFilePath, envelope);
     } catch (error) {
       throw this.toFilesystemError(
         error,
@@ -373,8 +408,10 @@ export class AppDataService {
 
     return {
       filePath: targetFilePath,
-      exportedAt: contacts.exportedAt,
-      recordCount: contacts.records.length
+      exportedAt,
+      recordCount: contacts.records.length,
+      beeperRecordCount: beepers.records.length,
+      importedBeeperRecordCount: beepers.importedRecords.length
     };
     });
   }
@@ -422,6 +459,15 @@ export class AppDataService {
 
   async importJsonFile(sourceFilePath: string): Promise<JsonFileImportResultInternal> {
     const raw = await readJsonFile<unknown>(sourceFilePath);
+    const combined = combinedDataEnvelopeSchema.safeParse(raw);
+
+    if (combined.success) {
+      return {
+        kind: "combined-import",
+        result: await this.importCombinedData(combined.data, sourceFilePath)
+      };
+    }
+
     const contacts = directoryDatasetSchema.safeParse(raw);
 
     if (contacts.success) {
@@ -484,8 +530,56 @@ export class AppDataService {
     }
 
     throw new Error(
-      "El JSON no es una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+      "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
     );
+  }
+
+  private async importCombinedData(
+    envelope: ReturnType<typeof combinedDataEnvelopeSchema.parse>,
+    sourceFilePath: string
+  ): Promise<ImportCombinedDataResultInternal> {
+    const beepersService = this.options.beepersService;
+
+    if (!beepersService) {
+      throw new Error("El servicio de buscas no está disponible.");
+    }
+
+    return this.enqueueWrite(async () => {
+      const settings = await this.readSettings(true);
+      const now = new Date().toISOString();
+      const transaction = await beepersService.importDatasetWithPeerTransaction(
+        envelope.beepers,
+        {
+          backupDirectoryPath: settings.backupDirectoryPath,
+          retentionCount: settings.ui.autoBackup.retentionCount
+        },
+        {
+          createBackup: () => this.createBackupInner(),
+          replaceDataset: () => this.writeDatasetToPath(settings.dataFilePath, envelope.contacts)
+        }
+      );
+
+      await this.appendAuditEntry({
+        timestamp: now,
+        editor: this.getEditorName(settings),
+        action: "dataset-replace",
+        recordsAffected: envelope.contacts.records.length,
+        importSource: path.basename(sourceFilePath)
+      });
+
+      const updatedSettings = await this.recordLastImportedAt(settings, now);
+
+      return {
+        contacts: envelope.contacts,
+        settings: this.toEditableSettings(updatedSettings),
+        backupPath: transaction.peerBackup,
+        beeperBackupPath: transaction.backupPath,
+        importedFilePath: sourceFilePath,
+        recordCount: envelope.contacts.records.length,
+        beeperRecordCount: transaction.recordCount,
+        importedBeeperRecordCount: transaction.importedRecordCount
+      };
+    });
   }
 
   // OIR-276: exposes the canonical backup directory so the IPC layer can

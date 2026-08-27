@@ -174,6 +174,10 @@ export class BeepersService {
     await writeJsonFile(filePath, dataset);
   }
 
+  async exportDataset(): Promise<BeepersDataset> {
+    return this.enqueueWrite(() => this.readDataset());
+  }
+
   async list(): Promise<BeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.records;
@@ -267,6 +271,71 @@ export class BeepersService {
       return {
         recordCount: parsed.records.length,
         importedRecordCount: parsed.importedRecords.length
+      };
+    });
+  }
+
+  async importDatasetWithPeerTransaction<T>(
+    dataset: BeepersDataset,
+    options: { backupDirectoryPath: string; retentionCount: number },
+    peer: {
+      createBackup: () => Promise<T>;
+      replaceDataset: () => Promise<void>;
+    }
+  ): Promise<{
+    recordCount: number;
+    importedRecordCount: number;
+    backupPath: string;
+    peerBackup: T;
+  }> {
+    return this.enqueueWrite(async () => {
+      const parsed = beepersDatasetSchema.parse(dataset);
+      const totalRecords = parsed.records.length + parsed.importedRecords.length;
+
+      if (totalRecords > MAX_SPREADSHEET_IMPORT_ROWS) {
+        throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} buscas.`);
+      }
+
+      const current = await this.readDataset();
+      const backupPath = await this.createBackup(
+        current,
+        options.backupDirectoryPath,
+        "beepers-before-import"
+      );
+      const peerBackup = await peer.createBackup();
+
+      await this.writeDataset(parsed);
+      try {
+        await peer.replaceDataset();
+      } catch (error) {
+        try {
+          await this.writeDataset(current);
+        } catch (rollbackError) {
+          const importMessage = error instanceof Error ? error.message : String(error);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(
+            `No se pudo importar el archivo combinado ni restaurar las buscas anteriores. Importación: ${importMessage}. Restauración: ${rollbackMessage}.`
+          );
+        }
+        throw error;
+      }
+
+      try {
+        await this.pruneBackups(
+          options.backupDirectoryPath,
+          options.retentionCount,
+          "beepers-before-import"
+        );
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[BackupRetention] Failed to prune beepers-before-import-* backups — ${errMsg}`);
+      }
+
+      return {
+        recordCount: parsed.records.length,
+        importedRecordCount: parsed.importedRecords.length,
+        backupPath,
+        peerBackup
       };
     });
   }

@@ -1619,20 +1619,47 @@ describe("AppDataService", () => {
 
   it("exports the current dataset and lists backups in reverse chronological order", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
 
-    const service = new AppDataService();
+    const service = new AppDataService({ beepersService: new BeepersService() });
     await service.ensureInitialFiles();
+    await fs.writeFile(
+      path.join(testRoot, "data", "contacts.json"),
+      JSON.stringify({
+        ...defaultContacts,
+        metadata: {
+          ...defaultContacts.metadata,
+          generatedFrom: path.join(testRoot, "imports", "agenda.ods"),
+          generatedBy: "C:\\Users\\operator\\contacts-generator.exe"
+        }
+      }),
+      "utf8"
+    );
 
     const exportFilePath = path.join(testRoot, "exports", "contacts-share.json");
     const exportResult = await service.exportDataset(exportFilePath);
 
     expect(exportResult.filePath).toBe(exportFilePath);
     expect(exportResult.recordCount).toBe(2);
+    expect(exportResult.beeperRecordCount).toBe(0);
+    expect(exportResult.importedBeeperRecordCount).toBe(0);
 
     const exportedDataset = JSON.parse(
       await fs.readFile(exportFilePath, "utf-8")
-    ) as { records: unknown[] };
-    expect(exportedDataset.records).toHaveLength(2);
+    ) as { format: string; version: string; contacts: { records: unknown[] }; beepers: { records: unknown[] } };
+    expect(exportedDataset).toMatchObject({
+      format: "hospiagenda-data",
+      version: "1.0.0",
+      contacts: {
+        metadata: {
+          generatedFrom: "agenda.ods",
+          generatedBy: "contacts-generator.exe"
+        }
+      },
+      beepers: { version: "1.0.0", records: [], importedRecords: [] }
+    });
+    expect(exportedDataset.contacts.records).toHaveLength(2);
+    expect(JSON.stringify(exportedDataset)).not.toContain(testRoot);
     if (process.platform !== "win32") {
       expect((await fs.stat(exportFilePath)).mode & 0o777).toBe(0o600);
     }
@@ -1679,8 +1706,9 @@ describe("AppDataService", () => {
 
   it("surfaces the affected destination when export writing fails", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
 
-    const service = new AppDataService();
+    const service = new AppDataService({ beepersService: new BeepersService() });
     await service.ensureInitialFiles();
 
     const writeFileSpy = vi

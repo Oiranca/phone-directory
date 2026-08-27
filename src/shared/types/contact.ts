@@ -206,6 +206,8 @@ export interface ExportContactsResultInternal {
   filePath: string;
   exportedAt: string;
   recordCount: number;
+  beeperRecordCount: number;
+  importedBeeperRecordCount: number;
 }
 
 /**
@@ -218,6 +220,8 @@ export interface ExportContactsResult {
   fileName: string;
   exportedAt: string;
   recordCount: number;
+  beeperRecordCount: number;
+  importedBeeperRecordCount: number;
 }
 
 /**
@@ -244,7 +248,19 @@ export interface ImportContactsResultInternal extends BootstrapData {
  */
 export type ImportContactsResult = Omit<ImportContactsResultInternal, "backupPath" | "importedFilePath">;
 
+export interface ImportCombinedDataResultInternal extends ImportContactsResultInternal {
+  beeperBackupPath: string;
+  beeperRecordCount: number;
+  importedBeeperRecordCount: number;
+}
+
+export type ImportCombinedDataResult = Omit<
+  ImportCombinedDataResultInternal,
+  "backupPath" | "beeperBackupPath" | "importedFilePath"
+>;
+
 export type JsonFileImportResultInternal =
+  | { kind: "combined-import"; result: ImportCombinedDataResultInternal }
   | { kind: "contacts-import"; result: ImportContactsResultInternal }
   | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
   | { kind: "settings-import"; settings: EditableAppSettings };
@@ -496,6 +512,7 @@ export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "impo
  * unified "Importar" entry point. Lets the renderer route to whichever
  * existing UI matches the flow that main actually dispatched to, without ever
  * receiving a file path back:
+ *   - "combined-import"      → replace contacts and beepers together
  *   - "json-import"           → replace the contacts dataset
  *   - "beepers-import"        → replace the beepers dataset
  *   - "settings-import"       → import preferences while preserving managed paths
@@ -504,6 +521,7 @@ export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "impo
  *   - "cancelled"             → the user closed the dialog without picking a file
  */
 export type PickAndImportDatasetResult =
+  | { kind: "combined-import"; result: ImportCombinedDataResult }
   | { kind: "json-import"; result: ImportContactsResult }
   | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
   | { kind: "settings-import"; settings: EditableAppSettings }

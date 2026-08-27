@@ -34,18 +34,12 @@ type PendingConfirmation =
  * Card consolidation:
  * - "Copia de seguridad" merges the former "Crear copia de seguridad" and
  *   "Exportar JSON" actions into a single card. A later pass reduced this to a
- *   single primary button plus a de-emphasized secondary link for saving to
- *   a different folder; a subsequent pass removed that secondary link entirely (the
- *   operator confirmed choosing another destination folder is never
- *   needed) — the card is now just a title, one description line and the
- *   single "Crear copia de seguridad" button. The underlying
- *   exportDataset() IPC mechanism is untouched; only this UI entry point
- *   into it was removed.
+ *   local-backup action plus a portable combined-data export.
  * - "Importar" is now a single unified entry point: one button opens exactly
  *   one native file dialog (filtered to .json/.csv/.ods/.xls/.xlsx) via
  *   window.hospitalDirectory.pickAndImportDataset(). The main process
  *   determines the picked file's extension and dispatches internally to the
- *   schema-aware JSON import (contacts, beepers, or settings) or
+ *   schema-aware JSON import (combined data, contacts, beepers, or settings) or
  *   previewCsvImport() (CSV/ODS/XLS/XLSX normalize/validate/preview)
  *   pipelines — this component renders the matching result/preview UI.
  *
@@ -69,6 +63,7 @@ export const DataManagementSection = () => {
   const [backups, setBackups] = useState<BackupListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   // Covers the whole pickAndImportDataset() round-trip — the native dialog is
   // open and, once a file is picked, either JSON import or CSV preview
   // generation is still running. We only find out which one after the
@@ -90,6 +85,7 @@ export const DataManagementSection = () => {
   const backupsRequestedRef = useRef(false);
   const isMutating =
     isCreatingBackup ||
+    isExporting ||
     isImporting ||
     isImportingCsv;
 
@@ -157,9 +153,29 @@ export const DataManagementSection = () => {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const result = await window.hospitalDirectory.exportDataset();
+      if (!result) return;
+      const totalBeepers = result.beeperRecordCount + result.importedBeeperRecordCount;
+      pushToast({
+        type: "success",
+        message: `Archivo exportado: ${result.recordCount} contactos y ${totalBeepers} buscas.`
+      });
+    } catch (error) {
+      pushToast({
+        type: "error",
+        message: toCompactToastMessage(error, "No se pudo exportar el archivo de datos.")
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Single unified "Importar" entry point. Opens exactly one native
   // dialog (via pickAndImportDataset) and renders whichever existing flow
-  // matches the returned `kind`: contacts, beepers, settings, or a spreadsheet
+  // matches the returned `kind`: combined data, contacts, beepers, settings, or a spreadsheet
   // preview requiring a second confirmation.
   const handlePickAndImport = async () => {
     try {
@@ -194,6 +210,18 @@ export const DataManagementSection = () => {
         pushToast({
           type: "success",
           message: "Importación completada."
+        });
+        return;
+      }
+
+      if (response.kind === "combined-import") {
+        const result = response.result;
+        initialize({ contacts: result.contacts, settings: result.settings });
+        await refreshBackups();
+        const totalBeepers = result.beeperRecordCount + result.importedBeeperRecordCount;
+        pushToast({
+          type: "success",
+          message: `Importación completada: ${result.recordCount} contactos y ${totalBeepers} buscas.`
         });
         return;
       }
@@ -511,13 +539,13 @@ export const DataManagementSection = () => {
               the operator confirmed choosing another destination
               folder is never needed, so this card is now just a title, one
               description line and the single button. The underlying
-              exportDataset()/createBackup() IPC mechanism is unchanged. */}
+              createBackup() keeps producing the local contacts-only safety copy. */}
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-lg font-semibold text-scs-blueDark">Copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
-              Genera una copia de seguridad del directorio en la carpeta local de copias de seguridad.
+              Crea una copia local o exporta agenda y buscas en un único archivo portable.
             </p>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void handleCreateBackup()}
@@ -525,6 +553,14 @@ export const DataManagementSection = () => {
                 className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {isCreatingBackup ? "Creando…" : "Crear copia de seguridad"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={isMutating}
+                className="focus-ring rounded-2xl border border-scs-blue bg-white px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
+              >
+                {isExporting ? "Exportando…" : "Exportar archivo portable"}
               </button>
             </div>
           </div>

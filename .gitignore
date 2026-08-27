@@ -57,3 +57,5 @@ scripts/.test-*/
 
 # Ephemeral agent coordination log (not product docs)
 .claude/agent-progress.md
+# Added by code-review-graph
+.code-review-graph/

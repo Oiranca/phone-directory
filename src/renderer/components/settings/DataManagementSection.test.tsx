@@ -215,7 +215,9 @@ describe("DataManagementSection (Configuración data section)", () => {
         exportDataset: vi.fn().mockResolvedValue({
           fileName: "share.json",
           exportedAt: defaultContacts.exportedAt,
-          recordCount: defaultContacts.records.length
+          recordCount: defaultContacts.records.length,
+          beeperRecordCount: 0,
+          importedBeeperRecordCount: 0
         }),
         // The component only calls pickAndImportDataset() — default to
         // the CSV-preview flow since most tests exercise it. Tests that need the
@@ -353,6 +355,41 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
+  });
+
+  it("imports a combined JSON dataset and reports both stores", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "combined-import",
+      result: {
+        ...defaultJsonImportResult,
+        beeperRecordCount: 2,
+        importedBeeperRecordCount: 3
+      }
+    });
+
+    renderPage();
+    await screen.findByText("Datos e importación");
+    await openImportPicker();
+
+    expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
+    expect(await screen.findByText("Importación completada: 1 contactos y 5 buscas.")).toBeInTheDocument();
+  });
+
+  it("exports contacts and beepers in one portable file", async () => {
+    window.hospitalDirectory.exportDataset = vi.fn().mockResolvedValue({
+      fileName: "hospiagenda-data.json",
+      exportedAt: defaultContacts.exportedAt,
+      recordCount: 2,
+      beeperRecordCount: 1,
+      importedBeeperRecordCount: 4
+    });
+
+    renderPage();
+    await screen.findByText("Datos e importación");
+    fireEvent.click(screen.getByRole("button", { name: "Exportar archivo portable" }));
+
+    expect(window.hospitalDirectory.exportDataset).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Archivo exportado: 2 contactos y 5 buscas.")).toBeInTheDocument();
   });
 
   it("imports a beepers JSON dataset through the unified picker", async () => {

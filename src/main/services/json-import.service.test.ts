@@ -96,6 +96,147 @@ describe("schema-aware JSON import", () => {
     )).toBe(true);
   });
 
+  it("imports a validated combined envelope after backing up both stores", async () => {
+    const profileRoot = path.join(testRoot, "profile");
+    const combinedPath = path.join(fixtureRoot, "combined.json");
+    const importedContacts = {
+      ...defaultContacts,
+      records: [{ ...defaultContacts.records[0]!, displayName: "Agenda combinada" }],
+      metadata: { ...defaultContacts.metadata, recordCount: 1 }
+    };
+    const importedBeepers = {
+      version: "1.0.0" as const,
+      records: [],
+      importedRecords: [{
+        id: "ibsc_aabbccdd",
+        deviceNumber: "7182",
+        department: "Esterilización",
+        sourceSheet: "Buscas Todos",
+        sourceRow: 2
+      }]
+    };
+    await fs.writeFile(combinedPath, JSON.stringify({
+      format: "hospiagenda-data",
+      version: "1.0.0",
+      exportedAt: "2026-08-27T10:00:00.000Z",
+      contacts: importedContacts,
+      beepers: importedBeepers
+    }));
+
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new AppDataService({ beepersService: new BeepersService() });
+    await service.ensureInitialFiles();
+
+    const result = await service.importJsonFile(combinedPath);
+
+    expect(result.kind).toBe("combined-import");
+    expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")))
+      .toMatchObject({ records: [{ displayName: "Agenda combinada" }] });
+    expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "beepers.json"), "utf8")))
+      .toEqual(importedBeepers);
+    const backupNames = await fs.readdir(path.join(profileRoot, "backups"));
+    expect(backupNames.some((name) => name.startsWith("contacts-"))).toBe(true);
+    expect(backupNames.some((name) => name.startsWith("beepers-before-import-"))).toBe(true);
+  });
+
+  it("rejects an invalid combined envelope before changing either store", async () => {
+    const profileRoot = path.join(testRoot, "profile");
+    const combinedPath = path.join(fixtureRoot, "invalid-combined.json");
+    await fs.writeFile(combinedPath, JSON.stringify({
+      format: "hospiagenda-data",
+      version: "1.0.0",
+      exportedAt: "2026-08-27T10:00:00.000Z",
+      contacts: { ...defaultContacts, records: [{ invalid: true }] },
+      beepers: { version: "1.0.0", records: [], importedRecords: [] }
+    }));
+
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new AppDataService({ beepersService: new BeepersService() });
+    await service.ensureInitialFiles();
+    const contactsBefore = await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8");
+
+    await expect(service.importJsonFile(combinedPath)).rejects.toThrow("El JSON no es un archivo combinado");
+    expect(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")).toBe(contactsBefore);
+    await expect(fs.readFile(path.join(profileRoot, "data", "beepers.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await fs.readdir(path.join(profileRoot, "backups"))).toEqual([]);
+  });
+
+  it("leaves both stores unchanged when the contacts backup fails", async () => {
+    const profileRoot = path.join(testRoot, "profile");
+    const combinedPath = path.join(fixtureRoot, "combined-backup-failure.json");
+    await fs.writeFile(combinedPath, JSON.stringify({
+      format: "hospiagenda-data",
+      version: "1.0.0",
+      exportedAt: "2026-08-27T10:00:00.000Z",
+      contacts: { ...defaultContacts, records: [] },
+      beepers: { version: "1.0.0", records: [], importedRecords: [{
+        id: "ibsc_aabbccdd",
+        deviceNumber: "7182",
+        department: "Esterilización",
+        sourceSheet: "Buscas Todos",
+        sourceRow: 2
+      }] }
+    }));
+
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
+    await service.ensureInitialFiles();
+    const contactsBefore = await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8");
+    const copySpy = vi.spyOn(fs, "copyFile").mockRejectedValueOnce(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+
+    await expect(service.importJsonFile(combinedPath)).rejects.toThrow("No se pudo crear la copia");
+    expect(copySpy).toHaveBeenCalledTimes(1);
+    expect(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")).toBe(contactsBefore);
+    expect(await beepersService.list()).toEqual([]);
+    expect(await beepersService.listImported()).toEqual([]);
+  });
+
+  it("restores beepers when replacing contacts fails after both backups", async () => {
+    const profileRoot = path.join(testRoot, "profile");
+    const combinedPath = path.join(fixtureRoot, "combined-contacts-write-failure.json");
+    await fs.writeFile(combinedPath, JSON.stringify({
+      format: "hospiagenda-data",
+      version: "1.0.0",
+      exportedAt: "2026-08-27T10:00:00.000Z",
+      contacts: { ...defaultContacts, records: [] },
+      beepers: { version: "1.0.0", records: [], importedRecords: [{
+        id: "ibsc_aabbccdd",
+        deviceNumber: "7182",
+        department: "Esterilización",
+        sourceSheet: "Buscas Todos",
+        sourceRow: 2
+      }] }
+    }));
+
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
+    await service.ensureInitialFiles();
+    const contactsPath = path.join(profileRoot, "data", "contacts.json");
+    const contactsBefore = await fs.readFile(contactsPath, "utf8");
+    const rename = fs.rename.bind(fs);
+    const renameSpy = vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (path.basename(String(destination)) === "contacts.json") {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
+      return rename(source, destination);
+    });
+
+    await expect(service.importJsonFile(combinedPath)).rejects.toThrow(
+      "No se pudo escribir el archivo de datos configurado"
+    );
+    expect(renameSpy).toHaveBeenCalled();
+    renameSpy.mockRestore();
+    expect(await fs.readFile(contactsPath, "utf8")).toBe(contactsBefore);
+    expect(await beepersService.list()).toEqual([]);
+    expect(await beepersService.listImported()).toEqual([]);
+  });
+
   it("rejects unknown JSON with a clear domain error", async () => {
     const unknownPath = path.join(fixtureRoot, "unknown.json");
     await fs.writeFile(unknownPath, JSON.stringify({ version: "unknown" }));
@@ -104,7 +245,7 @@ describe("schema-aware JSON import", () => {
     await service.ensureInitialFiles();
 
     await expect(service.importJsonFile(unknownPath)).rejects.toThrow(
-      "El JSON no es una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+      "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
     );
   });
 
