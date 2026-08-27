@@ -44,6 +44,18 @@ const stripImportPaths = <T extends { backupPath: unknown; importedFilePath: unk
   return safe;
 };
 
+const stripCombinedImportPaths = <
+  T extends { backupPath: unknown; beeperBackupPath: unknown; importedFilePath: unknown }
+>(result: T): Omit<T, "backupPath" | "beeperBackupPath" | "importedFilePath"> => {
+  const {
+    backupPath: _backupPath,
+    beeperBackupPath: _beeperBackupPath,
+    importedFilePath: _importedFilePath,
+    ...safe
+  } = result;
+  return safe;
+};
+
 const toSafeResetResult = (result: ResetContactsResultInternal) => {
   const { backupPath: _backupPath, ...safe } = result;
   return safe;
@@ -75,7 +87,9 @@ const RESTORE_BACKUP_ERROR_MESSAGE = "No se pudo restaurar la copia de seguridad
 const toSafeExportResult = (result: ExportContactsResultInternal): ExportContactsResult => ({
   fileName: path.basename(result.filePath),
   exportedAt: result.exportedAt,
-  recordCount: result.recordCount
+  recordCount: result.recordCount,
+  beeperRecordCount: result.beeperRecordCount,
+  importedBeeperRecordCount: result.importedBeeperRecordCount
 });
 
 export const registerContactsIpc = (service: AppDataService) => {
@@ -168,7 +182,7 @@ export const registerContactsIpc = (service: AppDataService) => {
       defaultId: 0,
       cancelId: 0,
       title: "Exportar datos sensibles",
-      message: "El archivo exportado contiene datos sensibles del directorio.",
+      message: "El archivo exportado contiene datos sensibles de la agenda y las buscas.",
       detail: "Guárdalo solo en una ubicación protegida y elimínalo cuando ya no sea necesario."
     } satisfies Electron.MessageBoxOptions;
     const warningResult = browserWindow
@@ -180,8 +194,8 @@ export const registerContactsIpc = (service: AppDataService) => {
     }
 
     const saveOptions = {
-      title: "Exportar directorio",
-      defaultPath: path.join(app.getPath("downloads"), "contacts-export.json"),
+      title: "Exportar datos de HospiAgenda",
+      defaultPath: path.join(app.getPath("downloads"), "hospiagenda-data.json"),
       filters: [{ name: "JSON", extensions: ["json"] }]
     };
     const { canceled, filePath } = browserWindow
@@ -378,6 +392,10 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     if (extension === "json") {
       const result = await service.importJsonFile(sourceFilePath);
+
+      if (result.kind === "combined-import") {
+        return { kind: "combined-import", result: stripCombinedImportPaths(result.result) } as const;
+      }
 
       if (result.kind === "contacts-import") {
         return { kind: "json-import", result: stripImportPaths(result.result) } as const;
