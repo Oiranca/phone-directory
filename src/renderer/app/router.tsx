@@ -1,7 +1,5 @@
 import { Navigate, createHashRouter } from "react-router";
 import { App } from "./App";
-import { BeepersPage } from "../pages/BeepersPage";
-import { RecordFormPage } from "../pages/RecordFormPage";
 import { DirectoryPage } from "../pages/DirectoryPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
@@ -9,11 +7,9 @@ import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary"
 // Code-splitting: previously every route (including
 // SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
 // DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
-// all 7 pages shipped in the single initial bundle chunk regardless of
-// whether the operator ever visits them. These two are the highest-leverage
-// routes to split off since neither is the landing page and both pull in
-// sizeable, only-conditionally-used UI. DirectoryPage stays a static/eager
-// import since it's the index route and the first thing users see.
+// all route pages shipped in the initial bundle regardless of whether the
+// operator ever visited them. DirectoryPage stays static since it is the
+// index route and first screen. Every other user-facing page loads on demand.
 //
 // PR review follow-up — `withSuspense` originally only handled the pending
 // state. `withLazyRouteBoundary` additionally catches a rejected dynamic
@@ -38,11 +34,11 @@ export const router = createHashRouter([
       },
       {
         path: "contacts/new",
-        element: <RecordFormPage />
+        element: withSuspense(() => import("../pages/RecordFormPage").then((mod) => ({ default: mod.RecordFormPage })))
       },
       {
         path: "contacts/:id/edit",
-        element: <RecordFormPage />
+        element: withSuspense(() => import("../pages/RecordFormPage").then((mod) => ({ default: mod.RecordFormPage })))
       },
       {
         // Importar/Exportar was folded into Configuración as a
@@ -56,7 +52,7 @@ export const router = createHashRouter([
       },
       {
         path: "beeper",
-        element: <BeepersPage />
+        element: withSuspense(() => import("../pages/BeepersPage").then((mod) => ({ default: mod.BeepersPage })))
       },
       {
         path: "deduplicate",
