@@ -12,6 +12,7 @@ import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/cont
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 import { DirectoryHighlightCard } from "../components/directory/DirectoryHighlightCard";
 import { GENERIC_CCEE_APPOINTMENTS } from "../../shared/constants/directoryHighlights";
+import { RECORD_TYPE_LABELS } from "../../shared/constants/catalogs";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -183,6 +184,12 @@ const EditIcon = () => (
   </svg>
 );
 
+const CopyIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7.5V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 20 6v7.5a2.25 2.25 0 0 1-2.25 2.25H16M6.25 8h7.5A2.25 2.25 0 0 1 16 10.25v7.5A2.25 2.25 0 0 1 13.75 20h-7.5A2.25 2.25 0 0 1 4 17.75v-7.5A2.25 2.25 0 0 1 6.25 8Z" />
+  </svg>
+);
+
 /**
  * Derives a safe external URL for a social contact.
  * XSS-safe approach: only `http:` and `https:` schemes are allowed.
@@ -272,6 +279,7 @@ export const DirectoryPage = () => {
     ensureBootstrapLoaded
   } = useAppStore();
   const [currentPage, setCurrentPage] = useState(1);
+  const [copiedRecordId, setCopiedRecordId] = useState<string | null>(null);
 
   useEffect(() => {
     void ensureBootstrapLoaded();
@@ -407,6 +415,18 @@ export const DirectoryPage = () => {
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
   const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
+  const primarySelectedPhone = selectedRecord ? getPreferredResultPhone(selectedRecord) : undefined;
+
+  const copyPrimaryPhone = async () => {
+    if (!selectedRecord || !primarySelectedPhone) return;
+    try {
+      if (!navigator.clipboard) return;
+      await navigator.clipboard.writeText(primarySelectedPhone.number);
+      setCopiedRecordId(selectedRecord.id);
+    } catch {
+      // Clipboard permission can be unavailable in locked-down workstations.
+    }
+  };
 
   return (
     <section
@@ -528,10 +548,15 @@ export const DirectoryPage = () => {
             // e2e assertion).
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-1 -mx-1 -my-1"
           >
-          {currentPageRecords.map((record) => {
+          {currentPageRecords.map((record, index) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
+            const isPrimaryPhoneSafe = Boolean(primaryPhone && !primaryPhone.confidential && !primaryPhone.noPatientSharing);
+            const listContext = [record.organization.department, buildLocationTitleFallback(record.location)]
+              .filter((value, contextIndex, values) => Boolean(value?.trim()) && values.indexOf(value) === contextIndex)
+              .join(" · ");
+            const recordTypeLabel = RECORD_TYPE_LABELS[record.type];
             // Subtitle combines the contact's name (unless it's just a
             // duplicate of organization.service, which happens for ODS-imported
             // records whose blank "Nombre" column fell back to the service
@@ -545,32 +570,40 @@ export const DirectoryPage = () => {
             const subtitle = [nameLine, categoryLine].filter(Boolean).join(" · ");
 
             return (
-              <li key={record.id}>
+              <li key={record.id} className="rounded-2xl border border-slate-200 bg-white shadow-panel">
                 <button
                   type="button"
                   data-record-id={record.id}
                   onClick={() => setSelectedRecordId(record.id)}
                   aria-pressed={isSelected}
                   className={[
-                    "w-full rounded-2xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
+                    "w-full rounded-2xl p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
                     isSelected
-                      ? "border-scs-blue bg-scs-mist shadow-sm ring-1 ring-scs-blue"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 shadow-panel"
+                      ? "bg-scs-mist shadow-sm ring-1 ring-scs-blue"
+                      : "hover:bg-slate-50"
                   ].join(" ")}
                 >
-                  <div className="min-w-0">
+                  <div className="flex gap-3">
+                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600" aria-label={`Resultado ${pageStart + index + 1}`}>
+                      {pageStart + index + 1}
+                    </span>
+                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-scs-mist text-xs font-bold text-scs-blueDark" aria-label={recordTypeLabel}>
+                      {recordTypeLabel.slice(0, 1)}
+                    </span>
+                    <div className="min-w-0 flex-1">
                     {/* Prefix the title with the service when it adds context
                         beyond displayName (see buildDisplayTitle). */}
                     <h3 className="truncate font-semibold text-scs-blueDark">
                       {buildDisplayTitle(record.displayName, record.organization, record.location)}
                     </h3>
-                  </div>
+                    {listContext && <p className="mt-1 truncate text-xs font-medium text-slate-500">{listContext}</p>}
                   {/* Subtitle: name (unless duplicate of service) and role,
                       joined with " · ". Always renders — even empty — so the
                       layout slot/gap stays consistent across rows. */}
                   <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{primaryPhone?.number ?? "Sin teléfono"}</span>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium text-slate-700">{isPrimaryPhoneSafe ? primaryPhone?.number : "Contacto restringido"}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{record.status === "active" ? "Activo" : "Inactivo"}</span>
                     {privacyFlags.length > 0 && (
                       <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900" title="Atención de privacidad">
                         <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
@@ -578,7 +611,18 @@ export const DirectoryPage = () => {
                       </span>
                     )}
                   </div>
+                    </div>
+                  </div>
                 </button>
+                {isPrimaryPhoneSafe && primaryPhone && (
+                  <a
+                    href={`tel:${primaryPhone.number}`}
+                    aria-label={`Llamar a ${buildDisplayTitle(record.displayName, record.organization, record.location)}`}
+                    className="focus-ring flex min-h-11 items-center justify-center rounded-b-2xl border-t border-slate-200 px-4 text-sm font-semibold text-scs-blue hover:bg-scs-mist"
+                  >
+                    Llamar {primaryPhone.number}
+                  </a>
+                )}
               </li>
             );
           })}
@@ -696,14 +740,6 @@ export const DirectoryPage = () => {
                         <p className="mt-1 text-sm font-medium text-slate-600">{selectedRecord.organization.role}</p>
                       ) : null}
                     </div>
-                    <Link
-                      to={`/contacts/${selectedRecord.id}/edit`}
-                      reloadDocument
-                      aria-label={`Editar: ${selectedRecord.displayName}`}
-                      className="focus-ring inline-flex size-11 shrink-0 items-center justify-center self-start rounded-full text-scs-blue transition hover:bg-scs-mist"
-                    >
-                      <EditIcon />
-                    </Link>
                   </div>
                 </div>
 
@@ -909,6 +945,28 @@ export const DirectoryPage = () => {
                     </p>
                   </div>
                 )}
+
+                <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
+                  {primarySelectedPhone && (
+                    <button
+                      type="button"
+                      onClick={() => void copyPrimaryPhone()}
+                      className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <CopyIcon />
+                      {copiedRecordId === selectedRecord.id ? "Copiado" : "Copiar contacto principal"}
+                    </button>
+                  )}
+                  <Link
+                    to={`/contacts/${selectedRecord.id}/edit`}
+                    reloadDocument
+                    aria-label={`Editar: ${selectedRecord.displayName}`}
+                    className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-scs-blue px-4 text-sm font-semibold text-white hover:bg-scs-blueDark"
+                  >
+                    <EditIcon />
+                    Editar registro
+                  </Link>
+                </div>
               </div>
             ) : (
               <div className="flex h-64 flex-col items-center justify-center text-center">
