@@ -16,6 +16,7 @@ import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 import type { BeepersService } from "./beeper.service.js";
 import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
+import { buildExistingRecordMatchIndexes, buildStableMergeKeys } from "./import-match-indexes.js";
 import type {
   AutoBackupSettings,
   AppSettings,
@@ -1907,7 +1908,7 @@ export class AppDataService {
     const exportedAt = new Date().toISOString();
     const mergedRecords = [...currentDataset.records];
     const { byExternalId: currentIndexesByExternalId, byStableKey: currentIndexesByStableKey } =
-      this.buildExistingRecordMatchIndexes(mergedRecords);
+      buildExistingRecordMatchIndexes(mergedRecords);
 
     let createdCount = 0;
     let updatedCount = 0;
@@ -1918,7 +1919,7 @@ export class AppDataService {
       const externalIdMatchIndex = importedRecord.externalId
         ? currentIndexesByExternalId.get(importedRecord.externalId)
         : undefined;
-      const stableMatchIndex = this.buildStableMergeKeys(importedRecord)
+      const stableMatchIndex = buildStableMergeKeys(importedRecord)
         .map((stableKey) => currentIndexesByStableKey.get(stableKey))
         .find((index): index is number => index !== undefined);
       const matchIndex = externalIdMatchIndex ?? stableMatchIndex;
@@ -2014,7 +2015,7 @@ export class AppDataService {
           currentIndexesByExternalId.set(mergedRecord.externalId, matchIndex);
         }
 
-        for (const stableKey of this.buildStableMergeKeys(mergedRecord)) {
+        for (const stableKey of buildStableMergeKeys(mergedRecord)) {
           if (!currentIndexesByStableKey.has(stableKey)) {
             currentIndexesByStableKey.set(stableKey, matchIndex);
           }
@@ -2041,7 +2042,7 @@ export class AppDataService {
         currentIndexesByExternalId.set(createdRecord.externalId, createdIndex);
       }
 
-      for (const stableKey of this.buildStableMergeKeys(createdRecord)) {
+      for (const stableKey of buildStableMergeKeys(createdRecord)) {
         if (!currentIndexesByStableKey.has(stableKey)) {
           currentIndexesByStableKey.set(stableKey, createdIndex);
         }
@@ -2377,60 +2378,6 @@ export class AppDataService {
     );
   }
 
-  private buildStableMergeKeys(record: ContactRecord): string[] {
-    const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
-    const phoneNumbers = record.contactMethods.phones
-      .map((phone) => normalizePhoneForDedup(phone.number))
-      .filter(Boolean)
-      .sort();
-    const emailAddresses = record.contactMethods.emails
-      .map((email) => normalized(email.address))
-      .filter(Boolean)
-      .sort();
-    const keys = new Set<string>();
-    const base = [
-      normalized(record.type),
-      normalized(record.organization.department),
-      normalized(record.organization.service),
-      normalized(record.location?.text)
-    ].join("|");
-
-    if (phoneNumbers.length > 0) {
-      keys.add(`${base}|phones:${phoneNumbers.join(",")}`);
-    }
-
-    if (emailAddresses.length > 0) {
-      keys.add(`${base}|emails:${emailAddresses.join(",")}`);
-    }
-
-    if (normalized(record.displayName) && phoneNumbers.length > 0) {
-      keys.add(`${normalized(record.type)}|${normalized(record.displayName)}|phones:${phoneNumbers.join(",")}`);
-    }
-
-    return [...keys];
-  }
-
-  private buildExistingRecordMatchIndexes(records: ContactRecord[]): {
-    byExternalId: Map<string, number>;
-    byStableKey: Map<string, number>;
-  } {
-    const byExternalId = new Map<string, number>();
-    const byStableKey = new Map<string, number>();
-
-    records.forEach((record, index) => {
-      if (record.externalId && !byExternalId.has(record.externalId)) {
-        byExternalId.set(record.externalId, index);
-      }
-      for (const stableKey of this.buildStableMergeKeys(record)) {
-        if (!byStableKey.has(stableKey)) {
-          byStableKey.set(stableKey, index);
-        }
-      }
-    });
-
-    return { byExternalId, byStableKey };
-  }
-
   private detectConflicts(
     currentDataset: DirectoryDataset,
     importedDataset: DirectoryDataset
@@ -2492,7 +2439,7 @@ export class AppDataService {
     };
 
     // Build lookup indexes from the current dataset
-    const existingIndexes = this.buildExistingRecordMatchIndexes(currentDataset.records);
+    const existingIndexes = buildExistingRecordMatchIndexes(currentDataset.records);
     const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
     const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
 
@@ -2559,7 +2506,7 @@ export class AppDataService {
       // found yet — an intra-batch externalId match must not shadow a real
       // phone/email collision against pre-existing data on a different key.
       if (existingMatch === undefined) {
-        for (const key of this.buildStableMergeKeys(importedRecord)) {
+        for (const key of buildStableMergeKeys(importedRecord)) {
           const indexed = currentIndexesByStableKey.get(key);
           if (indexed === undefined) {
             continue;
@@ -2625,7 +2572,7 @@ export class AppDataService {
       if (importedRecord.externalId && !currentIndexesByExternalId.has(importedRecord.externalId)) {
         currentIndexesByExternalId.set(importedRecord.externalId, importedIndexEntry);
       }
-      for (const stableKey of this.buildStableMergeKeys(importedRecord)) {
+      for (const stableKey of buildStableMergeKeys(importedRecord)) {
         if (!currentIndexesByStableKey.has(stableKey)) {
           currentIndexesByStableKey.set(stableKey, {
             ...importedIndexEntry,

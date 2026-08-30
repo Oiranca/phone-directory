@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import type { EditableAppSettings } from "../../shared/types/contact.js";
 import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
+import { buildStableMergeKeys } from "./import-match-indexes.js";
 import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 
@@ -5710,12 +5711,8 @@ describe("AppDataService", () => {
       const recordWithBeeperA = { ...baseRecord, beepers: [{ number: "4321" }] };
       const recordWithBeeperB = { ...baseRecord, beepers: [{ number: "9876" }] };
 
-      const privateMerge = service as unknown as {
-        buildStableMergeKeys: (record: typeof baseRecord) => string[];
-      };
-
-      const keysA = privateMerge.buildStableMergeKeys(recordWithBeeperA);
-      const keysB = privateMerge.buildStableMergeKeys(recordWithBeeperB);
+      const keysA = buildStableMergeKeys(recordWithBeeperA);
+      const keysB = buildStableMergeKeys(recordWithBeeperB);
 
       expect(keysA.length).toBeGreaterThan(0);
       expect(keysA).toEqual(keysB);
