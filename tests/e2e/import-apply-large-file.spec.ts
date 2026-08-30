@@ -140,36 +140,26 @@ test.describe("bulk ODS import survives a same-document navigation between previ
 
     try {
       await waitForDirectory(page);
-      await page.getByRole("link", { name: "Configuración" }).click();
-
-      await page.getByRole("button", { name: "Importar" }).click();
-      await page.getByRole("button", { name: "Elegir archivo" }).click();
-      await expect(page.getByText("Vista previa importación")).toBeVisible();
-
-      const confirmBtn = page.getByRole("button", { name: "Confirmar importación" });
-      await expect(confirmBtn).toBeEnabled();
-
-      // A genuine cross-document navigation (isSameDocument: false) — the
-      // original security intent ("navigation means the import
-      // preview UI is gone") must still hold for this case.
-      await electronApp.evaluate(({ BrowserWindow }) => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (!win) {
-          throw new Error("no BrowserWindow found");
-        }
-        win.webContents.emit("did-start-navigation", {
-          url: "http://example.invalid/",
-          isSameDocument: false,
-          isMainFrame: true
-        });
+      const importToken = await page.evaluate(async () => {
+        const result = await window.hospitalDirectory.pickAndImportDataset();
+        if (result.kind !== "csv-preview") throw new Error("CSV preview missing");
+        return result.preview.importToken;
       });
 
-      await confirmBtn.click();
-      const importCsvDialog = page.getByRole("dialog", { name: "Confirmar importación de agenda" });
-      await expect(importCsvDialog).toBeVisible();
-      await importCsvDialog.getByRole("button", { name: "Confirmar importación" }).click();
+      await page.goto("data:text/html,<title>navigated</title>");
+      await expect(page).toHaveTitle("navigated");
+      await page.goBack();
+      await waitForDirectory(page);
 
-      await expect(page.getByText("La importación CSV ya no es válida")).toBeVisible();
+      const error = await page.evaluate(async (token) => {
+        try {
+          await window.hospitalDirectory.importCsvDataset(token, []);
+          return null;
+        } catch (cause) {
+          return cause instanceof Error ? cause.message : String(cause);
+        }
+      }, importToken);
+      expect(error).toContain("La importación CSV ya no es válida");
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);
