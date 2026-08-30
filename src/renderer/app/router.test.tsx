@@ -62,7 +62,9 @@ describe("router — lazy route smoke test", () => {
         listBackups: vi.fn().mockResolvedValue([]),
         createBackup: vi.fn(),
         detectDuplicates: vi.fn().mockResolvedValue({ pairs: [] }),
-        mergeContacts: vi.fn()
+        mergeContacts: vi.fn(),
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([])
       }
     });
   });
@@ -106,5 +108,33 @@ describe("router — lazy route smoke test", () => {
 
     expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
     expect(window.hospitalDirectory.detectDuplicates).toHaveBeenCalled();
+  });
+
+  it("resolves the lazy contact form route and renders RecordFormPage content", async () => {
+    render(
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    );
+
+    await act(async () => {
+      await router.navigate("/contacts/new");
+    });
+
+    expect(await screen.findByRole("heading", { name: "Alta de contacto" })).toBeInTheDocument();
+  });
+
+  it("resolves the lazy beeper route and renders BeepersPage content", async () => {
+    render(
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    );
+
+    await act(async () => {
+      await router.navigate("/beeper");
+    });
+
+    expect(await screen.findByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
   });
 });

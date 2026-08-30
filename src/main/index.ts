@@ -49,6 +49,7 @@ const createWindow = () => {
     height: 920,
     minWidth: 1080,
     minHeight: 720,
+    show: !env.isE2E,
     backgroundColor: "#f8fafc",
     ...(isDev ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
@@ -125,7 +126,9 @@ app.whenReady().then(() => {
   // logo. Set it explicitly here for a better dev-mode experience; the
   // packaged build already gets the correct icon from electron-builder's
   // "build.mac.icon" config, so this must stay dev-only.
-  if (process.platform === "darwin" && !app.isPackaged) {
+  if (process.platform === "darwin" && env.isE2E) {
+    app.dock?.hide();
+  } else if (process.platform === "darwin" && !app.isPackaged) {
     app.dock?.setIcon(nativeImage.createFromPath(APP_ICON_PATH));
   }
 
