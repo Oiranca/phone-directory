@@ -600,6 +600,32 @@ describe("DirectoryPage", () => {
     expect(within(detail).queryByText("Sin nombre y apellidos registrado")).not.toBeInTheDocument();
   });
 
+  it("uses location in the title when imported data has no distinct name", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.displayName = "Lencería";
+    contacts.records[0]!.organization.service = "Lencería";
+    contacts.records[0]!.location = { building: "San Roque de Guía", text: "San Roque de Guía" };
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    expect(within(list).getByRole("heading", { name: "Lencería - San Roque de Guía" })).toBeInTheDocument();
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByRole("heading", { name: "Lencería - San Roque de Guía" })).toBeInTheDocument();
+  });
+
   it("omits Nombre y Apellidos when displayName is just the service label repeated, e.g. blank ODS 'Nombre' column", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.displayName = "Sindicato Médico";

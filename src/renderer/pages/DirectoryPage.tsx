@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
-import type { PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
+import type { ContactRecord, PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";
@@ -56,6 +56,25 @@ const serviceContainsDisplayName = (service: string, displayName: string): boole
   return normalizedDisplayName.length > 0 && normalizeDisplayName(service).includes(normalizedDisplayName);
 };
 
+const buildLocationTitleFallback = (location: ContactRecord["location"]): string => {
+  const seen = new Set<string>();
+  return [
+    location?.building,
+    formatLocationFloor(location?.floor),
+    formatLocationRoom(location?.room),
+    location?.text
+  ]
+    .filter((value): value is string => {
+      const normalized = value ? normalizeDisplayName(value) : "";
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    })
+    .join(" · ");
+};
+
 // The service alone (e.g. "Alergia") is often the detail that makes
 // a contact identifiable at a glance, but it was buried inside the card body
 // instead of the title. Compose "{service} - {displayName}" when the service
@@ -68,11 +87,25 @@ const serviceContainsDisplayName = (service: string, displayName: string): boole
 // and "Cocina Francisco Artíles" (whose service merely contains displayName)
 // now renders as just "Cocina Francisco Artíles" instead of duplicating the
 // name a second time.
-const buildDisplayTitle = (displayName: string, organization: { service?: string }): string => {
+const buildDisplayTitle = (
+  displayName: string,
+  organization: { service?: string },
+  location: ContactRecord["location"]
+): string => {
   const { service } = organization;
   if (!service) {
     return displayName;
   }
+
+  // Imported rows without Nombre store Servicio as displayName. In that case,
+  // use location as the secondary title context; a genuine name still wins.
+  if (!displayName.trim() || isDuplicateOfDisplayName(service, displayName)) {
+    const locationFallback = buildLocationTitleFallback(location);
+    return locationFallback && !isDuplicateOfDisplayName(service, locationFallback)
+      ? `${service} - ${locationFallback}`
+      : service;
+  }
+
   return serviceContainsDisplayName(service, displayName) ? service : `${service} - ${displayName}`;
 };
 
@@ -373,16 +406,7 @@ export const DirectoryPage = () => {
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
-  const selectedRecordLocation = selectedRecord
-    ? [
-        selectedRecord.location?.building,
-        formatLocationFloor(selectedRecord.location?.floor),
-        formatLocationRoom(selectedRecord.location?.room),
-        selectedRecord.location?.text
-      ]
-        .filter((value): value is string => Boolean(value?.trim()))
-        .join(" · ")
-    : "";
+  const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
 
   return (
     <section
@@ -538,7 +562,7 @@ export const DirectoryPage = () => {
                     {/* Prefix the title with the service when it adds context
                         beyond displayName (see buildDisplayTitle). */}
                     <h3 className="truncate font-semibold text-scs-blueDark">
-                      {buildDisplayTitle(record.displayName, record.organization)}
+                      {buildDisplayTitle(record.displayName, record.organization, record.location)}
                     </h3>
                   </div>
                   {/* Subtitle: name (unless duplicate of service) and role,
@@ -664,7 +688,7 @@ export const DirectoryPage = () => {
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
                       <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization)}
+                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
                       </h4>
                       {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
