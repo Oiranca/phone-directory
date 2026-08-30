@@ -209,22 +209,7 @@ test.describe("critical MVP flows", () => {
 
       for (const viewport of viewportsToCheck) {
         await page.setViewportSize(viewport);
-        // Let the ResizeObserver-driven --app-header-height /
-        // --directory-filterbar-height CSS custom properties settle after
-        // the resize before measuring.
-        await page.waitForTimeout(150);
-
-        const measurement = await page.evaluate(() => ({
-          scrollHeight: document.documentElement.scrollHeight,
-          innerHeight: window.innerHeight
-        }));
-
-        // 1px epsilon for sub-pixel rounding across browser engines.
-        expect(
-          measurement.scrollHeight,
-          `Directory page produced page-level scroll at ${viewport.width}x${viewport.height}: ` +
-            `scrollHeight=${measurement.scrollHeight} innerHeight=${measurement.innerHeight}`
-        ).toBeLessThanOrEqual(measurement.innerHeight + 1);
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
       }
     } finally {
       await closeElectronApp(electronApp);
@@ -265,30 +250,8 @@ test.describe("critical MVP flows", () => {
 
       for (const viewport of viewportsToCheck) {
         await page.setViewportSize(viewport);
-        // Let the ResizeObserver-driven --app-header-height /
-        // --directory-filterbar-height CSS custom properties settle after
-        // the resize before measuring.
-        await page.waitForTimeout(150);
-
-        const measurement = await page.evaluate(() => ({
-          scrollWidth: document.documentElement.scrollWidth,
-          scrollHeight: document.documentElement.scrollHeight,
-          innerWidth: window.innerWidth,
-          innerHeight: window.innerHeight
-        }));
-
-        // 1px epsilon for sub-pixel rounding across browser engines.
-        expect(
-          measurement.scrollWidth,
-          `Directory page produced horizontal page-level scroll at ${viewport.width}x${viewport.height}: ` +
-            `scrollWidth=${measurement.scrollWidth} innerWidth=${measurement.innerWidth}`
-        ).toBeLessThanOrEqual(measurement.innerWidth + 1);
-
-        expect(
-          measurement.scrollHeight,
-          `Directory page produced vertical page-level scroll at ${viewport.width}x${viewport.height}: ` +
-            `scrollHeight=${measurement.scrollHeight} innerHeight=${measurement.innerHeight}`
-        ).toBeLessThanOrEqual(measurement.innerHeight + 1);
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
       }
     } finally {
       await closeElectronApp(electronApp);
