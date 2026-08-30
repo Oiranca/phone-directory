@@ -143,9 +143,7 @@ test.describe("chip removal regression", () => {
       await page.screenshot({ path: path.join(screenshotsDir, "01-detail-header-pills.png") });
 
       // --- 2. Per-phone card badge -----------------------------------------
-      const phoneCard = page.locator("div.rounded-2xl.border.border-slate-200.bg-white.p-4", {
-        hasText: "80099"
-      });
+      const phoneCard = page.getByTestId("contact-phone-ph_chip_1");
       await expect(phoneCard.getByText("Confidencial", { exact: true })).toBeVisible();
       await expect(phoneCard.getByText("No facilitar a pacientes")).toHaveCount(0);
       await expect(phoneCard.getByText(/No pacientes/i)).toHaveCount(0);

@@ -803,7 +803,7 @@ export const DirectoryPage = () => {
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
                       {selectedRecord.contactMethods.phones.map((phone) => (
-                        <div key={phone.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div key={phone.id} data-testid={`contact-phone-${phone.id}`} className="rounded-2xl border border-slate-200 bg-white p-4">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
