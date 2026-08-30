@@ -225,7 +225,7 @@ describe("DirectoryPage", () => {
     // This record inherits organization.service ("Información") from
     // the spread fixture record, so the title is composed with that prefix.
     expect((await screen.findAllByText(/control de noche/i)).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Inactivo")).not.toBeInTheDocument();
+    expect(screen.getByText("Inactivo")).toBeInTheDocument();
   });
 
   it("does not render any type/area/tag/inactive filter controls", async () => {
@@ -296,10 +296,9 @@ describe("DirectoryPage", () => {
     // name ("Admisión General") on its own line.
     const heading = within(list).getByRole("heading", { name: /admisión general/i });
     const card = heading.closest("div.min-w-0");
-    // The Tipo/Unidad subtitle line was removed entirely, so with no
-    // role set the title's wrapper div renders no <p> at all (the new
-    // name/category subtitle line renders as a sibling of this div, not inside it).
-    expect(card?.querySelectorAll("p")).toHaveLength(0);
+    // The scan row now includes contextual grouping and an empty-safe subtitle,
+    // but still must not invent a missing role/category value.
+    expect(within(card as HTMLElement).queryByText(/Jefe\/a de Servicio/)).not.toBeInTheDocument();
   });
 
   it("still renders an empty subtitle <p> when both the name and role lines are suppressed", async () => {
@@ -987,6 +986,31 @@ describe("DirectoryPage", () => {
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("renders scan metadata and record actions without exposing restricted phone values", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.location = { building: "Hospital General" };
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByLabelText("Resultado 1")).toBeInTheDocument();
+    expect(within(row).getByLabelText("Servicio")).toBeInTheDocument();
+    expect(within(row).getByText("Admisión · Hospital General")).toBeInTheDocument();
+    expect(within(row).getByText("Contacto restringido")).toBeInTheDocument();
+    expect(within(row).queryByText(contacts.records[0]!.contactMethods.phones[0]!.number)).not.toBeInTheDocument();
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByRole("button", { name: /Copiar contacto principal/ })).toBeInTheDocument();
+    expect(within(detail).getByRole("link", { name: `Editar: ${contacts.records[0]!.displayName}` })).toBeInTheDocument();
+  });
+
   it("caps visible results to ten per page and exposes pagination", async () => {
     const contacts = structuredClone(defaultContacts);
 
@@ -1495,7 +1519,7 @@ describe("DirectoryPage", () => {
     const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
     expect(editLink.querySelector("svg")).toBeInTheDocument();
-    expect(editLink).not.toHaveTextContent("Editar");
+    expect(editLink).toHaveTextContent("Editar registro");
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
