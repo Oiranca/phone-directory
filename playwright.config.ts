@@ -6,7 +6,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   globalSetup: "./tests/e2e/global-setup.ts",
-  reporter: process.env.CI ? "dot" : "list",
+  reporter: process.env.CI
+    ? "dot"
+    : process.env.PLAYWRIGHT_BACKGROUND === "1"
+      ? [["json", { outputFile: "test-results/e2e-background.json" }]]
+      : "list",
   use: {
     trace: "on-first-retry",
     screenshot: "only-on-failure",
