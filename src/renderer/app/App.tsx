@@ -160,8 +160,6 @@ const RecoveryPanel = () => {
 
 export const App = () => {
   const {
-    contacts,
-    settings,
     recovery,
     isLoading,
     bootstrapError,
@@ -173,7 +171,7 @@ export const App = () => {
 
   useEffect(() => {
     void ensureBootstrapLoaded();
-  }, []);
+  }, [ensureBootstrapLoaded]);
 
   useEffect(() => {
     if (typeof window.hospitalDirectory?.onAutoBackupFailure !== "function") {

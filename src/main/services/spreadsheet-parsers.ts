@@ -22,7 +22,6 @@ import type { DetectionConfidence } from "../../shared/types/contact.js";
 import {
   clean,
   hasLetters,
-  hasPhoneLikeNumber,
   looksLikeDateValue,
   extractNumbers,
   detectPrivacy,
@@ -439,7 +438,7 @@ export const normalizeServiceSheet = (
   const data = sheet.rows.slice(profile.rowsToSkip);
   const records: NormalizedImportRow[] = [];
   let currentSection = "";
-  let socialSkippedRows = 0;
+  const socialSkippedRows = 0;
   let prevRowHadSocialContext = false;
 
   data.forEach((row) => {

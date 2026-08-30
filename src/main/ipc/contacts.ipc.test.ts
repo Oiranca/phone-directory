@@ -430,7 +430,6 @@ describe("contacts:detect-duplicates — recovery state handling", () => {
 // ---------------------------------------------------------------------------
 
 // Helper: build a minimal EventEmitter-style webContents stub
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic listener args (e.g. did-start-navigation's details object)
 type Listener = (...args: any[]) => void;
 function makeWebContentsSender(id: number): {
   id: number;

@@ -4840,7 +4840,6 @@ describe("AppDataService", () => {
         throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST", path: p });
       }
       openCallCount += 1;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return realOpen(p, flags as any, ...(rest as []));
     });
 
@@ -4902,7 +4901,6 @@ describe("AppDataService", () => {
         wxCallCount += 1;
         throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES", path: p });
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return realOpen(p, flags as any, ...(rest as []));
     });
 
@@ -5218,7 +5216,6 @@ describe("AppDataService", () => {
     const failingBeepersService = {
       importFromOds: async () => { throw new Error("beepers write failure"); }
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const service = new AppDataService({ beepersService: failingBeepersService as any });
     await service.ensureInitialFiles();
     await service.saveSettings(buildEditableSettings());

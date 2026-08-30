@@ -108,7 +108,7 @@ interface MergeFieldsEditorProps {
  * record's value when it differs.
  */
 export const MergeFieldsEditor = ({
-  keepRecord,
+  keepRecord: _keepRecord,
   discardRecord,
   draft,
   onChange

@@ -14,7 +14,6 @@ import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
 import type { BeepersService } from "./beeper.service.js";
-import type { CsvImportPreviewInternal } from "./csv-import.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import { buildExistingRecordMatchIndexes, buildStableMergeKeys } from "./import-match-indexes.js";
 import type {
