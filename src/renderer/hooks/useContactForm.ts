@@ -362,7 +362,7 @@ export const useContactForm = (): UseContactFormResult => {
 
   useEffect(() => {
     void ensureBootstrapLoaded();
-  }, []);
+  }, [ensureBootstrapLoaded]);
 
   useEffect(() => {
     if (isEditing && existingRecord) {

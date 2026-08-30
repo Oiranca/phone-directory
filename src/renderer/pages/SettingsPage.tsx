@@ -41,7 +41,7 @@ export const SettingsPage = () => {
 
   useEffect(() => {
     void ensureBootstrapLoaded();
-  }, []);
+  }, [ensureBootstrapLoaded]);
 
   useEffect(() => {
     if (!settings) {

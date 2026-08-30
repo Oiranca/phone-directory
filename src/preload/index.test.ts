@@ -168,7 +168,6 @@ describe("source guard — api.cts mirrors index.cts channel strings", () => {
 // ---------------------------------------------------------------------------
 
 describe("build artifact — compiled api.cjs behavioral tests", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let buildApi: ((ipcRenderer: any) => Record<string, (...args: any[]) => any>) | null = null;
   let artifactAvailable = false;
 

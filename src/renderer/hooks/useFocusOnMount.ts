@@ -22,5 +22,5 @@ export function useFocusOnMount<T extends HTMLElement>(ref: RefObject<T | null>,
     if (when) {
       ref.current?.focus();
     }
-  }, [when]);
+  }, [ref, when]);
 }

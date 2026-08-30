@@ -21,7 +21,7 @@ export type {
 } from "../schemas/contact.js";
 
 import type { AreaType, RecordType } from "../constants/catalogs.js";
-import type { AuditLogEntry, BeeperEntry, ContactRecord, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
+import type { AuditLogEntry, BeeperEntry, EditableAppSettings, DirectoryDataset } from "../schemas/contact.js";
 
 // ---------------------------------------------------------------------------
 // UX-only and composite types — not duplicated by any Zod schema.
