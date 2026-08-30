@@ -1906,20 +1906,8 @@ export class AppDataService {
   ) {
     const exportedAt = new Date().toISOString();
     const mergedRecords = [...currentDataset.records];
-    const currentIndexesByExternalId = new Map<string, number>();
-    const currentIndexesByStableKey = new Map<string, number>();
-
-    mergedRecords.forEach((record, index) => {
-      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
-        currentIndexesByExternalId.set(record.externalId, index);
-      }
-
-      for (const stableKey of this.buildStableMergeKeys(record)) {
-        if (!currentIndexesByStableKey.has(stableKey)) {
-          currentIndexesByStableKey.set(stableKey, index);
-        }
-      }
-    });
+    const { byExternalId: currentIndexesByExternalId, byStableKey: currentIndexesByStableKey } =
+      this.buildExistingRecordMatchIndexes(mergedRecords);
 
     let createdCount = 0;
     let updatedCount = 0;
@@ -2422,6 +2410,27 @@ export class AppDataService {
     return [...keys];
   }
 
+  private buildExistingRecordMatchIndexes(records: ContactRecord[]): {
+    byExternalId: Map<string, number>;
+    byStableKey: Map<string, number>;
+  } {
+    const byExternalId = new Map<string, number>();
+    const byStableKey = new Map<string, number>();
+
+    records.forEach((record, index) => {
+      if (record.externalId && !byExternalId.has(record.externalId)) {
+        byExternalId.set(record.externalId, index);
+      }
+      for (const stableKey of this.buildStableMergeKeys(record)) {
+        if (!byStableKey.has(stableKey)) {
+          byStableKey.set(stableKey, index);
+        }
+      }
+    });
+
+    return { byExternalId, byStableKey };
+  }
+
   private detectConflicts(
     currentDataset: DirectoryDataset,
     importedDataset: DirectoryDataset
@@ -2483,30 +2492,27 @@ export class AppDataService {
     };
 
     // Build lookup indexes from the current dataset
+    const existingIndexes = this.buildExistingRecordMatchIndexes(currentDataset.records);
     const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
     const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
 
-    for (let i = 0; i < currentDataset.records.length; i++) {
-      const record = currentDataset.records[i]!;
-      if (record.externalId && !currentIndexesByExternalId.has(record.externalId)) {
-        currentIndexesByExternalId.set(record.externalId, {
-          recordIndex: i,
+    for (const [externalId, recordIndex] of existingIndexes.byExternalId) {
+      const record = currentDataset.records[recordIndex]!;
+      currentIndexesByExternalId.set(externalId, {
+          recordIndex,
           conflictType: "external-id-match",
           record: this.toConflictRecordSummary(record),
           source: "existing"
-        });
-      }
-      for (const stableKey of this.buildStableMergeKeys(record)) {
-        if (!currentIndexesByStableKey.has(stableKey)) {
-          const conflictType = this.classifyConflictTypeByKey(stableKey);
-          currentIndexesByStableKey.set(stableKey, {
-            recordIndex: i,
-            conflictType,
-            record: this.toConflictRecordSummary(record),
-            source: "existing"
-          });
-        }
-      }
+      });
+    }
+    for (const [stableKey, recordIndex] of existingIndexes.byStableKey) {
+      const record = currentDataset.records[recordIndex]!;
+      currentIndexesByStableKey.set(stableKey, {
+        recordIndex,
+        conflictType: this.classifyConflictTypeByKey(stableKey),
+        record: this.toConflictRecordSummary(record),
+        source: "existing"
+      });
     }
 
     // Check each imported record for a collision with an existing record.
