@@ -555,7 +555,6 @@ describe("AuditLogService", () => {
       writeFileSpy.mockImplementationOnce(() =>
         Promise.reject(Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }))
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       writeFileSpy.mockImplementation((...args: any[]) => (realWriteFile as any)(...args));
 
       let integrityError!: InstanceType<typeof AuditLogIntegrityError>;
@@ -930,7 +929,6 @@ describe("AuditLogService", () => {
 
       // Accessing the private field via bracket notation keeps this test tied to
       // the documented default without requiring thousands of real appends.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((service as any).rotationThresholdEntries).toBe(5000);
     });
   });

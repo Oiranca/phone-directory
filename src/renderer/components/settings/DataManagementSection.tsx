@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
@@ -89,7 +89,7 @@ export const DataManagementSection = () => {
     isImporting ||
     isImportingCsv;
 
-  const loadBackups = async () => {
+  const loadBackups = useCallback(async () => {
     try {
       setIsLoading(true);
       const backupItems = await window.hospitalDirectory.listBackups();
@@ -102,11 +102,11 @@ export const DataManagementSection = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [pushToast]);
 
   useEffect(() => {
     void ensureBootstrapLoaded();
-  }, []);
+  }, [ensureBootstrapLoaded]);
 
   useFocusOnMount(panelHeadingRef, isPanelOpen);
 
@@ -120,7 +120,7 @@ export const DataManagementSection = () => {
       backupsRequestedRef.current = true;
       void loadBackups();
     }
-  }, [storeIsLoading, bootstrapStatus, contacts, settings]);
+  }, [storeIsLoading, bootstrapStatus, contacts, settings, loadBackups]);
 
   const refreshBackups = async () => {
     try {

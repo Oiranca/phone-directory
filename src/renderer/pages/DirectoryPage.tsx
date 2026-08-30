@@ -122,11 +122,6 @@ const FILTER_BAR_STICKY_TOP = `var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px)`;
 const STICKY_CONTENT_TOP = `calc(var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) + var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) + 1.5rem)`;
 const BOUNDED_CONTENT_MAX_HEIGHT = `calc(100vh - var(${APP_HEADER_HEIGHT_CSS_VAR}, 0px) - var(${FILTER_BAR_HEIGHT_CSS_VAR}, 0px) - var(${PAGE_CHROME_CSS_VAR}, 3.75rem))`;
 
-const privacyInlineRiskText = {
-  Confidencial: "Número interno confidencial.",
-  "No facilitar a pacientes": "No compartir con pacientes."
-} as const;
-
 // Quick-search shortcuts for the 8 known ODS "book" sheets that are
 // already tagged via `organization.department` (an indexed, weight-5
 // Fuse.js search key — see search.service.ts). These are plain shortcuts
@@ -283,7 +278,7 @@ export const DirectoryPage = () => {
 
   useEffect(() => {
     void ensureBootstrapLoaded();
-  }, []);
+  }, [ensureBootstrapLoaded]);
   const deferredQuery = useDeferredValue(query);
   // Filters removed from the UI — only free-text search remains.
   // `showInactive: true` keeps every record (active + inactive) visible since
