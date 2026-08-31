@@ -41,7 +41,7 @@ describe("registerBeepersIpc", () => {
   // Dynamic import so the vi.mock above is applied before the module loads
   beforeAll(async () => {
     const { registerBeepersIpc } = await import("./beeper.ipc.js");
-    registerBeepersIpc(serviceMock as never, appDataServiceMock as never);
+    registerBeepersIpc(serviceMock as never, appDataServiceMock as never, ipcMainStub.handle as never);
   });
 
   afterEach(() => {

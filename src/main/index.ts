@@ -1,6 +1,6 @@
-import { BrowserWindow, app, nativeImage, session } from "electron";
+import { BrowserWindow, app, ipcMain, nativeImage, session } from "electron";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { env } from "./config/env.js";
 import { registerCrashHandlers } from "./crash-handlers.js";
 import { registerBeepersIpc } from "./ipc/beeper.ipc.js";
@@ -13,6 +13,7 @@ import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
 import {
   buildContentSecurityPolicy,
+  createTrustedIpcHandle,
   denyWindowOpen,
   isAllowedNavigationUrl,
   WINDOW_WEB_PREFERENCES
@@ -30,6 +31,12 @@ const DEV_SERVER_URL = env.rendererUrl ?? "http://localhost:5173";
 // packaged app); packaged builds get their icon from electron-builder's
 // win/mac/linux "icon" config instead, so this is a dev-only convenience.
 const APP_ICON_PATH = path.join(__dirname, "../../build-resources/icon.png");
+const PACKAGED_RENDERER_PATH = path.join(__dirname, "../../dist/index.html");
+const EXPECTED_RENDERER_URL = isDev
+  ? DEV_SERVER_URL
+  : pathToFileURL(PACKAGED_RENDERER_PATH).href;
+
+let mainWindow: BrowserWindow | null = null;
 
 const portableUserDataPath = resolvePortableUserDataPath({
   execPath: process.execPath,
@@ -57,10 +64,16 @@ const createWindow = () => {
       ...WINDOW_WEB_PREFERENCES
     }
   });
+  mainWindow = window;
+  window.once("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
+  });
 
   window.webContents.setWindowOpenHandler(denyWindowOpen);
   window.webContents.on("will-navigate", (event, targetUrl) => {
-    if (!isAllowedNavigationUrl(targetUrl, { isDev, devServerUrl: DEV_SERVER_URL })) {
+    if (!isAllowedNavigationUrl(targetUrl, EXPECTED_RENDERER_URL)) {
       event.preventDefault();
     }
   });
@@ -73,7 +86,7 @@ const createWindow = () => {
     return;
   }
 
-  void window.loadFile(path.join(__dirname, "../../dist/index.html"));
+  void window.loadFile(PACKAGED_RENDERER_PATH);
 };
 
 const bootstrap = async () => {
@@ -95,9 +108,14 @@ const bootstrap = async () => {
     beepersService
   });
   await service.ensureInitialFiles();
-  registerContactsIpc(service);
-  registerBeepersIpc(beepersService, service);
-  registerSettingsIpc(service);
+  const trustedIpcHandle = createTrustedIpcHandle(
+    ipcMain.handle.bind(ipcMain),
+    () => mainWindow?.webContents ?? null,
+    EXPECTED_RENDERER_URL
+  );
+  registerContactsIpc(service, trustedIpcHandle);
+  registerBeepersIpc(beepersService, service, trustedIpcHandle);
+  registerSettingsIpc(service, trustedIpcHandle);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const filteredHeaders = Object.fromEntries(
       Object.entries(details.responseHeaders ?? {}).filter(
