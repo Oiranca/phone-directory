@@ -53,24 +53,37 @@ const normalizeSearchText = (value: string) =>
 const normalizeSearchQuery = (value: string) =>
   normalizeSearchText(value).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-const recordSearchText = (record: ContactRecord) => normalizeSearchText([
-  record.displayName,
-  record.organization.service,
-  record.organization.department,
-  record.organization.specialty,
-  record.location?.building,
-  record.location?.floor,
-  record.location?.room,
-  record.location?.text,
-  record.aliases.join(" "),
-  record.tags.join(" "),
-  record.notes,
-  ...record.contactMethods.phones.flatMap((phone) => [phone.number, phone.extension, phone.label]),
-  ...record.contactMethods.emails.flatMap((email) => [email.address, email.label])
-].filter(Boolean).join(" "));
+const recordSearchTextCache = new WeakMap<ContactRecord, string>();
 
-const hasFlexibleTokenMatch = (record: ContactRecord, query: string) =>
-  query.split(" ").every((token) => recordSearchText(record).includes(token));
+const getRecordSearchText = (record: ContactRecord) => {
+  const cached = recordSearchTextCache.get(record);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const normalized = normalizeSearchText([
+    record.displayName,
+    record.organization.service,
+    record.organization.department,
+    record.organization.specialty,
+    record.location?.building,
+    record.location?.floor,
+    record.location?.room,
+    record.location?.text,
+    record.aliases.join(" "),
+    record.tags.join(" "),
+    record.notes,
+    ...record.contactMethods.phones.flatMap((phone) => [phone.number, phone.extension, phone.label]),
+    ...record.contactMethods.emails.flatMap((email) => [email.address, email.label])
+  ].filter(Boolean).join(" "));
+
+  recordSearchTextCache.set(record, normalized);
+  return normalized;
+};
+
+const hasFlexibleTokenMatch = (record: ContactRecord, queryTokens: string[]) =>
+  queryTokens.every((token) => getRecordSearchText(record).includes(token));
 
 const isShortTextQuery = (query: string) =>
   query.length <= SHORT_TEXT_QUERY_MAX_LENGTH && /^\p{L}[\p{L}\p{N}]*$/u.test(query);
@@ -150,7 +163,8 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     : fuseResults;
 
   if (matchingResults.length === 0 && normalizedSearchQuery.includes(" ")) {
-    return applyFilters(records.filter((record) => hasFlexibleTokenMatch(record, normalizedSearchQuery)), filters);
+    const queryTokens = normalizedSearchQuery.split(" ");
+    return applyFilters(records.filter((record) => hasFlexibleTokenMatch(record, queryTokens)), filters);
   }
 
   return applyFilters(matchingResults.map((result) => result.item), filters);
@@ -177,4 +191,9 @@ export const getPhonePrivacyFlags = (record: ContactRecord): PrivacyFlag[] => {
 /** @internal — for tests only */
 export function _getFuseCacheEntry(records: ContactRecord[]): Fuse<ContactRecord> | undefined {
   return fuseCache.get(records);
+}
+
+/** @internal — for tests only */
+export function _getRecordSearchTextCacheEntry(record: ContactRecord): string | undefined {
+  return recordSearchTextCache.get(record);
 }

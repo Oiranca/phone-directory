@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { searchRecords, _getFuseCacheEntry, getPreferredResultPhone, getPhonePrivacyFlags, normalizeTag } from "./search.service";
+import {
+  searchRecords,
+  _getFuseCacheEntry,
+  _getRecordSearchTextCacheEntry,
+  getPreferredResultPhone,
+  getPhonePrivacyFlags,
+  normalizeTag
+} from "./search.service";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import type { ContactRecord } from "../../shared/types/contact";
 import type { DirectoryFilters } from "./search.service";
@@ -12,6 +19,20 @@ const defaultFilters: DirectoryFilters = {
   selectedTags: [],
   showInactive: true
 };
+
+const buildLargeSearchFixture = (count: number): ContactRecord[] =>
+  Array.from({ length: count }, (_, index) => ({
+    ...structuredClone(records[index % records.length]!),
+    id: `benchmark-${index}`,
+    displayName: `Equipo ${index}`,
+    organization: {
+      ...structuredClone(records[index % records.length]!.organization),
+      department: index % 2 === 0 ? "Norte" : "Sur"
+    },
+    aliases: [],
+    tags: [],
+    notes: ""
+  }));
 
 describe("searchRecords", () => {
   it("returns all records when the query is empty", () => {
@@ -105,6 +126,40 @@ describe("searchRecords", () => {
     expect(fuseForCopy).toBeDefined();
     expect(fuseForOriginal).not.toBe(fuseForCopy);
   });
+
+  it("caches normalized fallback text without retaining replaced record arrays", () => {
+    const fallbackRecords = buildLargeSearchFixture(4);
+
+    expect(_getRecordSearchTextCacheEntry(fallbackRecords[0]!)).toBeUndefined();
+    searchRecords(fallbackRecords, "equipo norte", defaultFilters);
+    const cachedText = _getRecordSearchTextCacheEntry(fallbackRecords[0]!);
+    searchRecords(fallbackRecords, "equipo sur", defaultFilters);
+
+    expect(cachedText).toContain("equipo 0");
+    expect(_getRecordSearchTextCacheEntry(fallbackRecords[0]!)).toBe(cachedText);
+  });
+
+  it("keeps rapid multiword fallback searches responsive with 5,000 contacts", () => {
+    const largeRecords = buildLargeSearchFixture(5_000);
+    const coldStartedAt = performance.now();
+    const firstResult = searchRecords(largeRecords, "equipo norte", defaultFilters);
+    const coldDuration = performance.now() - coldStartedAt;
+
+    expect(firstResult).toHaveLength(2_500);
+    expect(coldDuration).toBeLessThan(100);
+
+    const durations = Array.from({ length: 10 }, (_, index) => {
+      const startedAt = performance.now();
+      const result = searchRecords(largeRecords, index % 2 === 0 ? "equipo norte" : "equipo sur", defaultFilters);
+
+      expect(result).toHaveLength(2_500);
+      return performance.now() - startedAt;
+    }).sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
+
+    expect(Math.max(...durations)).toBeLessThan(50);
+    expect(p95).toBeLessThan(100);
+  }, 15_000);
 
   it("prioritizes display name matches over lower-weight service matches", () => {
     const rankingRecords: ContactRecord[] = [
