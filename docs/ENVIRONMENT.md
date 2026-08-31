@@ -89,6 +89,17 @@ opened platform executable; no environment variable activates portable mode.
 Variables consumed exclusively by the Playwright E2E test harness. They are injected by the
 test runner and must never be set in production or developer `.env` files.
 
+### PLAYWRIGHT_BACKGROUND
+
+Selects the JSON reporter used by detached local Playwright runs. Background automation sets
+this flag so results remain available in `test-results/e2e-background.json` without requiring
+an interactive terminal. It does not enable headed mode; Playwright remains headless by default.
+
+- **Type:** exact flag — `1` enables the background JSON reporter; any other value is ignored
+- **Default:** unset (the local list reporter is used; CI uses the dot reporter)
+- **Set by:** background E2E automation — do not set in `.env`
+- **Example:** `PLAYWRIGHT_BACKGROUND=1`
+
 ### USB_IMPORT_FIXTURE_ROOT
 
 Opt-in path to an existing USB `portable-data/data` directory for the Vitest JSON import
