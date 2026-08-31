@@ -11,8 +11,8 @@ import { csvImportPolicySelectionListSchema } from "../../shared/schemas/csv-imp
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { BrowserWindow, app, dialog, ipcMain } from "electron";
-import type { WebContents } from "electron";
+import { BrowserWindow, app, dialog } from "electron";
+import type { IpcMain, WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../services/duplicate-detection.service.js";
 import { env } from "../config/env.js";
@@ -92,7 +92,7 @@ const toSafeExportResult = (result: ExportContactsResultInternal): ExportContact
   importedBeeperRecordCount: result.importedBeeperRecordCount
 });
 
-export const registerContactsIpc = (service: AppDataService) => {
+export const registerContactsIpc = (service: AppDataService, handle: IpcMain["handle"]) => {
   // sourceFilePath and senderId identify the import; sender/navListener are held so
   // cleanup can detach the navigation listener without a secondary lookup.
   const pendingCsvImports = new Map<
@@ -136,29 +136,29 @@ export const registerContactsIpc = (service: AppDataService) => {
     }
   };
 
-  ipcMain.handle(CHANNELS.bootstrap, () => service.getBootstrapData());
+  handle(CHANNELS.bootstrap, () => service.getBootstrapData());
   // The resolved backup path is main-process-only — no renderer caller reads
   // it (DataManagementSection awaits and discards it), so it is never
   // forwarded across the IPC boundary. (OIR-276)
-  ipcMain.handle(CHANNELS.createBackup, async (): Promise<void> => {
+  handle(CHANNELS.createBackup, async (): Promise<void> => {
     await service.createBackup();
   });
-  ipcMain.handle(CHANNELS.resetDataset, async () => toSafeResetResult(await service.resetDataset()));
-  ipcMain.handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
+  handle(CHANNELS.resetDataset, async () => toSafeResetResult(await service.resetDataset()));
+  handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
     service.createRecord(payload)
   );
-  ipcMain.handle(CHANNELS.updateRecord, (_event, recordId: string, payload: EditableContactRecord) =>
+  handle(CHANNELS.updateRecord, (_event, recordId: string, payload: EditableContactRecord) =>
     service.updateRecord(recordId, payload)
   );
-  ipcMain.handle(CHANNELS.deleteRecord, (_event, recordId: string) => service.deleteRecord(recordId));
-  ipcMain.handle(CHANNELS.listBackups, async () => (await service.listBackups()).map(toSafeBackupListItem));
+  handle(CHANNELS.deleteRecord, (_event, recordId: string) => service.deleteRecord(recordId));
+  handle(CHANNELS.listBackups, async () => (await service.listBackups()).map(toSafeBackupListItem));
   // Renderer sends a bare fileName (never an absolute path — listBackups()
   // no longer returns one). Reject anything path-shaped before it is ever
   // joined against the real backup directory, then resolve it main-process
   // side. AppDataService.restoreBackup() still re-validates the resolved
   // path is inside the backup directory (symlink/dev-ino checks) as
   // defense-in-depth. (OIR-276)
-  ipcMain.handle(CHANNELS.restoreBackup, async (_event, backupFileName: string) => {
+  handle(CHANNELS.restoreBackup, async (_event, backupFileName: string) => {
     if (!isSafeBackupFileName(backupFileName)) {
       throw new Error(RESTORE_BACKUP_ERROR_MESSAGE);
     }
@@ -168,7 +168,7 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return stripImportPaths(await service.restoreBackup(backupFilePath));
   });
-  ipcMain.handle(CHANNELS.exportDataset, async (event) => {
+  handle(CHANNELS.exportDataset, async (event) => {
     const e2eFilePath = consumeE2eSaveDialogPath();
 
     if (e2eFilePath) {
@@ -208,7 +208,7 @@ export const registerContactsIpc = (service: AppDataService) => {
 
     return toSafeExportResult(await service.exportDataset(filePath));
   });
-  ipcMain.handle(CHANNELS.importDataset, async (event) => {
+  handle(CHANNELS.importDataset, async (event) => {
     const e2eFilePath = consumeE2eOpenDialogPath();
 
     if (e2eFilePath) {
@@ -324,7 +324,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     };
   };
 
-  ipcMain.handle(CHANNELS.previewCsvImport, async (event) => {
+  handle(CHANNELS.previewCsvImport, async (event) => {
     const e2eFilePath = consumeE2eOpenDialogPath();
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const openOptions = {
@@ -362,7 +362,7 @@ export const registerContactsIpc = (service: AppDataService) => {
   // dialog, main reads the file, and only the discriminated-union result
   // (or the CSV importToken, per the existing previewCsvImport contract) is
   // returned. No renderer-supplied path is ever accepted here.
-  ipcMain.handle(CHANNELS.pickAndImportDataset, async (event) => {
+  handle(CHANNELS.pickAndImportDataset, async (event) => {
     const e2eFilePath = consumeE2eOpenDialogPath();
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const openOptions = {
@@ -413,7 +413,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     // platforms/window managers allow bypassing open-dialog filters.
     return { kind: "unsupported-extension", extension } as const;
   });
-  ipcMain.handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
+  handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
     // Atomically take the token before any await — a second concurrent confirmation
     // will find nothing in the map and be rejected immediately.
     const pendingImport = pendingCsvImports.get(importToken);
@@ -452,7 +452,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     return stripImportPaths(await service.importCsvDataset(pendingImport.sourceFilePath, policies));
   });
 
-  ipcMain.handle(CHANNELS.detectDuplicates, async () => {
+  handle(CHANNELS.detectDuplicates, async () => {
     const bootstrapData = await service.getBootstrapData();
 
     if ("recovery" in bootstrapData) {
@@ -477,7 +477,7 @@ export const registerContactsIpc = (service: AppDataService) => {
     }
   });
 
-  ipcMain.handle(CHANNELS.mergeDuplicates, async (_event, rawPayload: unknown) => {
+  handle(CHANNELS.mergeDuplicates, async (_event, rawPayload: unknown) => {
     const parsed = mergeContactsSchema.safeParse(rawPayload);
 
     if (!parsed.success) {

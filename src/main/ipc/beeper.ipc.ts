@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import type { IpcMain } from "electron";
 import { ZodError } from "zod";
 import { editableBeeperRecordSchema, editableImportedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeepersService } from "../services/beeper.service.js";
@@ -24,8 +24,12 @@ const toRendererError = (err: unknown, channel: string): Error => {
   return new Error("Error inesperado. Consulte los registros del proceso principal.");
 };
 
-export const registerBeepersIpc = (service: BeepersService, appDataService: AppDataService) => {
-  ipcMain.handle(BEEPERS_CHANNELS.list, async () => {
+export const registerBeepersIpc = (
+  service: BeepersService,
+  appDataService: AppDataService,
+  handle: IpcMain["handle"]
+) => {
+  handle(BEEPERS_CHANNELS.list, async () => {
     try {
       return await service.list();
     } catch (err) {
@@ -33,7 +37,7 @@ export const registerBeepersIpc = (service: BeepersService, appDataService: AppD
     }
   });
 
-  ipcMain.handle(BEEPERS_CHANNELS.add, async (_event, rawPayload: unknown) => {
+  handle(BEEPERS_CHANNELS.add, async (_event, rawPayload: unknown) => {
     try {
       const parsed = editableBeeperRecordSchema.parse(rawPayload);
       return await service.add(parsed);
@@ -42,7 +46,7 @@ export const registerBeepersIpc = (service: BeepersService, appDataService: AppD
     }
   });
 
-  ipcMain.handle(BEEPERS_CHANNELS.update, async (_event, id: unknown, rawPayload: unknown) => {
+  handle(BEEPERS_CHANNELS.update, async (_event, id: unknown, rawPayload: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
       throw new Error("ID de busca inválido.");
     }
@@ -54,7 +58,7 @@ export const registerBeepersIpc = (service: BeepersService, appDataService: AppD
     }
   });
 
-  ipcMain.handle(BEEPERS_CHANNELS.remove, async (_event, id: unknown) => {
+  handle(BEEPERS_CHANNELS.remove, async (_event, id: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
       throw new Error("ID de busca inválido.");
     }
@@ -65,7 +69,7 @@ export const registerBeepersIpc = (service: BeepersService, appDataService: AppD
     }
   });
 
-  ipcMain.handle(BEEPERS_CHANNELS.listImported, async () => {
+  handle(BEEPERS_CHANNELS.listImported, async () => {
     try {
       return await service.listImported();
     } catch (err) {
@@ -73,7 +77,7 @@ export const registerBeepersIpc = (service: BeepersService, appDataService: AppD
     }
   });
 
-  ipcMain.handle(BEEPERS_CHANNELS.updateImported, async (_event, id: unknown, rawPayload: unknown) => {
+  handle(BEEPERS_CHANNELS.updateImported, async (_event, id: unknown, rawPayload: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
       throw new Error("ID de busca importada inválido.");
     }

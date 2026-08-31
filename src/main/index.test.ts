@@ -10,9 +10,11 @@
  *   - denied navigation + denied window.open
  *   - Content-Security-Policy header (production and development)
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  assertTrustedIpcEvent,
   buildContentSecurityPolicy,
+  createTrustedIpcHandle,
   denyWindowOpen,
   isAllowedNavigationUrl,
   PROD_CSP,
@@ -54,32 +56,37 @@ describe("denyWindowOpen — popup window handler", () => {
 // isAllowedNavigationUrl — production mode (isDev: false)
 // ---------------------------------------------------------------------------
 describe("isAllowedNavigationUrl — production mode", () => {
-  const opts = { isDev: false, devServerUrl: "http://localhost:5173" };
+  const expectedUrl = "file:///Applications/HospiAgenda/resources/app.asar/dist/index.html";
 
-  it("allows file:// URLs", () => {
-    expect(isAllowedNavigationUrl("file:///path/to/index.html", opts)).toBe(true);
-    expect(isAllowedNavigationUrl("file://", opts)).toBe(true);
+  it("allows only the canonical renderer document with query/hash changes", () => {
+    expect(isAllowedNavigationUrl(expectedUrl, expectedUrl)).toBe(true);
+    expect(isAllowedNavigationUrl(`${expectedUrl}?source=usb#agenda`, expectedUrl)).toBe(true);
+  });
+
+  it("denies other local files", () => {
+    expect(isAllowedNavigationUrl("file:///tmp/attacker.html", expectedUrl)).toBe(false);
+    expect(isAllowedNavigationUrl("file://", expectedUrl)).toBe(false);
   });
 
   it("denies http:// URLs", () => {
-    expect(isAllowedNavigationUrl("http://example.com", opts)).toBe(false);
-    expect(isAllowedNavigationUrl("http://localhost:5173", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("http://example.com", expectedUrl)).toBe(false);
+    expect(isAllowedNavigationUrl("http://localhost:5173", expectedUrl)).toBe(false);
   });
 
   it("denies https:// URLs", () => {
-    expect(isAllowedNavigationUrl("https://example.com", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("https://example.com", expectedUrl)).toBe(false);
   });
 
   it("denies data: URLs", () => {
-    expect(isAllowedNavigationUrl("data:text/html,<h1>xss</h1>", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("data:text/html,<h1>xss</h1>", expectedUrl)).toBe(false);
   });
 
   it("denies javascript: URLs", () => {
-    expect(isAllowedNavigationUrl("javascript:alert(1)", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("javascript:alert(1)", expectedUrl)).toBe(false);
   });
 
   it("denies blank string", () => {
-    expect(isAllowedNavigationUrl("", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("", expectedUrl)).toBe(false);
   });
 });
 
@@ -88,27 +95,97 @@ describe("isAllowedNavigationUrl — production mode", () => {
 // ---------------------------------------------------------------------------
 describe("isAllowedNavigationUrl — development mode", () => {
   const devUrl = "http://localhost:5173";
-  const opts = { isDev: true, devServerUrl: devUrl };
 
   it("allows the exact dev server URL", () => {
-    expect(isAllowedNavigationUrl(devUrl, opts)).toBe(true);
+    expect(isAllowedNavigationUrl(devUrl, devUrl)).toBe(true);
   });
 
-  it("allows URLs with a path under the dev server origin", () => {
-    expect(isAllowedNavigationUrl(`${devUrl}/`, opts)).toBe(true);
-    expect(isAllowedNavigationUrl(`${devUrl}/some/page`, opts)).toBe(true);
+  it("allows query/hash changes but denies another path", () => {
+    expect(isAllowedNavigationUrl(`${devUrl}/?mode=e2e#/settings`, devUrl)).toBe(true);
+    expect(isAllowedNavigationUrl(`${devUrl}/some/page`, devUrl)).toBe(false);
   });
 
   it("denies file:// in dev mode (only the dev server is permitted)", () => {
-    expect(isAllowedNavigationUrl("file:///path/to/index.html", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("file:///path/to/index.html", devUrl)).toBe(false);
   });
 
   it("denies unrelated http URLs in dev mode", () => {
-    expect(isAllowedNavigationUrl("http://evil.com", opts)).toBe(false);
+    expect(isAllowedNavigationUrl("http://evil.com", devUrl)).toBe(false);
   });
 
   it("denies a URL that merely contains the dev server URL as a substring", () => {
-    expect(isAllowedNavigationUrl(`http://evil.com/?r=${devUrl}`, opts)).toBe(false);
+    expect(isAllowedNavigationUrl(`http://evil.com/?r=${devUrl}`, devUrl)).toBe(false);
+  });
+});
+
+describe("assertTrustedIpcEvent", () => {
+  const expectedRendererUrl = "file:///app/dist/index.html";
+  const mainFrame = { url: `${expectedRendererUrl}#/agenda` };
+  const expectedWebContents = { mainFrame };
+
+  it("allows the expected top frame", () => {
+    expect(() =>
+      assertTrustedIpcEvent(
+        { sender: expectedWebContents, senderFrame: mainFrame },
+        expectedWebContents,
+        expectedRendererUrl
+      )
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["foreign webContents", { sender: { mainFrame }, senderFrame: mainFrame }],
+    ["foreign frame", { sender: expectedWebContents, senderFrame: { url: mainFrame.url } }],
+    ["missing frame", { sender: expectedWebContents, senderFrame: null }]
+  ])("rejects %s before sensitive work", (_name, event) => {
+    const sensitiveWork = vi.fn();
+
+    expect(() => {
+      assertTrustedIpcEvent(event, expectedWebContents, expectedRendererUrl);
+      sensitiveWork();
+    }).toThrow("Unauthorized IPC sender");
+    expect(sensitiveWork).not.toHaveBeenCalled();
+  });
+
+  it("rejects an external local file even from the expected top frame", () => {
+    const externalFrame = { url: "file:///tmp/attacker.html" };
+    const externalWebContents = { mainFrame: externalFrame };
+
+    expect(() =>
+      assertTrustedIpcEvent(
+        { sender: externalWebContents, senderFrame: externalFrame },
+        externalWebContents,
+        expectedRendererUrl
+      )
+    ).toThrow("Unauthorized IPC sender");
+  });
+});
+
+describe("createTrustedIpcHandle", () => {
+  it("guards a registered handler before it can read or mutate data", () => {
+    const expectedRendererUrl = "file:///app/dist/index.html";
+    const mainFrame = { url: expectedRendererUrl };
+    const expectedWebContents = { mainFrame };
+    let registeredHandler: ((event: never) => unknown) | undefined;
+    const sensitiveHandler = vi.fn().mockResolvedValue("sensitive data");
+    const registerHandle = vi.fn((_channel, listener) => {
+      registeredHandler = listener;
+    });
+    const handle = createTrustedIpcHandle(
+      registerHandle as never,
+      () => expectedWebContents,
+      expectedRendererUrl
+    );
+
+    handle("contacts:get-bootstrap-data", sensitiveHandler);
+
+    expect(() =>
+      registeredHandler!({
+        sender: { mainFrame },
+        senderFrame: mainFrame
+      } as never)
+    ).toThrow("Unauthorized IPC sender");
+    expect(sensitiveHandler).not.toHaveBeenCalled();
   });
 });
 

@@ -1,3 +1,5 @@
+import type { IpcMain } from "electron";
+
 /**
  * Pure security policy helpers for the main-process window bootstrap.
  *
@@ -39,23 +41,65 @@ export const buildContentSecurityPolicy = ({
 /**
  * Returns true if the renderer is allowed to navigate to `targetUrl`.
  *
- * Production: only file:// URLs are permitted (the app loads from the local
- * file system). Development: only the Vite dev server URL (exact match or
- * path under it) is permitted.
+ * Only the canonical renderer document is permitted. Query-string and hash
+ * changes are allowed because they do not replace that document.
  */
 export const isAllowedNavigationUrl = (
   targetUrl: string,
-  { isDev, devServerUrl }: { isDev: boolean; devServerUrl: string }
+  expectedRendererUrl: string
 ): boolean => {
-  if (isDev) {
-    return (
-      targetUrl.startsWith(`${devServerUrl}/`) ||
-      targetUrl === devServerUrl
-    );
-  }
+  try {
+    const target = new URL(targetUrl);
+    const expected = new URL(expectedRendererUrl);
 
-  return targetUrl.startsWith("file://");
+    return (
+      target.protocol === expected.protocol &&
+      target.username === expected.username &&
+      target.password === expected.password &&
+      target.host === expected.host &&
+      target.pathname === expected.pathname
+    );
+  } catch {
+    return false;
+  }
 };
+
+type TrustedWebContents = {
+  mainFrame: unknown;
+};
+
+type TrustedIpcEvent = {
+  sender: unknown;
+  senderFrame: { url: string } | null;
+};
+
+export const assertTrustedIpcEvent = (
+  event: TrustedIpcEvent,
+  expectedWebContents: TrustedWebContents | null,
+  expectedRendererUrl: string
+): void => {
+  if (
+    !expectedWebContents ||
+    event.sender !== expectedWebContents ||
+    event.senderFrame !== expectedWebContents.mainFrame ||
+    !event.senderFrame ||
+    !isAllowedNavigationUrl(event.senderFrame.url, expectedRendererUrl)
+  ) {
+    throw new Error("Unauthorized IPC sender");
+  }
+};
+
+export const createTrustedIpcHandle = (
+  registerHandle: IpcMain["handle"],
+  getExpectedWebContents: () => TrustedWebContents | null,
+  expectedRendererUrl: string
+): IpcMain["handle"] =>
+  (channel, listener) => {
+    registerHandle(channel, (event, ...args) => {
+      assertTrustedIpcEvent(event, getExpectedWebContents(), expectedRendererUrl);
+      return listener(event, ...args);
+    });
+  };
 
 /**
  * The webPreferences object passed to every BrowserWindow created by the app.

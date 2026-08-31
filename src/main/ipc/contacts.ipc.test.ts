@@ -6,6 +6,11 @@ import type { CsvImportPreviewWithConflicts } from "../../shared/types/contact.j
 
 const getPathMock = vi.fn();
 
+const captureIpcHandle = (handlers: Map<string, (...args: unknown[]) => unknown>) =>
+  ((channel: string, handler: (...args: unknown[]) => unknown) => {
+    handlers.set(channel, handler);
+  }) as never;
+
 vi.mock("electron", () => ({
   app: {
     getPath: getPathMock
@@ -309,7 +314,7 @@ describe("contacts:merge-duplicates — mergeDuplicates(keepId, discardId, overr
     const mergeDuplicatesMock = vi.fn();
     const serviceMock = { mergeDuplicates: mergeDuplicatesMock };
 
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, ipcMain.handle);
 
     const handleMock = vi.mocked(ipcMain.handle);
     const registeredCall = handleMock.mock.calls.find(
@@ -555,7 +560,7 @@ describe("contacts:import-csv-dataset — sender binding", () => {
 
     // Import fresh module so vi.doMock above takes effect
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -938,7 +943,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     };
 
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -1153,7 +1158,7 @@ describe("contacts:preview-csv-import — global pending-import cap", () => {
     };
 
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -1342,7 +1347,7 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
     };
 
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -1451,7 +1456,7 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
       importCsvDataset: vi.fn(),
       detectDuplicates: vi.fn(),
       mergeDuplicates: vi.fn()
-    } as never);
+    } as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -1599,7 +1604,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     };
 
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
   afterEach(() => {
@@ -1712,7 +1717,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
       app: { getPath: vi.fn().mockReturnValue("/tmp") }
     }));
     const { registerContactsIpc } = await import("./contacts.ipc.js");
-    registerContactsIpc(serviceMock as never);
+    registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
 
     const sender = { id: 7, on: vi.fn(), once: vi.fn(), removeListener: vi.fn() };
     showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/directory.csv"] });

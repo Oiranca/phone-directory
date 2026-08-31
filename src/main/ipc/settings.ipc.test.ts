@@ -63,7 +63,7 @@ const serviceMock = {
 
 beforeAll(async () => {
   const { registerSettingsIpc } = await import("./settings.ipc.js");
-  registerSettingsIpc(serviceMock as never);
+  registerSettingsIpc(serviceMock as never, ipcMainStub.handle as never);
 });
 
 afterEach(() => {

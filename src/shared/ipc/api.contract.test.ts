@@ -117,9 +117,13 @@ describe("Handler registration coverage — every renderer-invokable channel has
       get: () => vi.fn().mockResolvedValue(undefined)
     });
 
-    registerContactsIpc(serviceStub);
-    registerSettingsIpc(serviceStub);
-    registerBeepersIpc(serviceStub, serviceStub);
+    const captureHandle = ((channel: string) => {
+      registeredChannels.add(channel);
+    }) as never;
+
+    registerContactsIpc(serviceStub, captureHandle);
+    registerSettingsIpc(serviceStub, captureHandle);
+    registerBeepersIpc(serviceStub, serviceStub, captureHandle);
   });
 
   it("REQUIRED_CHANNELS is non-empty (derived from shared channel objects)", () => {
