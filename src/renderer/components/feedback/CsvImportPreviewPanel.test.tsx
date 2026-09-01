@@ -72,18 +72,18 @@ const renderPanel = (
 ) => {
   const onConfirm = vi.fn();
   const onClose = vi.fn();
-  const onPolicyChange = vi.fn();
+  const onPoliciesChange = vi.fn();
   const result = render(
     <CsvImportPreviewPanel
       preview={preview}
       isImporting={overrides.isImporting ?? false}
       isMutating={overrides.isMutating ?? false}
       onConfirm={onConfirm}
-      onPolicyChange={onPolicyChange}
+      onPoliciesChange={onPoliciesChange}
       onClose={onClose}
     />
   );
-  return { ...result, onConfirm, onPolicyChange, onClose };
+  return { ...result, onConfirm, onPoliciesChange, onClose };
 };
 
 afterEach(() => {
@@ -499,12 +499,12 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     });
 
-    it("calls onPolicyChange when a policy is selected", () => {
-      const { onPolicyChange } = renderPanel(conflictPreview);
+    it("calls onPoliciesChange when a policy is selected", () => {
+      const { onPoliciesChange } = renderPanel(conflictPreview);
 
       fireEvent.click(screen.getByRole("radio", { name: "Combinar" }));
 
-      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
+      expect(onPoliciesChange).toHaveBeenCalledWith([0], "merge-fields");
     });
 
     it("enables confirmation when all conflict policies are resolved", () => {
@@ -1443,8 +1443,8 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("combobox", { name: /Política para seleccionados/ })).toBeInTheDocument();
     });
 
-    it("apply-to-selected calls onPolicyChange for each selected conflict with the chosen policy", () => {
-      const { onPolicyChange } = renderPanel(twoConflictPreview);
+    it("apply-to-selected calls onPoliciesChange once with the selected conflicts", () => {
+      const { onPoliciesChange } = renderPanel(twoConflictPreview);
 
       // Select both conflicts
       fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todos/ }));
@@ -1456,13 +1456,12 @@ describe("CsvImportPreviewPanel", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Aplicar a seleccionados/ }));
 
-      expect(onPolicyChange).toHaveBeenCalledWith(0, "overwrite");
-      expect(onPolicyChange).toHaveBeenCalledWith(1, "overwrite");
-      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+      expect(onPoliciesChange).toHaveBeenCalledWith([0, 1], "overwrite");
+      expect(onPoliciesChange).toHaveBeenCalledTimes(1);
     });
 
     it("apply-to-selected only targets selected conflicts, not all", () => {
-      const { onPolicyChange } = renderPanel(twoConflictPreview);
+      const { onPoliciesChange } = renderPanel(twoConflictPreview);
 
       // Select only conflict 0
       fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar Servicio A importado/ }));
@@ -1473,10 +1472,10 @@ describe("CsvImportPreviewPanel", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: /Aplicar a seleccionados/ }));
 
-      expect(onPolicyChange).toHaveBeenCalledWith(0, "skip");
-      expect(onPolicyChange).toHaveBeenCalledTimes(1);
+      expect(onPoliciesChange).toHaveBeenCalledWith([0], "skip");
+      expect(onPoliciesChange).toHaveBeenCalledTimes(1);
       // conflict 1 must not be touched
-      expect(onPolicyChange).not.toHaveBeenCalledWith(1, expect.anything());
+      expect(onPoliciesChange).not.toHaveBeenCalledWith(expect.arrayContaining([1]), expect.anything());
     });
 
     it("bulk-apply deselects all after applying", () => {
@@ -1499,31 +1498,30 @@ describe("CsvImportPreviewPanel", () => {
       expect(screen.getByRole("button", { name: /Combinar a todos/ })).toBeInTheDocument();
     });
 
-    it("apply-to-all calls onPolicyChange for every conflict", () => {
-      const { onPolicyChange } = renderPanel(twoConflictPreview);
+    it("apply-to-all calls onPoliciesChange once with every conflict", () => {
+      const { onPoliciesChange } = renderPanel(twoConflictPreview);
 
       fireEvent.click(screen.getByRole("button", { name: /Combinar a todos/ }));
 
-      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
-      expect(onPolicyChange).toHaveBeenCalledWith(1, "merge-fields");
-      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+      expect(onPoliciesChange).toHaveBeenCalledWith("all", "merge-fields");
+      expect(onPoliciesChange).toHaveBeenCalledTimes(1);
     });
 
     // --- individual override after bulk apply ---
 
     it("individual radio still works after a bulk apply (per-conflict override)", () => {
-      const { onPolicyChange } = renderPanel(twoConflictPreview);
+      const { onPoliciesChange } = renderPanel(twoConflictPreview);
 
       // Bulk apply "skip" to all
       fireEvent.click(screen.getByRole("button", { name: /Omitir a todos/ }));
-      expect(onPolicyChange).toHaveBeenCalledTimes(2);
+      expect(onPoliciesChange).toHaveBeenCalledTimes(1);
 
       // Now override conflict 0 individually to "merge-fields"
       const radios = screen.getAllByRole("radio", { name: "Combinar" });
       fireEvent.click(radios[0]!);
 
-      expect(onPolicyChange).toHaveBeenCalledWith(0, "merge-fields");
-      expect(onPolicyChange).toHaveBeenCalledTimes(3);
+      expect(onPoliciesChange).toHaveBeenCalledWith([0], "merge-fields");
+      expect(onPoliciesChange).toHaveBeenCalledTimes(2);
     });
 
     // --- resolved-gate still holds ---
@@ -1745,7 +1743,7 @@ describe("CsvImportPreviewPanel", () => {
 
       const onConfirm = vi.fn();
       const onClose = vi.fn();
-      const onPolicyChange = vi.fn();
+      const onPoliciesChange = vi.fn();
 
       const { rerender } = render(
         <CsvImportPreviewPanel
@@ -1753,7 +1751,7 @@ describe("CsvImportPreviewPanel", () => {
           isImporting={false}
           isMutating={false}
           onConfirm={onConfirm}
-          onPolicyChange={onPolicyChange}
+          onPoliciesChange={onPoliciesChange}
           onClose={onClose}
         />
       );
@@ -1770,7 +1768,7 @@ describe("CsvImportPreviewPanel", () => {
           isImporting={false}
           isMutating={false}
           onConfirm={onConfirm}
-          onPolicyChange={onPolicyChange}
+          onPoliciesChange={onPoliciesChange}
           onClose={onClose}
         />
       );
@@ -1863,6 +1861,39 @@ describe("CsvImportPreviewPanel", () => {
 
       // Selection must have persisted across page navigation
       expect(selectFirstConflict()).toBeChecked();
+    });
+
+    it("clears bulk selection when a replacement preview is shown", () => {
+      const previewA = makeConflictsPreview(2);
+      const previewB = { ...makeConflictsPreview(2), importToken: "replacement-token" };
+      const onPoliciesChange = vi.fn();
+      const { rerender } = render(
+        <CsvImportPreviewPanel
+          preview={previewA}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={vi.fn()}
+          onPoliciesChange={onPoliciesChange}
+          onClose={vi.fn()}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Importado 1 (conflicto 1)" }));
+      expect(screen.getByRole("button", { name: /Aplicar a seleccionados/ })).toBeInTheDocument();
+
+      rerender(
+        <CsvImportPreviewPanel
+          preview={previewB}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={vi.fn()}
+          onPoliciesChange={onPoliciesChange}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: /Aplicar a seleccionados/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Seleccionar Importado 1 (conflicto 1)" })).not.toBeChecked();
     });
 
     it("does not render conflict pagination when conflicts count is at or below the page size", () => {

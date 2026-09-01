@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
@@ -20,6 +20,16 @@ const formatTimestamp = (value: string) => {
     timeStyle: "short"
   }).format(date);
 };
+
+const yieldToRenderer = () => new Promise<void>((resolve) => {
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => {
+    channel.port1.close();
+    channel.port2.close();
+    resolve();
+  };
+  channel.port2.postMessage(undefined);
+});
 
 type PendingConfirmation =
   | { kind: "pick-import" }
@@ -74,6 +84,7 @@ export const DataManagementSection = () => {
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const confirmationInFlightRef = useRef(false);
+  const policyUpdateSequenceRef = useRef(0);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const isPanelOpen = csvPreview !== null;
@@ -380,27 +391,58 @@ export const DataManagementSection = () => {
     }
   };
 
-  const handleConflictPolicyChange = (recordIndex: number, policy: MergePolicy) => {
-    setCsvPreview((current) => {
-      if (!current) {
-        return current;
+  const handleConflictPoliciesChange = async (
+    preview: CsvImportPreviewWithConflicts,
+    recordIndices: readonly number[] | "all",
+    policy: MergePolicy
+  ) => {
+    const sequence = ++policyUpdateSequenceRef.current;
+    const selectedIndices = recordIndices === "all" ? null : new Set(recordIndices);
+    const conflictedRecords = preview.conflictedRecords.slice();
+    let previousSkippedUpdates = 0;
+    let skippedUpdates = 0;
+    let policiesResolved = true;
+
+    for (let index = 0; index < conflictedRecords.length; index += 1) {
+      const conflict = conflictedRecords[index]!;
+      if (conflict.selectedPolicy === "skip") {
+        previousSkippedUpdates += 1;
       }
 
-      const previousSkippedUpdates = current.conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
-      const conflictedRecords = current.conflictedRecords.map((conflict) =>
-        conflict.recordIndex === recordIndex
-          ? { ...conflict, selectedPolicy: policy }
-          : conflict
-      );
-      const skippedUpdates = conflictedRecords.filter((conflict) => conflict.selectedPolicy === "skip").length;
-      const baseUpdatedCount = current.updatedCount + previousSkippedUpdates;
+      const updatedConflict = selectedIndices === null || selectedIndices.has(conflict.recordIndex)
+        ? { ...conflict, selectedPolicy: policy }
+        : conflict;
+      conflictedRecords[index] = updatedConflict;
 
-      return {
-        ...current,
-        updatedCount: Math.max(0, baseUpdatedCount - skippedUpdates),
-        conflictedRecords,
-        policiesResolved: conflictedRecords.every((conflict) => conflict.selectedPolicy)
-      };
+      if (updatedConflict.selectedPolicy === "skip") {
+        skippedUpdates += 1;
+      }
+      if (!updatedConflict.selectedPolicy) {
+        policiesResolved = false;
+      }
+
+      if ((index + 1) % 250 === 0 && index + 1 < conflictedRecords.length) {
+        await yieldToRenderer();
+        if (sequence !== policyUpdateSequenceRef.current) {
+          return;
+        }
+      }
+    }
+
+    const baseUpdatedCount = preview.updatedCount + previousSkippedUpdates;
+    const updatedPreview = {
+      ...preview,
+      updatedCount: Math.max(0, baseUpdatedCount - skippedUpdates),
+      conflictedRecords,
+      policiesResolved
+    };
+
+    startTransition(() => {
+      setCsvPreview((current) =>
+        sequence === policyUpdateSequenceRef.current && current === preview
+          ? updatedPreview
+          : current
+      );
     });
   };
 
@@ -614,7 +656,9 @@ export const DataManagementSection = () => {
             isImporting={isImportingCsv}
             isMutating={isMutating}
             onConfirm={() => setPendingConfirmation({ kind: "import-csv", preview: csvPreview })}
-            onPolicyChange={handleConflictPolicyChange}
+            onPoliciesChange={(recordIndices, policy) =>
+              void handleConflictPoliciesChange(csvPreview, recordIndices, policy)
+            }
             onClose={() => {
               setCsvPreview(null);
               triggerButtonRef.current?.focus();

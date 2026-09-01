@@ -1254,6 +1254,71 @@ describe("DataManagementSection (Configuración data section)", () => {
 
     // The conflict warning message (in toast or panel alert) must contain "Para cada uno"
     expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Omitir a todos" }));
+
+    expect(screen.getByText("2 de 2 resueltos")).toBeInTheDocument();
+    for (const radio of screen.getAllByRole("radio", { name: "Omitir" })) {
+      expect(radio).toBeChecked();
+    }
+    expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    expect(await screen.findByText(/0 se crearán y 0 se actualizarán/)).toBeInTheDocument();
+  });
+
+  it("keeps only the latest policy when a 5000-conflict batch is replaced", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        ...defaultCsvPreview,
+        importToken: "csv-conflict-replacement",
+        totalRowCount: 5_000,
+        validRowCount: 5_000,
+        recordCount: 5_000,
+        createdCount: 0,
+        updatedCount: 5_000,
+        warningCount: 0,
+        warnings: [],
+        previewRows: [],
+        conflictCount: 5_000,
+        policiesResolved: false,
+        conflictedRecords: Array.from({ length: 5_000 }, (_, recordIndex) => ({
+          recordIndex,
+          importedRecord: {
+            id: `imported-${recordIndex}`,
+            displayName: `Importado ${recordIndex}`,
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecord: {
+            id: `existing-${recordIndex}`,
+            displayName: `Existente ${recordIndex}`,
+            phones: [],
+            emails: [],
+            socials: []
+          },
+          matchingRecordIndex: recordIndex,
+          matchingRecordSource: "existing" as const,
+          conflictType: "external-id-match" as const,
+          conflictReasonKey: "conflict_reason.external_id" as const
+        }))
+      }
+    });
+
+    renderPage();
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    expect(await screen.findByText("Conflictos (5000)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Omitir a todos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Combinar a todos" }));
+
+    expect(await screen.findByText("5000 de 5000 resueltos")).toBeInTheDocument();
+    for (const radio of screen.getAllByRole("radio", { name: "Combinar" })) {
+      expect(radio).toBeChecked();
+    }
   });
 
   it("confidence note shown in panel, not in toast, when detectionConfidence is not 'high'", async () => {
