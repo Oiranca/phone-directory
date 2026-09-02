@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CsvImportPreviewWithConflicts } from "../../shared/types/contact.js";
+import { ImportPreviewAbortError } from "../services/import-preview-control.js";
 
 const getPathMock = vi.fn();
 
@@ -719,6 +720,50 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     expect(result.fileName).toBe("test.csv");
   });
 
+  it("cancels active processing on request and allows a fresh retry", async () => {
+    const sender = makeWebContentsSender(10);
+    serviceMock.previewCsvImport.mockImplementation(
+      (_sourceFilePath: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => reject(new ImportPreviewAbortError()), { once: true });
+        })
+    );
+
+    const handler = handlers.get("contacts:preview-csv-import");
+    if (!handler) throw new Error("preview handler not registered");
+    const pendingPreview = handler({ sender } as unknown);
+    await vi.waitFor(() => expect(serviceMock.previewCsvImport).toHaveBeenCalledOnce());
+
+    const cancelHandler = handlers.get("contacts:cancel-csv-import-preview");
+    if (!cancelHandler) throw new Error("cancel preview handler not registered");
+    cancelHandler({ sender } as unknown);
+    await expect(pendingPreview).rejects.toThrow("se canceló");
+
+    serviceMock.previewCsvImport.mockResolvedValue({ ...previewStub });
+    await expect(handler({ sender } as unknown)).resolves.toMatchObject({ fileName: "test.csv" });
+  });
+
+  it("times out stalled preview processing with a retryable error", async () => {
+    vi.useFakeTimers();
+    const sender = makeWebContentsSender(10);
+    serviceMock.previewCsvImport.mockImplementation(
+      (_sourceFilePath: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => reject(new ImportPreviewAbortError()), { once: true });
+        })
+    );
+
+    const handler = handlers.get("contacts:preview-csv-import");
+    if (!handler) throw new Error("preview handler not registered");
+    const pendingPreview = handler({ sender } as unknown);
+    const assertion = expect(pendingPreview).rejects.toThrow("tardó demasiado");
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await assertion;
+    vi.useRealTimers();
+  });
+
   it("concurrent confirmations — exactly one succeeds, the other is rejected", async () => {
     const sender = makeWebContentsSender(10);
     const importToken = await runPreview(sender);
@@ -1043,7 +1088,10 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
       preview: { importToken: string; sourceFilePath?: string; fileName: string };
     };
 
-    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith("/tmp/incoming/directory.csv");
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(
+      "/tmp/incoming/directory.csv",
+      { signal: expect.any(AbortSignal) }
+    );
     expect(serviceMock.importDataset).not.toHaveBeenCalled();
     expect(response.kind).toBe("csv-preview");
     // Parity with previewCsvImport — the absolute source path must never reach the renderer here either.
@@ -1058,7 +1106,10 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 
     const response = await getHandler()({ sender } as unknown) as { kind: string };
 
-    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(`/tmp/incoming/directory.${extension}`);
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(
+      `/tmp/incoming/directory.${extension}`,
+      { signal: expect.any(AbortSignal) }
+    );
     expect(response.kind).toBe("csv-preview");
   });
 

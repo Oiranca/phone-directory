@@ -274,6 +274,39 @@ describe("readWorkbookRowsInWorker", () => {
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it("terminates a worker when preview processing is cancelled", async () => {
+    const { readWorkbookRowsInWorker } = await import("./spreadsheet-import.service.js");
+    const worker = new FakeWorker();
+    const controller = new AbortController();
+    const promise = readWorkbookRowsInWorker("/tmp/source.xlsx", {
+      workerFactory: () => worker,
+      signal: controller.signal
+    });
+
+    controller.abort();
+
+    await expect(promise).rejects.toHaveProperty("name", "ImportPreviewAbortError");
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a fresh worker successfully after a worker crash", async () => {
+    const { readWorkbookRowsInWorker } = await import("./spreadsheet-import.service.js");
+    const crashedWorker = new FakeWorker();
+    const failedAttempt = readWorkbookRowsInWorker("/tmp/source.xlsx", {
+      workerFactory: () => crashedWorker
+    });
+    crashedWorker.emit("exit", 1);
+    await expect(failedAttempt).rejects.toThrow("terminó de forma inesperada");
+
+    const retryWorker = new FakeWorker();
+    const retry = readWorkbookRowsInWorker("/tmp/source.xlsx", {
+      workerFactory: () => retryWorker
+    });
+    retryWorker.emit("message", { type: "success", result: sampleResult });
+
+    await expect(retry).resolves.toEqual(sampleResult);
+  });
+
   it("rejects unexpected worker exits", async () => {
     const { readWorkbookRowsInWorker } = await import("./spreadsheet-import.service.js");
     const worker = new FakeWorker();

@@ -58,6 +58,10 @@ import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } f
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizeDisplayName, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
+import {
+  yieldDuringImportPreview,
+  type ImportPreviewProcessingOptions
+} from "./import-preview-control.js";
 
 /**
  * Union `customFields` from both records of a duplicate-merge pair.
@@ -706,18 +710,26 @@ export class AppDataService {
   // Return type carries sourceFilePath so the IPC handler can destructure it out
   // at the boundary. The renderer-facing CsvImportPreviewWithConflicts
   // intentionally omits sourceFilePath; this widens it with the internal field.
-  async previewCsvImport(sourceFilePath: string): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
+  async previewCsvImport(
+    sourceFilePath: string,
+    processingOptions: ImportPreviewProcessingOptions = {}
+  ): Promise<CsvImportPreviewWithConflicts & { sourceFilePath: string }> {
     const settings = await this.readSettings(true);
     const { dataset, preview } = await buildSpreadsheetImportPreview(
       sourceFilePath,
-      this.getEditorName(settings)
+      this.getEditorName(settings),
+      processingOptions
     );
 
     // previewCsvImport is side-effect-free: beepers are NOT persisted here.
     // Beepers are persisted only when the user confirms via importCsvDataset.
 
     const currentContacts = await this.readContacts(settings);
-    const { conflicts: conflictedRecords } = this.detectConflicts(currentContacts, dataset);
+    const { conflicts: conflictedRecords } = await this.detectConflicts(
+      currentContacts,
+      dataset,
+      processingOptions
+    );
 
     // Preview has no user-selected policies yet, but it must still gate
     // mergeImportedDataset's "already unchanged" fast path for every row
@@ -734,11 +746,12 @@ export class AppDataService {
     const previewPolicies = new Map<number, MergePolicy>(
       conflictedRecords.map((conflict) => [conflict.recordIndex, "overwrite" as MergePolicy])
     );
-    const mergeSummary = this.mergeImportedDataset(
+    const mergeSummary = await this.mergeImportedDataset(
       currentContacts,
       dataset,
       this.getEditorName(settings),
-      previewPolicies
+      previewPolicies,
+      processingOptions
     );
 
     return {
@@ -787,9 +800,9 @@ export class AppDataService {
     }
 
     const currentContacts = await this.readContacts(settings);
-    const { conflicts } = this.detectConflicts(currentContacts, dataset);
+    const { conflicts } = await this.detectConflicts(currentContacts, dataset);
     const policies = this.resolveImportPolicies(conflicts, policySelections);
-    const merged = this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
+    const merged = await this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
     const backupPath = await this.createBackupInner();
     const now = new Date().toISOString();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
@@ -1898,11 +1911,12 @@ export class AppDataService {
       : `${service} - ${displayName}`;
   }
 
-  private mergeImportedDataset(
+  private async mergeImportedDataset(
     currentDataset: DirectoryDataset,
     importedDataset: DirectoryDataset,
     editorName: string,
-    conflictPolicies: Map<number, MergePolicy> = new Map()
+    conflictPolicies: Map<number, MergePolicy> = new Map(),
+    processingOptions: ImportPreviewProcessingOptions = {}
   ) {
     const exportedAt = new Date().toISOString();
     const mergedRecords = [...currentDataset.records];
@@ -1915,6 +1929,7 @@ export class AppDataService {
     const conflictPolicyCounts: Partial<Record<MergePolicy, number>> = {};
 
     for (const [importRecordIndex, importedRecord] of importedDataset.records.entries()) {
+      await yieldDuringImportPreview(importRecordIndex, processingOptions);
       const externalIdMatchIndex = importedRecord.externalId
         ? currentIndexesByExternalId.get(importedRecord.externalId)
         : undefined;
@@ -2377,10 +2392,11 @@ export class AppDataService {
     );
   }
 
-  private detectConflicts(
+  private async detectConflicts(
     currentDataset: DirectoryDataset,
-    importedDataset: DirectoryDataset
-  ): { conflicts: ConflictedImportRecord[]; unchangedCount: number } {
+    importedDataset: DirectoryDataset,
+    processingOptions: ImportPreviewProcessingOptions = {}
+  ): Promise<{ conflicts: ConflictedImportRecord[]; unchangedCount: number }> {
     const conflicts: ConflictedImportRecord[] = [];
     let unchangedCount = 0;
     type ConflictIndexEntry = {
@@ -2442,7 +2458,9 @@ export class AppDataService {
     const currentIndexesByExternalId = new Map<string, ConflictIndexEntry>();
     const currentIndexesByStableKey = new Map<string, ConflictIndexEntry>();
 
+    let existingIndex = 0;
     for (const [externalId, recordIndex] of existingIndexes.byExternalId) {
+      await yieldDuringImportPreview(existingIndex++, processingOptions);
       const record = currentDataset.records[recordIndex]!;
       currentIndexesByExternalId.set(externalId, {
           recordIndex,
@@ -2452,6 +2470,7 @@ export class AppDataService {
       });
     }
     for (const [stableKey, recordIndex] of existingIndexes.byStableKey) {
+      await yieldDuringImportPreview(existingIndex++, processingOptions);
       const record = currentDataset.records[recordIndex]!;
       currentIndexesByStableKey.set(stableKey, {
         recordIndex,
@@ -2480,7 +2499,8 @@ export class AppDataService {
     // `mergeImportedDataset` — which has its own independent index and is
     // unaffected by this method — keeps consolidating duplicate rows within a
     // single import file exactly as it always has.
-    importedDataset.records.forEach((importedRecord, importRecordIndex) => {
+    for (const [importRecordIndex, importedRecord] of importedDataset.records.entries()) {
+      await yieldDuringImportPreview(importRecordIndex, processingOptions);
       let existingMatch: ConflictIndexEntry | undefined;
       let importOnlyMatch: ConflictIndexEntry | undefined;
       let conflictReasonKey = "";
@@ -2579,7 +2599,7 @@ export class AppDataService {
           });
         }
       }
-    });
+    }
 
     return { conflicts, unchangedCount };
   }

@@ -226,6 +226,7 @@ describe("DataManagementSection (Configuración data section)", () => {
           kind: "csv-preview",
           preview: { ...defaultCsvPreview }
         }),
+        cancelCsvImportPreview: vi.fn().mockResolvedValue(undefined),
         importCsvDataset: vi.fn().mockResolvedValue({
           contacts: {
             ...defaultContacts,
@@ -1188,6 +1189,8 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText(/Seleccionando y analizando el archivo/)).toBeInTheDocument();
     const spinnerStatus = screen.getByRole("status");
     expect(spinnerStatus).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar análisis" }));
+    expect(window.hospitalDirectory.cancelCsvImportPreview).toHaveBeenCalledOnce();
 
     // Resolve to avoid state-update-after-unmount warning
     resolvePick({ kind: "cancelled" });

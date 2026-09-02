@@ -1663,6 +1663,20 @@ describe("CsvImportPreviewPanel", () => {
       expect(rows.length).toBeLessThanOrEqual(100);
     });
 
+    it("labels bounded preview rows as a summary of the complete file", () => {
+      renderPanel({
+        ...makeRowsPreview(100),
+        totalRowCount: 5000,
+        validRowCount: 5000,
+        recordCount: 5000,
+        mergedRecordCount: 5000,
+        createdCount: 5000
+      });
+
+      expect(screen.getByText("Filas del archivo (5000)")).toBeInTheDocument();
+      expect(screen.getByText(/Mostrando las primeras 100 filas/)).toBeInTheDocument();
+    });
+
     it("conflict selection persists across page navigation", () => {
       // Build a preview that has both a conflict AND enough rows to show a pager.
       const bigPreview: CsvImportPreviewWithConflicts = {

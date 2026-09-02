@@ -24,6 +24,7 @@ export const CONTACTS_CHANNELS = {
   exportDataset:    "contacts:export-dataset",
   importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
+  cancelCsvImportPreview: "contacts:cancel-csv-import-preview",
   importCsvDataset: "contacts:import-csv-dataset",
   // Single unified "Importar" entry point. Opens ONE native dialog
   // (json/csv/ods/xls/xlsx filter) and dispatches internally by extension to

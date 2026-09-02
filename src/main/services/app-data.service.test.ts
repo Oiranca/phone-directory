@@ -5745,10 +5745,10 @@ describe("AppDataService", () => {
         detectConflicts: (
           current: typeof currentDataset,
           imported: { records: (typeof baseRecord)[] }
-        ) => { conflicts: unknown[]; unchangedCount: number };
+        ) => Promise<{ conflicts: unknown[]; unchangedCount: number }>;
       };
 
-      const { conflicts, unchangedCount } = privateMerge.detectConflicts(currentDataset, {
+      const { conflicts, unchangedCount } = await privateMerge.detectConflicts(currentDataset, {
         records: [importedRecord]
       });
 
@@ -5783,15 +5783,15 @@ describe("AppDataService", () => {
           imported: { records: (typeof baseRecord)[] },
           editorName: string,
           conflictPolicies: Map<number, string>
-        ) => {
+        ) => Promise<{
           contacts: typeof currentDataset;
           createdCount: number;
           updatedCount: number;
           unchangedCount: number;
-        };
+        }>;
       };
 
-      const merged = privateMerge.mergeImportedDataset(
+      const merged = await privateMerge.mergeImportedDataset(
         currentDataset,
         { records: [importedRecord] },
         "Tester",
@@ -5836,15 +5836,15 @@ describe("AppDataService", () => {
           imported: { records: (typeof baseRecord)[] },
           editorName: string,
           conflictPolicies: Map<number, string>
-        ) => {
+        ) => Promise<{
           contacts: typeof currentDataset;
           createdCount: number;
           updatedCount: number;
           unchangedCount: number;
-        };
+        }>;
       };
 
-      const merged = privateMerge.mergeImportedDataset(
+      const merged = await privateMerge.mergeImportedDataset(
         currentDataset,
         { records: [importedRecord] },
         "Tester",
@@ -5893,15 +5893,15 @@ describe("AppDataService", () => {
           imported: { records: (typeof baseRecord)[] },
           editorName: string,
           conflictPolicies: Map<number, string>
-        ) => {
+        ) => Promise<{
           contacts: typeof currentDataset;
           createdCount: number;
           updatedCount: number;
           unchangedCount: number;
-        };
+        }>;
       };
 
-      const merged = privateMerge.mergeImportedDataset(
+      const merged = await privateMerge.mergeImportedDataset(
         currentDataset,
         { records: [importedRecord] },
         "Tester",
@@ -5978,4 +5978,80 @@ describe("AppDataService", () => {
       expect(dataset.records[0]!.beepers).toEqual([{ number: "4321" }]);
     });
   });
+
+  it.skipIf(process.platform !== "win32")(
+    "keeps a 5,000-by-5,000 import preview responsive and within the total-time budget",
+    async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const template = structuredClone(defaultContacts.records[0]!);
+    const records = Array.from({ length: 5000 }, (_, index) => ({
+      ...structuredClone(template),
+      id: `perf-current-${index}`,
+      externalId: `perf-${index}`,
+      displayName: `Actual ${index}`,
+      contactMethods: {
+        ...structuredClone(template.contactMethods),
+        phones: [{
+          ...structuredClone(template.contactMethods.phones[0]!),
+          id: `perf-phone-${index}`,
+          number: String(600_000_000 + index)
+        }]
+      }
+    }));
+    const dataset = {
+      ...structuredClone(defaultContacts),
+      metadata: {
+        ...structuredClone(defaultContacts.metadata),
+        recordCount: records.length,
+        typeCounts: { [template.type]: records.length }
+      },
+      records
+    };
+    await fs.writeFile(
+      path.join(currentUserDataRoot, "data", "contacts.json"),
+      JSON.stringify(dataset),
+      "utf-8"
+    );
+
+    const sourceFilePath = path.join(testRoot, "incoming", "preview-5000.csv");
+    await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+    const csvRows = Array.from(
+      { length: 5000 },
+      (_, index) => `perf-${index},${template.type},Importado ${index},${600_000_000 + index}`
+    );
+    await fs.writeFile(
+      sourceFilePath,
+      ["externalId,type,displayName,phone1Number", ...csvRows].join("\n"),
+      "utf-8"
+    );
+
+    let maxHeartbeatDelayMs = 0;
+    let lastHeartbeat = performance.now();
+    const heartbeat = setInterval(() => {
+      const now = performance.now();
+      maxHeartbeatDelayMs = Math.max(maxHeartbeatDelayMs, now - lastHeartbeat - 10);
+      lastHeartbeat = now;
+    }, 10);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const startedAt = performance.now();
+    const preview = await service.previewCsvImport(sourceFilePath);
+    const totalMs = performance.now() - startedAt;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    clearInterval(heartbeat);
+
+    expect(preview.conflictCount).toBe(5000);
+    expect(preview.previewRows).toHaveLength(100);
+    expect(preview).not.toHaveProperty("records");
+    expect(preview.conflictedRecords[0]?.importedRecord).not.toHaveProperty("audit");
+    expect(preview.conflictedRecords[0]?.matchingRecord).not.toHaveProperty("contactMethods");
+    expect(totalMs).toBeLessThan(5000);
+    expect(maxHeartbeatDelayMs).toBeLessThan(100);
+
+    },
+    15_000
+  );
 });
