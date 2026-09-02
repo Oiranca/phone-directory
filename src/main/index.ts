@@ -61,7 +61,8 @@ const createWindow = () => {
     ...(isDev ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
-      ...WINDOW_WEB_PREFERENCES
+      ...WINDOW_WEB_PREFERENCES,
+      backgroundThrottling: !env.isE2E
     }
   });
   mainWindow = window;

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import { RECORD_TYPE_LABELS } from "../../../shared/constants/catalogs";
@@ -218,12 +218,12 @@ type Props = {
   isImporting: boolean;
   isMutating: boolean;
   onConfirm: () => void;
-  onPolicyChange: (recordIndex: number, policy: MergePolicy) => void;
+  onPoliciesChange: (recordIndices: readonly number[] | "all", policy: MergePolicy) => void;
   onClose: () => void;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 };
 
-export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPolicyChange, onClose, headingRef }: Props) => {
+export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPoliciesChange, onClose, headingRef }: Props) => {
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
@@ -254,6 +254,8 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
 
   useEffect(() => {
     setConflictsPage(0);
+    setSelectedIndices(new Set());
+    setBulkPolicy("skip");
   }, [preview.importToken]);
 
   // ---------------------------------------------------------------------------
@@ -279,13 +281,12 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
     (conflictsPage + 1) * CONFLICTS_PER_PAGE
   );
 
-  const allIndices = conflictedRecords.map((c) => c.recordIndex);
-  const allSelected = allIndices.length > 0 && allIndices.every((idx) => selectedIndices.has(idx));
-  const someSelected = !allSelected && allIndices.some((idx) => selectedIndices.has(idx));
-  const selectedCount = allIndices.filter((idx) => selectedIndices.has(idx)).length;
-
-  // Count how many conflicts already have a policy selected.
-  const resolvedCount = conflictedRecords.filter((c) => c.selectedPolicy !== undefined).length;
+  const selectedCount = selectedIndices.size;
+  const resolvedCount = policiesResolved
+    ? conflictedRecords.length
+    : conflictedRecords.filter((conflict) => conflict.selectedPolicy !== undefined).length;
+  const allSelected = conflictedRecords.length > 0 && selectedCount === conflictedRecords.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   // Use the shared accessible ConfirmDialog instead of window.confirm.
   // closeButtonRef lets us restore focus to the trigger button when the operator
@@ -319,7 +320,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
     onClose();
   };
 
-  const handleToggleOne = useCallback((recordIndex: number) => {
+  const handleToggleOne = (recordIndex: number) => {
     setSelectedIndices((prev) => {
       const next = new Set(prev);
       if (next.has(recordIndex)) {
@@ -329,32 +330,33 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       }
       return next;
     });
-  }, []);
+  };
 
-  const handleSelectAll = useCallback(() => {
-    setSelectedIndices(new Set(allIndices));
-  }, [allIndices]);
+  const handleSelectAll = () => {
+    setSelectedIndices(new Set(conflictedRecords.map((conflict) => conflict.recordIndex)));
+  };
 
-  const handleDeselectAll = useCallback(() => {
+  const handleDeselectAll = () => {
     setSelectedIndices(new Set());
-  }, []);
+  };
 
-  const handleApplyToSelected = useCallback(() => {
-    for (const idx of allIndices) {
-      if (selectedIndices.has(idx)) {
-        onPolicyChange(idx, bulkPolicy);
-      }
-    }
+  const handleApplyToSelected = () => {
+    onPoliciesChange(
+      conflictedRecords
+        .filter((conflict) => selectedIndices.has(conflict.recordIndex))
+        .map((conflict) => conflict.recordIndex),
+      bulkPolicy
+    );
     // Deselect all after applying so the UI resets cleanly.
     setSelectedIndices(new Set());
-  }, [allIndices, selectedIndices, bulkPolicy, onPolicyChange]);
+  };
 
-  const handleApplyToAll = useCallback((policy: MergePolicy) => {
-    for (const idx of allIndices) {
-      onPolicyChange(idx, policy);
+  const handleApplyToAll = (policy: MergePolicy) => {
+    onPoliciesChange("all", policy);
+    if (selectedIndices.size > 0) {
+      setSelectedIndices(new Set());
     }
-    setSelectedIndices(new Set());
-  }, [allIndices, onPolicyChange]);
+  };
 
   return (
     <section
@@ -720,7 +722,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                                   value={policy}
                                   checked={conflict.selectedPolicy === policy}
                                   disabled={isMutating}
-                                  onChange={() => onPolicyChange(conflict.recordIndex, policy)}
+                                  onChange={() => onPoliciesChange([conflict.recordIndex], policy)}
                                   aria-describedby={descId}
                                   aria-required="true"
                                   className="h-4 w-4 shrink-0"

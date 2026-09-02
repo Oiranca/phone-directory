@@ -253,8 +253,8 @@ test.describe("CSV import conflict-resolution flows", () => {
 
       await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeDisabled();
 
-      // Use "Omitir a todos" bulk-apply shortcut
-      await page.getByRole("button", { name: "Omitir a todos" }).click();
+      // Native button keyboard activation must keep the bulk path accessible.
+      await page.getByRole("button", { name: "Omitir a todos" }).press("Enter");
 
       const confirmBtn = page.getByRole("button", { name: "Confirmar importación" });
       await expect(confirmBtn).toBeEnabled();
@@ -265,6 +265,90 @@ test.describe("CSV import conflict-resolution flows", () => {
       await dialog.getByRole("button", { name: "Confirmar importación" }).click();
 
       await expect(page.getByText(/Importación completada/)).toBeVisible();
+    } finally {
+      await closeElectronApp(electronApp);
+      await removeWorkspace(workspace);
+    }
+  });
+
+  test("batches 5000 conflict policies within the renderer-task budget", async () => {
+    const workspace = await createWorkspace("conflict-bulk-performance");
+    const csvPath = path.join(workspace.incomingDir, "5000-conflicts.csv");
+    const rows = Array.from({ length: 5_000 }, (_, index) =>
+      `example-1,service,Admisión Bulk ${index},Admisión,gestion-administracion,${20_000 + index},internal,active`
+    );
+    await fs.writeFile(
+      csvPath,
+      [
+        "externalId,type,displayName,department,area,phone1Number,phone1Kind,status",
+        ...rows
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const { electronApp, page } = await launchElectronApp({
+      userDataPath: workspace.userDataPath,
+      openDialogPaths: [csvPath]
+    });
+
+    try {
+      await waitForDirectory(page);
+      await openPreview(page);
+      await expect(page.getByText("Conflictos (5000)")).toBeVisible();
+
+      const metrics = await page.evaluate(async () => {
+        const button = Array.from(document.querySelectorAll("button"))
+          .find((candidate) => candidate.textContent?.trim() === "Omitir a todos");
+        const progress = Array.from(document.querySelectorAll("span"))
+          .find((candidate) => /de 5000 resueltos$/.test(candidate.textContent?.trim() ?? ""));
+        if (!button || !progress) throw new Error("Bulk conflict controls are unavailable");
+
+        const longTasks: Array<{ startTime: number; duration: number }> = [];
+        const measurementStart = performance.now();
+        const observer = new PerformanceObserver((entries) => {
+          longTasks.push(...entries.getEntries()
+            .filter((entry) => entry.startTime >= measurementStart)
+            .map((entry) => ({ startTime: entry.startTime, duration: entry.duration })));
+        });
+        observer.observe({ entryTypes: ["longtask"] });
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const startedAt = performance.now();
+        const rendered = new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => {
+            mutationObserver.disconnect();
+            reject(new Error("Timed out waiting for 5000 resolved conflicts"));
+          }, 2_000);
+          const mutationObserver = new MutationObserver(() => {
+            if (progress.textContent?.trim() !== "5000 de 5000 resueltos") return;
+            window.clearTimeout(timeout);
+            mutationObserver.disconnect();
+            resolve();
+          });
+          mutationObserver.observe(progress, { childList: true, characterData: true, subtree: true });
+        });
+        button.click();
+        await rendered;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const elapsed = performance.now() - startedAt;
+        observer.disconnect();
+
+        return {
+          elapsed,
+          longestTask: Math.max(0, ...longTasks.map((task) => task.duration)),
+          longTasks: longTasks.map((task) => ({
+            startOffset: task.startTime - startedAt,
+            duration: task.duration
+          }))
+        };
+      });
+
+      console.info("Conflict bulk-update performance", metrics);
+      expect(metrics.elapsed).toBeLessThanOrEqual(250);
+      expect(metrics.longestTask).toBeLessThanOrEqual(50);
+      await expect(page.getByText("5000 de 5000 resueltos")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Confirmar importación" })).toBeEnabled();
     } finally {
       await closeElectronApp(electronApp);
       await removeWorkspace(workspace);
