@@ -821,13 +821,18 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {preview.previewRows.length > 0 && (
         <div className="mt-6">
           <p className="text-sm font-semibold text-emerald-950">
-            Filas del archivo ({preview.previewRows.length})
+            Filas del archivo ({preview.totalRowCount})
             {totalPreviewPages > 1 && (
               <span className="ml-2 text-xs font-normal text-emerald-700">
                 — filas {previewPageStart + 1}–{Math.min(previewPageStart + PREVIEW_ROWS_PER_PAGE, totalPreviewRows)} de {totalPreviewRows}
               </span>
             )}
           </p>
+          {preview.previewRows.length < preview.totalRowCount && (
+            <p className="mt-1 text-xs text-emerald-700">
+              Mostrando las primeras {preview.previewRows.length} filas; los totales incluyen el archivo completo.
+            </p>
+          )}
           {/* The table scrolls horizontally INSIDE its own
               container (overflow-x-auto below) rather than forcing page-level
               scroll — but a native scrollbar alone is easy to miss (e.g. macOS

@@ -29,6 +29,10 @@ import {
 } from "./spreadsheet-parsers.js";
 import { parseBeeperSheets } from "./spreadsheet-beeper-parser.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
+import {
+  ImportPreviewAbortError,
+  type ImportPreviewProcessingOptions
+} from "./import-preview-control.js";
 
 // Re-export the public symbols that external modules depend on.
 export type { SerializedPhoneEntry } from "./spreadsheet-normalize.js";
@@ -1056,7 +1060,7 @@ type SpreadsheetImportWorkerFactory = (sourceFilePath: string) => SpreadsheetImp
 type ReadWorkbookRowsInWorkerOptions = {
   timeoutMs?: number;
   workerFactory?: SpreadsheetImportWorkerFactory;
-};
+} & ImportPreviewProcessingOptions;
 
 const createSpreadsheetImportWorker: SpreadsheetImportWorkerFactory = (sourceFilePath) =>
   new Worker(
@@ -1076,6 +1080,10 @@ export const readWorkbookRowsInWorker = (
   sourceFilePath: string,
   options: ReadWorkbookRowsInWorkerOptions = {}
 ): Promise<SpreadsheetImportNormalizationResult> => {
+  if (options.signal?.aborted) {
+    return Promise.reject(new ImportPreviewAbortError());
+  }
+
   const timeoutMs = options.timeoutMs ?? MAX_SPREADSHEET_IMPORT_WORKER_TIMEOUT_MS;
   const workerFactory = options.workerFactory ?? createSpreadsheetImportWorker;
 
@@ -1107,6 +1115,15 @@ export const readWorkbookRowsInWorker = (
         )
       );
     }, timeoutMs);
+
+    const abortHandler = () => {
+      void worker.terminate().catch(() => {});
+      rejectWorker(new ImportPreviewAbortError());
+    };
+    options.signal?.addEventListener("abort", abortHandler, { once: true });
+    if (options.signal?.aborted && !settled) {
+      abortHandler();
+    }
 
     worker.once("message", (payload: SpreadsheetImportWorkerResponse) => {
       if (payload?.type === "success") {
@@ -1164,7 +1181,8 @@ const emptyBeepersParseResult = (): BeepersSheetParseResult => ({
 
 export const buildSpreadsheetImportPreview = async (
   sourceFilePath: string,
-  editorName: string
+  editorName: string,
+  processingOptions: ImportPreviewProcessingOptions = {}
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal; beepersParseResult: BeepersSheetParseResult }> => {
   const extension = path.extname(sourceFilePath).toLowerCase();
   const sourceStats = await fs.stat(sourceFilePath);
@@ -1178,7 +1196,7 @@ export const buildSpreadsheetImportPreview = async (
   }
 
   if (extension === ".csv" && await isNormalizedTemplateCsv(sourceFilePath)) {
-    const result = await buildCsvImportPreview(sourceFilePath, editorName);
+    const result = await buildCsvImportPreview(sourceFilePath, editorName, processingOptions);
 
     return {
       ...result,
@@ -1197,7 +1215,7 @@ export const buildSpreadsheetImportPreview = async (
 
   const normalized = IS_VITEST_RUNTIME
     ? normalizeWorkbookRowsFromFile(sourceFilePath)
-    : await readWorkbookRowsInWorker(sourceFilePath);
+    : await readWorkbookRowsInWorker(sourceFilePath, processingOptions);
 
   if (normalized.rows.length > MAX_SPREADSHEET_IMPORT_ROWS) {
     throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
@@ -1210,7 +1228,8 @@ export const buildSpreadsheetImportPreview = async (
     detectedFormat: normalized.detectedFormat,
     detectionConfidence: normalized.detectionConfidence,
     beepersSkippedRowCount: normalized.beepersSkippedRowCount,
-    socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount
+    socialHandleSkippedRowCount: normalized.socialHandleSkippedRowCount,
+    ...processingOptions
   });
 
   return {

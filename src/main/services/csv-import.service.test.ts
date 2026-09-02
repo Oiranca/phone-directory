@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ImportPreviewAbortError } from "./import-preview-control.js";
 import { buildCsvImportPreview, buildImportPreviewFromRows } from "./csv-import.service.js";
 
 describe("buildCsvImportPreview", () => {
@@ -106,9 +107,59 @@ describe("buildCsvImportPreview", () => {
     const rows = Array.from({ length: 5000 }, (_, i) => `person,Persona ${i},${10000 + i}`);
     const filePath = await writeFile("at-cap-rows.csv", [header, ...rows].join("\n") + "\n");
 
-    const { preview } = await buildCsvImportPreview(filePath, "TestEditor");
+    const { preview, dataset } = await buildCsvImportPreview(filePath, "TestEditor");
     expect(preview.totalRowCount).toBe(5000);
+    expect(preview.previewRows).toHaveLength(100);
+    expect(dataset.records).toHaveLength(5000);
   }, 15000);
+
+  it("keeps full issue and warning counts while bounding renderer details", async () => {
+    const invalidRows = Array.from({ length: 101 }, () => ({
+      type: "person",
+      displayName: "",
+      phone1Number: "12345"
+    }));
+    const invalid = await buildImportPreviewFromRows(invalidRows, {
+      sourceFilePath: "/tmp/invalid.csv",
+      fileName: "invalid.csv",
+      editorName: "TestEditor"
+    });
+    expect(invalid.preview.invalidRowCount).toBe(101);
+    expect(invalid.preview.rowIssues).toHaveLength(100);
+    expect(invalid.preview.previewRows).toHaveLength(100);
+
+    const warningRows = Array.from({ length: 101 }, (_, index) => ({
+      type: "person",
+      displayName: `Persona ${index}`,
+      phone1Number: String(10000 + index),
+      area: "desconocida"
+    }));
+    const warning = await buildImportPreviewFromRows(warningRows, {
+      sourceFilePath: "/tmp/warnings.csv",
+      fileName: "warnings.csv",
+      editorName: "TestEditor"
+    });
+    expect(warning.preview.warningCount).toBe(101);
+    expect(warning.preview.warnings).toHaveLength(100);
+  });
+
+  it("yields during large previews and honors cancellation", async () => {
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      type: "person",
+      displayName: `Persona ${index}`,
+      phone1Number: String(10000 + index)
+    }));
+    const controller = new AbortController();
+    setImmediate(() => controller.abort());
+
+    await expect(buildImportPreviewFromRows(rows, {
+      sourceFilePath: "/tmp/cancel.csv",
+      fileName: "cancel.csv",
+      editorName: "TestEditor",
+      signal: controller.signal,
+      yieldEvery: 50
+    })).rejects.toThrow(ImportPreviewAbortError);
+  });
 
   it("skips row and adds issue when displayName is missing", async () => {
     const filePath = await writeFile(

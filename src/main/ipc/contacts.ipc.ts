@@ -15,9 +15,11 @@ import { BrowserWindow, app, dialog } from "electron";
 import type { IpcMain, WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
 import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../services/duplicate-detection.service.js";
+import { ImportPreviewAbortError } from "../services/import-preview-control.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
+const CSV_IMPORT_PREVIEW_TIMEOUT_MS = 10_000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
 // Defensive global cap on concurrent pending CSV imports; see
 // pendingCsvImports below.
@@ -106,6 +108,7 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
       wrongSenderAttempts: number;
     }
   >();
+  const activePreviewControllers = new Map<number, AbortController>();
   const senderTokens = new Map<number, string>();
   const senderCleanupAttached = new Set<number>();
   const pendingE2eOpenDialogPaths = [...env.e2eOpenDialogPaths];
@@ -236,10 +239,48 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
   // importToken bookkeeping once a source file path has been resolved.
   const runCsvImportPreview = async (event: Electron.IpcMainInvokeEvent, sourceFilePath: string) => {
     const senderId = event.sender.id;
+    activePreviewControllers.get(senderId)?.abort();
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, CSV_IMPORT_PREVIEW_TIMEOUT_MS);
+    const abortOnDestroyed = () => controller.abort();
+    const abortOnNavigation = (details: { isSameDocument?: boolean } | undefined) => {
+      if (!details?.isSameDocument) {
+        controller.abort();
+      }
+    };
+
+    activePreviewControllers.set(senderId, controller);
+    event.sender.once("destroyed", abortOnDestroyed);
+    event.sender.on("did-start-navigation", abortOnNavigation);
+
     // previewCsvImport declares { sourceFilePath: string } in its return type so
     // TypeScript proves the field exists here; we destructure it out before the
     // renderer payload is assembled (no cast needed).
-    const preview = await service.previewCsvImport(sourceFilePath);
+    let preview;
+    try {
+      preview = await service.previewCsvImport(sourceFilePath, { signal: controller.signal });
+    } catch (error) {
+      if (error instanceof ImportPreviewAbortError || controller.signal.aborted) {
+        throw new Error(
+          timedOut
+            ? "La preparación de la importación tardó demasiado. Vuelve a intentarlo."
+            : "La preparación de la importación se canceló. Vuelve a intentarlo."
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      event.sender.removeListener("destroyed", abortOnDestroyed);
+      event.sender.removeListener("did-start-navigation", abortOnNavigation);
+      if (activePreviewControllers.get(senderId) === controller) {
+        activePreviewControllers.delete(senderId);
+      }
+    }
     const importToken = randomUUID();
     const previousImportToken = senderTokens.get(senderId);
 
@@ -351,6 +392,10 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     }
 
     return runCsvImportPreview(event, sourceFilePath);
+  });
+
+  handle(CHANNELS.cancelCsvImportPreview, (event) => {
+    activePreviewControllers.get(event.sender.id)?.abort();
   });
 
   // Single unified "Importar" entry point. Opens ONE native dialog

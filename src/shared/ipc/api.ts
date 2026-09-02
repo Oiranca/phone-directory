@@ -66,6 +66,7 @@ export interface HospitalDirectoryApi {
 
   // CSV import
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
+  cancelCsvImportPreview: () => Promise<void>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
 
   // Unified single-picker import entry point. Opens one native

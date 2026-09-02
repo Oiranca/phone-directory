@@ -65,6 +65,7 @@ const EXPECTED_METHODS = [
   "importDataset",
   "resetDataset",
   "previewCsvImport",
+  "cancelCsvImportPreview",
   "importCsvDataset",
   "listBeepers",
   "addBeeper",
@@ -247,6 +248,9 @@ describe("build artifact — compiled api.cjs behavioral tests", () => {
     });
     it("previewCsvImport → contacts:preview-csv-import", async () => {
       await expectChannel("previewCsvImport", CONTACTS_CHANNELS.previewCsvImport);
+    });
+    it("cancelCsvImportPreview → contacts:cancel-csv-import-preview", async () => {
+      await expectChannel("cancelCsvImportPreview", CONTACTS_CHANNELS.cancelCsvImportPreview);
     });
     it("importCsvDataset → contacts:import-csv-dataset", async () => {
       await expectChannel("importCsvDataset", CONTACTS_CHANNELS.importCsvDataset, "tok", []);

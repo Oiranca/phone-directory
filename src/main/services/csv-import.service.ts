@@ -28,6 +28,10 @@ import { computeMetadataCounts } from "../../shared/utils/matching.js";
 export type CsvImportPreviewInternal = CsvImportPreview & { sourceFilePath: string };
 import { isSerializedPhoneEntry, isSerializedBeeperEntry } from "./spreadsheet-normalize.js";
 import type { SerializedPhoneEntry, SerializedBeeperEntry } from "./spreadsheet-normalize.js";
+import {
+  yieldDuringImportPreview,
+  type ImportPreviewProcessingOptions
+} from "./import-preview-control.js";
 
 const REQUIRED_COLUMNS = ["type", "displayName"] as const;
 const SUPPORTED_COLUMNS = [
@@ -92,6 +96,7 @@ const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", 
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
 const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CSV_IMPORT_ROWS = 5000;
+const MAX_PREVIEW_DETAILS = 100;
 
 export type NormalizedImportRow = Record<string, string>;
 
@@ -511,7 +516,8 @@ const buildDataset = (records: ContactRecord[], editorName: string) => {
 
 export const buildCsvImportPreview = async (
   sourceFilePath: string,
-  editorName: string
+  editorName: string,
+  processingOptions: ImportPreviewProcessingOptions = {}
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const sourceStats = await fs.stat(sourceFilePath);
 
@@ -539,7 +545,8 @@ export const buildCsvImportPreview = async (
   return buildImportPreviewFromRows(parseResult.data, {
     sourceFilePath,
     fileName: path.basename(sourceFilePath),
-    editorName
+    editorName,
+    ...processingOptions
   });
 };
 
@@ -555,15 +562,23 @@ export const buildImportPreviewFromRows = async (
     beepersSkippedRowCount?: number;
     /** INTERIM: Social-handle rows silently skipped. Default 0 (CSV path). */
     socialHandleSkippedRowCount?: number;
-  }
+  } & ImportPreviewProcessingOptions
 ): Promise<{ dataset: DirectoryDataset; preview: CsvImportPreviewInternal }> => {
   const records: ContactRecord[] = [];
   const rowIssues: CsvImportIssue[] = [];
   const warnings: CsvImportWarning[] = [];
-
   const previewRows: CsvImportPreviewRow[] = [];
+  let invalidRowCount = 0;
+  let warningCount = 0;
+  const appendPreviewDetails = <T>(target: T[], entries: T[]) => {
+    const remaining = MAX_PREVIEW_DETAILS - target.length;
+    if (remaining > 0) {
+      target.push(...entries.slice(0, remaining));
+    }
+  };
 
-  rows.forEach((row: NormalizedImportRow, index: number) => {
+  for (const [index, row] of rows.entries()) {
+    await yieldDuringImportPreview(index, options);
     const rowNumber = index + 2;
     const displayName = maybe(row.displayName);
     const issues: string[] = [];
@@ -639,13 +654,15 @@ export const buildImportPreviewFromRows = async (
     }
 
     if (issues.length > 0) {
-      rowIssues.push({
+      invalidRowCount += 1;
+      warningCount += rowWarnings.length;
+      appendPreviewDetails(rowIssues, [{
         rowNumber,
         displayName,
         messages: issues
-      });
-      warnings.push(...rowWarnings);
-      previewRows.push({
+      }]);
+      appendPreviewDetails(warnings, rowWarnings);
+      appendPreviewDetails(previewRows, [{
         rowNumber,
         status: "rejected",
         displayName,
@@ -656,8 +673,8 @@ export const buildImportPreviewFromRows = async (
         email1: maybe(row.email1),
         errorMessages: issues,
         warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
-      });
-      return;
+      }]);
+      continue;
     }
 
     try {
@@ -701,8 +718,9 @@ export const buildImportPreviewFromRows = async (
       });
 
       records.push(record);
-      warnings.push(...rowWarnings);
-      previewRows.push({
+      warningCount += rowWarnings.length;
+      appendPreviewDetails(warnings, rowWarnings);
+      appendPreviewDetails(previewRows, [{
         rowNumber,
         status: rowWarnings.length > 0 ? "warning" : "accepted",
         displayName,
@@ -712,20 +730,22 @@ export const buildImportPreviewFromRows = async (
         phone1Number: record.contactMethods.phones[0]?.number,
         email1: record.contactMethods.emails[0]?.address,
         warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
-      });
+      }]);
     } catch (error) {
       const messages =
         error instanceof Error
           ? ["La fila no se pudo convertir en un registro válido."]
           : ["La fila no se pudo convertir en un registro válido."];
 
-      rowIssues.push({
+      invalidRowCount += 1;
+      warningCount += rowWarnings.length;
+      appendPreviewDetails(rowIssues, [{
         rowNumber,
         displayName,
         messages
-      });
-      warnings.push(...rowWarnings);
-      previewRows.push({
+      }]);
+      appendPreviewDetails(warnings, rowWarnings);
+      appendPreviewDetails(previewRows, [{
         rowNumber,
         status: "rejected",
         displayName,
@@ -736,9 +756,9 @@ export const buildImportPreviewFromRows = async (
         email1: maybe(row.email1),
         errorMessages: messages,
         warningMessages: rowWarnings.length > 0 ? rowWarnings.map((w) => w.message) : undefined
-      });
+      }]);
     }
-  });
+  }
 
   const dataset = buildDataset(records, options.editorName);
 
@@ -752,8 +772,8 @@ export const buildImportPreviewFromRows = async (
       detectionConfidence: options.detectionConfidence,
       totalRowCount: rows.length,
       validRowCount: records.length,
-      invalidRowCount: rowIssues.length,
-      warningCount: warnings.length,
+      invalidRowCount,
+      warningCount,
       recordCount: dataset.records.length,
       mergedRecordCount: dataset.records.length,
       createdCount: dataset.records.length,
