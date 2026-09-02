@@ -85,6 +85,13 @@ export const DataManagementSection = () => {
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const confirmationInFlightRef = useRef(false);
   const policyUpdateSequenceRef = useRef(0);
+  const pendingPolicyUpdatesRef = useRef<{
+    preview: CsvImportPreviewWithConflicts;
+    operations: Array<{
+      selectedIndices: ReadonlySet<number> | null;
+      policy: MergePolicy;
+    }>;
+  } | null>(null);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const isPanelOpen = csvPreview !== null;
@@ -398,6 +405,10 @@ export const DataManagementSection = () => {
   ) => {
     const sequence = ++policyUpdateSequenceRef.current;
     const selectedIndices = recordIndices === "all" ? null : new Set(recordIndices);
+    const operations = pendingPolicyUpdatesRef.current?.preview === preview
+      ? [...pendingPolicyUpdatesRef.current.operations, { selectedIndices, policy }]
+      : [{ selectedIndices, policy }];
+    pendingPolicyUpdatesRef.current = { preview, operations };
     const conflictedRecords = preview.conflictedRecords.slice();
     let previousSkippedUpdates = 0;
     let skippedUpdates = 0;
@@ -409,9 +420,15 @@ export const DataManagementSection = () => {
         previousSkippedUpdates += 1;
       }
 
-      const updatedConflict = selectedIndices === null || selectedIndices.has(conflict.recordIndex)
-        ? { ...conflict, selectedPolicy: policy }
-        : conflict;
+      let selectedPolicy = conflict.selectedPolicy;
+      for (const operation of operations) {
+        if (operation.selectedIndices === null || operation.selectedIndices.has(conflict.recordIndex)) {
+          selectedPolicy = operation.policy;
+        }
+      }
+      const updatedConflict = selectedPolicy === conflict.selectedPolicy
+        ? conflict
+        : { ...conflict, selectedPolicy };
       conflictedRecords[index] = updatedConflict;
 
       if (updatedConflict.selectedPolicy === "skip") {
