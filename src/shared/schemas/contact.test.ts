@@ -64,6 +64,15 @@ describe("directoryDatasetSchema", () => {
 
     expect(() => directoryDatasetSchema.parse(invalidDataset)).toThrow(ZodError);
   });
+
+  it("rejects datasets above the 10,000-record limit", () => {
+    const oversizedDataset = {
+      ...defaultContacts,
+      records: Array.from({ length: 10_001 }, () => defaultContacts.records[0]!)
+    };
+
+    expect(() => directoryDatasetSchema.parse(oversizedDataset)).toThrow(ZodError);
+  });
 });
 
 // ---------------------------------------------------------------------------

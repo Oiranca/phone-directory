@@ -1008,7 +1008,7 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 
     const response = await getHandler()({ sender } as unknown);
 
-    expect(serviceMock.importJsonFile).toHaveBeenCalledWith("/tmp/incoming/replacement.json");
+    expect(serviceMock.importJsonFile.mock.calls[0]?.[0]).toBe("/tmp/incoming/replacement.json");
     expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
     // backupPath/importedFilePath are absolute filesystem paths and must be
     // stripped before the result crosses the IPC boundary into the renderer
@@ -1018,6 +1018,22 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     expect(response).toEqual({ kind: "json-import", result: safeJsonImportResult });
     expect(response).not.toHaveProperty("result.backupPath");
     expect(response).not.toHaveProperty("result.importedFilePath");
+  });
+
+  it("cancels an in-flight JSON worker through the existing import cancel action", async () => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
+    serviceMock.importJsonFile.mockImplementation((_filePath: string, options: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      })
+    );
+    const sender = makeWebContentsSender(1);
+    const importPromise = getHandler()({ sender } as unknown);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    await handlers.get("contacts:cancel-csv-import-preview")!({ sender } as unknown);
+
+    await expect(importPromise).rejects.toThrow("cancelled");
   });
 
   it("strips every internal path from a combined JSON import", async () => {
@@ -1685,7 +1701,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/replacement.json"] });
 
     const handler = handlers.get("contacts:import-dataset");
-    const result = await handler!({ sender: { id: 1 } });
+    const result = await handler!({ sender: makeWebContentsSender(1) });
 
     expect(result).toEqual({
       contacts: importResultInternal.contacts,

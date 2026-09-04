@@ -1,0 +1,8 @@
+export const MAX_JSON_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+export const MAX_JSON_FILE_SIZE_MB = 10;
+export const MAX_DATASET_RECORDS = 10_000;
+export const MAX_NESTED_COLLECTION_ITEMS = 100;
+export const MAX_JSON_DEPTH = 20;
+export const MAX_JSON_OBJECT_FIELDS = 100;
+export const MAX_JSON_ARRAY_ITEMS = MAX_DATASET_RECORDS;
+export const MAX_JSON_TOTAL_FIELDS = 500_000;

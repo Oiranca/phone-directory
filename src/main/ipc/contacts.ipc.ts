@@ -117,6 +117,29 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
   const consumeE2eOpenDialogPath = () => pendingE2eOpenDialogPaths.shift() ?? null;
   const consumeE2eSaveDialogPath = () => pendingE2eSaveDialogPaths.shift() ?? null;
 
+  const runJsonImport = async <T>(
+    event: Electron.IpcMainInvokeEvent,
+    importFile: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> => {
+    const senderId = event.sender.id;
+    activePreviewControllers.get(senderId)?.abort();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    activePreviewControllers.set(senderId, controller);
+    event.sender.once("destroyed", abort);
+    event.sender.on("did-start-navigation", abort);
+
+    try {
+      return await importFile(controller.signal);
+    } finally {
+      event.sender.removeListener("destroyed", abort);
+      event.sender.removeListener("did-start-navigation", abort);
+      if (activePreviewControllers.get(senderId) === controller) {
+        activePreviewControllers.delete(senderId);
+      }
+    }
+  };
+
   const clearPendingCsvImport = (importToken: string) => {
     const pendingImport = pendingCsvImports.get(importToken);
 
@@ -215,7 +238,10 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     const e2eFilePath = consumeE2eOpenDialogPath();
 
     if (e2eFilePath) {
-      return stripImportPaths(await service.importDataset(e2eFilePath));
+      return stripImportPaths(await runJsonImport(
+        event,
+        (signal) => service.importDataset(e2eFilePath, { signal })
+      ));
     }
 
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -232,7 +258,11 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
       return null;
     }
 
-    return stripImportPaths(await service.importDataset(filePaths[0]!));
+    const sourceFilePath = filePaths[0]!;
+    return stripImportPaths(await runJsonImport(
+      event,
+      (signal) => service.importDataset(sourceFilePath, { signal })
+    ));
   });
   // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset —
   // both dispatch to the same normalize/validate/preview pipeline and the same
@@ -436,7 +466,10 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     const extension = path.extname(sourceFilePath).toLowerCase().replace(/^\./, "");
 
     if (extension === "json") {
-      const result = await service.importJsonFile(sourceFilePath);
+      const result = await runJsonImport(
+        event,
+        (signal) => service.importJsonFile(sourceFilePath, { signal })
+      );
 
       if (result.kind === "combined-import") {
         return { kind: "combined-import", result: stripCombinedImportPaths(result.result) } as const;

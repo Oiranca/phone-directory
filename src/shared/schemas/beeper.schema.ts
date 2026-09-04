@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_DATASET_RECORDS } from "../constants/json-limits.js";
 
 export const BEEPER_SHIFTS = ["mañana", "tarde", "noche"] as const;
 
@@ -74,9 +75,10 @@ export const editableImportedBeeperRecordSchema = z.object({
 
 export const beepersDatasetSchema = z.object({
   version: z.literal("1.0.0"),
-  records: z.array(beeperRecordSchema),
+  records: z.array(beeperRecordSchema).max(MAX_DATASET_RECORDS),
   importedRecords: z
     .array(importedBeeperRecordSchema)
+    .max(MAX_DATASET_RECORDS)
     .nullable()
     .optional()
     .transform((v) => v ?? [])

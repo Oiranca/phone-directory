@@ -62,6 +62,11 @@ import {
   yieldDuringImportPreview,
   type ImportPreviewProcessingOptions
 } from "./import-preview-control.js";
+import {
+  JsonDataError,
+  readJsonData,
+  type ReadJsonDataOptions
+} from "./json-data-reader.js";
 
 /**
  * Union `customFields` from both records of a duplicate-merge pair.
@@ -420,10 +425,11 @@ export class AppDataService {
     });
   }
 
-  async importDataset(sourceFilePath: string): Promise<ImportContactsResultInternal> {
-    const importedContacts = directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(sourceFilePath)
-    );
+  async importDataset(
+    sourceFilePath: string,
+    options: ReadJsonDataOptions = {}
+  ): Promise<ImportContactsResultInternal> {
+    const importedContacts = (await readJsonData(sourceFilePath, "contacts", options)).data as DirectoryDataset;
     return this.importParsedContactsDataset(importedContacts, sourceFilePath);
   }
 
@@ -461,44 +467,54 @@ export class AppDataService {
     });
   }
 
-  async importJsonFile(sourceFilePath: string): Promise<JsonFileImportResultInternal> {
-    const raw = await readJsonFile<unknown>(sourceFilePath);
-    const combined = combinedDataEnvelopeSchema.safeParse(raw);
+  async importJsonFile(
+    sourceFilePath: string,
+    options: ReadJsonDataOptions = {}
+  ): Promise<JsonFileImportResultInternal> {
+    let parsed;
+    try {
+      parsed = await readJsonData(sourceFilePath, "auto", options);
+    } catch (error) {
+      if (error instanceof JsonDataError && error.code === "invalid-data") {
+        throw new Error(
+          "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+        );
+      }
+      throw error;
+    }
 
-    if (combined.success) {
+    if (parsed.kind === "combined") {
       return {
         kind: "combined-import",
-        result: await this.importCombinedData(combined.data, sourceFilePath)
+        result: await this.importCombinedData(
+          parsed.data as ReturnType<typeof combinedDataEnvelopeSchema.parse>,
+          sourceFilePath
+        )
       };
     }
 
-    const contacts = directoryDatasetSchema.safeParse(raw);
-
-    if (contacts.success) {
+    if (parsed.kind === "contacts") {
       return {
         kind: "contacts-import",
-        result: await this.importParsedContactsDataset(contacts.data, sourceFilePath)
+        result: await this.importParsedContactsDataset(parsed.data as DirectoryDataset, sourceFilePath)
       };
     }
 
-    const beepers = beepersDatasetSchema.safeParse(raw);
-
-    if (beepers.success) {
+    if (parsed.kind === "beepers") {
       if (!this.options.beepersService) {
         throw new Error("El servicio de buscas no está disponible.");
       }
 
       const settings = await this.readSettings(true);
-      const counts = await this.options.beepersService.importDataset(beepers.data, {
+      const counts = await this.options.beepersService.importDataset(
+        parsed.data as ReturnType<typeof beepersDatasetSchema.parse>, {
         backupDirectoryPath: settings.backupDirectoryPath,
         retentionCount: settings.ui.autoBackup.retentionCount
       });
       return { kind: "beepers-import", ...counts };
     }
 
-    const importedSettings = appSettingsSchema.safeParse(raw);
-
-    if (importedSettings.success) {
+    if (parsed.kind === "settings") {
       return this.enqueueWrite(async () => {
         const managedDefaults = this.getManagedSettingsDefaults();
         const currentSettings = await this.readSettings(true);
@@ -511,11 +527,11 @@ export class AppDataService {
         );
 
         const settings = await this.saveSettingsInner({
-          editorName: importedSettings.data.editorName,
+          editorName: (parsed.data as AppSettings).editorName,
           dataFilePath: managedDefaults.dataFilePath,
           backupDirectoryPath: managedDefaults.backupDirectoryPath,
-          ui: importedSettings.data.ui,
-          lastImportedAt: importedSettings.data.lastImportedAt
+          ui: (parsed.data as AppSettings).ui,
+          lastImportedAt: (parsed.data as AppSettings).lastImportedAt
         });
 
         try {
@@ -533,9 +549,7 @@ export class AppDataService {
       });
     }
 
-    throw new Error(
-      "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
-    );
+    throw new Error("El archivo JSON no tiene una estructura válida de HospiAgenda.");
   }
 
   private async importCombinedData(
@@ -1303,9 +1317,7 @@ export class AppDataService {
       false
     );
 
-    return directoryDatasetSchema.parse(
-      await readJsonFile<DirectoryDataset>(canonicalFilePath)
-    );
+    return (await readJsonData(canonicalFilePath, "contacts")).data as DirectoryDataset;
   }
 
   private createBackupSuffix() {
@@ -2813,6 +2825,7 @@ export class AppDataService {
 
     return (
       error instanceof SyntaxError ||
+      error instanceof JsonDataError ||
       error instanceof ZodError ||
       filesystemError?.code === "ENOENT" ||
       filesystemError?.code === "ENOTDIR" ||
@@ -2823,7 +2836,13 @@ export class AppDataService {
   private toRecoveryState(error: unknown, contactsFilePath: string): RecoveryState {
     let details: string;
 
-    if (error instanceof ZodError) {
+    if (error instanceof JsonDataError && error.code === "too-large") {
+      details = error.message;
+    } else if (error instanceof JsonDataError && error.code === "too-deep") {
+      details = error.message;
+    } else if (error instanceof JsonDataError && error.code === "too-many-fields") {
+      details = error.message;
+    } else if (error instanceof ZodError || (error instanceof JsonDataError && error.code === "invalid-data")) {
       details = "El archivo tiene una estructura inválida. Utiliza la plantilla oficial para importar contactos.";
     } else if (this.getErrnoException(error)?.code === "ENOENT") {
       details = "El archivo configurado no existe. Importa una copia JSON válida o restablece un directorio vacío para volver a trabajar.";

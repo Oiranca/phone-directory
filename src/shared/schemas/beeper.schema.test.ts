@@ -231,4 +231,11 @@ describe("beepersDatasetSchema", () => {
     expect(result.importedRecords).toHaveLength(1);
     expect(result.importedRecords[0]!.deviceNumber).toBe("7321");
   });
+
+  it("rejects datasets above the 10,000-record limit", () => {
+    expect(() => beepersDatasetSchema.parse({
+      version: "1.0.0",
+      records: Array.from({ length: 10_001 }, () => validRecord)
+    })).toThrow();
+  });
 });

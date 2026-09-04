@@ -3,11 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableImportedBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
-import { ensurePrivateDirectory, readJsonFile, writeJsonFile } from "../utils/fs-json.js";
+import { ensurePrivateDirectory, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
+import { readJsonData } from "./json-data-reader.js";
 
 const BEEPERS_VERSION = "1.0.0";
 
@@ -143,7 +144,7 @@ export class BeepersService {
 
     let legacyDataset: BeepersDataset;
     try {
-      legacyDataset = beepersDatasetSchema.parse(await readJsonFile<BeepersDataset>(legacyFilePath));
+      legacyDataset = (await readJsonData(legacyFilePath, "beepers")).data as BeepersDataset;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return;
@@ -159,7 +160,7 @@ export class BeepersService {
     await this.migrateLegacyStoreIfNeeded();
     const filePath = getBeepersFilePath();
     try {
-      return beepersDatasetSchema.parse(await readJsonFile<BeepersDataset>(filePath));
+      return (await readJsonData(filePath, "beepers")).data as BeepersDataset;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return emptyDataset();
