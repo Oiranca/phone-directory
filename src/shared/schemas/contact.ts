@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { AREAS, RECORD_TYPES } from "../constants/catalogs.js";
 import { normalizePhoneForStorage } from "../utils/matching.js";
+import {
+  MAX_DATASET_RECORDS,
+  MAX_NESTED_COLLECTION_ITEMS
+} from "../constants/json-limits.js";
 
 const isoDateTimeString = z.string().datetime({ offset: true });
 const autoBackupDefaults = {
@@ -151,24 +155,24 @@ const contactRecordSchemaBase = z.object({
     section: z.string().optional()
   }).optional(),
   contactMethods: z.object({
-    phones: z.array(phoneContactSchema),
-    emails: z.array(emailContactSchema),
+    phones: z.array(phoneContactSchema).max(MAX_NESTED_COLLECTION_ITEMS),
+    emails: z.array(emailContactSchema).max(MAX_NESTED_COLLECTION_ITEMS),
     // BACKWARD COMPAT: existing persisted records have no `socials` field.
     // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
-    socials: z.array(socialContactSchema).default([])
+    socials: z.array(socialContactSchema).max(MAX_NESTED_COLLECTION_ITEMS).default([])
   }),
   // BACKWARD COMPAT: existing persisted records have no `beepers` field.
   // .default([]) ensures old datasets (contacts.json without this key) parse without errors.
   // Top-level sibling of contactMethods (not nested inside it) — beepers are
   // conceptually distinct from phones/emails/socials. See OIR-264.
-  beepers: z.array(beeperEntrySchema).default([]),
-  aliases: z.array(z.string()),
-  tags: z.array(z.string()),
+  beepers: z.array(beeperEntrySchema).max(MAX_NESTED_COLLECTION_ITEMS).default([]),
+  aliases: z.array(z.string()).max(MAX_NESTED_COLLECTION_ITEMS),
+  tags: z.array(z.string()).max(MAX_NESTED_COLLECTION_ITEMS),
   notes: z.string().optional(),
   // User-defined key/value pairs for information the fixed form
   // doesn't cover. Optional — absent on records that don't use it, including
   // all existing persisted records.
-  customFields: z.array(customFieldSchema).optional(),
+  customFields: z.array(customFieldSchema).max(MAX_NESTED_COLLECTION_ITEMS).optional(),
   status: z.enum(["active", "inactive"]),
   source: z.object({
     externalId: z.string().optional(),
@@ -215,7 +219,7 @@ export const directoryDatasetSchema = z.object({
     recordTypes: z.array(z.enum(RECORD_TYPES)),
     areas: z.array(z.enum(AREAS))
   }),
-  records: z.array(contactRecordSchema)
+  records: z.array(contactRecordSchema).max(MAX_DATASET_RECORDS)
 });
 
 export const appSettingsSchema = z.object({

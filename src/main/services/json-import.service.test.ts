@@ -249,6 +249,18 @@ describe("schema-aware JSON import", () => {
     );
   });
 
+  it("rejects selected JSON files above the 10 MB byte limit before parsing", async () => {
+    const oversizedPath = path.join(fixtureRoot, "oversized.json");
+    await fs.writeFile(oversizedPath, `${JSON.stringify(defaultContacts)}${" ".repeat(10 * 1024 * 1024)}`);
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    await expect(service.importJsonFile(oversizedPath)).rejects.toThrow(
+      "El archivo JSON supera el tamaño máximo permitido de 10 MB."
+    );
+  });
+
   it.runIf(process.platform !== "win32")("rejects a symlinked beeper backup directory", async () => {
     const beepersPath = path.join(fixtureRoot, "beepers.json");
     await fs.writeFile(
