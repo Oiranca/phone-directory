@@ -1,3 +1,4 @@
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -79,51 +80,53 @@ describe("writeJsonFile", () => {
   });
 
   it.runIf(process.platform !== "win32")(
-    "chmods a stale pre-existing .tmp file to the private mode before it gets renamed into place",
+    "does not follow a pre-created temporary-file symlink",
     async () => {
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-tmp-"));
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-symlink-"));
       const filePath = path.join(tmpDir, "contacts.json");
+      const victimPath = path.join(tmpDir, "victim.json");
 
       try {
-        // Simulate a `.tmp` file left behind by a crash of a pre-hardening build: it exists
-        // on disk already, at a permissive mode. `fs.writeFile` only applies its `mode` option
-        // when it CREATES the file — since this one already exists, it must be explicitly
-        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
-        const staleTmpPath = filePath + ".tmp";
-        await fs.writeFile(staleTmpPath, "{}", { mode: 0o644 });
-        const staleMode = (await fs.stat(staleTmpPath)).mode & 0o777;
-        expect(staleMode).toBe(0o644);
+        await fs.writeFile(victimPath, "untouched", "utf-8");
+        await fs.symlink(victimPath, filePath + ".tmp");
 
-        await writeJsonFile(filePath, { sensitive: true }, { platform: "linux" });
+        await writeJsonFile(filePath, { safe: true });
 
-        const finalMode = (await fs.stat(filePath)).mode & 0o777;
-        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+        expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+        expect(JSON.parse(await fs.readFile(filePath, "utf-8"))).toEqual({ safe: true });
       } finally {
         await fs.rm(tmpDir, { recursive: true, force: true });
       }
     }
   );
 
+  it("creates the temporary file exclusively and cleans it after a failed write", async () => {
+    const writeError = Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    const writeFileSpy = vi.spyOn(fs, "writeFile").mockRejectedValue(writeError);
+    const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
+
+    await expect(writeJsonFile("/test/data.json", {})).rejects.toThrow("disk full");
+
+    const temporaryPath = expect.stringMatching(/^\/test\/data\.json\.[0-9a-f-]{36}\.tmp$/);
+    expect(writeFileSpy).toHaveBeenCalledWith(
+      temporaryPath,
+      expect.any(String),
+      expect.objectContaining({ flag: "wx" })
+    );
+    expect(unlinkSpy).toHaveBeenCalledWith(temporaryPath);
+  });
+
   it.runIf(process.platform !== "win32")(
-    "chmods a stale pre-existing .new staging file to the private mode before it gets renamed into place",
+    "does not follow a pre-created staging-file symlink during fallback",
     async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-new-"));
       const filePath = path.join(tmpDir, "contacts.json");
+      const victimPath = path.join(tmpDir, "victim.json");
 
       try {
-        // Simulate a `.new` staging file left behind by a crash of a pre-hardening build mid
-        // fallback: it exists on disk already, at a permissive mode. `fs.copyFile` overwrites
-        // its contents but does not change an existing file's mode, so it must be explicitly
-        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
-        const staleNewPath = filePath + ".new";
-        await fs.writeFile(staleNewPath, "{}", { mode: 0o644 });
-        const staleMode = (await fs.stat(staleNewPath)).mode & 0o777;
-        expect(staleMode).toBe(0o644);
+        await fs.writeFile(victimPath, "untouched", "utf-8");
+        await fs.symlink(victimPath, filePath + ".new");
 
-        // Force the primary rename (tmp -> filePath) to keep failing transiently so the write
-        // exhausts its retries and falls into the copy-then-replace staging path, while letting
-        // the staging rename (staging -> filePath) actually hit the real filesystem so the final
-        // mode can be asserted.
         const originalRename = fs.rename.bind(fs);
         vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
           if (typeof src === "string" && src.endsWith(".tmp")) {
@@ -138,6 +141,8 @@ describe("writeJsonFile", () => {
           { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0 }
         );
 
+        expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+        expect(JSON.parse(await fs.readFile(filePath, "utf-8"))).toEqual({ sensitive: true });
         const finalMode = (await fs.stat(filePath)).mode & 0o777;
         expect(finalMode).toBe(SENSITIVE_FILE_MODE);
       } finally {
@@ -222,7 +227,7 @@ describe("writeJsonFile", () => {
         const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(writeJsonFile(testFilePath, {}, { platform })).rejects.toThrow("EACCES");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
       it("uses a .tmp file as the intermediate (atomic replacement)", async () => {
@@ -235,7 +240,7 @@ describe("writeJsonFile", () => {
 
         await writeJsonFile(testFilePath, {}, { platform });
 
-        expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath);
+        expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), testFilePath);
       });
     });
   }
@@ -286,13 +291,17 @@ describe("writeJsonFile", () => {
 
         // copyFile writes to a NEW staging file adjacent to the destination — never to the
         // destination path itself (never opens/truncates the destination in place).
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
+        expect(copyFileSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/\.tmp$/),
+          expect.stringMatching(/\.new$/),
+          fsConstants.COPYFILE_EXCL
+        );
         expect(copyFileSpy).not.toHaveBeenCalledWith(expect.anything(), testFilePath);
 
         // The staging file is fsynced, then an atomic rename is attempted to replace the
         // destination — this is the same rename primitive as the original atomic path, just
         // targeting the staging file instead of tmp.
-        expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".new", testFilePath);
+        expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/), testFilePath);
 
         // Three open calls: tmp fsync + staging fsync (dest dir fsync is skipped on win32)
         expect(mockFileHandle.sync).toHaveBeenCalledTimes(2);
@@ -314,7 +323,7 @@ describe("writeJsonFile", () => {
 
         await writeJsonFile(testFilePath, {}, { platform, renameRetryAttempts: 1, renameRetryDelayMs: 0 });
 
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
       it(`removes the tmp and staging files when the copy step itself fails after ${errCode}`, async () => {
@@ -337,10 +346,14 @@ describe("writeJsonFile", () => {
 
         // The interrupted copy targeted the staging file only — the destination was never
         // opened/truncated, so it remains fully intact even though the write ultimately failed.
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
+        expect(copyFileSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/\.tmp$/),
+          expect.stringMatching(/\.new$/),
+          fsConstants.COPYFILE_EXCL
+        );
         expect(copyFileSpy).not.toHaveBeenCalledWith(expect.anything(), testFilePath);
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".new");
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/));
       });
     }
 
@@ -480,9 +493,13 @@ describe("writeJsonFile", () => {
           writeJsonFile(testFilePath, {}, { platform: "win32", renameRetryAttempts: 1, renameRetryDelayMs: 0 })
         ).rejects.toThrow("interrupted mid-copy");
 
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".new");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(copyFileSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/\.tmp$/),
+          expect.stringMatching(/\.new$/),
+          fsConstants.COPYFILE_EXCL
+        );
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/));
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
       it("never leaves the destination truncated/partial when every rename attempt (including the fallback replace) fails — real filesystem", async () => {
@@ -510,8 +527,7 @@ describe("writeJsonFile", () => {
           expect(finalContent).toBe(originalContent);
 
           // Staging artifacts are cleaned up rather than left behind.
-          await expect(fs.readFile(testFilePath + ".tmp", "utf-8")).rejects.toThrow();
-          await expect(fs.readFile(testFilePath + ".new", "utf-8")).rejects.toThrow();
+          expect((await fs.readdir(tmpDir)).filter((name) => /\.(tmp|new)$/.test(name))).toEqual([]);
         } finally {
           await fs.rm(tmpDir, { recursive: true, force: true });
         }
@@ -544,7 +560,7 @@ describe("writeJsonFile", () => {
 
       await writeJsonFile(testFilePath, {}, { platform });
 
-      expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath);
+      expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), testFilePath);
     });
   });
 });
