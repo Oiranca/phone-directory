@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -83,20 +85,12 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
   const platform = options.platform ?? process.platform;
   const renameRetryAttempts = options.renameRetryAttempts ?? DEFAULT_RENAME_RETRY_ATTEMPTS;
   const renameRetryDelayMs = options.renameRetryDelayMs ?? DEFAULT_RENAME_RETRY_DELAY_MS;
-  const tmp = filePath + ".tmp";
+  const tmp = `${filePath}.${randomUUID()}.tmp`;
   const writeOptions = supportsPrivateMode(platform)
-    ? { encoding: "utf-8" as const, mode: SENSITIVE_FILE_MODE }
-    : { encoding: "utf-8" as const };
-  await fs.writeFile(tmp, JSON.stringify(data, null, 2), writeOptions);
-  if (supportsPrivateMode(platform)) {
-    // fs.writeFile only applies `mode` when it creates the tmp file. If a stale `.tmp` file
-    // was left behind on disk (e.g. by a crash of a pre-hardening build) at a permissive mode,
-    // writeFile reuses it without touching its mode, and the rename below would then promote
-    // that stale, permissive file to become the final file. Explicitly chmod the tmp file after
-    // writing so its mode is always correct before it is ever renamed into place.
-    await fs.chmod(tmp, SENSITIVE_FILE_MODE);
-  }
+    ? { encoding: "utf-8" as const, flag: "wx" as const, mode: SENSITIVE_FILE_MODE }
+    : { encoding: "utf-8" as const, flag: "wx" as const };
   try {
+    await fs.writeFile(tmp, JSON.stringify(data, null, 2), writeOptions);
     const fh = await fs.open(tmp, "r+");
     try {
       await fh.sync();
@@ -126,18 +120,9 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
       // over the destination (retrying the same way). The destination file is never opened for
       // in-place writing/truncation, so a crash at any point before the final rename leaves the
       // original file fully intact — never truncated or partially written.
-      const staging = filePath + ".new";
+      const staging = `${filePath}.${randomUUID()}.new`;
       try {
-        await fs.copyFile(tmp, staging);
-        if (supportsPrivateMode(platform)) {
-          // fs.copyFile does not change the mode of a pre-existing destination file. If a stale
-          // `.new` staging file was left behind on disk (e.g. by a crash of a pre-hardening build
-          // mid-fallback) at a permissive mode, copyFile overwrites its contents but leaves its
-          // mode untouched, and the rename below would then promote that stale, permissive mode
-          // to become the final file. Explicitly chmod the staging file after copying so its mode
-          // is always correct before it is ever renamed into place.
-          await fs.chmod(staging, SENSITIVE_FILE_MODE);
-        }
+        await fs.copyFile(tmp, staging, fsConstants.COPYFILE_EXCL);
         const stagingFh = await fs.open(staging, "r+");
         try {
           await stagingFh.sync();
