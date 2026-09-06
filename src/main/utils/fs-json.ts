@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -46,6 +45,19 @@ const isTransientRenameError = (err: unknown): boolean => {
   return code === "EPERM" || code === "EEXIST";
 };
 
+const assertPathMatchesHandle = async (
+  filePath: string,
+  handle: Awaited<ReturnType<typeof fs.open>>
+): Promise<void> => {
+  const [opened, current] = await Promise.all([
+    handle.stat({ bigint: true }),
+    fs.lstat(filePath, { bigint: true })
+  ]);
+  if (current.isSymbolicLink() || opened.dev !== current.dev || opened.ino !== current.ino) {
+    throw Object.assign(new Error(`Refusing replaced atomic-write path: ${filePath}`), { code: "ELOOP" });
+  }
+};
+
 /** Attempts `fs.rename(src, dest)`, retrying with exponential backoff when the failure is a
  *  transient EPERM/EEXIST (e.g. a momentary Windows file lock). Any other error is thrown
  *  immediately without retrying. */
@@ -74,30 +86,28 @@ export interface WriteJsonFileOptions {
    *  both POSIX and Windows code paths on any host without `it.runIf` guards. */
   platform?: NodeJS.Platform;
   /** Override the number of `rename()` attempts (initial attempt + retries) before falling
-   *  back to the safer copy-then-replace path. Defaults to 5. Intended for unit tests. */
+   *  back to the staged-write path. Defaults to 5. Intended for unit tests. */
   renameRetryAttempts?: number;
   /** Override the base backoff delay (ms) between rename retries (doubles each attempt).
    *  Defaults to 50ms. Intended for unit tests to avoid slow, real-time waits. */
   renameRetryDelayMs?: number;
+  /** Override UUID generation for deterministic filesystem race tests. */
+  randomUuid?: () => string;
 }
 
 export async function writeJsonFile(filePath: string, data: unknown, options: WriteJsonFileOptions = {}): Promise<void> {
   const platform = options.platform ?? process.platform;
   const renameRetryAttempts = options.renameRetryAttempts ?? DEFAULT_RENAME_RETRY_ATTEMPTS;
   const renameRetryDelayMs = options.renameRetryDelayMs ?? DEFAULT_RENAME_RETRY_DELAY_MS;
-  const tmp = `${filePath}.${randomUUID()}.tmp`;
-  const writeOptions = supportsPrivateMode(platform)
-    ? { encoding: "utf-8" as const, flag: "wx" as const, mode: SENSITIVE_FILE_MODE }
-    : { encoding: "utf-8" as const, flag: "wx" as const };
+  const createUuid = options.randomUuid ?? randomUUID;
+  const tmp = `${filePath}.${createUuid()}.tmp`;
+  const contents = JSON.stringify(data, null, 2);
   try {
-    await fs.writeFile(tmp, JSON.stringify(data, null, 2), writeOptions);
-    const fh = await fs.open(tmp, "r+");
+    const fh = await fs.open(tmp, "wx+", supportsPrivateMode(platform) ? SENSITIVE_FILE_MODE : undefined);
     try {
+      await fs.writeFile(fh, contents, "utf-8");
       await fh.sync();
-    } finally {
-      await fh.close();
-    }
-    try {
+      await assertPathMatchesHandle(tmp, fh);
       // Atomic path (unchanged): rename the fsynced tmp file directly over the destination,
       // retrying transient EPERM/EEXIST failures before giving up.
       await renameWithRetry(tmp, filePath, renameRetryAttempts, renameRetryDelayMs);
@@ -115,27 +125,35 @@ export async function writeJsonFile(filePath: string, data: unknown, options: Wr
         throw err;
       }
       // Rename retries exhausted — the destination is still locked (typically Windows AV/backup
-      // software). Fall back to a still crash-safe replace: copy the already-fsynced tmp file to
+      // software). Fall back to a still crash-safe replace: write the same serialized data to
       // a NEW adjacent staging file, fsync THAT staging file, and only then atomically rename it
       // over the destination (retrying the same way). The destination file is never opened for
       // in-place writing/truncation, so a crash at any point before the final rename leaves the
       // original file fully intact — never truncated or partially written.
-      const staging = `${filePath}.${randomUUID()}.new`;
+      const staging = `${filePath}.${createUuid()}.new`;
       try {
-        await fs.copyFile(tmp, staging, fsConstants.COPYFILE_EXCL);
-        const stagingFh = await fs.open(staging, "r+");
+        await assertPathMatchesHandle(tmp, fh);
+        const stagingFh = await fs.open(
+          staging,
+          "wx+",
+          supportsPrivateMode(platform) ? SENSITIVE_FILE_MODE : undefined
+        );
         try {
+          await fs.writeFile(stagingFh, contents, "utf-8");
           await stagingFh.sync();
+          await assertPathMatchesHandle(staging, stagingFh);
+          await renameWithRetry(staging, filePath, renameRetryAttempts, renameRetryDelayMs);
         } finally {
           await stagingFh.close();
         }
-        await renameWithRetry(staging, filePath, renameRetryAttempts, renameRetryDelayMs);
         await fs.unlink(tmp).catch(() => undefined);
       } catch (fallbackErr) {
         await fs.unlink(staging).catch(() => undefined);
         await fs.unlink(tmp).catch(() => undefined);
         throw fallbackErr;
       }
+    } finally {
+      await fh.close();
     }
   } catch (err) {
     await fs.unlink(tmp).catch(() => undefined);
