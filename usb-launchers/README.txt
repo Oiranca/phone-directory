@@ -10,6 +10,8 @@ WINDOWS
 Double-click HospiAgenda.exe at the USB root.
 Keep resources, DLL, and PAK files beside HospiAgenda.exe; together they are
 the portable Windows runtime.
+The USB must use BitLocker To Go. The app refuses to start unless Windows
+confirms protection. Keep the recovery key outside this USB.
 
 MACOS
 -----
@@ -35,4 +37,4 @@ All persistent data stays in portable-data on this USB drive:
       settings.json
     backups/
 
-To back up your data, copy portable-data to a safe location.
+To back up your data, copy portable-data only to another protected location.

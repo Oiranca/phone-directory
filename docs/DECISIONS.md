@@ -23,12 +23,29 @@ data at rest.
 
 On POSIX platforms, app-managed data and backup directories are created with `0700`
 permissions, and JSON files written by the app are finalized with `0600` permissions.
-Windows does not map these POSIX modes reliably, so the policy there remains "use the
-user profile / USB filesystem access controls".
+Windows portable deployments require BitLocker To Go on the whole USB volume. Packaged
+Windows startup checks the executable volume with `manage-bde -status
+<drive> -protectionaserrorlevel` and stops before reading or creating app data unless
+Windows confirms protection. Initialized Windows release packages are prohibited; data
+is imported only after the blank package is copied to an encrypted USB.
 
 Operators must treat exported JSON as sensitive data. The export IPC path warns before
 opening the native save dialog; exports should be stored only in protected locations and
 deleted when no longer needed.
+
+### Threat model and key lifecycle
+
+This control protects a lost, stolen, or offline-copied USB. It does not protect data
+from malware, administrators, or other processes while an authorized operator has the
+volume unlocked. The operator owns the BitLocker password and recovery key. The recovery
+key must be stored separately from the USB in an approved protected location. The app
+never receives, stores, rotates, or backs up either secret. Losing both makes the data
+unrecoverable.
+
+Backups and exports remain plaintext files inside the unlocked process view and must be
+written only to the same BitLocker volume or another approved encrypted destination.
+Restore does not require an app migration: unlock the protected volume, restore
+`portable-data`, then start the app.
 
 ### Deferred
 
@@ -39,9 +56,8 @@ Electron process.
 
 ### Revisit When
 
-Revisit if the app needs multi-user roles, centralized workstation policy, encrypted USB
-handoff, remote sync, or regulated retention guarantees beyond local best-effort file
-permissions and existing log/backup rotation.
+Revisit if the app needs multi-user roles, centralized workstation policy, unattended
+unlock, non-Windows portable handoff, remote sync, or regulated retention guarantees.
 
 ---
 

@@ -4058,13 +4058,13 @@ printf '\nTest 98 (initialized data): --data-dir stages managed files and record
 SANDBOX98="$(build_sandbox_repo)"
 BIN98="$(mktemp -d "$TEST_FIXTURE_ROOT/bin98-XXXXXX")"
 DATA98="$(mktemp -d "$TEST_FIXTURE_ROOT/data98-XXXXXX")"
-write_sandbox_bin "$BIN98" "$SANDBOX98" "$CLEAN_JSON" 0 win
+write_sandbox_bin "$BIN98" "$SANDBOX98" "$CLEAN_JSON" 0 linux
 printf '{"version":"1.0.0","records":[]}\n' > "$DATA98/contacts.json"
 printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA98/beepers.json"
 printf '{"editorName":"","dataFilePath":"/managed/contacts.json","backupDirectoryPath":"/managed/backups","managedPaths":{"dataFilePath":true,"backupDirectoryPath":true},"ui":{"showInactiveByDefault":false}}\n' > "$DATA98/settings.json"
 printf 'must not be packaged\n' > "$DATA98/crash-log.jsonl"
 rc_98=0
-env PATH="$BIN98:$PATH" bash "$SANDBOX98/scripts/release-usb.sh" win --data-dir "$DATA98" >/dev/null 2>&1 || rc_98=$?
+env PATH="$BIN98:$PATH" bash "$SANDBOX98/scripts/release-usb.sh" linux --data-dir "$DATA98" >/dev/null 2>&1 || rc_98=$?
 PKG98="$SANDBOX98/dist-portable/usb-package"
 MANIFEST98="$PKG98/RELEASE_MANIFEST.txt"
 SHA256FILE98="$PKG98/RELEASE_MANIFEST.txt.sha256"
@@ -4109,6 +4109,11 @@ if [[ ! -e "$PKG99/portable-data" ]] && [[ -f "$MANIFEST99" ]] && grep -qF 'Init
 else
   fail "Test 99: default release data state is not safely empty"
 fi
+if [[ -f "$MANIFEST99" ]] && grep -qF 'Portable data protection: BitLocker To Go required at startup' "$MANIFEST99"; then
+  pass "Test 99: Windows manifest records the BitLocker requirement"
+else
+  fail "Test 99: Windows manifest omits the BitLocker requirement"
+fi
 rm -rf "$SANDBOX99" "$BIN99"
 
 # Test 100: contacts and beepers are an atomic initialized dataset contract;
@@ -4117,10 +4122,10 @@ printf '\nTest 100 (incomplete data): --data-dir without beepers.json aborts\n'
 SANDBOX100="$(build_sandbox_repo)"
 BIN100="$(mktemp -d "$TEST_FIXTURE_ROOT/bin100-XXXXXX")"
 DATA100="$(mktemp -d "$TEST_FIXTURE_ROOT/data100-XXXXXX")"
-write_sandbox_bin "$BIN100" "$SANDBOX100" "$CLEAN_JSON" 0 win
+write_sandbox_bin "$BIN100" "$SANDBOX100" "$CLEAN_JSON" 0 linux
 printf '{"version":"1.0.0","records":[]}\n' > "$DATA100/contacts.json"
 rc_100=0
-env PATH="$BIN100:$PATH" bash "$SANDBOX100/scripts/release-usb.sh" win --data-dir "$DATA100" >/dev/null 2>&1 || rc_100=$?
+env PATH="$BIN100:$PATH" bash "$SANDBOX100/scripts/release-usb.sh" linux --data-dir "$DATA100" >/dev/null 2>&1 || rc_100=$?
 if [[ $rc_100 -ne 0 ]]; then
   pass "Test 100: incomplete initialized dataset rejected"
 else
@@ -4133,11 +4138,11 @@ printf '\nTest 101 (invalid data): malformed managed JSON aborts\n'
 SANDBOX101="$(build_sandbox_repo)"
 BIN101="$(mktemp -d "$TEST_FIXTURE_ROOT/bin101-XXXXXX")"
 DATA101="$(mktemp -d "$TEST_FIXTURE_ROOT/data101-XXXXXX")"
-write_sandbox_bin "$BIN101" "$SANDBOX101" "$CLEAN_JSON" 0 win
+write_sandbox_bin "$BIN101" "$SANDBOX101" "$CLEAN_JSON" 0 linux
 printf '{not-json}\n' > "$DATA101/contacts.json"
 printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA101/beepers.json"
 rc_101=0
-env PATH="$BIN101:$PATH" bash "$SANDBOX101/scripts/release-usb.sh" win --data-dir "$DATA101" >/dev/null 2>&1 || rc_101=$?
+env PATH="$BIN101:$PATH" bash "$SANDBOX101/scripts/release-usb.sh" linux --data-dir "$DATA101" >/dev/null 2>&1 || rc_101=$?
 if [[ $rc_101 -ne 0 ]]; then
   pass "Test 101: malformed initialized dataset rejected"
 else
@@ -4151,18 +4156,36 @@ printf '\nTest 102 (unsafe settings): machine-specific settings paths abort\n'
 SANDBOX102="$(build_sandbox_repo)"
 BIN102="$(mktemp -d "$TEST_FIXTURE_ROOT/bin102-XXXXXX")"
 DATA102="$(mktemp -d "$TEST_FIXTURE_ROOT/data102-XXXXXX")"
-write_sandbox_bin "$BIN102" "$SANDBOX102" "$CLEAN_JSON" 0 win
+write_sandbox_bin "$BIN102" "$SANDBOX102" "$CLEAN_JSON" 0 linux
 printf '{"version":"1.0.0","records":[]}\n' > "$DATA102/contacts.json"
 printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA102/beepers.json"
 printf '{"editorName":"","dataFilePath":"/Users/operator/contacts.json","backupDirectoryPath":"/Users/operator/backups","managedPaths":{"dataFilePath":false,"backupDirectoryPath":false},"ui":{"showInactiveByDefault":false}}\n' > "$DATA102/settings.json"
 rc_102=0
-env PATH="$BIN102:$PATH" bash "$SANDBOX102/scripts/release-usb.sh" win --data-dir "$DATA102" >/dev/null 2>&1 || rc_102=$?
+env PATH="$BIN102:$PATH" bash "$SANDBOX102/scripts/release-usb.sh" linux --data-dir "$DATA102" >/dev/null 2>&1 || rc_102=$?
 if [[ $rc_102 -ne 0 ]]; then
   pass "Test 102: machine-specific settings rejected"
 else
   fail "Test 102: machine-specific settings unexpectedly accepted"
 fi
 rm -rf "$SANDBOX102" "$BIN102" "$DATA102"
+
+# Test 103: initialized Windows packages would expose plaintext before BitLocker
+# is enabled on the target USB, so release staging must reject them.
+printf '\nTest 103 (Windows protection): initialized Windows release aborts\n'
+SANDBOX103="$(build_sandbox_repo)"
+BIN103="$(mktemp -d "$TEST_FIXTURE_ROOT/bin103-XXXXXX")"
+DATA103="$(mktemp -d "$TEST_FIXTURE_ROOT/data103-XXXXXX")"
+write_sandbox_bin "$BIN103" "$SANDBOX103" "$CLEAN_JSON" 0 win
+printf '{"version":"1.0.0","records":[]}\n' > "$DATA103/contacts.json"
+printf '{"version":"1.0.0","records":[],"importedRecords":[]}\n' > "$DATA103/beepers.json"
+rc_103=0
+output_103="$(env PATH="$BIN103:$PATH" bash "$SANDBOX103/scripts/release-usb.sh" win --data-dir "$DATA103" 2>&1)" || rc_103=$?
+if [[ $rc_103 -ne 0 ]] && [[ "$output_103" == *"Enable BitLocker To Go"* ]]; then
+  pass "Test 103: initialized Windows release rejected with BitLocker guidance"
+else
+  fail "Test 103: initialized Windows release was not safely rejected"
+fi
+rm -rf "$SANDBOX103" "$BIN103" "$DATA103"
 
 # --- summary -------------------------------------------------------------------
 

@@ -4,6 +4,22 @@
 
 This application is designed for **local USB installation on shared workstations** within a controlled environment. It is not distributed over the internet and does not have a public release channel.
 
+## Windows Portable Data Protection
+
+Windows USB deployments require BitLocker To Go on the complete removable volume. The
+packaged app checks its executable drive with Windows `manage-bde` and exits before
+reading or creating `portable-data` when protection cannot be confirmed. Windows release
+packages are blank; import data only after copying the app to the protected USB.
+
+BitLocker protects a lost or offline-copied drive. It does not isolate files from malware,
+administrators, or other processes while the authorized operator has unlocked the drive.
+Store the recovery key separately from the USB. The app does not know or retain the
+password or recovery key; losing both makes the encrypted data unrecoverable. Backups and
+exports must remain on BitLocker or another approved encrypted destination.
+
+Operator setup and clean-machine verification are defined in
+[`docs/USB_RELEASE_HANDOFF_CHECKLIST.md`](docs/USB_RELEASE_HANDOFF_CHECKLIST.md).
+
 ## Code Signing Status
 
 ### macOS
