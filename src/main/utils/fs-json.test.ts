@@ -10,6 +10,8 @@ import {
   writeJsonFile
 } from "./fs-json.js";
 
+const realLstat = fs.lstat.bind(fs) as (...args: any[]) => Promise<any>;
+
 // ---------------------------------------------------------------------------
 // Per-OS release smoke intent
 // ---------------------------------------------------------------------------
@@ -27,13 +29,27 @@ describe("writeJsonFile", () => {
   let mockFileHandle: {
     sync: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
+    stat: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
+    const fileIdentity = {
+      dev: 1n,
+      ino: 1n,
+      isSymbolicLink: () => false
+    };
     mockFileHandle = {
       sync: vi.fn().mockResolvedValue(undefined),
-      close: vi.fn().mockResolvedValue(undefined)
+      close: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue(fileIdentity)
     };
+    vi.spyOn(fs, "lstat").mockImplementation(async (filePath, options?) => {
+      const candidate = String(filePath);
+      if (candidate.startsWith("/test/") || candidate.startsWith("C:\\test\\")) {
+        return fileIdentity as Awaited<ReturnType<typeof fs.lstat>>;
+      }
+      return realLstat(filePath, options);
+    });
   });
 
   afterEach(() => {
@@ -79,25 +95,23 @@ describe("writeJsonFile", () => {
   });
 
   it.runIf(process.platform !== "win32")(
-    "chmods a stale pre-existing .tmp file to the private mode before it gets renamed into place",
+    "does not follow a pre-created temporary-file symlink",
     async () => {
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-tmp-"));
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-symlink-"));
       const filePath = path.join(tmpDir, "contacts.json");
+      const victimPath = path.join(tmpDir, "victim.json");
+      const uuid = "00000000-0000-4000-8000-000000000001";
 
       try {
-        // Simulate a `.tmp` file left behind by a crash of a pre-hardening build: it exists
-        // on disk already, at a permissive mode. `fs.writeFile` only applies its `mode` option
-        // when it CREATES the file — since this one already exists, it must be explicitly
-        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
-        const staleTmpPath = filePath + ".tmp";
-        await fs.writeFile(staleTmpPath, "{}", { mode: 0o644 });
-        const staleMode = (await fs.stat(staleTmpPath)).mode & 0o777;
-        expect(staleMode).toBe(0o644);
+        await fs.writeFile(victimPath, "untouched", "utf-8");
+        await fs.symlink(victimPath, `${filePath}.${uuid}.tmp`);
 
-        await writeJsonFile(filePath, { sensitive: true }, { platform: "linux" });
+        await expect(
+          writeJsonFile(filePath, { safe: true }, { randomUuid: () => uuid })
+        ).rejects.toMatchObject({ code: "EEXIST" });
 
-        const finalMode = (await fs.stat(filePath)).mode & 0o777;
-        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+        expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+        await expect(fs.readFile(filePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         await fs.rm(tmpDir, { recursive: true, force: true });
       }
@@ -105,25 +119,68 @@ describe("writeJsonFile", () => {
   );
 
   it.runIf(process.platform !== "win32")(
-    "chmods a stale pre-existing .new staging file to the private mode before it gets renamed into place",
+    "rejects a temporary path replaced with a symlink after exclusive creation",
+    async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-swap-tmp-"));
+      const filePath = path.join(tmpDir, "contacts.json");
+      const victimPath = path.join(tmpDir, "victim.json");
+      const uuid = "00000000-0000-4000-8000-000000000004";
+      const tmpPath = `${filePath}.${uuid}.tmp`;
+
+      try {
+        await fs.writeFile(victimPath, "untouched", "utf-8");
+        vi.spyOn(fs, "lstat").mockImplementation(async (candidate, options?) => {
+          if (candidate === tmpPath) {
+            await fs.unlink(tmpPath);
+            await fs.symlink(victimPath, tmpPath);
+          }
+          return realLstat(candidate, options);
+        });
+
+        await expect(
+          writeJsonFile(filePath, { safe: true }, { randomUuid: () => uuid })
+        ).rejects.toMatchObject({ code: "ELOOP" });
+
+        expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+        await expect(fs.readFile(filePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it("creates the temporary file exclusively and cleans it after a failed write", async () => {
+    const writeError = Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    const writeFileSpy = vi.spyOn(fs, "writeFile").mockRejectedValue(writeError);
+    const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+    const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
+
+    await expect(writeJsonFile("/test/data.json", {})).rejects.toThrow("disk full");
+
+    const temporaryPath = expect.stringMatching(/^\/test\/data\.json\.[0-9a-f-]{36}\.tmp$/);
+    expect(openSpy).toHaveBeenCalledWith(
+      temporaryPath,
+      "wx+",
+      SENSITIVE_FILE_MODE
+    );
+    expect(writeFileSpy).toHaveBeenCalledWith(mockFileHandle, expect.any(String), "utf-8");
+    expect(unlinkSpy).toHaveBeenCalledWith(temporaryPath);
+  });
+
+  it.runIf(process.platform !== "win32")(
+    "does not follow a pre-created staging-file symlink during fallback",
     async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-stale-new-"));
       const filePath = path.join(tmpDir, "contacts.json");
+      const victimPath = path.join(tmpDir, "victim.json");
+      const tmpUuid = "00000000-0000-4000-8000-000000000002";
+      const stagingUuid = "00000000-0000-4000-8000-000000000003";
 
       try {
-        // Simulate a `.new` staging file left behind by a crash of a pre-hardening build mid
-        // fallback: it exists on disk already, at a permissive mode. `fs.copyFile` overwrites
-        // its contents but does not change an existing file's mode, so it must be explicitly
-        // chmodded, or the stale permissive mode would be promoted to the final file by rename.
-        const staleNewPath = filePath + ".new";
-        await fs.writeFile(staleNewPath, "{}", { mode: 0o644 });
-        const staleMode = (await fs.stat(staleNewPath)).mode & 0o777;
-        expect(staleMode).toBe(0o644);
+        const randomUuid = vi.fn().mockReturnValueOnce(tmpUuid).mockReturnValueOnce(stagingUuid);
+        await fs.writeFile(victimPath, "untouched", "utf-8");
+        await fs.symlink(victimPath, `${filePath}.${stagingUuid}.new`);
 
-        // Force the primary rename (tmp -> filePath) to keep failing transiently so the write
-        // exhausts its retries and falls into the copy-then-replace staging path, while letting
-        // the staging rename (staging -> filePath) actually hit the real filesystem so the final
-        // mode can be asserted.
         const originalRename = fs.rename.bind(fs);
         vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
           if (typeof src === "string" && src.endsWith(".tmp")) {
@@ -132,14 +189,59 @@ describe("writeJsonFile", () => {
           return originalRename(src, dest);
         });
 
-        await writeJsonFile(
-          filePath,
-          { sensitive: true },
-          { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0 }
-        );
+        await expect(
+          writeJsonFile(
+            filePath,
+            { sensitive: true },
+            { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0, randomUuid }
+          )
+        ).rejects.toMatchObject({ code: "EEXIST" });
 
-        const finalMode = (await fs.stat(filePath)).mode & 0o777;
-        expect(finalMode).toBe(SENSITIVE_FILE_MODE);
+        expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+        await expect(fs.readFile(filePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "rejects a staging path replaced with a different file after exclusive creation",
+    async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fs-json-swap-new-"));
+      const filePath = path.join(tmpDir, "contacts.json");
+      const replacementPath = path.join(tmpDir, "replacement.json");
+      const tmpUuid = "00000000-0000-4000-8000-000000000005";
+      const stagingUuid = "00000000-0000-4000-8000-000000000006";
+      const stagingPath = `${filePath}.${stagingUuid}.new`;
+      const randomUuid = vi.fn().mockReturnValueOnce(tmpUuid).mockReturnValueOnce(stagingUuid);
+
+      try {
+        await fs.writeFile(replacementPath, "attacker-controlled", "utf-8");
+        const originalRename = fs.rename.bind(fs);
+        vi.spyOn(fs, "rename").mockImplementation(async (src, dest) => {
+          if (typeof src === "string" && src.endsWith(".tmp")) {
+            throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+          }
+          return originalRename(src, dest);
+        });
+        vi.spyOn(fs, "lstat").mockImplementation(async (candidate, options?) => {
+          if (candidate === stagingPath) {
+            await fs.unlink(stagingPath);
+            await fs.rename(replacementPath, stagingPath);
+          }
+          return realLstat(candidate, options);
+        });
+
+        await expect(
+          writeJsonFile(
+            filePath,
+            { safe: true },
+            { platform: "linux", renameRetryAttempts: 1, renameRetryDelayMs: 0, randomUuid }
+          )
+        ).rejects.toMatchObject({ code: "ELOOP" });
+
+        await expect(fs.readFile(filePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         await fs.rm(tmpDir, { recursive: true, force: true });
       }
@@ -182,32 +284,29 @@ describe("writeJsonFile", () => {
         expect(mockFileHandle.close).toHaveBeenCalledTimes(2);
       });
 
-      it("does NOT fall back to copyFile when rename succeeds", async () => {
+      it("does NOT create a staging file when rename succeeds", async () => {
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
-        vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+        const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
         vi.spyOn(fs, "rename").mockResolvedValue(undefined);
-
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
 
         await writeJsonFile("/test/data.json", {}, { platform });
 
-        expect(copyFileSpy).not.toHaveBeenCalled();
+        expect(openSpy).not.toHaveBeenCalledWith(expect.stringMatching(/\.new$/), expect.anything(), expect.anything());
       });
 
-      it("propagates non-EPERM/EEXIST rename errors without falling back to copyFile", async () => {
+      it("propagates non-EPERM/EEXIST rename errors without creating a staging file", async () => {
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "chmod").mockResolvedValue(undefined);
-        vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+        const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const enoentErr = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         vi.spyOn(fs, "rename").mockRejectedValue(enoentErr);
 
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(writeJsonFile("/test/data.json", {}, { platform })).rejects.toThrow("ENOENT");
-        expect(copyFileSpy).not.toHaveBeenCalled();
+        expect(openSpy).not.toHaveBeenCalledWith(expect.stringMatching(/\.new$/), expect.anything(), expect.anything());
       });
 
       it("removes the tmp file when rename fails with a non-EPERM error", async () => {
@@ -222,7 +321,7 @@ describe("writeJsonFile", () => {
         const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(writeJsonFile(testFilePath, {}, { platform })).rejects.toThrow("EACCES");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
       it("uses a .tmp file as the intermediate (atomic replacement)", async () => {
@@ -235,13 +334,13 @@ describe("writeJsonFile", () => {
 
         await writeJsonFile(testFilePath, {}, { platform });
 
-        expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath);
+        expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), testFilePath);
       });
     });
   }
 
   // Windows: rename over an existing file fails with EPERM/EEXIST; falls back
-  // to copyFile + fsync. Parent directory is NOT fsynced.
+  // to an exclusively created staging file + fsync. Parent directory is NOT fsynced.
   describe("Windows semantics — platform: win32", () => {
     const platform: NodeJS.Platform = "win32";
 
@@ -266,16 +365,15 @@ describe("writeJsonFile", () => {
     });
 
     for (const errCode of ["EPERM", "EEXIST"] as const) {
-      it(`falls back to a staged copy + fsync + rename when rename keeps failing with ${errCode}`, async () => {
+      it(`falls back to a staged write + fsync + rename when rename keeps failing with ${errCode}`, async () => {
         const testFilePath = "C:\\test\\data.json";
 
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
-        vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+        const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const renameErr = Object.assign(new Error(errCode), { code: errCode });
         const renameSpy = vi.spyOn(fs, "rename").mockRejectedValue(renameErr);
 
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         // Force rename to always fail (both the primary attempt and the staging replace),
@@ -284,15 +382,16 @@ describe("writeJsonFile", () => {
           writeJsonFile(testFilePath, {}, { platform, renameRetryAttempts: 1, renameRetryDelayMs: 0 })
         ).rejects.toThrow(errCode);
 
-        // copyFile writes to a NEW staging file adjacent to the destination — never to the
-        // destination path itself (never opens/truncates the destination in place).
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
-        expect(copyFileSpy).not.toHaveBeenCalledWith(expect.anything(), testFilePath);
+        expect(openSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/\.new$/),
+          "wx+",
+          undefined
+        );
 
         // The staging file is fsynced, then an atomic rename is attempted to replace the
         // destination — this is the same rename primitive as the original atomic path, just
         // targeting the staging file instead of tmp.
-        expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".new", testFilePath);
+        expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/), testFilePath);
 
         // Three open calls: tmp fsync + staging fsync (dest dir fsync is skipped on win32)
         expect(mockFileHandle.sync).toHaveBeenCalledTimes(2);
@@ -308,16 +407,14 @@ describe("writeJsonFile", () => {
         vi.spyOn(fs, "rename")
           .mockRejectedValueOnce(renameErr) // primary rename fails
           .mockResolvedValueOnce(undefined); // staging replace succeeds
-        vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
-
         const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await writeJsonFile(testFilePath, {}, { platform, renameRetryAttempts: 1, renameRetryDelayMs: 0 });
 
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
-      it(`removes the tmp and staging files when the copy step itself fails after ${errCode}`, async () => {
+      it(`removes the tmp and staging files when the staging write fails after ${errCode}`, async () => {
         const testFilePath = "C:\\test\\data.json";
 
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
@@ -326,29 +423,28 @@ describe("writeJsonFile", () => {
         const renameErr = Object.assign(new Error(errCode), { code: errCode });
         vi.spyOn(fs, "rename").mockRejectedValue(renameErr);
 
-        const copyErr = new Error("copy failed");
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockRejectedValue(copyErr);
+        const writeErr = new Error("staging write failed");
+        const writeFileSpy = vi.spyOn(fs, "writeFile").mockResolvedValueOnce(undefined).mockRejectedValueOnce(writeErr);
 
         const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(
           writeJsonFile(testFilePath, {}, { platform, renameRetryAttempts: 1, renameRetryDelayMs: 0 })
-        ).rejects.toThrow("copy failed");
+        ).rejects.toThrow("staging write failed");
 
-        // The interrupted copy targeted the staging file only — the destination was never
+        // The interrupted write targeted the staging file only — the destination was never
         // opened/truncated, so it remains fully intact even though the write ultimately failed.
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
-        expect(copyFileSpy).not.toHaveBeenCalledWith(expect.anything(), testFilePath);
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".new");
+        expect(writeFileSpy).toHaveBeenCalledTimes(2);
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/));
       });
     }
 
     describe("rename retry with backoff", () => {
-      it("retries a transient rename failure and succeeds without ever falling back to copyFile", async () => {
+      it("retries a transient rename failure and succeeds without creating a staging file", async () => {
         const testFilePath = "C:\\test\\data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
-        vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+        const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
         const renameErr = Object.assign(new Error("EPERM"), { code: "EPERM" });
         const renameSpy = vi
@@ -357,8 +453,6 @@ describe("writeJsonFile", () => {
           .mockRejectedValueOnce(renameErr)
           .mockResolvedValueOnce(undefined);
 
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
-
         await writeJsonFile(testFilePath, {}, {
           platform: "win32",
           renameRetryAttempts: 5,
@@ -366,10 +460,10 @@ describe("writeJsonFile", () => {
         });
 
         expect(renameSpy).toHaveBeenCalledTimes(3);
-        expect(copyFileSpy).not.toHaveBeenCalled();
+        expect(openSpy).toHaveBeenCalledTimes(1);
       });
 
-      it("gives up after exhausting rename retries and then falls back to the staged copy+rename", async () => {
+      it("gives up after exhausting rename retries and then falls back to the staged write+rename", async () => {
         const testFilePath = "C:\\test\\data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
@@ -377,7 +471,6 @@ describe("writeJsonFile", () => {
         const renameErr = Object.assign(new Error("EPERM"), { code: "EPERM" });
         const renameSpy = vi.spyOn(fs, "rename").mockRejectedValue(renameErr);
 
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(
@@ -390,7 +483,7 @@ describe("writeJsonFile", () => {
 
         // 4 attempts for the primary rename + 4 attempts for the staging replace = 8 total.
         expect(renameSpy).toHaveBeenCalledTimes(8);
-        expect(copyFileSpy).toHaveBeenCalledTimes(1);
+        expect(fs.writeFile).toHaveBeenCalledTimes(2);
       });
 
       it("waits with exponential backoff between rename retry attempts", async () => {
@@ -433,7 +526,7 @@ describe("writeJsonFile", () => {
     });
 
     describe("fallback crash-safety invariant", () => {
-      it("never opens or copies onto the destination file directly — only onto tmp/staging files", async () => {
+      it("never opens the destination file directly — only tmp/staging files", async () => {
         const testFilePath = "C:\\test\\data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
         const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
@@ -441,7 +534,6 @@ describe("writeJsonFile", () => {
         const renameErr = Object.assign(new Error("EPERM"), { code: "EPERM" });
         vi.spyOn(fs, "rename").mockRejectedValue(renameErr);
 
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(
@@ -453,13 +545,9 @@ describe("writeJsonFile", () => {
         for (const call of openSpy.mock.calls) {
           expect(call[0]).not.toBe(testFilePath);
         }
-        // copyFile never targets the destination directly.
-        for (const call of copyFileSpy.mock.calls) {
-          expect(call[1]).not.toBe(testFilePath);
-        }
       });
 
-      it("leaves the destination fully intact if the staging copy step is interrupted mid-copy", async () => {
+      it("leaves the destination fully intact if the staging write is interrupted", async () => {
         const testFilePath = "C:\\test\\data.json";
         vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
         vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
@@ -467,22 +555,17 @@ describe("writeJsonFile", () => {
         const renameErr = Object.assign(new Error("EPERM"), { code: "EPERM" });
         vi.spyOn(fs, "rename").mockRejectedValue(renameErr);
 
-        const copyErr = new Error("interrupted mid-copy");
-        const copyFileSpy = vi.spyOn(fs, "copyFile").mockImplementation(async (_src, dest) => {
-          // Simulate a crash partway through writing the staging file. Since the destination
-          // was never the copy target, it is never touched by this failure.
-          expect(dest).not.toBe(testFilePath);
-          throw copyErr;
-        });
+        const writeErr = new Error("interrupted staging write");
+        const writeFileSpy = vi.spyOn(fs, "writeFile").mockResolvedValueOnce(undefined).mockRejectedValueOnce(writeErr);
         const unlinkSpy = vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
         await expect(
           writeJsonFile(testFilePath, {}, { platform: "win32", renameRetryAttempts: 1, renameRetryDelayMs: 0 })
-        ).rejects.toThrow("interrupted mid-copy");
+        ).rejects.toThrow("interrupted staging write");
 
-        expect(copyFileSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath + ".new");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".new");
-        expect(unlinkSpy).toHaveBeenCalledWith(testFilePath + ".tmp");
+        expect(writeFileSpy).toHaveBeenCalledTimes(2);
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.new$/));
+        expect(unlinkSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/));
       });
 
       it("never leaves the destination truncated/partial when every rename attempt (including the fallback replace) fails — real filesystem", async () => {
@@ -510,8 +593,7 @@ describe("writeJsonFile", () => {
           expect(finalContent).toBe(originalContent);
 
           // Staging artifacts are cleaned up rather than left behind.
-          await expect(fs.readFile(testFilePath + ".tmp", "utf-8")).rejects.toThrow();
-          await expect(fs.readFile(testFilePath + ".new", "utf-8")).rejects.toThrow();
+          expect((await fs.readdir(tmpDir)).filter((name) => /\.(tmp|new)$/.test(name))).toEqual([]);
         } finally {
           await fs.rm(tmpDir, { recursive: true, force: true });
         }
@@ -522,16 +604,15 @@ describe("writeJsonFile", () => {
       const testFilePath = "C:\\test\\data.json";
 
       vi.spyOn(fs, "writeFile").mockResolvedValue(undefined);
-      vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
+      const openSpy = vi.spyOn(fs, "open").mockResolvedValue(mockFileHandle as any);
 
       const eacces = Object.assign(new Error("EACCES"), { code: "EACCES" });
       vi.spyOn(fs, "rename").mockRejectedValue(eacces);
 
-      const copyFileSpy = vi.spyOn(fs, "copyFile").mockResolvedValue(undefined);
       vi.spyOn(fs, "unlink").mockResolvedValue(undefined);
 
       await expect(writeJsonFile(testFilePath, {}, { platform })).rejects.toThrow("EACCES");
-      expect(copyFileSpy).not.toHaveBeenCalled();
+      expect(openSpy).toHaveBeenCalledTimes(1);
     });
 
     it("uses a .tmp file as the intermediate (atomic replacement path)", async () => {
@@ -544,7 +625,7 @@ describe("writeJsonFile", () => {
 
       await writeJsonFile(testFilePath, {}, { platform });
 
-      expect(renameSpy).toHaveBeenCalledWith(testFilePath + ".tmp", testFilePath);
+      expect(renameSpy).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), testFilePath);
     });
   });
 });
