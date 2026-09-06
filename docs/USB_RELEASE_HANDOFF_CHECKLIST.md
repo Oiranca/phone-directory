@@ -29,15 +29,11 @@ pnpm run release:usb -- mac
 pnpm run release:usb -- linux
 ```
 
-For a preloaded macOS or Linux operator USB, explicitly provide the app-managed data directory:
+For a preloaded operator USB, explicitly provide the app-managed data directory:
 
 ```bash
-pnpm run release:usb -- mac --data-dir "$HOME/Library/Application Support/hospiagenda/data"
+pnpm run release:usb -- win --data-dir "$HOME/Library/Application Support/hospiagenda/data"
 ```
-
-Windows releases must remain blank. `release:usb -- win --data-dir ...` is rejected so
-plaintext data cannot be staged before the target USB has BitLocker. Import the data from
-inside the app after completing the Windows protection steps below.
 
 Never copy profile data implicitly. `--data-dir` requires `contacts.json` and
 `beepers.json`; optional `settings.json` is accepted only with both managed-path
@@ -89,12 +85,6 @@ If the release is blocked by a `NON-ALLOWLISTED` advisory:
 
 Copy the contents of `dist-portable/usb-package/` to the USB root.
 
-For Windows, first enable BitLocker To Go on the target USB through **Control Panel >
-BitLocker Drive Encryption > Turn on BitLocker**. Use a strong password and save the
-recovery key somewhere other than this USB. Wait for encryption to finish, then copy the
-blank Windows package. Microsoft documents removable-drive protection and recovery at
-<https://learn.microsoft.com/windows/security/operating-system-security/data-protection/bitlocker/faq>.
-
 Expected USB root files vary by platform:
 
 | Platform | Required payload |
@@ -105,7 +95,7 @@ Expected USB root files vary by platform:
 
 Linux may also include `HospiAgenda.AppImage` when the build configuration produces the versioned AppImage artifact.
 
-Initialized macOS/Linux releases additionally require `portable-data/data/contacts.json`
+Initialized releases additionally require `portable-data/data/contacts.json`
 and `portable-data/data/beepers.json`; `settings.json` may also be present.
 Confirm `RELEASE_MANIFEST.txt` says `Initial data: INCLUDED (...)`. Blank
 releases must say `Initial data: EMPTY (created on first launch)`.
@@ -128,25 +118,11 @@ Open the packaged application directly:
 Confirm:
 
 - the app opens directly without launcher errors
-- on Windows, `manage-bde -status <drive>: -protectionaserrorlevel` exits with code `0`
 - `portable-data/` is created at the USB root
 - initialized contacts and buscas are visible when the manifest says data was included
 - a new or existing contact can be viewed
 - settings show usable data and backup paths
 - closing and reopening preserves the same data
-
-For Windows, perform the first data import only after this check passes. The app must show
-"Protección de datos requerida" and exit when run from an unprotected Windows volume.
-
-### Clean-machine Windows confidentiality check
-
-1. Import test data on the unlocked BitLocker USB, close the app, and safely eject it.
-2. Connect it to a clean Windows machine or separate unauthorized local account.
-3. Do not enter the BitLocker password or recovery key. Confirm the volume contents,
-   including `portable-data`, cannot be opened.
-4. Unlock with the operator password, run
-   `manage-bde -status <drive>: -protectionaserrorlevel`, and confirm exit code `0`.
-5. Open HospiAgenda and confirm the test contacts and buscas remain readable.
 
 ## 5. Operator handoff
 
@@ -162,8 +138,7 @@ Tell the operator:
 - open the platform executable directly
 - on Windows, keep `HospiAgenda.exe` beside `resources/` and its DLL/PAK runtime files
 - keep `portable-data/` with the USB drive
-- back up `portable-data/` before major imports or cleanup work, only to another protected destination
-- store the BitLocker recovery key separately; never on the protected USB
+- back up `portable-data/` before major imports or cleanup work
 - do not delete `RELEASE_MANIFEST.txt`; it identifies the build
 
 ## 6. Failure handling
@@ -176,10 +151,6 @@ If the app does not open:
 - on macOS, capture any visible Terminal, Finder, Gatekeeper, or launch dialog text
 - retry on the same machine after ejecting and remounting the USB drive
 - if it still fails, rebuild from the latest `main` and replace the USB contents
-
-If BitLocker rejects the password, use the separately stored recovery key. If neither is
-available, the data cannot be recovered; restore the latest protected backup to a newly
-encrypted USB. Never disable BitLocker to bypass the startup check.
 
 ## 7. Release Pipeline Security
 

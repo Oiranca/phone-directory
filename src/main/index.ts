@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, session } from "electron";
+import { BrowserWindow, app, ipcMain, nativeImage, session } from "electron";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { env } from "./config/env.js";
@@ -11,10 +11,6 @@ import { AppDataService } from "./services/app-data.service.js";
 import { BeepersService } from "./services/beeper.service.js";
 import { assertPathChainIsNotSymlink } from "./utils/path-safety.js";
 import { resolvePortableUserDataPath } from "./utils/portable-paths.js";
-import {
-  assertWindowsPortableVolumeProtected,
-  WindowsPortableProtectionError
-} from "./utils/windows-portable-protection.js";
 import {
   buildContentSecurityPolicy,
   createTrustedIpcHandle,
@@ -96,7 +92,6 @@ const createWindow = () => {
 
 const bootstrap = async () => {
   if (portableUserDataPath) {
-    assertWindowsPortableVolumeProtected();
     await assertPathChainIsNotSymlink(
       portableUserDataPath,
       "No se pudo preparar la ruta portable de datos.",
@@ -157,9 +152,6 @@ app.whenReady().then(() => {
   }
 
   void bootstrap().catch((error) => {
-    if (error instanceof WindowsPortableProtectionError) {
-      dialog.showErrorBox("Protección de datos requerida", error.message);
-    }
     console.error(error);
     app.quit();
   });

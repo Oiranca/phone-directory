@@ -123,11 +123,6 @@ case "$PLATFORM" in
     ;;
 esac
 
-if [[ "$PLATFORM" == "win" && -n "$DATA_SOURCE_DIR" ]]; then
-  echo "Windows portable releases must be blank. Enable BitLocker To Go on the target USB, copy the blank package, then import data inside the app." >&2
-  exit 2
-fi
-
 cd "$REPO_ROOT"
 
 if [[ -n "$DATA_SOURCE_DIR" ]]; then
@@ -366,7 +361,6 @@ Version: $PKG_VERSION
 Source commit: $(git rev-parse --short HEAD)
 ${AUDIT_STATUS_LINE}
 Initial data: ${INITIAL_DATA_STATUS}
-Portable data protection: $([[ "$PLATFORM" == "win" ]] && printf 'BitLocker To Go required at startup' || printf 'OS/filesystem controls required')
 
 Copy the contents of this directory to the USB root.
 Open the platform executable directly. It stores data in portable-data at the USB root.
