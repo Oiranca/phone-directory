@@ -44,6 +44,16 @@ const mockImportedRecords: ImportedBeeperRecord[] = [
   }
 ];
 
+const makeRecords = (count: number): BeeperRecord[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `bsc_${String(index + 1).padStart(3, "0")}`,
+    deviceNumber: `B-${String(index + 1).padStart(3, "0")}`,
+    assignedTo: `Persona ${index + 1}`,
+    department: index < 11 ? "Grupo Alfa" : "Grupo Beta",
+    role: "Profesional",
+    shift: "mañana"
+  }));
+
 // Stub HTMLDialogElement.showModal/close since jsdom does not implement them
 let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
 let originalShowModal: (() => void) | undefined;
@@ -354,6 +364,74 @@ describe("BeepersPage", () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("2 resultados")).toBeInTheDocument();
+    });
+  });
+
+  it("renders at most ten rows and navigates page boundaries", async () => {
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue(makeRecords(9)),
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords)
+    });
+    renderPage();
+
+    await screen.findByText("B-001");
+    expect(document.querySelectorAll("tbody tr")).toHaveLength(10);
+    expect(screen.queryByText("5002")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByText("5002")).toBeInTheDocument();
+    expect(document.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Página anterior" }));
+    expect(await screen.findByText("B-001")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+  });
+
+  it("resets to the first page when the search changes", async () => {
+    setupWindowApi({ listBeepers: vi.fn().mockResolvedValue(makeRecords(21)) });
+    renderPage();
+
+    await screen.findByText("B-001");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByText("B-021")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "Grupo Alfa" } });
+    await waitFor(() => {
+      expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
+      expect(screen.getByText("B-001")).toBeInTheDocument();
+    });
+  });
+
+  it("clamps the current page after deleting its last row", async () => {
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue(makeRecords(11)),
+      deleteBeeper: vi.fn().mockResolvedValue(undefined)
+    });
+    renderPage();
+
+    await screen.findByText("B-001");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Eliminar busca B-011" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Eliminar$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("B-001")).toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Paginación de buscas" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("restores focus to the edit button after saving", async () => {
+    setupWindowApi({ updateBeeper: vi.fn().mockResolvedValue(mockRecords[0]) });
+    renderPage();
+
+    const editButton = await screen.findByRole("button", { name: "Editar busca B-001" });
+    fireEvent.click(editButton);
+    fireEvent.submit(screen.getByRole("form", { name: /Editar busca/i }));
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(editButton);
     });
   });
 
