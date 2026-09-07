@@ -87,7 +87,7 @@ See `SECURITY.md → Accepted Risks` for a human-readable summary of each accept
 `SKIP_AUDIT=1` skips the audit entirely. A non-empty `SKIP_AUDIT_REASON` is **required** — without it the release aborts:
 
 ```bash
-SKIP_AUDIT=1 SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks" \
+SKIP_AUDIT=1 SKIP_AUDIT_REASON="Emergency exception documented in SECURITY.md" \
   pnpm run release:usb
 ```
 

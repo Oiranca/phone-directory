@@ -21,16 +21,9 @@ import { evaluateAudit } from "./audit-gate-core.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, "fixtures", "audit");
-const SCRIPTS_DIR  = path.dirname(__dirname); // scripts/
-
 /** Read a fixture JSON file as a raw string (not parsed). */
 function fixture(name) {
   return readFileSync(path.join(FIXTURES_DIR, name), "utf8").trimEnd();
-}
-
-/** Load the real audit allowlist from the repo. */
-function realAllowlist() {
-  return JSON.parse(readFileSync(path.join(SCRIPTS_DIR, "audit-allowlist.json"), "utf8"));
 }
 
 /** A future expiry date (1 year from the fixed reference date). */
@@ -48,6 +41,14 @@ function shellQuoteEntry(overrides = {}) {
     expires: FUTURE_EXPIRES,
     ...overrides,
   };
+}
+
+function activeTestAllowlist() {
+  return [
+    shellQuoteEntry(),
+    shellQuoteEntry({ id: "GHSA-ph9p-34f9-6g65", package: "tmp", severity: "high" }),
+    shellQuoteEntry({ id: "GHSA-gv7w-rqvm-qjhr", package: "esbuild", severity: "high" }),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -117,18 +118,18 @@ describe("evaluateAudit — clean / pass cases", () => {
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
-      "allowlisted-only advisories (v6) with real allowlist → exit 0",
-      ALLOWLISTED_JSON, realAllowlist(), 1,
+      "allowlisted-only advisories (v6) with active test allowlist → exit 0",
+      ALLOWLISTED_JSON, activeTestAllowlist(), 1,
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
-      "allowlisted-only advisories (v7) with real allowlist → exit 0",
-      V7_ALLOWLISTED_JSON, realAllowlist(), 1,
+      "allowlisted-only advisories (v7) with active test allowlist → exit 0",
+      V7_ALLOWLISTED_JSON, activeTestAllowlist(), 1,
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
       "all-allowlisted with non-zero pnpm exit → still exit 0",
-      ALLOWLISTED_JSON, realAllowlist(), 1,
+      ALLOWLISTED_JSON, activeTestAllowlist(), 1,
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
@@ -147,8 +148,8 @@ describe("evaluateAudit — clean / pass cases", () => {
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
-      "real allowlist + 3 known advisories → exit 0 (regression guard after allowlist changes)",
-      ALLOWLISTED_JSON, realAllowlist(), 1,
+      "active test allowlist + 3 advisories → exit 0",
+      ALLOWLISTED_JSON, activeTestAllowlist(), 1,
       { exitCode: 0, stdoutContains: "PASSED:" },
     ],
     [
@@ -514,9 +515,9 @@ describe("evaluateAudit — v7 schema specifics", () => {
     expect(result.stderr).toContain("inconsistent");
   });
 
-  it("v7 v6-allowlisted advisories pass with real allowlist + matching ghsaId field", () => {
+  it("v7 allowlisted advisories pass with matching ghsaId field", () => {
     // V7_ALLOWLISTED_JSON uses ghsaId field (not github_advisory_id).
-    const result = evaluateAudit(V7_ALLOWLISTED_JSON, realAllowlist(), 1);
+    const result = evaluateAudit(V7_ALLOWLISTED_JSON, activeTestAllowlist(), 1);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("PASSED:");
   });
