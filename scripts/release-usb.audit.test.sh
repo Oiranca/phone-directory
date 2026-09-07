@@ -148,7 +148,7 @@ build_sandbox_repo() {
   cp "$REPO_ROOT/scripts/release-usb.sh" "$sandbox/scripts/release-usb.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate.sh" "$sandbox/scripts/lib/audit-gate.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate-core.mjs" "$sandbox/scripts/lib/audit-gate-core.mjs"
-  cp "$ALLOWLIST" "$sandbox/scripts/audit-allowlist.json"
+  cp "$REPO_ALLOWLIST" "$sandbox/scripts/audit-allowlist.json"
   # Linux retains a FUSE-less fallback. Windows and macOS launch directly.
   cp "$REPO_ROOT/usb-launchers/launch.sh" "$sandbox/usb-launchers/launch.sh"
   cp "$REPO_ROOT/usb-launchers/README.txt" "$sandbox/usb-launchers/README.txt"
@@ -3822,6 +3822,11 @@ if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST89"; t
   pass "Commit2 e2e audited: RELEASE_MANIFEST.txt contains 'Dependency audit: PASSED'"
 else
   fail "Commit2 e2e audited: manifest missing PASSED line (got: $(cat "$MANIFEST89" 2>/dev/null || echo MISSING))"
+fi
+if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED (allowlist 0 entries)' "$MANIFEST89"; then
+  pass "Commit2 e2e audited: clean production allowlist count is zero"
+else
+  fail "Commit2 e2e audited: manifest does not record an empty production allowlist"
 fi
 assert_packaged_smoke_gate "$SANDBOX89" linux "Commit2 e2e audited"
 rm -rf "$SANDBOX89" "$BIN89"
