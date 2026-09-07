@@ -444,6 +444,26 @@ describe("DuplicateDetectionService", () => {
       ).rejects.toThrow(DuplicateDetectionAbortError);
     });
 
+    it("stops when cancellation arrives during a scan", async () => {
+      let reads = 0;
+      const signal = new Proxy({} as AbortSignal, {
+        get(_, property) {
+          if (property === "aborted") {
+            reads += 1;
+            return reads > 1;
+          }
+          return undefined;
+        }
+      });
+      const records = Array.from({ length: 600 }, (_, index) =>
+        buildMinimalContact({ id: `abort-${index}`, displayName: `Contact ${index}` })
+      );
+
+      await expect(service.detectDuplicates(records, { signal })).rejects.toThrow(
+        DuplicateDetectionAbortError
+      );
+    });
+
     it("error inside detection propagates cleanly (not swallowed)", async () => {
       // Inject a record with a getter that throws to simulate internal failure
       const badRecord = buildMinimalContact({ id: "bad", displayName: "Trigger" });

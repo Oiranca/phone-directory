@@ -1,6 +1,6 @@
+import Module, { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { IpcRenderer } from "electron";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { HospitalDirectoryApi } from "../shared/ipc/api.js";
 import {
@@ -10,13 +10,23 @@ import {
   SETTINGS_CHANNELS
 } from "../shared/ipc/channels.js";
 
-type BuildApi = (ipcRenderer: IpcRenderer) => HospitalDirectoryApi;
 type InvokeMethod = Exclude<keyof HospitalDirectoryApi, "onAutoBackupFailure">;
 
-const apiCjsPath = path.resolve(
+const indexCjsPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../dist-electron/preload/api.cjs"
+  "../../dist-electron/preload/index.cjs"
 );
+
+const electron = {
+  exposeInMainWorld: vi.fn(),
+  invoke: vi.fn(),
+  on: vi.fn(),
+  removeListener: vi.fn()
+};
+
+type ModuleLoader = (request: string, parent: NodeModule | undefined, isMain: boolean) => unknown;
+const nodeModule = Module as unknown as { _load: ModuleLoader };
+const requireCompiled = createRequire(import.meta.url);
 
 const ROUTES: Record<InvokeMethod, { channel: string; args?: unknown[] }> = {
   getBootstrapData: { channel: CONTACTS_CHANNELS.bootstrap },
@@ -47,21 +57,36 @@ const ROUTES: Record<InvokeMethod, { channel: string; args?: unknown[] }> = {
 };
 
 describe("compiled preload API", () => {
-  let buildApi: BuildApi;
-  const ipcRenderer = {
-    invoke: vi.fn(),
-    on: vi.fn(),
-    removeListener: vi.fn()
-  };
+  let api: HospitalDirectoryApi;
 
   beforeAll(async () => {
-    const compiled = await import(apiCjsPath).catch(() => {
-      throw new Error("Falta dist-electron/preload/api.cjs; ejecute pnpm build:electron antes de los tests.");
-    }) as { buildApi?: BuildApi };
-    if (typeof compiled.buildApi !== "function") {
-      throw new Error("El preload compilado no exporta buildApi.");
+    const originalLoad = nodeModule._load;
+    nodeModule._load = (request, parent, isMain) => request === "electron"
+      ? {
+          contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
+          ipcRenderer: {
+            invoke: electron.invoke,
+            on: electron.on,
+            removeListener: electron.removeListener
+          }
+        }
+      : originalLoad(request, parent, isMain);
+    try {
+      delete requireCompiled.cache[indexCjsPath];
+      requireCompiled(indexCjsPath);
+    } catch (cause) {
+      throw new Error(
+        "No se pudo cargar dist-electron/preload/index.cjs; ejecute pnpm build:electron antes de los tests.",
+        { cause }
+      );
+    } finally {
+      nodeModule._load = originalLoad;
     }
-    buildApi = compiled.buildApi;
+    const exposure = electron.exposeInMainWorld.mock.calls[0];
+    if (exposure?.[0] !== "hospitalDirectory") {
+      throw new Error("El preload compilado no expone hospitalDirectory.");
+    }
+    api = exposure[1] as HospitalDirectoryApi;
   });
 
   afterEach(() => {
@@ -69,42 +94,40 @@ describe("compiled preload API", () => {
   });
 
   it.each(Object.entries(ROUTES))("routes %s to its public IPC channel", async (method, route) => {
-    ipcRenderer.invoke.mockResolvedValueOnce(undefined);
-    const api = buildApi(ipcRenderer as unknown as IpcRenderer) as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    electron.invoke.mockResolvedValueOnce(undefined);
+    const methods = api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
 
-    await api[method]!(...(route.args ?? []));
+    await methods[method]!(...(route.args ?? []));
 
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith(route.channel, ...(route.args ?? []));
+    expect(electron.invoke).toHaveBeenCalledWith(route.channel, ...(route.args ?? []));
   });
 
   it.each(Object.keys(ROUTES))("propagates %s IPC failures", async (method) => {
     const failure = new Error("IPC failure");
-    ipcRenderer.invoke.mockRejectedValueOnce(failure);
-    const api = buildApi(ipcRenderer as unknown as IpcRenderer) as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    electron.invoke.mockRejectedValueOnce(failure);
+    const methods = api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
 
-    await expect(api[method]!(...(ROUTES[method as InvokeMethod].args ?? []))).rejects.toBe(failure);
+    await expect(methods[method]!(...(ROUTES[method as InvokeMethod].args ?? []))).rejects.toBe(failure);
   });
 
   it("defaults importCsvDataset policies to an empty list", async () => {
-    ipcRenderer.invoke.mockResolvedValueOnce(undefined);
-    const api = buildApi(ipcRenderer as unknown as IpcRenderer);
+    electron.invoke.mockResolvedValueOnce(undefined);
 
     await api.importCsvDataset("token");
 
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith(CONTACTS_CHANNELS.importCsvDataset, "token", []);
+    expect(electron.invoke).toHaveBeenCalledWith(CONTACTS_CHANNELS.importCsvDataset, "token", []);
   });
 
   it("forwards auto-backup failures and removes the same wrapped listener", () => {
-    const api = buildApi(ipcRenderer as unknown as IpcRenderer);
     const listener = vi.fn();
 
     const unsubscribe = api.onAutoBackupFailure(listener);
-    const wrapped = ipcRenderer.on.mock.calls[0]?.[1] as ((event: unknown, payload: unknown) => void);
+    const wrapped = electron.on.mock.calls[0]?.[1] as ((event: unknown, payload: unknown) => void);
     wrapped({}, { message: "Backup failed" });
     unsubscribe();
 
-    expect(ipcRenderer.on).toHaveBeenCalledWith(PUSH_CHANNELS.autoBackupFailed, wrapped);
+    expect(electron.on).toHaveBeenCalledWith(PUSH_CHANNELS.autoBackupFailed, wrapped);
     expect(listener).toHaveBeenCalledWith({ message: "Backup failed" });
-    expect(ipcRenderer.removeListener).toHaveBeenCalledWith(PUSH_CHANNELS.autoBackupFailed, wrapped);
+    expect(electron.removeListener).toHaveBeenCalledWith(PUSH_CHANNELS.autoBackupFailed, wrapped);
   });
 });
