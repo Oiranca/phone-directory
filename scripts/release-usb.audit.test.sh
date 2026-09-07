@@ -11,7 +11,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATE_SCRIPT="$REPO_ROOT/scripts/lib/audit-gate.sh"
-ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
+REPO_ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
 
 # Per-process fixture root under scripts/ — named with the current PID so that
 # two concurrent test runs cannot delete each other's fixture directories.
@@ -20,6 +20,8 @@ ALLOWLIST="$REPO_ROOT/scripts/audit-allowlist.json"
 # would match sibling runs' directories (scripts/.test-<other-pid>-*).
 TEST_FIXTURE_ROOT="$(mktemp -d "$REPO_ROOT/scripts/.test-$$-XXXXXX")"
 trap 'rm -rf "$TEST_FIXTURE_ROOT" 2>/dev/null || true' EXIT
+ALLOWLIST="$TEST_FIXTURE_ROOT/active-allowlist.json"
+printf '%s\n' '[{"id":"GHSA-w7jw-789q-3m8p","package":"shell-quote","severity":"critical","reason":"test entry","expires":"2099-12-31"},{"id":"GHSA-ph9p-34f9-6g65","package":"tmp","severity":"high","reason":"test entry","expires":"2099-12-31"},{"id":"GHSA-gv7w-rqvm-qjhr","package":"esbuild","severity":"high","reason":"test entry","expires":"2099-12-31"}]' > "$ALLOWLIST"
 
 # --- test infrastructure -------------------------------------------------------
 
@@ -29,6 +31,12 @@ FAILURES=()
 
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf '  PASS: %s\n' "$1"; }
 fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); FAILURES+=("$1"); printf '  FAIL: %s\n' "$1"; }
+
+if [[ "$(tr -d '[:space:]' < "$REPO_ALLOWLIST")" == '[]' ]]; then
+  pass "repository allowlist stays empty while the raw audit is clean"
+else
+  fail "repository allowlist contains stale entries"
+fi
 
 assert_exit_0() {
   local desc="$1"; shift
@@ -112,7 +120,7 @@ INFRA_ERROR_OUTPUT='Error: ECONNREFUSED connect ECONNREFUSED 127.0.0.1:4873'
 # Sources the gate and calls run_audit_gate; returns its exit code.
 run_gate_in_subshell() {
   local bindir="$1"; shift
-  env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" "$@" bash -c "
+  env PATH="$bindir:$PATH" REPO_ROOT="$REPO_ROOT" AUDIT_GATE_TEST_MODE=1 AUDIT_ALLOWLIST="$ALLOWLIST" "$@" bash -c "
     set -euo pipefail
     source '$GATE_SCRIPT'
     AUDIT_STATUS_LINE=''
@@ -140,7 +148,7 @@ build_sandbox_repo() {
   cp "$REPO_ROOT/scripts/release-usb.sh" "$sandbox/scripts/release-usb.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate.sh" "$sandbox/scripts/lib/audit-gate.sh"
   cp "$REPO_ROOT/scripts/lib/audit-gate-core.mjs" "$sandbox/scripts/lib/audit-gate-core.mjs"
-  cp "$REPO_ROOT/scripts/audit-allowlist.json" "$sandbox/scripts/audit-allowlist.json"
+  cp "$ALLOWLIST" "$sandbox/scripts/audit-allowlist.json"
   # Linux retains a FUSE-less fallback. Windows and macOS launch directly.
   cp "$REPO_ROOT/usb-launchers/launch.sh" "$sandbox/usb-launchers/launch.sh"
   cp "$REPO_ROOT/usb-launchers/README.txt" "$sandbox/usb-launchers/README.txt"
@@ -769,7 +777,7 @@ rm -rf "$TMP5b"
 # Test 6: SKIP_AUDIT=true / yes / 2 → gate still runs (strict == "1")
 printf '\nTest 6: SKIP_AUDIT=true/yes/2 → gate still runs (non-"1" values ignored)\n'
 TMP6="$(setup_fake_pnpm)"
-write_fake_pnpm "$TMP6" "$ALLOWLISTED_JSON" 1   # only allowlisted → should pass
+write_fake_pnpm "$TMP6" "$CLEAN_JSON" 0
 for val in "true" "yes" "2" "TRUE"; do
   if out="$(env PATH="$TMP6:$PATH" REPO_ROOT="$REPO_ROOT" SKIP_AUDIT="$val" bash -c "
     source '$GATE_SCRIPT'
@@ -778,7 +786,7 @@ for val in "true" "yes" "2" "TRUE"; do
     printf '%s' \"\$AUDIT_STATUS_LINE\"
   " 2>/dev/null)"; then
     if printf '%s' "$out" | grep -q 'PASSED'; then
-      pass "SKIP_AUDIT=$val → gate runs and passes (allowlisted advisories)"
+      pass "SKIP_AUDIT=$val → gate runs and passes"
     else
       fail "SKIP_AUDIT=$val → gate ran but status line unexpected: $out"
     fi
@@ -1770,18 +1778,18 @@ else
 fi
 rm -rf "$TMP48" "$TMPD48_AL"
 
-# Test 49: confirm the 3 real allowlist entries still pass with real allowlist
-printf '\nTest 49: real allowlist + all 3 allowlisted advisories → still PASSES\n'
+# Test 49: confirm active synthetic entries still pass
+printf '\nTest 49: active test allowlist + all 3 advisories → still PASSES\n'
 TMP49="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP49" "$ALLOWLISTED_JSON" 1
 if out="$(run_gate_in_subshell "$TMP49" 2>/dev/null)"; then
   if printf '%s' "$out" | grep -q 'PASSED'; then
-    pass "real allowlist + 3 known advisories → still PASSES after Fix 2"
+    pass "active test allowlist + 3 advisories → still PASSES after Fix 2"
   else
-    fail "real allowlist + 3 known advisories: status line missing 'PASSED': $out"
+    fail "active test allowlist + 3 advisories: status line missing 'PASSED': $out"
   fi
 else
-  fail "real allowlist + 3 known advisories → exited non-zero — Fix 2 regression"
+  fail "active test allowlist + 3 advisories → exited non-zero — Fix 2 regression"
 fi
 rm -rf "$TMP49"
 
@@ -2511,7 +2519,7 @@ rm -rf "$TMP67e" "$PERMISSIVE_DIR_67e"
 # Test 58: v6 schema — allowlisted critical advisory + metadata critical:0 → ABORTS (exit 3)
 # iteratedHighCrit=1 (counted before allowlist suppression), metaHighCrit=0 — mismatch
 printf '\nTest 58 (Fix 2, v6): allowlisted critical + metadata critical:0 → ABORTS (inconsistent)\n'
-# Payload: shell-quote critical (GHSA-w7jw-789q-3m8p — in real allowlist) but metadata says critical:0
+# Payload: shell-quote critical (in active test allowlist) but metadata says critical:0
 ALLOWLISTED_CRIT_META_ZERO_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-w7jw-789q-3m8p","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":0}}}'
 TMP58="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP58" "$ALLOWLISTED_CRIT_META_ZERO_JSON" 1
@@ -2532,7 +2540,7 @@ rm -rf "$TMP58"
 # Test 59: v6 schema — allowlisted critical advisory + metadata critical:0,high:0 lower than iterated → ABORTS
 # Same as 58 but testing with a high advisory and metadata high:0 (iterated=1, meta=0)
 printf '\nTest 59 (Fix 2, v6): allowlisted high advisory + metadata high:0 → ABORTS (inconsistent)\n'
-# Payload: esbuild high (GHSA-gv7w-rqvm-qjhr — in real allowlist) but metadata says high:0
+# Payload: esbuild high (in active test allowlist) but metadata says high:0
 ALLOWLISTED_HIGH_META_ZERO_JSON='{"advisories":{"3":{"findings":[],"id":3,"severity":"high","module_name":"esbuild","title":"esbuild vuln","github_advisory_id":"GHSA-gv7w-rqvm-qjhr","vulnerable_versions":"<0.28.1","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"high":0,"critical":0}}}'
 TMP59="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP59" "$ALLOWLISTED_HIGH_META_ZERO_JSON" 1
@@ -2551,7 +2559,7 @@ fi
 rm -rf "$TMP59"
 
 # Test 60: v7 schema — allowlisted critical advisory + metadata critical:0 → ABORTS (exit 3)
-# iteratedHighCrit=1 (shell-quote critical, allowlisted in real allowlist), metaHighCrit=0 — mismatch
+# iteratedHighCrit=1 (shell-quote critical, allowlisted in tests), metaHighCrit=0 — mismatch
 printf '\nTest 60 (Fix 2, v7): v7 allowlisted critical + metadata critical:0 → ABORTS (inconsistent)\n'
 VULN_ALLOWLISTED_META_ZERO_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote vuln","severity":"critical"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"critical":0,"high":0}}}'
 TMP60="$(setup_fake_pnpm)"
@@ -2574,7 +2582,7 @@ rm -rf "$TMP60"
 # Regression guard: the fix must not break the legitimate all-allowlisted pass case
 printf '\nTest 61 (Fix 2, v6 regression): allowlisted critical + matching metadata critical:1 → still PASSES\n'
 TMP61="$(setup_fake_pnpm)"
-# Use the pre-existing ALLOWLISTED_JSON (critical:1, high:2 — all in real allowlist)
+# Use ALLOWLISTED_JSON (critical:1, high:2 — all in the active test allowlist)
 write_fake_pnpm "$TMP61" "$ALLOWLISTED_JSON" 1
 if out="$(run_gate_in_subshell "$TMP61" 2>/dev/null)"; then
   if printf '%s' "$out" | grep -q 'PASSED'; then
@@ -3035,7 +3043,7 @@ fi
 rm -rf "$TMP81"
 
 # Test 82 (Fix B, v6 regression): consistent per-severity counts → still PASSES
-# ALLOWLISTED_JSON: critical:1 high:2 — all in real allowlist, metadata matches exactly
+# ALLOWLISTED_JSON: critical:1 high:2 — all in active test allowlist, metadata matches exactly
 printf '\nTest 82 (Fix B, v6 regression): consistent per-severity counts → still PASSES\n'
 TMP82="$(setup_fake_pnpm)"
 write_fake_pnpm "$TMP82" "$ALLOWLISTED_JSON" 1
@@ -3179,7 +3187,7 @@ rm -rf "$TMP83f"
 # Test 83g: v6, GHSA id in advisory is uppercase but allowlist entry is lowercase → still MATCHES
 printf '\nTest 83g (Commit4, v6): GHSA uppercase in advisory, lowercase in allowlist → still PASSES\n'
 TMP83g="$(setup_fake_pnpm)"
-# Use the real allowlist GHSA id in uppercase in the advisory payload.
+# Use an active test allowlist GHSA id in uppercase in the advisory payload.
 UPPER_GHSA_JSON='{"advisories":{"1":{"findings":[],"id":1,"severity":"critical","module_name":"shell-quote","title":"shell-quote vuln","github_advisory_id":"GHSA-W7JW-789Q-3M8P","vulnerable_versions":"<=1.8.3","cves":[]}},"muted":[],"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1},"dependencies":1}}'
 write_fake_pnpm "$TMP83g" "$UPPER_GHSA_JSON" 1
 if out="$(run_gate_in_subshell "$TMP83g" 2>/dev/null)"; then
@@ -3388,7 +3396,7 @@ rm -rf "$TMP83s" "$TMPD83s_AL"
 # severity and must NOT block. Node severity = critical; metadata critical:1,high:0.
 printf '\nTest 83m (Commit1, v7): allowlisted critical via + non-allowlisted LOW via, same package → PASSES (low not promoted)\n'
 TMP83m="$(setup_fake_pnpm)"
-# shell-quote node: critical via (GHSA-w7jw-789q-3m8p, in real allowlist) + low via
+# shell-quote node: critical via (in active test allowlist) + low via
 # (GHSA-low9-low9-low9, NOT allowlisted). Node max severity is "critical".
 CRIT_PLUS_LOW_VIA_JSON='{"vulnerabilities":{"shell-quote":{"name":"shell-quote","severity":"critical","via":[{"ghsaId":"GHSA-w7jw-789q-3m8p","title":"shell-quote crit vuln","severity":"critical"},{"ghsaId":"GHSA-low9-low9-low9","title":"shell-quote low vuln","severity":"low"}],"effects":[],"range":"*","nodes":[],"fixAvailable":false}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1}}}'
 write_fake_pnpm "$TMP83m" "$CRIT_PLUS_LOW_VIA_JSON" 1
@@ -3562,7 +3570,7 @@ rm -rf "$TMP83w"
 printf '\nTest 83x (CommitB): live advisory with malformed ghsaId (contains space) → NOT suppressed by allowlist, BLOCKS\n'
 TMP83x="$(setup_fake_pnpm)"
 # Allowlist entry for "GHSA-aaaa-aaaa aa" package "evil-pkg" — this is
-# what an attacker might try to inject to collide with a real allowlist entry.
+# what an attacker might try to inject to collide with an active allowlist entry.
 # But "GHSA-aaaa-aaaa aa" is not a valid GHSA id (contains a space), so after
 # CommitB it is stripped to "" before the map lookup and cannot be suppressed.
 MALFORMED_GHSA_ALLOWLIST="$(printf '[{"id":"GHSA-aaaa-aaaa-aaaa","package":"evil-pkg","severity":"critical","reason":"test","expires":"%s"}]' "$FUTURE_EXPIRES")"

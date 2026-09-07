@@ -33,63 +33,8 @@ The following vulnerabilities have been addressed as of this release:
 
 ### Accepted Risks
 
-> **Source of truth:** The machine-readable allowlist of explicitly accepted advisory IDs is
-> [`scripts/audit-allowlist.json`](scripts/audit-allowlist.json).
-> The audit gate in `scripts/release-usb.sh` reads this file at release time and filters out
-> allowlisted advisories before failing — any newly appearing high/critical advisory that is NOT
-> in the allowlist will still abort the release.
-> Each entry carries an `expires` date (YYYY-MM-DD). The gate enforces expiry at release time:
-> an entry whose `expires` date has passed causes the gate to abort, requiring the entry to be
-> re-reviewed and its `expires` date updated (or the advisory resolved) before a new release can proceed.
->
-> The accepted identity of an entry is the composite of its GHSA `id` **and** `package`. A single
-> advisory affecting more than one package (e.g. `GHSA-2j2x-hqr9-3h42` on both `react-router` and
-> `react-router-dom`) is recorded as one entry per package, all sharing the same `id`; the gate
-> rejects only an exact duplicate identity (same GHSA id **and** same package). A live advisory is
-> suppressed only when its GHSA id, package, and severity all match an accepted identity.
-> The entries below summarise each accepted risk; the allowlist JSON contains the full rationale.
-
-The following advisories are **accepted as low-risk** for this deployment model:
-
-#### 1. shell-quote (GHSA-w7jw-789q-3m8p — Critical, CVE-2026-9277)
-- **Status**: `shell-quote <=1.8.3` (transitive via `concurrently > shell-quote`)
-- **Vulnerability**: `quote()` does not escape newline characters in object `.op` values, enabling shell command injection when attacker-controlled object tokens are passed to `quote()`.
-- **Mitigation**:
-  - `concurrently` is a **dev-only tool** used to run renderer/electron watchers during local development — it is never bundled into the Electron application or executed at runtime.
-  - `concurrently` uses `shell-quote` internally with fixed, developer-authored command strings. No attacker-influenced input reaches `quote()` in this project.
-  - Deployment model: local USB install on a controlled workstation with no external network attack surface.
-- **Risk Assessment**: Low — vulnerable code path not reachable in this project
-- **Remediation Path**: Update `concurrently` when a version transitively pulling `shell-quote >=1.8.4` becomes available.
-
-#### 2. tmp (GHSA-ph9p-34f9-6g65 — High, CVE-2026-44705)
-- **Status**: `tmp <0.2.6` (transitive dependency via `electron-builder > app-builder-lib > @malept/flatpak-bundler > tmp-promise > tmp`)
-- **Vulnerability**: Path traversal via unsanitized prefix/postfix enabling directory escape
-- **Mitigation**:
-  - Flatpak bundler is **not used** in this deployment (Windows/macOS/Linux USB distribution)
-  - Build toolchain runs in controlled CI/local dev environment only
-  - No patch available in current electron-builder chain
-- **Risk Assessment**: Low — flatpak packaging not part of release workflow
-- **Remediation Path**: Monitor electron-builder for upstream fix that updates tmp to >=0.2.6.
-
-#### 3. esbuild (GHSA-gv7w-rqvm-qjhr — High)
-- **Status**: `esbuild >=0.17.0 <0.28.1` (transitive via `vite > esbuild`)
-- **Vulnerability**: Missing SHA-256 binary integrity verification in the **Deno module** (`lib/deno/mod.ts`) when `NPM_CONFIG_REGISTRY` is attacker-controlled, enabling arbitrary code execution.
-- **Mitigation**:
-  - This project uses esbuild via the **Node.js npm package** (through vite), not the Deno distribution. The vulnerable `lib/deno/mod.ts` code path is never executed.
-  - The Node.js npm package includes `binaryIntegrityCheck()` and is not affected.
-  - Upgrading esbuild directly would conflict with vite's peer dependency constraints.
-- **Risk Assessment**: Low — vulnerable Deno module code path not used
-- **Remediation Path**: Upgrade vite to a version that requires esbuild >=0.28.1 when available without breaking the current Node `>=22.22.0` baseline.
-
-#### 4. brace-expansion (GHSA-mh99-v99m-4gvg — High, CVE-2026-14257)
-- **Status**: Legacy `brace-expansion` major lines remain reachable only through build/release tooling chains such as `electron-builder` packaging helpers and legacy `minimatch` consumers. The project pins the newest compatible 1.x/2.x/5.x releases through `pnpm.overrides`, but the GHSA-mh99-v99m-4gvg fix is only available in the 5.x line.
-- **Vulnerability**: Unbounded brace expansion length can exhaust memory when attacker-controlled brace patterns reach `expand()`.
-- **Mitigation**:
-  - The dependency is **build-tooling only** and is never bundled into the shipped Electron runtime.
-  - Packaging and file glob patterns are developer-authored. No user-provided contact/import data reaches the glob/brace expansion code paths.
-  - Forcing `brace-expansion@5.0.8` globally breaks legacy `minimatch@3` consumers (`TypeError: expand is not a function`), so the remaining vulnerable build-tooling-only paths are accepted until upstream parent packages migrate to compatible dependencies.
-- **Risk Assessment**: Low — vulnerable code path requires attacker-controlled build glob input, which is not present in this project.
-- **Remediation Path**: Monitor `electron-builder`, `@electron/asar`, `@electron/universal`, `electron-winstaller`, `temp`/`rimraf`/`glob`, and `filelist` for releases that remove legacy `minimatch` consumers or support `brace-expansion >=5.0.8` without API breakage.
+No advisories are currently accepted. The machine-readable source of truth is
+[`scripts/audit-allowlist.json`](scripts/audit-allowlist.json), which remains empty while the raw audit is clean.
 
 ## Import Rate Limiting
 
@@ -124,7 +69,7 @@ When the allowlist cannot be updated in time (e.g. an emergency release), the ga
 
 ```bash
 SKIP_AUDIT=1 \
-  SKIP_AUDIT_REASON="GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks" \
+  SKIP_AUDIT_REASON="Emergency exception documented in SECURITY.md" \
   pnpm run release:usb
 ```
 
@@ -133,13 +78,13 @@ The value must be exactly `1` — other values (`true`, `yes`, `2`, or empty str
 **Bypass status is recorded in `RELEASE_MANIFEST.txt`** inside the produced USB package, so every artifact is traceable:
 
 ```
-Dependency audit: BYPASSED — reason: GHSA-w7jw-789q-3m8p accepted per SECURITY.md §Accepted Risks
+Dependency audit: BYPASSED — reason: Emergency exception documented in SECURITY.md
 ```
 
 A normal audited release records:
 
 ```
-Dependency audit: PASSED (allowlist 3 entries)
+Dependency audit: PASSED (allowlist 0 entries)
 ```
 
 **This override is for explicit, reviewed risk acceptance only.** Use it when:
