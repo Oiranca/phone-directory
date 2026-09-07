@@ -20,6 +20,7 @@ const SHIFT_LABELS: Record<string, string> = {
 // replacing the previous plain native <select>. Same values/order as
 // BEEPER_SHIFTS.
 const SHIFT_OPTIONS = BEEPER_SHIFTS.map((shift) => ({ value: shift, label: SHIFT_LABELS[shift] }));
+const RESULTS_PER_PAGE = 10;
 
 const EditIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -65,8 +66,11 @@ export const BeepersPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; deviceNumber: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
   const deferredQuery = useDeferredValue(query);
 
   const loadBeepers = async () => {
@@ -132,6 +136,30 @@ export const BeepersPage = () => {
     });
   }, [filteredImportedRecords]);
 
+  const totalResults = filteredRecords.length + visibleImportedRecords.length;
+  const totalPages = Math.max(1, Math.ceil(totalResults / RESULTS_PER_PAGE));
+  const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
+  const pageEnd = pageStart + RESULTS_PER_PAGE;
+  const currentPageRecords = filteredRecords.slice(pageStart, pageEnd);
+  const currentPageImportedRecords = visibleImportedRecords.slice(
+    Math.max(0, pageStart - filteredRecords.length),
+    Math.max(0, pageEnd - filteredRecords.length)
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredQuery]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const restoreEditFocus = () => {
+    requestAnimationFrame(() => {
+      (editTriggerRef.current?.isConnected ? editTriggerRef.current : searchRef.current)?.focus();
+    });
+  };
+
   const handleCreateNew = () => {
     setEditingId(null);
     setEditingImportedId(null);
@@ -171,10 +199,12 @@ export const BeepersPage = () => {
 
   const handleCancel = () => {
     if (isSaving) return;
+    const wasEditing = Boolean(editingId || editingImportedId);
     setShowForm(false);
     setEditingId(null);
     setEditingImportedId(null);
     setFormError("");
+    if (wasEditing) restoreEditFocus();
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -199,9 +229,11 @@ export const BeepersPage = () => {
         const created = await window.hospitalDirectory.addBeeper(formData);
         setRecords((prev) => [created, ...prev]);
       }
+      const wasEditing = Boolean(editingId || editingImportedId);
       setShowForm(false);
       setEditingId(null);
       setEditingImportedId(null);
+      if (wasEditing) restoreEditFocus();
     } catch (err) {
       setFormError(
         toCompactToastMessage(
@@ -282,6 +314,7 @@ export const BeepersPage = () => {
                 Buscar buscas
               </label>
               <input
+                ref={searchRef}
                 id="beeper-search"
                 data-page-search
                 value={query}
@@ -307,8 +340,7 @@ export const BeepersPage = () => {
             aria-atomic="true"
             className="text-xs font-medium text-slate-500"
           >
-            {filteredRecords.length + visibleImportedRecords.length}{" "}
-            {filteredRecords.length + visibleImportedRecords.length === 1 ? "resultado" : "resultados"}
+            {totalResults} {totalResults === 1 ? "resultado" : "resultados"}
           </p>
         </div>
       </div>
@@ -472,7 +504,7 @@ export const BeepersPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredRecords.map((record) => (
+                {currentPageRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 transition hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-xl bg-scs-mist px-3 py-1.5 text-base font-bold text-scs-blueDark ring-1 ring-scs-blue/15">
@@ -486,7 +518,11 @@ export const BeepersPage = () => {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => !isSaving && handleEdit(record)}
+                          onClick={(event) => {
+                            if (isSaving) return;
+                            editTriggerRef.current = event.currentTarget;
+                            handleEdit(record);
+                          }}
                           disabled={isSaving}
                           className="focus-ring inline-flex size-11 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
                           aria-label={`Editar busca ${record.deviceNumber}`}
@@ -506,7 +542,7 @@ export const BeepersPage = () => {
                     </td>
                   </tr>
                 ))}
-                {visibleImportedRecords.map((record) => (
+                {currentPageImportedRecords.map((record) => (
                   <tr key={record.id} className="border-b border-slate-100 bg-blue-50/30 transition hover:bg-blue-50/60">
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-xl bg-scs-mist px-3 py-1.5 text-base font-bold text-scs-blueDark ring-1 ring-scs-blue/15">
@@ -519,7 +555,11 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={() => !isSaving && handleEditImported(record)}
+                        onClick={(event) => {
+                          if (isSaving) return;
+                          editTriggerRef.current = event.currentTarget;
+                          handleEditImported(record);
+                        }}
                         disabled={isSaving}
                         className="focus-ring inline-flex size-11 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
                         aria-label={`Editar busca ${record.deviceNumber}`}
@@ -532,6 +572,31 @@ export const BeepersPage = () => {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <nav aria-label="Paginación de buscas" className="flex items-center justify-center gap-3 border-t border-slate-200 p-3">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                aria-label="Página anterior"
+                className="focus-ring rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <span aria-current="page" aria-live="polite" className="text-sm font-medium text-slate-600">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                aria-label="Página siguiente"
+                className="focus-ring rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Siguiente
+              </button>
+            </nav>
+          )}
         </div>
       )}
 
