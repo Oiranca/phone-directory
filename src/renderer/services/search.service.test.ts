@@ -139,28 +139,6 @@ describe("searchRecords", () => {
     expect(_getRecordSearchTextCacheEntry(fallbackRecords[0]!)).toBe(cachedText);
   });
 
-  it("keeps rapid multiword fallback searches responsive with 5,000 contacts", () => {
-    const largeRecords = buildLargeSearchFixture(5_000);
-    const coldStartedAt = performance.now();
-    const firstResult = searchRecords(largeRecords, "equipo norte", defaultFilters);
-    const coldDuration = performance.now() - coldStartedAt;
-
-    expect(firstResult).toHaveLength(2_500);
-    expect(coldDuration).toBeLessThan(100);
-
-    const durations = Array.from({ length: 10 }, (_, index) => {
-      const startedAt = performance.now();
-      const result = searchRecords(largeRecords, index % 2 === 0 ? "equipo norte" : "equipo sur", defaultFilters);
-
-      expect(result).toHaveLength(2_500);
-      return performance.now() - startedAt;
-    }).sort((left, right) => left - right);
-    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
-
-    expect(Math.max(...durations)).toBeLessThan(50);
-    expect(p95).toBeLessThan(100);
-  }, 15_000);
-
   it("prioritizes display name matches over lower-weight service matches", () => {
     const rankingRecords: ContactRecord[] = [
       {

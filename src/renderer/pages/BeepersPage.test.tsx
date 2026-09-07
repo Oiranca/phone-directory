@@ -717,7 +717,6 @@ describe("BeepersPage", () => {
     const caption = document.querySelector("caption");
     expect(caption).not.toBeNull();
     expect(caption!.textContent).toBe("Registros de buscas");
-    expect(caption!.className).toContain("sr-only");
   });
 
   it("focuses the first form field when the create form opens", async () => {

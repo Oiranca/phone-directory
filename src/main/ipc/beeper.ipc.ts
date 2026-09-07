@@ -5,9 +5,15 @@ import type { BeepersService } from "../services/beeper.service.js";
 import type { AppDataService } from "../services/app-data.service.js";
 import { BEEPERS_CHANNELS } from "../../shared/ipc/channels.js";
 
+const FILESYSTEM_ERROR_CODES = new Set([
+  "EACCES", "EBUSY", "EEXIST", "EIO", "EISDIR", "ELOOP", "EMFILE", "ENAMETOOLONG", "ENFILE",
+  "ENOENT", "ENOSPC", "ENOTDIR", "ENOTEMPTY", "EPERM", "EROFS", "EXDEV"
+]);
+
 /**
  * Maps a caught error to a renderer-safe message.
  * - ZodError: returns the first validation message (controlled, no internal paths).
+ * - Filesystem Error: logs its private details in main and returns stable copy.
  * - Known domain Error: returns err.message directly (already user-facing).
  * - Unexpected/unknown: logs details to main-process stderr only, returns a generic message.
  */
@@ -17,6 +23,10 @@ const toRendererError = (err: unknown, channel: string): Error => {
     return new Error(firstIssue?.message ?? "Datos de busca inválidos.");
   }
   if (err instanceof Error) {
+    if ("code" in err && typeof err.code === "string" && FILESYSTEM_ERROR_CODES.has(err.code)) {
+      console.error(`[beeper.ipc] Filesystem error on channel ${channel}:`, err);
+      return new Error("No se pudo completar la operación con el archivo de buscas.");
+    }
     return err;
   }
   // Unexpected non-Error throw — log internally, do not leak details to renderer

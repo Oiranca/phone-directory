@@ -25,10 +25,8 @@ import type {
 // any code runs — making channel renames compile-time safe without requiring
 // runtime hand-syncing across duplicated maps.
 //
-// The sister module src/preload/api.cts holds the same constants and
-// buildApi() factory for unit testing; the source-guard tests in
-// src/preload/index.test.ts verify that this file and api.cts stay in sync at
-// the text/value level.
+// The testable sister module src/preload/api.cts carries the same compile-time
+// channel and API checks; its compiled buildApi() is exercised behaviorally.
 const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
   createBackup:     "contacts:create-backup",

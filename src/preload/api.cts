@@ -1,13 +1,10 @@
 /**
  * Builds the HospitalDirectoryApi implementation object.
  *
- * This is the single source of truth for the preload bridge implementation.
- * src/preload/index.cts imports this factory and passes the result to
- * contextBridge.exposeInMainWorld.
+ * Testable mirror of the sandboxed preload bridge implementation.
  *
  * Compiled to CommonJS (api.cjs) by tsconfig.electron.json (module: NodeNext,
- * .cts extension forces CJS output). index.cts requires api.cjs at runtime —
- * CJS→CJS works with no ESM/CJS boundary issue.
+ * .cts extension forces CJS output).
  *
  * Channel constants are inlined here (not imported from channels.ts) for the
  * same reason as the original index.cts: src/shared/ipc/channels.ts is ESM

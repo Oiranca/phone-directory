@@ -986,7 +986,7 @@ describe("DirectoryPage", () => {
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("renders scan metadata and record actions without exposing restricted phone values", async () => {
+  it("renders record actions without visual ordinal or type markers and without exposing restricted phone values", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.location = { building: "Hospital General" };
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
@@ -1000,8 +1000,8 @@ describe("DirectoryPage", () => {
 
     const list = await screen.findByRole("list", { name: "Resultados del directorio" });
     const row = within(list).getByRole("button", { name: /admisión general/i });
-    expect(within(row).getByLabelText("Resultado 1")).toBeInTheDocument();
-    expect(within(row).getByLabelText("Servicio")).toBeInTheDocument();
+    expect(within(row).queryByLabelText("Resultado 1")).not.toBeInTheDocument();
+    expect(within(row).queryByLabelText("Servicio")).not.toBeInTheDocument();
     expect(within(row).getByText("Admisión · Hospital General")).toBeInTheDocument();
     expect(within(row).getByText("Contacto restringido")).toBeInTheDocument();
     expect(within(row).queryByText(contacts.records[0]!.contactMethods.phones[0]!.number)).not.toBeInTheDocument();
