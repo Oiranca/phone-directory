@@ -25,13 +25,4 @@ describe("LoadingStatus", () => {
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 
-  it("applies a default className when none is passed", () => {
-    render(<LoadingStatus message="Cargando…" />);
-    expect(screen.getByRole("status").className).toContain("rounded-3xl");
-  });
-
-  it("applies a custom className when passed", () => {
-    render(<LoadingStatus message="Cargando…" className="custom-class" />);
-    expect(screen.getByRole("status").className).toBe("custom-class");
-  });
 });

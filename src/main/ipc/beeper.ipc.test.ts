@@ -239,6 +239,25 @@ describe("registerBeepersIpc", () => {
       expect((err as Error).message).toBe("El número de busca \"B-001\" ya está registrado.");
     });
 
+    it.each(["ENOENT", "EACCES", "EPERM", "EIO", "ELOOP", "ENOSPC"])(
+      "maps filesystem error %s without exposing its absolute path",
+      async (code) => {
+        const filesystemError = Object.assign(
+          new Error(`${code}: failed '/Users/operator/private/beepers.json'`),
+          { code }
+        );
+        serviceMock.list.mockRejectedValueOnce(filesystemError);
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+        const err = await invoke("beepers:list").catch((error: unknown) => error);
+
+        expect((err as Error).message).toBe("No se pudo completar la operación con el archivo de buscas.");
+        expect((err as Error).message).not.toContain("/Users/operator");
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("beepers:list"), filesystemError);
+        consoleSpy.mockRestore();
+      }
+    );
+
     it("converts non-Error throws to a generic message and logs to console.error", async () => {
       serviceMock.remove.mockRejectedValueOnce("raw string rejection");
 

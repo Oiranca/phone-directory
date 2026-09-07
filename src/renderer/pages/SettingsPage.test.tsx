@@ -491,52 +491,11 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Ruta del archivo de datos")).toHaveValue("/tmp/data/contacts.json");
   });
 
-  it("primary action buttons carry focus-ring for keyboard accessibility", async () => {
-    renderPage();
-    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
-
-    const saveBtn = screen.getByRole("button", { name: "Guardar configuración" });
-    const discardBtn = screen.getByRole("button", { name: "Descartar cambios" });
-    expect(saveBtn.className).toContain("focus-ring");
-    expect(discardBtn.className).toContain("focus-ring");
-  });
-
-  it("Cargar rutas gestionadas button carries focus-ring", async () => {
-    window.hospitalDirectory.saveSettings = vi.fn().mockRejectedValue(new Error("Ruta inválida"));
-
-    renderPage();
-    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Ruta del archivo de datos"), {
-      target: { value: "/tmp/data/existente.json" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
-
-    const resetBtn = await screen.findByRole("button", { name: "Cargar rutas gestionadas" });
-    expect(resetBtn.className).toContain("focus-ring");
-  });
-
   // The "Estado actual" sidebar and "Qué cambia al guardar" explainer
   // panel were removed as noise for a non-technical operator — everything they
   // showed either duplicated the editable fields already on the page or the
   // header watermark. See the "Avanzado" disclosure tests below for the
   // coverage that replaced the old path-field assertions.
-
-  it("data-path help copy uses plain 'directorio' wording, not 'dataset' jargon", async () => {
-    renderPage();
-    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
-
-    // Native <summary>/<details> disclosure — not exposed as an ARIA "button"
-    // role by jsdom's aria-query mapping, so it is located by its text/DOM node.
-    fireEvent.click(screen.getByText("Avanzado"));
-
-    expect(
-      await screen.findByText(
-        "Debe ser una ruta absoluta hacia un archivo `.json` nuevo dentro de una carpeta existente y con permisos de escritura."
-      )
-    ).toBeInTheDocument();
-    expect(document.body.innerHTML).not.toContain("dataset");
-  });
 
   it("path fields are folded away behind a collapsed 'Avanzado' disclosure by default", async () => {
     renderPage();

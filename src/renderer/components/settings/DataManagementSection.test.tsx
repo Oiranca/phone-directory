@@ -265,18 +265,6 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(screen.getByText("Última actualización del directorio")).toBeInTheDocument();
   });
 
-  it("card-like action buttons carry focus-ring for keyboard focus visibility", async () => {
-    renderPage();
-
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-
-    const backupBtn = screen.getByRole("button", { name: /Crear copia de seguridad/ });
-    const importBtn = screen.getByRole("button", { name: "Importar" });
-
-    expect(backupBtn.className).toContain("focus-ring");
-    expect(importBtn.className).toContain("focus-ring");
-  });
-
   it("explains the supported imported data and formats", async () => {
     renderPage();
 

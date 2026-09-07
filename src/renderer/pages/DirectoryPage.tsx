@@ -12,7 +12,6 @@ import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/cont
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 import { DirectoryHighlightCard } from "../components/directory/DirectoryHighlightCard";
 import { GENERIC_CCEE_APPOINTMENTS } from "../../shared/constants/directoryHighlights";
-import { RECORD_TYPE_LABELS } from "../../shared/constants/catalogs";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -543,7 +542,7 @@ export const DirectoryPage = () => {
             // e2e assertion).
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-1 -mx-1 -my-1"
           >
-          {currentPageRecords.map((record, index) => {
+          {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
@@ -551,7 +550,6 @@ export const DirectoryPage = () => {
             const listContext = [record.organization.department, buildLocationTitleFallback(record.location)]
               .filter((value, contextIndex, values) => Boolean(value?.trim()) && values.indexOf(value) === contextIndex)
               .join(" · ");
-            const recordTypeLabel = RECORD_TYPE_LABELS[record.type];
             // Subtitle combines the contact's name (unless it's just a
             // duplicate of organization.service, which happens for ODS-imported
             // records whose blank "Nombre" column fell back to the service
@@ -578,14 +576,7 @@ export const DirectoryPage = () => {
                       : "hover:bg-slate-50"
                   ].join(" ")}
                 >
-                  <div className="flex gap-3">
-                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600" aria-label={`Resultado ${pageStart + index + 1}`}>
-                      {pageStart + index + 1}
-                    </span>
-                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-scs-mist text-xs font-bold text-scs-blueDark" aria-label={recordTypeLabel}>
-                      {recordTypeLabel.slice(0, 1)}
-                    </span>
-                    <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     {/* Prefix the title with the service when it adds context
                         beyond displayName (see buildDisplayTitle). */}
                     <h3 className="truncate font-semibold text-scs-blueDark">
@@ -606,7 +597,6 @@ export const DirectoryPage = () => {
                       </span>
                     )}
                   </div>
-                    </div>
                   </div>
                 </button>
                 {isPrimaryPhoneSafe && primaryPhone && (

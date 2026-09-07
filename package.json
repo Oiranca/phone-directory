@@ -27,6 +27,7 @@
     "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
     "test:e2e:packaged": "node scripts/packaged-startup-smoke.mjs",
     "preview": "vite preview",
+    "pretest": "pnpm run build:electron",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

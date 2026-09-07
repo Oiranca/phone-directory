@@ -89,10 +89,9 @@ function.
 - `src/preload/index.cts` — `satisfies typeof _CanonicalXxx` type-only
   imports from `shared/ipc/channels.ts` catch channel renames at compile
   time.
-- `src/preload/api.cts` + `src/preload/index.test.ts` — a sister module used
-  for unit testing preload logic (since `index.cts` itself is hard to
-  exercise directly under Electron's sandbox constraints); a source-guard
-  test verifies the two stay in sync.
+- `src/preload/index.test.ts` — loads the compiled `index.cjs` with Electron
+  mocked and verifies every exposed method routes to the canonical channel,
+  propagates failures, and wires push-event cleanup correctly.
 - `src/shared/ipc/api.contract.test.ts` — pins `HospitalDirectoryApi`'s
   shape.
 - `src/main/ipc/*.ipc.test.ts` — one test file per `*.ipc.ts` handler

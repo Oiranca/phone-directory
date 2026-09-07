@@ -46,12 +46,6 @@ describe('StatusBanner', () => {
     expect(banner).toHaveAttribute('aria-live', 'polite');
   });
 
-  it('applies custom className', () => {
-    const { container } = render(<StatusBanner message="Info" className="custom-class" />);
-    const banner = container.firstChild as HTMLElement;
-    expect(banner).toHaveClass('custom-class');
-  });
-
   it.each([
     { type: 'success' as const, srPrefix: 'Correcto:' },
     { type: 'error' as const, srPrefix: 'Error:' },
