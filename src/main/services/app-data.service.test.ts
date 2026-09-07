@@ -1883,9 +1883,11 @@ describe("AppDataService", () => {
 
   it("backfills lastImportedAt from the most recent of several dataset-replace/bulk-import audit entries", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
+    const getAuditLogSpy = vi.spyOn(AppDataAuditFacade.prototype, "getAuditLog");
 
     const auditLogFilePath = path.join(testRoot, "data", "audit-log.json");
     const olderTimestamp = "2025-11-01T08:00:00.000Z";
@@ -1902,6 +1904,27 @@ describe("AppDataService", () => {
     const bootstrap = await service.getBootstrapData();
 
     expect(bootstrap.settings.lastImportedAt).toBe(newerTimestamp);
+    expect(getAuditLogSpy).toHaveBeenCalledOnce();
+    expect(getAuditLogSpy).toHaveBeenCalledWith({});
+  });
+
+  it("keeps bootstrap best-effort when the legacy audit log is malformed", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await fs.writeFile(
+      path.join(testRoot, "data", "audit-log.json"),
+      JSON.stringify([{ timestamp: "invalid", editor: "Samuel", action: "unknown" }]),
+      "utf-8"
+    );
+    const getAuditLogSpy = vi.spyOn(AppDataAuditFacade.prototype, "getAuditLog");
+
+    const bootstrap = await service.getBootstrapData();
+
+    expect(bootstrap.settings.lastImportedAt).toBeUndefined();
+    expect(getAuditLogSpy).toHaveBeenCalledOnce();
   });
 
   it("leaves lastImportedAt unset when the audit log has no historical import entry", async () => {
@@ -1917,6 +1940,7 @@ describe("AppDataService", () => {
 
   it("does not overwrite an existing lastImportedAt with an audit-log backfill", async () => {
     const { AppDataService } = await import("./app-data.service.js");
+    const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
 
     const service = new AppDataService();
     await service.ensureInitialFiles();
@@ -1934,10 +1958,12 @@ describe("AppDataService", () => {
       ]),
       "utf-8"
     );
+    const getAuditLogSpy = vi.spyOn(AppDataAuditFacade.prototype, "getAuditLog");
 
     const bootstrap = await service.getBootstrapData();
 
     expect(bootstrap.settings.lastImportedAt).toBe(importResult.settings.lastImportedAt);
+    expect(getAuditLogSpy).not.toHaveBeenCalled();
   });
 
   it("concurrency regression: bootstrap backfill does not clobber a concurrent saveSettings", async () => {

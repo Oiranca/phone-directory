@@ -1276,15 +1276,11 @@ export class AppDataService {
     }
 
     try {
-      const [bulkImportResult, datasetReplaceResult] = await Promise.all([
-        this.auditFacade.getAuditLog({ action: "bulk-import" }),
-        this.auditFacade.getAuditLog({ action: "dataset-replace" })
-      ]);
-
-      const candidateTimestamps = [bulkImportResult.entries[0]?.timestamp, datasetReplaceResult.entries[0]?.timestamp]
-        .filter((timestamp): timestamp is string => Boolean(timestamp))
-        .sort();
-      const latestTimestamp = candidateTimestamps[candidateTimestamps.length - 1];
+      const auditResult = await this.auditFacade.getAuditLog({});
+      const latestTimestamp = auditResult.entries.reduce<string | undefined>((latest, entry) => {
+        if (entry.action !== "bulk-import" && entry.action !== "dataset-replace") return latest;
+        return !latest || entry.timestamp > latest ? entry.timestamp : latest;
+      }, undefined);
 
       if (!latestTimestamp) {
         return settings;
