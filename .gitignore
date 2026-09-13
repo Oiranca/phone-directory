@@ -40,7 +40,14 @@ data/*.json
 !data/*.example.json
 
 # Local Codex/session artifacts
-.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/ui-ux-pro-max/
+!.codex/skills/ui-ux-pro-max/**
+!.codex/agents/
+.codex/agents/*
+!.codex/agents/kx-*
 .agent-cache/
 AGENTS.md
 **/HANDOFF.md
