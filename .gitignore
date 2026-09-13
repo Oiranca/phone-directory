@@ -40,7 +40,10 @@ data/*.json
 !data/*.example.json
 
 # Local Codex/session artifacts
-.codex/
+.codex/*
+!.codex/agents/
+.codex/agents/*
+!.codex/agents/kx-*
 .agent-cache/
 AGENTS.md
 **/HANDOFF.md
