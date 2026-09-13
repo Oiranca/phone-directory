@@ -871,8 +871,14 @@ describe("AppDataService", () => {
         }
       })
     );
-    vi.spyOn(fs, "copyFile")
-      .mockRejectedValueOnce(Object.assign(new Error("copy failed"), { code: "EACCES" }));
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let contactsReadCount = 0;
+    vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json" && ++contactsReadCount === 2) {
+        throw Object.assign(new Error("copy failed"), { code: "EACCES", path: filePath });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
 
     await service.createRecord({
       beepers: [],
@@ -1648,20 +1654,20 @@ describe("AppDataService", () => {
     const backupDirectoryPath = path.join(testRoot, "backups");
     const backupFilePath = path.join(backupDirectoryPath, "contacts-backup.json");
 
-    const copyFileSpy = vi
-      .spyOn(fs, "copyFile")
-      .mockRejectedValueOnce(
-        Object.assign(new Error("EACCES: permission denied"), {
-          code: "EACCES",
-          path: contactsFilePath,
-          dest: backupFilePath
-        })
-      );
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const readFileSpy = vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json") {
+        throw Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES", path: contactsFilePath, dest: backupFilePath
+        });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
 
     await expect(service.createBackup()).rejects.toThrow(
       /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json\. Ruta de destino: contacts-backup\.json.*No tienes permisos suficientes para acceder al archivo o directorio\./
     );
-    expect(copyFileSpy).toHaveBeenCalledTimes(1);
+    expect(readFileSpy.mock.calls.filter(([filePath]) => path.basename(filePath as string) === "contacts.json")).toHaveLength(1);
   });
 
   it("surfaces the affected destination when export writing fails", async () => {
@@ -1696,21 +1702,20 @@ describe("AppDataService", () => {
     await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
     await fs.writeFile(sourceFilePath, JSON.stringify(defaultContacts, null, 2) + "\n", "utf-8");
 
-    const copyFileSpy = vi
-      .spyOn(fs, "copyFile")
-      .mockRejectedValueOnce(
-        Object.assign(new Error("ENOSPC: no space left on device"), {
-          code: "ENOSPC",
-          path: path.join(testRoot, "data", "contacts.json")
-        })
-      );
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const readFileSpy = vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json") {
+        throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC", path: filePath });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
     const backupDirectoryPath = path.join(testRoot, "backups");
     const contactsFilePath = path.join(testRoot, "data", "contacts.json");
 
     await expect(service.importDataset(sourceFilePath)).rejects.toThrow(
       /No se pudo crear la copia de seguridad del directorio\. Ruta afectada: contacts\.json.*Ruta de origen: contacts\.json.*No hay espacio suficiente en disco para completar la operación\./
     );
-    expect(copyFileSpy).toHaveBeenCalledTimes(1);
+    expect(readFileSpy.mock.calls.filter(([filePath]) => path.basename(filePath as string) === "contacts.json")).toHaveLength(1);
   });
 
   it("imports a dataset from disk and creates an automatic backup first", async () => {
@@ -4813,7 +4818,7 @@ describe("AppDataService", () => {
     expect(wxCallCount).toBe(1);
   });
 
-  it("atomic claim: 0-byte placeholder is removed when copyFile fails, leaving no orphan in the backup directory", async () => {
+  it("atomic claim: 0-byte placeholder is removed when the write fails, leaving no orphan in the backup directory", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -4822,14 +4827,13 @@ describe("AppDataService", () => {
 
     const backupDir = path.join(testRoot, "backups");
 
-    // Reject the copyFile so the placeholder written by fs.open('wx') would be
-    // left behind if createBackupCore does not clean it up.
-    vi.spyOn(fs, "copyFile").mockRejectedValueOnce(
-      Object.assign(new Error("ENOSPC: no space left on device"), {
-        code: "ENOSPC",
-        path: path.join(testRoot, "data", "contacts.json")
-      })
-    );
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json") {
+        throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC", path: filePath });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
 
     await expect(service.createBackup()).rejects.toThrow(/No se pudo crear la copia de seguridad/);
 
@@ -4839,6 +4843,40 @@ describe("AppDataService", () => {
     for (const file of jsonFiles) {
       const stats = await fs.stat(path.join(backupDir, file));
       expect(stats.size, `Expected no 0-byte placeholder but found ${file} with size 0`).toBeGreaterThan(0);
+    }
+  });
+
+  it("rejects a backup path swap before writing without touching the victim", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const sourceFilePath = path.join(testRoot, "data", "contacts.json");
+    const victimPath = path.join(testRoot, "victim.json");
+    await actualFs.writeFile(victimPath, "victim remains unchanged", "utf-8");
+    const realOpen = fs.open.bind(fs);
+    let claimedPath: string | undefined;
+    const openSpy = vi.spyOn(fs, "open").mockImplementation(async (filePath, flags, ...args) => {
+      if (flags === "wx") claimedPath = filePath as string;
+      return realOpen(filePath, flags as never, ...(args as []));
+    });
+    const readFileSpy = vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === path.basename(sourceFilePath) && claimedPath) {
+        await actualFs.unlink(claimedPath);
+        await actualFs.symlink(victimPath, claimedPath);
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
+
+    try {
+      await expect(service.createBackup()).rejects.toThrow(/No se pudo crear la copia de seguridad/);
+      expect(await actualFs.readFile(victimPath, "utf-8")).toBe("victim remains unchanged");
+      expect((await actualFs.lstat(claimedPath!)).isSymbolicLink()).toBe(true);
+    } finally {
+      openSpy.mockRestore();
+      readFileSpy.mockRestore();
     }
   });
 

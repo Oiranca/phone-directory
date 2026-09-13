@@ -50,8 +50,6 @@ import {
   ensureDirectory,
   ensurePrivateDirectory,
   readJsonFile,
-  SENSITIVE_FILE_MODE,
-  supportsPrivateMode,
   writeJsonFile
 } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
@@ -302,17 +300,16 @@ export class AppDataService {
     errorMessage: string,
     sourceFilePath: string
   ) {
-    const backupFilePath = await this.createBackupFilePathUnique(settings, prefix);
-    // The atomic open in createBackupFilePathUnique left a 0-byte placeholder
-    // at backupFilePath. If the copy fails we must remove that placeholder so
-    // it does not appear as a valid (but empty) backup artifact.
+    const claim = await this.createBackupFilePathUnique(settings, prefix);
+    let complete = false;
     try {
-      await this.copyFileWithContext(sourceFilePath, backupFilePath, errorMessage);
-    } catch (error) {
-      await fs.unlink(backupFilePath).catch(() => undefined);
-      throw error;
+      await this.copyFileToClaimedBackupWithContext(sourceFilePath, claim.path, claim.fileHandle, errorMessage);
+      complete = true;
+      return claim.path;
+    } finally {
+      if (!complete) await this.removeClaimedBackupFile(claim.path, claim.fileHandle);
+      await claim.fileHandle.close().catch(() => undefined);
     }
-    return backupFilePath;
   }
 
   async listBackups(): Promise<BackupListItemInternal[]> {
@@ -1350,12 +1347,9 @@ export class AppDataService {
 
       try {
         // 'wx' = O_CREAT | O_EXCL | O_WRONLY — fails with EEXIST if the file
-        // already exists.  On success we atomically own this path.
+        // already exists. Keep its handle: pathname writes would reopen TOCTOU.
         fileHandle = await fs.open(candidatePath, "wx", 0o600);
-        // Close immediately; the subsequent copyFile will overwrite the empty
-        // placeholder we just created (which is safe because we hold the name).
-        await fileHandle.close();
-        return candidatePath;
+        return { path: candidatePath, fileHandle };
       } catch (error) {
         await fileHandle?.close().catch(() => undefined);
         const errno = this.getErrnoException(error);
@@ -2722,23 +2716,44 @@ export class AppDataService {
     return settings.editorName.trim() || "Editor local";
   }
 
-  private async copyFileWithContext(sourceFilePath: string, targetFilePath: string, message: string) {
+  private async copyFileToClaimedBackupWithContext(
+    sourceFilePath: string,
+    targetFilePath: string,
+    targetFileHandle: fs.FileHandle,
+    message: string
+  ) {
     try {
       const canonicalSourceFilePath = await this.resolveCanonicalDataFilePath(sourceFilePath, message, false);
-      const canonicalTargetFilePath = path.join(
-        await this.resolveCanonicalDirectoryPath(path.dirname(targetFilePath), message),
-        path.basename(targetFilePath)
-      );
-
-      await fs.copyFile(canonicalSourceFilePath, canonicalTargetFilePath);
-      if (supportsPrivateMode()) {
-        await fs.chmod(canonicalTargetFilePath, SENSITIVE_FILE_MODE);
-      }
+      await targetFileHandle.writeFile(await fs.readFile(canonicalSourceFilePath));
+      await targetFileHandle.sync();
+      await this.assertClaimedBackupPathMatchesHandle(targetFilePath, targetFileHandle);
     } catch (error) {
       throw this.toFilesystemError(error, message, {
         sourceFilePath,
         targetFilePath
       });
+    }
+  }
+
+  private async assertClaimedBackupPathMatchesHandle(filePath: string, fileHandle: fs.FileHandle) {
+    const [opened, current] = await Promise.all([
+      fileHandle.stat({ bigint: true }),
+      fs.lstat(filePath, { bigint: true })
+    ]);
+    if (current.isSymbolicLink() || opened.dev !== current.dev || opened.ino !== current.ino) {
+      throw Object.assign(new Error("La ruta de la copia de seguridad cambió durante la escritura."), {
+        code: "ELOOP",
+        path: filePath
+      });
+    }
+  }
+
+  private async removeClaimedBackupFile(filePath: string, fileHandle: fs.FileHandle) {
+    try {
+      await this.assertClaimedBackupPathMatchesHandle(filePath, fileHandle);
+      await fs.unlink(filePath);
+    } catch {
+      // A replacement belongs to another writer; never unlink it during cleanup.
     }
   }
 
