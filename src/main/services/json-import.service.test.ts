@@ -186,10 +186,18 @@ describe("schema-aware JSON import", () => {
     const service = new AppDataService({ beepersService });
     await service.ensureInitialFiles();
     const contactsBefore = await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8");
-    const copySpy = vi.spyOn(fs, "copyFile").mockRejectedValueOnce(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let failureInjected = false;
+    const readSpy = vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json" && !failureInjected) {
+        failureInjected = true;
+        throw Object.assign(new Error("EACCES"), { code: "EACCES", path: filePath });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
 
     await expect(service.importJsonFile(combinedPath)).rejects.toThrow("No se pudo crear la copia");
-    expect(copySpy).toHaveBeenCalledTimes(1);
+    expect(readSpy.mock.calls.filter(([filePath]) => path.basename(filePath as string) === "contacts.json")).toHaveLength(1);
     expect(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")).toBe(contactsBefore);
     expect(await beepersService.list()).toEqual([]);
     expect(await beepersService.listImported()).toEqual([]);
