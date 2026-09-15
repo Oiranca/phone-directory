@@ -27,6 +27,8 @@ export const MAX_CRASH_LOG_MESSAGE_LENGTH = 1_000;
 export const MAX_CRASH_LOG_STACK_LENGTH = 4_000;
 export const MAX_CRASH_LOG_ENTRIES = 100;
 
+const MAX_ROTATION_FILE_ATTEMPTS = 5;
+
 const DIAGNOSTIC_SUFFIX_PATTERNS = [
   /\s+Ruta afectada:.*$/u,
   /\s+Ruta de origen:.*$/u,
@@ -101,9 +103,47 @@ const sanitizeExistingCrashLogEntry = (line: string): string | null => {
   }
 };
 
-const sanitizeAndRotateCrashLogIfNeeded = (filePath: string): void => {
+const assertPathMatchesHandle = (filePath: string, fileDescriptor: number): void => {
+  const opened = fs.fstatSync(fileDescriptor, { bigint: true });
+  const current = fs.lstatSync(filePath, { bigint: true });
+  if (current.isSymbolicLink() || opened.dev !== current.dev || opened.ino !== current.ino) {
+    throw Object.assign(new Error("Crash-log rotation path changed during write."), { code: "ELOOP" });
+  }
+};
+
+const createRotationFile = (filePath: string, contents: string): { fileDescriptor: number; tempFilePath: string } => {
+  for (let attempt = 0; attempt < MAX_ROTATION_FILE_ATTEMPTS; attempt += 1) {
+    const tempFilePath = `${filePath}.${globalThis.crypto.randomUUID()}.tmp`;
+    let fileDescriptor: number | undefined;
+
+    try {
+      fileDescriptor = fs.openSync(
+        tempFilePath,
+        "wx",
+        supportsPrivateMode() ? SENSITIVE_FILE_MODE : undefined
+      );
+      fs.writeFileSync(fileDescriptor, contents, "utf-8");
+      fs.fsyncSync(fileDescriptor);
+      assertPathMatchesHandle(tempFilePath, fileDescriptor);
+
+      return { fileDescriptor, tempFilePath };
+    } catch (error) {
+      if (fileDescriptor !== undefined) {
+        fs.closeSync(fileDescriptor);
+      }
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw Object.assign(new Error("Could not create a unique crash-log rotation file."), { code: "EEXIST" });
+};
+
+const sanitizeAndRotateCrashLogIfNeeded = (filePath: string, recordContents: string): boolean => {
   if (!fs.existsSync(filePath)) {
-    return;
+    return false;
   }
 
   const contents = fs.readFileSync(filePath, "utf-8");
@@ -114,23 +154,23 @@ const sanitizeAndRotateCrashLogIfNeeded = (filePath: string): void => {
     .filter((line): line is string => Boolean(line));
 
   const retainedLines = sanitizedLines.slice(-(MAX_CRASH_LOG_ENTRIES - 1));
-  const tempFilePath = `${filePath}.tmp`;
-  fs.writeFileSync(
-    tempFilePath,
-    retainedLines.length > 0 ? `${retainedLines.join("\n")}\n` : "",
-    supportsPrivateMode()
-      ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
-      : "utf-8"
+  const rotationFile = createRotationFile(
+    filePath,
+    retainedLines.length > 0 ? `${retainedLines.join("\n")}\n` : ""
   );
-  if (supportsPrivateMode()) {
-    // fs.writeFileSync only applies `mode` when it creates the tmp file. If a stale `.tmp`
-    // file was left behind on disk (e.g. by a crash of a pre-hardening build) at a permissive
-    // mode, writeFileSync reuses it without touching its mode, and the rename below would then
-    // promote that stale, permissive file to become the final file. Explicitly chmod the tmp
-    // file after writing so its mode is always correct before it is ever renamed into place.
-    fs.chmodSync(tempFilePath, SENSITIVE_FILE_MODE);
+  try {
+    fs.renameSync(rotationFile.tempFilePath, filePath);
+    assertPathMatchesHandle(filePath, rotationFile.fileDescriptor);
+    fs.writeFileSync(rotationFile.fileDescriptor, recordContents, "utf-8");
+    if (supportsPrivateMode()) {
+      fs.fchmodSync(rotationFile.fileDescriptor, SENSITIVE_FILE_MODE);
+    }
+    fs.fsyncSync(rotationFile.fileDescriptor);
+    assertPathMatchesHandle(filePath, rotationFile.fileDescriptor);
+    return true;
+  } finally {
+    fs.closeSync(rotationFile.fileDescriptor);
   }
-  fs.renameSync(tempFilePath, filePath);
 };
 
 /**
@@ -145,7 +185,6 @@ export const logCrash = (entry: CrashLogInput): void => {
     if (supportsPrivateMode()) {
       fs.chmodSync(path.dirname(filePath), PRIVATE_DIRECTORY_MODE);
     }
-    sanitizeAndRotateCrashLogIfNeeded(filePath);
 
     const record: CrashLogEntry = {
       timestamp: entry.timestamp ?? new Date().toISOString(),
@@ -153,10 +192,14 @@ export const logCrash = (entry: CrashLogInput): void => {
       message: sanitizeCrashLogText(entry.message, MAX_CRASH_LOG_MESSAGE_LENGTH),
       ...(entry.stack ? { stack: sanitizeCrashLogText(entry.stack, MAX_CRASH_LOG_STACK_LENGTH) } : {})
     };
+    const recordContents = `${JSON.stringify(record)}\n`;
+    if (sanitizeAndRotateCrashLogIfNeeded(filePath, recordContents)) {
+      return;
+    }
 
     fs.appendFileSync(
       filePath,
-      `${JSON.stringify(record)}\n`,
+      recordContents,
       supportsPrivateMode()
         ? { encoding: "utf-8", mode: SENSITIVE_FILE_MODE }
         : "utf-8"
