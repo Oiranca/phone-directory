@@ -745,6 +745,40 @@ describe("BeepersPage", () => {
     });
   });
 
+  it("hides an imported search row when the same visible beeper exists manually", async () => {
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue([
+        {
+          id: "bsc_duplicate",
+          deviceNumber: "7958",
+          assignedTo: "Reumatología",
+          department: "Hospitalización",
+          role: "Residente/a",
+          shift: "mañana"
+        }
+      ]),
+      listImportedBeepers: vi.fn().mockResolvedValue([
+        {
+          id: "ibsc_duplicate",
+          deviceNumber: " 7958 ",
+          name: " reumatología ",
+          department: " hospitalización ",
+          category: "residente/a",
+          sourceSheet: "Buscas_Todos",
+          sourceRow: 2
+        }
+      ])
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText(/Buscar buscas/i), { target: { value: "reu" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("1 resultado")).toBeInTheDocument();
+      expect(screen.getAllByText("7958")).toHaveLength(1);
+    });
+  });
+
   it("shows name/category for new-layout imported records and finds them by search", async () => {
     const newLayoutRecord: ImportedBeeperRecord = {
       id: "ibsc_00000003",

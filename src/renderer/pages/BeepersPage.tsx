@@ -46,10 +46,16 @@ const emptyForm = (): EditableBeeperRecord => ({
 const normalizeVisibleBeeperCell = (value: string): string =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 
-const importedBeeperDisplayKey = (record: ImportedBeeperRecord): string =>
-  [record.deviceNumber, record.name ?? record.holderType ?? "", record.department, record.category ?? ""]
+const beeperDisplayKey = (values: string[]): string =>
+  values
     .map(normalizeVisibleBeeperCell)
     .join("\u0000");
+
+const manualBeeperDisplayKey = (record: BeeperRecord): string =>
+  beeperDisplayKey([record.deviceNumber, record.assignedTo, record.department, record.role]);
+
+const importedBeeperDisplayKey = (record: ImportedBeeperRecord): string =>
+  beeperDisplayKey([record.deviceNumber, record.name ?? record.holderType ?? "", record.department, record.category ?? ""]);
 
 export const BeepersPage = () => {
   const { pushToast } = useToast();
@@ -127,14 +133,14 @@ export const BeepersPage = () => {
   }, [importedRecords, deferredQuery]);
 
   const visibleImportedRecords = useMemo(() => {
-    const visibleKeys = new Set<string>();
+    const visibleKeys = new Set(filteredRecords.map(manualBeeperDisplayKey));
     return filteredImportedRecords.filter((record) => {
       const key = importedBeeperDisplayKey(record);
       if (visibleKeys.has(key)) return false;
       visibleKeys.add(key);
       return true;
     });
-  }, [filteredImportedRecords]);
+  }, [filteredImportedRecords, filteredRecords]);
 
   const totalResults = filteredRecords.length + visibleImportedRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalResults / RESULTS_PER_PAGE));
