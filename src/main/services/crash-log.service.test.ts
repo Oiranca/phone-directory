@@ -187,36 +187,116 @@ describe("logCrash", () => {
   });
 
   it.runIf(process.platform !== "win32")(
-    "chmods a stale pre-existing rotation .tmp file to the private mode before it gets renamed into place",
+    "does not follow a pre-created legacy rotation symlink",
     async () => {
       const { logCrash } = await import("./crash-log.service.js");
       const crashLogPath = path.join(testRoot, "data", "crash-log.jsonl");
-
-      // First write creates the crash log file so the next logCrash call takes the
-      // sanitize-and-rotate path (which requires the file to already exist).
-      logCrash({ source: "uncaughtException", message: "First" });
-
-      // Simulate a `.tmp` rotation file left behind by a crash of a pre-hardening build: it
-      // exists on disk already, at a permissive mode. `fs.writeFileSync` only applies its
-      // `mode` option when it CREATES the file — since this one already exists, it must be
-      // explicitly chmodded, or the stale permissive mode would be promoted to the final file
-      // by the subsequent rename.
       const staleTmpPath = `${crashLogPath}.tmp`;
-      await fs.writeFile(staleTmpPath, "", { mode: 0o644 });
-      expect((await fs.stat(staleTmpPath)).mode & 0o777).toBe(0o644);
+      const victimPath = path.join(testRoot, "victim.jsonl");
 
-      // Assert the fix directly: the rotation path must chmod the stale tmp file to the
-      // private mode BEFORE renaming it over the destination — not just rely on a later,
-      // unrelated chmod of the final path masking a stale rotation tmp file.
-      const chmodSpy = vi.spyOn(fsSync, "chmodSync");
+      logCrash({ source: "uncaughtException", message: "First" });
+      await fs.writeFile(victimPath, "untouched", "utf-8");
+      await fs.symlink(victimPath, staleTmpPath);
 
       logCrash({ source: "unhandledRejection", message: "Second" });
 
-      const tmpChmodCall = chmodSpy.mock.calls.find(([target]) => target === staleTmpPath);
-      expect(tmpChmodCall).toBeDefined();
-      expect(tmpChmodCall?.[1]).toBe(0o600);
-
+      expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
       expect((await fs.stat(crashLogPath)).mode & 0o777).toBe(0o600);
+    }
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "does not modify a victim when a rotation path is swapped after its identity check",
+    async () => {
+      const { logCrash } = await import("./crash-log.service.js");
+      const crashLogPath = path.join(testRoot, "data", "crash-log.jsonl");
+      const victimPath = path.join(testRoot, "victim.jsonl");
+
+      logCrash({ source: "uncaughtException", message: "First" });
+      await fs.writeFile(victimPath, "untouched", { encoding: "utf-8", mode: 0o644 });
+
+      const originalRenameSync = fsSync.renameSync.bind(fsSync);
+      let swapped = false;
+      const writeFileSyncSpy = vi.spyOn(fsSync, "writeFileSync");
+      vi.spyOn(fsSync, "renameSync").mockImplementation((oldPath, newPath) => {
+        if (
+          !swapped &&
+          typeof oldPath === "string" &&
+          oldPath.startsWith(`${crashLogPath}.`) &&
+          oldPath.endsWith(".tmp") &&
+          newPath === crashLogPath
+        ) {
+          fsSync.unlinkSync(oldPath);
+          fsSync.linkSync(victimPath, oldPath);
+          swapped = true;
+        }
+        return originalRenameSync(oldPath, newPath);
+      });
+
+      logCrash({ source: "unhandledRejection", message: "Second" });
+
+      expect(swapped).toBe(true);
+      expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+      expect((await fs.stat(victimPath)).mode & 0o777).toBe(0o644);
+      expect(writeFileSyncSpy).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "rejects a hard-link rotation swap after exclusive creation",
+    async () => {
+      const { logCrash } = await import("./crash-log.service.js");
+      const crashLogPath = path.join(testRoot, "data", "crash-log.jsonl");
+      const victimPath = path.join(testRoot, "victim.jsonl");
+
+      logCrash({ source: "uncaughtException", message: "First" });
+      await fs.writeFile(victimPath, "untouched", "utf-8");
+
+      const originalLstatSync = fsSync.lstatSync.bind(fsSync);
+      let swapped = false;
+      vi.spyOn(fsSync, "lstatSync").mockImplementation((candidate, options) => {
+        if (
+          !swapped &&
+          typeof candidate === "string" &&
+          candidate.startsWith(`${crashLogPath}.`) &&
+          candidate.endsWith(".tmp")
+        ) {
+          fsSync.unlinkSync(candidate);
+          fsSync.linkSync(victimPath, candidate);
+          swapped = true;
+        }
+        return originalLstatSync(candidate, options);
+      });
+
+      logCrash({ source: "unhandledRejection", message: "Second" });
+
+      expect(swapped).toBe(true);
+      expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+      expect(await fs.readFile(crashLogPath, "utf-8")).toContain("First");
+    }
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "retries an exclusively claimed rotation name without following its symlink",
+    async () => {
+      const { logCrash } = await import("./crash-log.service.js");
+      const crashLogPath = path.join(testRoot, "data", "crash-log.jsonl");
+      const victimPath = path.join(testRoot, "victim.jsonl");
+      const collidingUuid = "00000000-0000-4000-8000-000000000001";
+      const replacementUuid = "00000000-0000-4000-8000-000000000002";
+      const collidingPath = `${crashLogPath}.${collidingUuid}.tmp`;
+
+      logCrash({ source: "uncaughtException", message: "First" });
+      await fs.writeFile(victimPath, "untouched", "utf-8");
+      await fs.symlink(victimPath, collidingPath);
+      vi.spyOn(globalThis.crypto, "randomUUID")
+        .mockReturnValueOnce(collidingUuid as ReturnType<typeof globalThis.crypto.randomUUID>)
+        .mockReturnValueOnce(replacementUuid as ReturnType<typeof globalThis.crypto.randomUUID>);
+
+      logCrash({ source: "unhandledRejection", message: "Second" });
+
+      expect(await fs.readFile(victimPath, "utf-8")).toBe("untouched");
+      expect((await fs.readFile(crashLogPath, "utf-8")).trim().split("\n")).toHaveLength(2);
     }
   );
 
