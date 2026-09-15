@@ -202,3 +202,9 @@ published fixes are pinned to patched versions. Moving Electron from 40 to 43
 also removed vulnerable `extract-zip` from the resolved dependency graph. Raw
 audit now reports zero high/critical advisories; no new allowlist entry or audit
 bypass was introduced.
+
+# 2026-09-15 — Restore the dependency audit gate without exceptions
+
+Updated the existing `js-yaml` override to 4.3.2, Vitest to 4.1.11, and added
+the narrow Joi 18.2.5 transitive override. The audit is clean and the allowlist
+remains empty.
