@@ -29,6 +29,7 @@ const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
   createBackup:     "contacts:create-backup",
   resetDataset:     "contacts:reset-dataset",
+  recoverAuditLog:  "contacts:recover-audit-log",
   createRecord:     "contacts:create-record",
   updateRecord:     "contacts:update-record",
   deleteRecord:     "contacts:delete-record",
@@ -84,6 +85,7 @@ const api: HospitalDirectoryApi = {
   exportDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.exportDataset) as ReturnType<HospitalDirectoryApi["exportDataset"]>,
   importDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.importDataset) as ReturnType<HospitalDirectoryApi["importDataset"]>,
   resetDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.resetDataset) as ReturnType<HospitalDirectoryApi["resetDataset"]>,
+  recoverAuditLog: () => ipcRenderer.invoke(CONTACTS_CHANNELS.recoverAuditLog) as ReturnType<HospitalDirectoryApi["recoverAuditLog"]>,
   previewCsvImport: () => ipcRenderer.invoke(CONTACTS_CHANNELS.previewCsvImport) as ReturnType<HospitalDirectoryApi["previewCsvImport"]>,
   cancelCsvImportPreview: () => ipcRenderer.invoke(CONTACTS_CHANNELS.cancelCsvImportPreview) as ReturnType<HospitalDirectoryApi["cancelCsvImportPreview"]>,
   importCsvDataset: (importToken, policies = []) =>

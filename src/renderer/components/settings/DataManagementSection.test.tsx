@@ -219,6 +219,7 @@ describe("DataManagementSection (Configuración data section)", () => {
           beeperRecordCount: 0,
           importedBeeperRecordCount: 0
         }),
+        recoverAuditLog: vi.fn().mockResolvedValue(undefined),
         // The component only calls pickAndImportDataset() — default to
         // the CSV-preview flow since most tests exercise it. Tests that need the
         // JSON flows override this per-test with their schema-specific kind.
@@ -295,6 +296,48 @@ describe("DataManagementSection (Configuración data section)", () => {
       expect(window.hospitalDirectory.createBackup).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByText("Copia de seguridad creada.")).toBeInTheDocument();
+  });
+
+  it("requires confirmation before replacing the damaged audit log", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Restablecer registro de auditoría" });
+    expect(dialog).toHaveTextContent("Las copias en cuarentena se conservarán.");
+    expect(dialog).not.toHaveTextContent("/tmp");
+    expect(window.hospitalDirectory.recoverAuditLog).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(window.hospitalDirectory.recoverAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("replaces the active audit log after confirmation", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.recoverAuditLog).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText("Registro de auditoría restablecido.")).toBeInTheDocument();
+  });
+
+  it("does not show filesystem paths when audit-log recovery fails", async () => {
+    window.hospitalDirectory.recoverAuditLog = vi.fn().mockRejectedValue(
+      new Error("EACCES: /Users/operator/Library/Application Support/HospiAgenda/data/audit-log.json")
+    );
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
+
+    expect(await screen.findByText("No se pudo restablecer el registro de auditoría.")).toBeInTheDocument();
+    expect(screen.queryByText(/\/Users\/operator/)).not.toBeInTheDocument();
   });
 
   it("shows the backup service error message when manual backup fails", async () => {

@@ -63,6 +63,7 @@ export interface HospitalDirectoryApi {
   exportDataset: () => Promise<ExportContactsResult | null>;
   importDataset: () => Promise<ImportContactsResult | null>;
   resetDataset: () => Promise<ResetContactsResult>;
+  recoverAuditLog: () => Promise<void>;
 
   // CSV import
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;

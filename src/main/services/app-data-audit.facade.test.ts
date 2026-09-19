@@ -296,7 +296,7 @@ describe("AppDataAuditFacade", () => {
     expect(loggedArgs).not.toContain(fsError);
   });
 
-  it("recoverFromIntegrityError clears the latched error so a subsequent appendEntry succeeds", async () => {
+  it("recovers a corrupt log, resumes appends, and diagnoses a later corruption", async () => {
     const { AppDataAuditFacade } = await import("./app-data-audit.facade.js");
 
     // Create the audit-log directory so AuditLogService can write
@@ -332,7 +332,7 @@ describe("AppDataAuditFacade", () => {
     consoleErrorSpy.mockClear();
     await facade.appendEntry(entry);
 
-    // No integrity error must have been logged after recovery
+    // Recovery must not log an integrity error itself.
     const integrityCallsAfterRecovery = consoleErrorSpy.mock.calls.filter(
       ([msg]) => typeof msg === "string" && (msg as string).includes("INTEGRITY ERROR")
     );
@@ -341,5 +341,15 @@ describe("AppDataAuditFacade", () => {
     // The entry must actually be persisted on disk
     const result = await facade.getAuditLog({ page: 1, pageSize: 20 });
     expect(result.entries.length).toBeGreaterThanOrEqual(1);
+
+    // A later corruption is independently diagnosable. This fails until the
+    // facade resets its one-shot diagnostic latch after successful recovery.
+    await fs.writeFile(auditLogPath, "{ invalid again {{{{", "utf-8");
+    await facade.appendEntry(entry);
+
+    const integrityCallsAfterSecondCorruption = consoleErrorSpy.mock.calls.filter(
+      ([msg]) => typeof msg === "string" && (msg as string).includes("INTEGRITY ERROR")
+    );
+    expect(integrityCallsAfterSecondCorruption).toHaveLength(1);
   });
 });

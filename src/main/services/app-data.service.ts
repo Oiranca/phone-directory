@@ -2896,9 +2896,8 @@ export class AppDataService {
    * Clear the latched integrity-error state on the audit log so that subsequent
    * appends are attempted again.
    *
-   * An IPC entrypoint can call this after the operator has resolved the
-   * underlying file corruption (no new IPC channel is needed — wire the
-   * existing audit-related IPC handler to this method if recovery is desired).
+   * The trusted renderer recovery action calls this after the operator has
+   * reviewed the quarantined data.
    */
   async recoverAuditLog(): Promise<void> {
     return this.auditFacade.recoverFromIntegrityError();
