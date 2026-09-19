@@ -725,6 +725,32 @@ describe("BeepersPage", () => {
         category: "Adjunto/a",
         sourceSheet: "Buscas_Todos",
         sourceRow: 9
+      },
+      {
+        id: "ibsc_distinct_department",
+        deviceNumber: "7958",
+        department: "Rehabilitación",
+        category: "Residente/a",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 10
+      },
+      {
+        id: "ibsc_distinct_holder_1",
+        deviceNumber: "7958",
+        name: "Ana García",
+        department: "Traumatología",
+        category: "Residente/a",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 11
+      },
+      {
+        id: "ibsc_distinct_holder_2",
+        deviceNumber: "7958",
+        name: "Luis Pérez",
+        department: "Traumatología",
+        category: "Residente/a",
+        sourceSheet: "Buscas_Todos",
+        sourceRow: 12
       }
     ];
     setupWindowApi({
@@ -734,14 +760,50 @@ describe("BeepersPage", () => {
     renderPage();
 
     fireEvent.change(await screen.findByLabelText(/Buscar buscas/i), {
-      target: { value: "Traumatología" }
+      target: { value: "7958" }
     });
 
     await waitFor(() => {
-      expect(screen.getByText("2 resultados")).toBeInTheDocument();
-      expect(screen.getAllByText("7958")).toHaveLength(2);
-      expect(screen.getByText("Residente/a")).toBeInTheDocument();
+      expect(screen.getByText("4 resultados")).toBeInTheDocument();
+      expect(screen.getAllByText("7958")).toHaveLength(4);
+      expect(screen.getAllByText("Residente/a")).toHaveLength(3);
       expect(screen.getByText("Adjunto/a")).toBeInTheDocument();
+      expect(screen.getByText("Rehabilitación")).toBeInTheDocument();
+      expect(screen.getByText("Ana García")).toBeInTheDocument();
+      expect(screen.getByText("Luis Pérez")).toBeInTheDocument();
+    });
+  });
+
+  it("merges incomplete imported search rows while retaining available details", async () => {
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue([]),
+      listImportedBeepers: vi.fn().mockResolvedValue([
+        {
+          id: "ibsc_7320_incomplete",
+          deviceNumber: "7320",
+          department: "Reumatología",
+          sourceSheet: "Buscas_Todos",
+          sourceRow: 2
+        },
+        {
+          id: "ibsc_7320_complete",
+          deviceNumber: " 7320 ",
+          department: " reumatología ",
+          category: "Doctor/a",
+          sourceSheet: "Buscas_Facultativos",
+          sourceRow: 8
+        }
+      ])
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText(/Buscar buscas/i), { target: { value: "reu" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("1 resultado")).toBeInTheDocument();
+      expect(screen.getAllByText("7320")).toHaveLength(1);
+      expect(screen.getByText("Reumatología")).toBeInTheDocument();
+      expect(screen.getByText("Doctor/a")).toBeInTheDocument();
     });
   });
 
