@@ -57,6 +57,30 @@ const manualBeeperDisplayKey = (record: BeeperRecord): string =>
 const importedBeeperDisplayKey = (record: ImportedBeeperRecord): string =>
   beeperDisplayKey([record.deviceNumber, record.name ?? record.holderType ?? "", record.department, record.category ?? ""]);
 
+const importedBeeperRowsMatch = (left: ImportedBeeperRecord, right: ImportedBeeperRecord): boolean => {
+  const leftValues = [left.deviceNumber, left.name ?? left.holderType ?? "", left.department, left.category ?? ""];
+  const rightValues = [right.deviceNumber, right.name ?? right.holderType ?? "", right.department, right.category ?? ""];
+
+  return (
+    normalizeVisibleBeeperCell(leftValues[0]) === normalizeVisibleBeeperCell(rightValues[0]) &&
+    leftValues.slice(1).every((value, index) => {
+      const other = rightValues[index + 1];
+      return !normalizeVisibleBeeperCell(value) || !normalizeVisibleBeeperCell(other) || normalizeVisibleBeeperCell(value) === normalizeVisibleBeeperCell(other);
+    })
+  );
+};
+
+const retainAvailableImportedBeeperDetails = (
+  current: ImportedBeeperRecord,
+  incoming: ImportedBeeperRecord
+): ImportedBeeperRecord => ({
+  ...current,
+  name: normalizeVisibleBeeperCell(current.name ?? "") ? current.name : incoming.name,
+  holderType: normalizeVisibleBeeperCell(current.holderType ?? "") ? current.holderType : incoming.holderType,
+  department: normalizeVisibleBeeperCell(current.department) ? current.department : incoming.department,
+  category: normalizeVisibleBeeperCell(current.category ?? "") ? current.category : incoming.category
+});
+
 export const BeepersPage = () => {
   const { pushToast } = useToast();
   const [records, setRecords] = useState<BeeperRecord[]>([]);
@@ -134,7 +158,26 @@ export const BeepersPage = () => {
 
   const visibleImportedRecords = useMemo(() => {
     const visibleKeys = new Set(filteredRecords.map(manualBeeperDisplayKey));
-    return filteredImportedRecords.filter((record) => {
+    const importedRecordsByDevice = new Map<string, ImportedBeeperRecord[]>();
+
+    for (const record of filteredImportedRecords) {
+      const deviceNumber = normalizeVisibleBeeperCell(record.deviceNumber);
+      const candidates = importedRecordsByDevice.get(deviceNumber);
+
+      if (!candidates) {
+        importedRecordsByDevice.set(deviceNumber, [record]);
+        continue;
+      }
+
+      const matchIndex = candidates.findIndex((candidate) => importedBeeperRowsMatch(candidate, record));
+      if (matchIndex === -1) {
+        candidates.push(record);
+      } else {
+        candidates[matchIndex] = retainAvailableImportedBeeperDetails(candidates[matchIndex], record);
+      }
+    }
+
+    return Array.from(importedRecordsByDevice.values()).flat().filter((record) => {
       const key = importedBeeperDisplayKey(record);
       if (visibleKeys.has(key)) return false;
       visibleKeys.add(key);
