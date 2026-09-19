@@ -1,11 +1,11 @@
 /**
  * Decision (2026-06-23): The audit log is an internal JSON record only.
- * The renderer audit UI (AuditLogPage) and its renderer-facing IPC boundary
- * (getAuditLog / exportAuditLog / recoverAuditLog channels + HospitalDirectoryApi
- * methods) were removed. Backend capture (appendEntry on every
- * create/update/merge) and the service-layer recovery path
- * (recoverFromIntegrityError / AppDataService.recoverAuditLog) are retained so
- * future operator tooling can wire recovery without touching this layer.
+ * The renderer audit UI (AuditLogPage) and read/export IPC boundaries remain
+ * removed. A trusted-renderer recovery action exposes only recoverAuditLog;
+ * it replaces the damaged active log while quarantine copies stay local.
+ * Backend capture (appendEntry on every create/update/merge) and the
+ * service-layer recovery path (recoverFromIntegrityError /
+ * AppDataService.recoverAuditLog) remain internal.
  * The integrityError latch remains deliberately fail-closed: once set, all
  * appends are blocked until an explicit recoverFromIntegrityError() call clears it.
  *

@@ -42,6 +42,7 @@ const ROUTES: Record<InvokeMethod, { channel: string; args?: unknown[] }> = {
   exportDataset: { channel: CONTACTS_CHANNELS.exportDataset },
   importDataset: { channel: CONTACTS_CHANNELS.importDataset },
   resetDataset: { channel: CONTACTS_CHANNELS.resetDataset },
+  recoverAuditLog: { channel: CONTACTS_CHANNELS.recoverAuditLog },
   previewCsvImport: { channel: CONTACTS_CHANNELS.previewCsvImport },
   cancelCsvImportPreview: { channel: CONTACTS_CHANNELS.cancelCsvImportPreview },
   importCsvDataset: { channel: CONTACTS_CHANNELS.importCsvDataset, args: ["token", []] },

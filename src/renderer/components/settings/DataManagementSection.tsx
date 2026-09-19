@@ -33,7 +33,8 @@ const yieldToRenderer = () => new Promise<void>((resolve) => {
 
 type PendingConfirmation =
   | { kind: "pick-import" }
-  | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts };
+  | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
+  | { kind: "recover-audit-log" };
 
 /**
  * "Datos e importación" section of the Configuración page.
@@ -74,6 +75,7 @@ export const DataManagementSection = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isRecoveringAuditLog, setIsRecoveringAuditLog] = useState(false);
   // Covers the whole pickAndImportDataset() round-trip — the native dialog is
   // open and, once a file is picked, either JSON import or CSV preview
   // generation is still running. We only find out which one after the
@@ -104,6 +106,7 @@ export const DataManagementSection = () => {
   const isMutating =
     isCreatingBackup ||
     isExporting ||
+    isRecoveringAuditLog ||
     isImporting ||
     isImportingCsv;
 
@@ -188,6 +191,24 @@ export const DataManagementSection = () => {
       });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleRecoverAuditLog = async () => {
+    try {
+      setIsRecoveringAuditLog(true);
+      await window.hospitalDirectory.recoverAuditLog();
+      pushToast({
+        type: "success",
+        message: "Registro de auditoría restablecido."
+      });
+    } catch {
+      pushToast({
+        type: "error",
+        message: "No se pudo restablecer el registro de auditoría."
+      });
+    } finally {
+      setIsRecoveringAuditLog(false);
     }
   };
 
@@ -483,6 +504,11 @@ export const DataManagementSection = () => {
         return;
       }
 
+      if (confirmation.kind === "recover-audit-log") {
+        await handleRecoverAuditLog();
+        return;
+      }
+
       await handleImportCsv(confirmation.preview);
     } finally {
       confirmationInFlightRef.current = false;
@@ -500,6 +526,14 @@ export const DataManagementSection = () => {
         message:
           "Vas a elegir un archivo para importar. Un JSON de agenda o buscas reemplazará esos datos después de crear su copia de seguridad. Un JSON de configuración importará las preferencias después de respaldarlas y conservará las rutas portables del USB. Las hojas de cálculo (CSV, ODS, XLS o XLSX) mostrarán una vista previa antes de aplicar cambios. ¿Deseas continuar?",
         confirmLabel: "Elegir archivo"
+      };
+    }
+
+    if (pendingConfirmation.kind === "recover-audit-log") {
+      return {
+        title: "Restablecer registro de auditoría",
+        message: "Se reemplazará solo el registro de auditoría activo dañado por uno vacío. Las copias en cuarentena se conservarán. ¿Quieres continuar?",
+        confirmLabel: "Restablecer registro"
       };
     }
 
@@ -730,6 +764,20 @@ export const DataManagementSection = () => {
           <p className="mt-3 text-xs text-slate-500">
             ¿Necesitas recuperar una copia de seguridad anterior? Ábrela desde el botón «Importar» de arriba: seleccionar un archivo de copia de seguridad reemplaza el directorio actual con ese contenido.
           </p>
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <p className="text-sm font-semibold text-scs-blueDark">Registro de auditoría</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Restablece un registro de auditoría activo dañado. Las copias en cuarentena se conservan.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPendingConfirmation({ kind: "recover-audit-log" })}
+              disabled={isMutating}
+              className="focus-ring mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-60"
+            >
+              {isRecoveringAuditLog ? "Restableciendo…" : "Restablecer registro de auditoría"}
+            </button>
+          </div>
         </div>
         </aside>
       </div>

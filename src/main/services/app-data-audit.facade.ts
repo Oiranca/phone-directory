@@ -8,6 +8,7 @@
  *   - query   → getAuditLog
  *   - export  → exportAuditLog
  *   - append  → appendEntry  (called inside write-queue closures; no queue involvement here)
+ *   - recover → recoverFromIntegrityError
  *
  * AppDataService holds an instance of this class and delegates to it.  All public
  * method signatures and behaviors are preserved exactly — this is a seam extraction,
@@ -111,10 +112,11 @@ export class AppDataAuditFacade {
    * this to resume audit logging once the operator has resolved the underlying
    * file corruption.
    *
-   * Note: an IPC entrypoint can call AppDataService.recoverAuditLog() which
-   * delegates here — no new IPC channel is required for the current use-case.
+   * AppDataService.recoverAuditLog() delegates here for the trusted renderer
+   * recovery action.
    */
   async recoverFromIntegrityError(): Promise<void> {
-    return this.auditLog.recoverFromIntegrityError();
+    await this.auditLog.recoverFromIntegrityError();
+    this.integrityErrorLogged = false;
   }
 }

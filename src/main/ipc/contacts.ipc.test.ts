@@ -1666,6 +1666,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
         beeperImportStatus: { status: "not-applicable", parsedCellCount: 0 },
         rowIssues: []
       }),
+      recoverAuditLog: vi.fn(),
       detectDuplicates: vi.fn(),
       mergeDuplicates: vi.fn()
     };
@@ -1685,6 +1686,24 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
 
     expect(serviceMock.createBackup).toHaveBeenCalledTimes(1);
     expect(result).toBeUndefined();
+  });
+
+  it("recoverAuditLog: invokes the service without accepting renderer data", async () => {
+    const handler = handlers.get("contacts:recover-audit-log");
+
+    await expect(handler!({ sender: { id: 1 } })).resolves.toBeUndefined();
+    expect(serviceMock.recoverAuditLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("recoverAuditLog: hides filesystem paths when recovery fails", async () => {
+    serviceMock.recoverAuditLog.mockRejectedValueOnce(
+      new Error("EACCES: /Users/operator/Library/Application Support/HospiAgenda/data/audit-log.json")
+    );
+    const handler = handlers.get("contacts:recover-audit-log");
+
+    await expect(handler!({ sender: { id: 1 } })).rejects.toThrow(
+      "No se pudo restablecer el registro de auditoría."
+    );
   });
 
   it("listBackups: strips filePath from every entry", async () => {

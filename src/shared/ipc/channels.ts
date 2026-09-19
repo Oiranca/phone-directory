@@ -16,6 +16,7 @@ export const CONTACTS_CHANNELS = {
   bootstrap:        "contacts:get-bootstrap-data",
   createBackup:     "contacts:create-backup",
   resetDataset:     "contacts:reset-dataset",
+  recoverAuditLog:  "contacts:recover-audit-log",
   createRecord:     "contacts:create-record",
   updateRecord:     "contacts:update-record",
   deleteRecord:     "contacts:delete-record",

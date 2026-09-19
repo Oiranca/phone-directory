@@ -629,6 +629,28 @@ describe("AuditLogService", () => {
       expect(result.entries[0]!.recordName).toBe("Post-recovery entry");
     });
 
+    it("keeps appends blocked when replacing the damaged log fails", async () => {
+      const { AuditLogService, AuditLogIntegrityError } = await import("./audit-log.service.js");
+      const service = new AuditLogService();
+      const auditLogPath = path.join(testRoot, "data", "audit-log.json");
+      await fs.mkdir(path.dirname(auditLogPath), { recursive: true });
+      await fs.writeFile(auditLogPath, "bad-json", "utf-8");
+
+      await expect(
+        service.append({ timestamp: "2026-06-01T00:00:00.000Z", editor: "Admin", action: "create" })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+
+      const realOpen = fs.open.bind(fs);
+      vi.spyOn(fs, "open").mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }))
+      ).mockImplementation((...args) => realOpen(...args));
+
+      await expect(service.recoverFromIntegrityError()).rejects.toThrow("EACCES: permission denied");
+      await expect(
+        service.append({ timestamp: "2026-06-01T01:00:00.000Z", editor: "Admin", action: "update" })
+      ).rejects.toBeInstanceOf(AuditLogIntegrityError);
+    });
+
     it("fresh log after recovery starts with exactly the appended entries, not merged with old corrupt content", async () => {
       const { AuditLogService } = await import("./audit-log.service.js");
       const service = new AuditLogService();

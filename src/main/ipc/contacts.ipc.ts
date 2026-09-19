@@ -85,6 +85,7 @@ const isSafeBackupFileName = (fileName: unknown): fileName is string =>
 // codebase (see AppDataService.restoreBackup's own defense-in-depth checks)
 // so a renderer-supplied fileName never leaks into the error copy.
 const RESTORE_BACKUP_ERROR_MESSAGE = "No se pudo restaurar la copia de seguridad seleccionada.";
+const AUDIT_LOG_RECOVERY_ERROR_MESSAGE = "No se pudo restablecer el registro de auditoría.";
 
 const toSafeExportResult = (result: ExportContactsResultInternal): ExportContactsResult => ({
   fileName: path.basename(result.filePath),
@@ -170,6 +171,14 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     await service.createBackup();
   });
   handle(CHANNELS.resetDataset, async () => toSafeResetResult(await service.resetDataset()));
+  handle(CHANNELS.recoverAuditLog, async (): Promise<void> => {
+    try {
+      await service.recoverAuditLog();
+    } catch (error) {
+      console.error("[AuditLog] Recovery failed.", error);
+      throw new Error(AUDIT_LOG_RECOVERY_ERROR_MESSAGE);
+    }
+  });
   handle(CHANNELS.createRecord, (_event, payload: EditableContactRecord) =>
     service.createRecord(payload)
   );
