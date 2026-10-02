@@ -403,9 +403,18 @@ command does not actually need, or stop and report — never a path around it.
 
 `kx open --claude` is the same thing with the arguments already written down —
 Claude Code, `--dangerously-skip-permissions`, this project's credentials.
-`kx open --codex` is Codex with `--dangerously-bypass-approvals-and-sandbox`.
+`kx open --codex` is Codex with `--yolo`.
 `kx open --opencode` is OpenCode with `--auto`, auto-approving permissions not
 explicitly denied. All three print the command line before running it.
+
+A person can add `--yolo` to any of them. It requires a terminal and two
+confirmations, then asks for a 1Password service account token with hidden
+input. The token reaches the session and its children as
+`OP_SERVICE_ACCOUNT_TOKEN`, so internal `kx exec` calls authenticate without
+further 1Password prompts. kx never saves it to disk. The session has all the
+vault access and permissions granted to that token, including any write access.
+`--yes` cannot bypass consent. Never ask for the token in chat or inspect its
+value; a person supplies it through the terminal prompt.
 
 **`--claude`, `--codex` and `--opencode` are the only launchers there are.**
 No `--cursor`, no `--code`, no `--shell`. Anything else is `kx exec`.
