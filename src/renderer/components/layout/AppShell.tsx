@@ -208,7 +208,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
             behavior (the directory is locked and there's nowhere to
             navigate to until recovery completes). */}
         {!isRecoveryMode && <NavRail />}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col pb-[72px] sm:pb-0">
           <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
             <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

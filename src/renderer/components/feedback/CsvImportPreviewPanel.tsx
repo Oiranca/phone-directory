@@ -995,7 +995,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       )}
 
       {/* Single sticky confirm footer — CTA appears in one place only */}
-      <div className="sticky bottom-0 mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm">
+      <div className="sticky bottom-[72px] mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm sm:bottom-0">
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex flex-col items-end gap-1">
             {hasUnresolvedConflicts && (
