@@ -198,7 +198,7 @@ delete directLaunchEnv.APPIMAGE;
 let child;
 
 try {
-  await fs.cp(sourcePlatformDir, targetPlatformDir, { recursive: true });
+  await fs.cp(sourcePlatformDir, targetPlatformDir, { recursive: true, verbatimSymlinks: true });
   const port = await availablePort();
   child = spawn(executablePath, [`--remote-debugging-port=${port}`], {
     cwd: repoRootDir,
