@@ -1,45 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConflictRecordSummary, CsvImportPreview, CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
-
-// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
-// Required because the discard-warning prompt now renders via the shared
-// ConfirmDialog component (native <dialog>) instead of window.confirm.
-let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
-let originalShowModal: (() => void) | undefined;
-let originalClose: (() => void) | undefined;
-
-beforeAll(() => {
-  if (typeof globalThis.HTMLDialogElement === "undefined") {
-    class HTMLDialogElementStub extends HTMLElement {
-      open = false;
-    }
-    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
-  }
-
-  dialogPrototype =
-    typeof globalThis.HTMLDialogElement !== "undefined"
-      ? globalThis.HTMLDialogElement.prototype
-      : HTMLElement.prototype;
-
-  originalShowModal = dialogPrototype.showModal;
-  originalClose = dialogPrototype.close;
-
-  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = true;
-  });
-  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = false;
-  });
-});
-
-afterAll(() => {
-  if (dialogPrototype) {
-    dialogPrototype.showModal = originalShowModal;
-    dialogPrototype.close = originalClose;
-  }
-});
 
 const basePreview: CsvImportPreviewWithConflicts = {
   importToken: "test-token",

@@ -1,53 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../feedback/ToastRegion";
 import { DataManagementSection } from "./DataManagementSection";
 import { useAppStore, resetBootstrapInFlight } from "../../store/useAppStore";
-
-const originalHTMLDialogElement = globalThis.HTMLDialogElement;
-let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
-let originalShowModal: (() => void) | undefined;
-let originalClose: (() => void) | undefined;
-
-beforeAll(() => {
-  if (typeof globalThis.HTMLDialogElement === "undefined") {
-    class HTMLDialogElementStub extends HTMLElement {
-      open = false;
-    }
-
-    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
-  }
-
-  dialogPrototype =
-    typeof globalThis.HTMLDialogElement !== "undefined"
-      ? globalThis.HTMLDialogElement.prototype
-      : HTMLElement.prototype;
-
-  originalShowModal = dialogPrototype.showModal;
-  originalClose = dialogPrototype.close;
-
-  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = true;
-  });
-  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = false;
-  });
-});
-
-afterAll(() => {
-  if (dialogPrototype) {
-    dialogPrototype.showModal = originalShowModal;
-    dialogPrototype.close = originalClose;
-  }
-
-  if (originalHTMLDialogElement) {
-    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
-  } else {
-    vi.unstubAllGlobals();
-  }
-});
 
 const resetStore = () => {
   resetBootstrapInFlight();
