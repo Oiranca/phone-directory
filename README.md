@@ -91,14 +91,16 @@ Run the test suite:
 pnpm test
 ```
 
-With the `agent-browser` CLI installed and on `PATH`, run the Electron E2E checks:
+After `pnpm install --frozen-lockfile`, run the Electron E2E checks:
 
 ```bash
 pnpm run test:e2e
 ```
 
-The E2E runner uses an isolated profile, checks the directory at mobile, tablet,
-and desktop widths, and imports a sample CSV.
+The E2E runner uses temporary profiles to check eight viewport sizes, CSV and
+ODS import, conflict handling, contact persistence, backup restore, phone
+privacy, and 5,000-record search and import performance. It stops at the first
+failure, so later checks are unverified when a run fails early.
 
 Run the local pre-commit CI gate:
 

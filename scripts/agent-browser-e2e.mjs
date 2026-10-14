@@ -498,10 +498,11 @@ try {
   const editPrivacy = JSON.parse(browserCommand("eval", `(() => {
     const input = document.querySelector('#phone-number-ph_chip_1');
     const section = input?.closest('li');
-    return { value: input?.value, text: section?.innerText || '', labels: [...(section?.querySelectorAll('label') || [])].map(label => label.innerText) };
+    return { value: input?.value, text: section?.innerText || '', pageText: document.body.innerText,
+      labels: [...(section?.querySelectorAll('label') || [])].map(label => label.innerText) };
   })()`));
   if (editPrivacy.value !== "80099" || !editPrivacy.text.includes("Confidencial") ||
-    editPrivacy.text.includes("No facilitar a pacientes") || editPrivacy.text.includes("No pacientes") ||
+    editPrivacy.pageText.includes("No facilitar a pacientes") || editPrivacy.pageText.includes("No pacientes") ||
     editPrivacy.labels.some((label) => /no facilitar|no pacientes/i.test(label))) {
     throw new Error(`Phone privacy edit controls failed: ${JSON.stringify(editPrivacy)}`);
   }

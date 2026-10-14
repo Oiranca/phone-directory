@@ -26,7 +26,9 @@ Without this flag, the package intentionally contains no user data.
 The command runs typecheck, tests, the production build, dev-mode E2E, and
 `electron-builder --dir` for the target platform. When the target platform
 matches the host platform, it also launches the packaged binary and verifies the
-real `file://` renderer startup path. It writes the copy-ready USB layout to:
+real `file://` renderer startup path from a temporary copy of the platform
+payload. Existing `dist-portable/portable-data` is left untouched. It writes
+the copy-ready USB layout to:
 
 ```bash
 dist-portable/usb-package/
@@ -109,9 +111,10 @@ Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass
 
 ### Packaged startup smoke
 
-Install the `agent-browser` CLI on the release host. The unbundled
-`pnpm run test:e2e` check uses it to verify directory layout at mobile,
-tablet, and desktop widths, then imports a CSV through the UI.
+`pnpm install --frozen-lockfile` installs the pinned `agent-browser` CLI. The
+unbundled `pnpm run test:e2e` check uses it for eight viewport sizes, import
+and conflict flows, persistence, backup restore, phone privacy, and search
+performance. The runner stops on its first failure.
 
 Run the packaged startup smoke on each target OS before release handoff:
 
@@ -119,9 +122,10 @@ Run the packaged startup smoke on each target OS before release handoff:
 pnpm run test:e2e:packaged
 ```
 
-The script builds the current platform with `electron-builder --dir`, launches
-the packaged executable, connects agent-browser to Electron, asserts the renderer loaded from
-`file://`, and waits for the main directory UI. `release-usb.sh` runs the same smoke automatically
+The script builds the current platform with `electron-builder --dir`, copies the
+platform payload to a temporary directory, launches that copy, connects
+agent-browser to Electron, asserts the renderer loaded from `file://`, and waits
+for the main directory UI. `release-usb.sh` runs the same smoke automatically
 when the release target matches the host platform; cross-built artifacts must be
 smoked on their own OS.
 

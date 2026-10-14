@@ -47,9 +47,9 @@ The release script runs:
 2. **Dependency audit gate** (`pnpm audit --json` filtered against `scripts/audit-allowlist.json`)
 3. `pnpm test`
 4. `pnpm run build`
-5. `pnpm run test:e2e` — agent-browser checks directory layout and CSV import
+5. `pnpm run test:e2e` — agent-browser checks eight viewport sizes, CSV/ODS import, conflict handling, persistence, backup restore, phone privacy, and search performance
 6. `electron-builder` direct-executable packaging for the selected platform
-7. Packaged startup smoke with agent-browser when the target matches the host OS
+7. Packaged startup smoke from a temporary payload copy with agent-browser when the target matches the host OS
 8. USB package staging under `dist-portable/usb-package/`
 
 Before handoff, use agent-browser with an isolated Electron profile to check other affected

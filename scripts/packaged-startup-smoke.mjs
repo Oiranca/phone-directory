@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
+import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -185,15 +186,19 @@ if (!skipBuild) {
   });
 }
 
-const executablePath = await findPackagedExecutable();
-const userDataPath = path.join(distRootDir, "portable-data");
+const sourceExecutablePath = await findPackagedExecutable();
+const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-packaged-smoke-"));
+const sourcePlatformDir = path.join(distRootDir, path.relative(distRootDir, sourceExecutablePath).split(path.sep)[0]);
+const targetPlatformDir = path.join(workspace, path.basename(sourcePlatformDir));
+const executablePath = path.join(workspace, path.relative(distRootDir, sourceExecutablePath));
+const userDataPath = path.join(workspace, "portable-data");
 const directLaunchEnv = { ...process.env };
 delete directLaunchEnv.ELECTRON_PORTABLE_ROOT_PATH;
 delete directLaunchEnv.APPIMAGE;
 let child;
 
 try {
-  await fs.rm(userDataPath, { recursive: true, force: true });
+  await fs.cp(sourcePlatformDir, targetPlatformDir, { recursive: true });
   const port = await availablePort();
   child = spawn(executablePath, [`--remote-debugging-port=${port}`], {
     cwd: repoRootDir,
@@ -221,7 +226,10 @@ try {
     const exit = once(child, "exit").then(() => true);
     child.kill();
     const exited = await Promise.race([exit, delay(5_000).then(() => false)]);
-    if (!exited) child.kill("SIGKILL");
+    if (!exited) {
+      child.kill("SIGKILL");
+      await exit;
+    }
   }
-  await fs.rm(userDataPath, { recursive: true, force: true });
+  await fs.rm(workspace, { recursive: true, force: true });
 }
