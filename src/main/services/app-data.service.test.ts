@@ -756,6 +756,66 @@ describe("AppDataService", () => {
     expect((await fs.readdir(path.join(testRoot, "backups"))).some((name) => name.startsWith("contacts-before-delete-"))).toBe(true);
   });
 
+  it("keeps only the newest contacts backup after repeated deletions", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const settings = buildEditableSettings();
+    settings.ui.autoBackup.retentionCount = 1;
+    await service.saveSettings(settings);
+    const bootstrap = await service.getBootstrapData();
+    if ("recovery" in bootstrap) throw new Error("Recovery mode unexpected");
+    const [first, second] = bootstrap.contacts.records;
+    if (!first || !second) throw new Error("Expected two seed contacts");
+
+    await service.createBackup();
+    await service.deleteRecord(first.id);
+    await service.deleteRecord(second.id);
+
+    const backupDir = path.join(testRoot, "backups");
+    const backups = (await fs.readdir(backupDir)).filter((name) => name.startsWith("contacts-") && name.endsWith(".json"));
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatch(/^contacts-before-delete-/);
+    const retained = JSON.parse(await fs.readFile(path.join(backupDir, backups[0]!), "utf-8")) as { records: Array<{ id: string }> };
+    expect(retained.records.map((record) => record.id)).toEqual([second.id]);
+  });
+
+  it("continues deletion when pruning fails after its backup succeeds", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const bootstrap = await service.getBootstrapData();
+    if ("recovery" in bootstrap) throw new Error("Recovery mode unexpected");
+    const recordId = bootstrap.contacts.records[0]!.id;
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(fs, "readdir").mockRejectedValueOnce(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+
+    const result = await service.deleteRecord(recordId);
+
+    expect(result.contacts.records.some((record) => record.id === recordId)).toBe(false);
+    expect((await fs.readdir(path.join(testRoot, "backups"))).some((name) => name.startsWith("contacts-before-delete-"))).toBe(true);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[BackupRetention]"));
+  });
+
+  it("does not delete a contact when its pre-delete backup fails", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    const bootstrap = await service.getBootstrapData();
+    if ("recovery" in bootstrap) throw new Error("Recovery mode unexpected");
+    const recordId = bootstrap.contacts.records[0]!.id;
+    const realOpen = fs.open.bind(fs);
+    vi.spyOn(fs, "open").mockImplementation(async (filePath, flags, ...args) => {
+      if (flags === "wx") throw Object.assign(new Error("EACCES"), { code: "EACCES", path: filePath });
+      return realOpen(filePath, flags as never, ...(args as []));
+    });
+
+    await expect(service.deleteRecord(recordId)).rejects.toThrow();
+    const after = await service.getBootstrapData();
+    if ("recovery" in after) throw new Error("Recovery mode unexpected");
+    expect(after.contacts.records.some((record) => record.id === recordId)).toBe(true);
+  });
+
   it("creates and rotates launch auto-backups when enabled", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
