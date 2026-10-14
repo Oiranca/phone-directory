@@ -257,19 +257,12 @@ export class AppDataService {
     const settings = await this.readSettings(true);
     const backupFilePath = await this.createBackupCore(settings, "contacts", "No se pudo crear la copia de seguridad del directorio.");
     this.autoBackupEditCount = 0;
-    // Cap the number of manual/import/restore/reset backups just like auto-backups.
-    // Without this, repeated import/export/reset cycles accumulate
-    // unlimited "contacts-*" backup files, each a full PII copy, with no cap —
-    // a real risk on the disk-constrained USB deployment this app targets.
-    // Reuses the same retentionCount knob and pruning primitive as auto-backups
-    // so retention behavior stays consistent between the two backup families.
-    //
-    // Follow-up: pruning failures (e.g. EACCES/EBUSY on a locked backup
-    // file on Windows) must NOT fail the calling operation (importDataset /
-    // restoreBackup / resetDataset) — the actual backup file above was already
-    // created successfully. Non-fatal: log so operators can diagnose, matching
-    // the console.error convention used for the non-fatal beepers import failure
-    // in importCsvDataset below.
+    await this.pruneContactsBackupsNonFatal(settings);
+    return backupFilePath;
+  }
+
+  private async pruneContactsBackupsNonFatal(settings: AppSettings) {
+    // A completed backup protects the operation even if retention fails.
     try {
       await this.pruneBackupsByPrefix(
         settings,
@@ -280,7 +273,6 @@ export class AppDataService {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error(`[BackupRetention] Failed to prune contacts-* backups — ${errMsg}`);
     }
-    return backupFilePath;
   }
 
   /**
@@ -1014,6 +1006,7 @@ export class AppDataService {
         "contacts-before-delete",
         "No se pudo crear la copia de seguridad antes de eliminar el registro."
       );
+      await this.pruneContactsBackupsNonFatal(settings);
 
       const nextContacts = this.buildNextDataset(
         contacts.records.filter((record) => record.id !== recordId),
