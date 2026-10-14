@@ -26,6 +26,10 @@ registerCrashHandlers({ targetApp: app });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const runInBackground = env.isE2E || env.backgroundSmoke;
+if (process.platform === "darwin" && runInBackground) {
+  app.setActivationPolicy("accessory");
+}
 const DEV_SERVER_URL = env.rendererUrl ?? "http://localhost:5173";
 // Only available in the source tree (build-resources/ is not bundled into the
 // packaged app); packaged builds get their icon from electron-builder's
@@ -56,13 +60,13 @@ const createWindow = () => {
     height: 920,
     minWidth: 1080,
     minHeight: 720,
-    show: !env.isE2E,
+    show: !runInBackground,
     backgroundColor: "#f8fafc",
     ...(isDev ? { icon: APP_ICON_PATH } : {}),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       ...WINDOW_WEB_PREFERENCES,
-      backgroundThrottling: !env.isE2E
+      backgroundThrottling: !runInBackground
     }
   });
   mainWindow = window;
@@ -145,7 +149,7 @@ app.whenReady().then(() => {
   // logo. Set it explicitly here for a better dev-mode experience; the
   // packaged build already gets the correct icon from electron-builder's
   // "build.mac.icon" config, so this must stay dev-only.
-  if (process.platform === "darwin" && env.isE2E) {
+  if (process.platform === "darwin" && runInBackground) {
     app.dock?.hide();
   } else if (process.platform === "darwin" && !app.isPackaged) {
     app.dock?.setIcon(nativeImage.createFromPath(APP_ICON_PATH));

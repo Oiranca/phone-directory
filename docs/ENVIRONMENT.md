@@ -80,6 +80,17 @@ opened platform executable; no environment variable activates portable mode.
 Variables used only when launching an isolated Electron profile for agent-browser checks.
 Set them on that launch command, never in production or developer `.env` files.
 
+### ELECTRON_BACKGROUND_SMOKE
+
+Keeps the packaged startup smoke window hidden and prevents its Dock icon from
+interrupting the active application on macOS. It does not enable E2E data or
+dialog overrides.
+
+- **Type:** boolean flag — truthy values: `1`, `true`
+- **Default:** unset
+- **Set by:** packaged startup smoke — do not set in `.env`
+- **Example:** `ELECTRON_BACKGROUND_SMOKE=1`
+
 ### USB_IMPORT_FIXTURE_ROOT
 
 Opt-in path to an existing USB `portable-data/data` directory for the Vitest JSON import

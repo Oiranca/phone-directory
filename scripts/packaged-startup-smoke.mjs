@@ -197,7 +197,7 @@ try {
   const port = await availablePort();
   child = spawn(executablePath, [`--remote-debugging-port=${port}`], {
     cwd: repoRootDir,
-    env: { ...directLaunchEnv, ELECTRON_OPEN_DEVTOOLS: "0" },
+    env: { ...directLaunchEnv, ELECTRON_OPEN_DEVTOOLS: "0", ELECTRON_BACKGROUND_SMOKE: "1" },
     stdio: ["ignore", "ignore", "pipe"]
   });
   let startupError = "";
