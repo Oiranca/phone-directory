@@ -9,7 +9,6 @@ export default tseslint.config(
       "dist-portable/**",
       ".claude/**",
       "node_modules/**",
-      "playwright-report/**",
       "test-results/**",
       "tmp/**"
     ]
@@ -35,7 +34,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ["**/*.{test,spec}.{ts,tsx}", "tests/**/*.ts"],
+    files: ["**/*.{test,spec}.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-function-type": "off",

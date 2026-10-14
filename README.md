@@ -43,6 +43,7 @@ Planning and migration reference files:
 - Zustand
 - Zod
 - Vitest
+- agent-browser (Electron E2E checks)
 
 ## Project Structure
 
@@ -89,6 +90,15 @@ Run the test suite:
 ```bash
 pnpm test
 ```
+
+With the `agent-browser` CLI installed and on `PATH`, run the Electron E2E checks:
+
+```bash
+pnpm run test:e2e
+```
+
+The E2E runner uses an isolated profile, checks the directory at mobile, tablet,
+and desktop widths, and imports a sample CSV.
 
 Run the local pre-commit CI gate:
 

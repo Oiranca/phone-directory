@@ -255,7 +255,7 @@ pnpm test
 log "Building renderer and Electron main/preload"
 pnpm run build
 
-log "Running E2E tests (critical import flow gate)"
+log "Running agent-browser E2E checks"
 pnpm run test:e2e
 
 log "Building portable app artifact"

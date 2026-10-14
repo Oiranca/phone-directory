@@ -109,6 +109,10 @@ Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass
 
 ### Packaged startup smoke
 
+Install the `agent-browser` CLI on the release host. The unbundled
+`pnpm run test:e2e` check uses it to verify directory layout at mobile,
+tablet, and desktop widths, then imports a CSV through the UI.
+
 Run the packaged startup smoke on each target OS before release handoff:
 
 ```bash
@@ -116,8 +120,8 @@ pnpm run test:e2e:packaged
 ```
 
 The script builds the current platform with `electron-builder --dir`, launches
-the packaged executable, asserts the renderer loaded from `file://`, and waits
-for the main directory UI. `release-usb.sh` runs the same smoke automatically
+the packaged executable, connects agent-browser to Electron, asserts the renderer loaded from
+`file://`, and waits for the main directory UI. `release-usb.sh` runs the same smoke automatically
 when the release target matches the host platform; cross-built artifacts must be
 smoked on their own OS.
 

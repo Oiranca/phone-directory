@@ -1,8 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { createServer } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { _electron as electron } from "@playwright/test";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distRootDir = path.join(repoRootDir, "dist-portable");
@@ -120,6 +122,62 @@ const findPackagedExecutable = async () => {
   );
 };
 
+const availablePort = () => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.once("error", reject);
+  server.listen(0, "127.0.0.1", () => {
+    const address = server.address();
+    server.close(() => {
+      if (!address || typeof address === "string") reject(new Error("Could not allocate a debugging port"));
+      else resolve(address.port);
+    });
+  });
+});
+
+const browserSession = `packaged-smoke-${process.pid}`;
+const browserCommand = (...args) => {
+  const result = spawnSync("agent-browser", ["--session", browserSession, ...args], {
+    cwd: repoRootDir,
+    encoding: "utf8",
+    timeout: 10_000,
+    shell: process.platform === "win32",
+    env: { ...process.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "3000" }
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr.trim() || `agent-browser exited ${result.status}`);
+  return result.stdout.trim();
+};
+
+const waitForDirectory = async (port, child) => {
+  const deadline = Date.now() + 60_000;
+  let lastError;
+  let connected = false;
+
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Packaged app exited before the directory loaded: ${child.exitCode ?? child.signalCode}`);
+    }
+    try {
+      if (!connected) {
+        browserCommand("connect", String(port));
+        connected = true;
+      }
+      const pageUrl = browserCommand("get", "url");
+      if (pageUrl.startsWith("file://") &&
+        browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true") {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(250);
+  }
+
+  throw new Error(`Packaged directory did not load from file:// within 60 seconds${lastError ? `: ${lastError.message}` : ""}`);
+};
+
+browserCommand("--version");
+
 if (!skipBuild) {
   execFileSync("pnpm", ["run", `build:dist:${targetPlatform}`], {
     cwd: repoRootDir,
@@ -132,30 +190,22 @@ const userDataPath = path.join(distRootDir, "portable-data");
 const directLaunchEnv = { ...process.env };
 delete directLaunchEnv.ELECTRON_PORTABLE_ROOT_PATH;
 delete directLaunchEnv.APPIMAGE;
-let electronApp;
+let child;
 
 try {
   await fs.rm(userDataPath, { recursive: true, force: true });
-
-  electronApp = await electron.launch({
-    executablePath,
+  const port = await availablePort();
+  child = spawn(executablePath, [`--remote-debugging-port=${port}`], {
     cwd: repoRootDir,
-    timeout: 60_000,
-    env: {
-      ...directLaunchEnv,
-      ELECTRON_OPEN_DEVTOOLS: "0"
-    }
+    env: { ...directLaunchEnv, ELECTRON_OPEN_DEVTOOLS: "0" },
+    stdio: ["ignore", "ignore", "pipe"]
   });
-
-  const page = await electronApp.firstWindow();
-  await page.getByPlaceholder("Buscar contacto o servicio").waitFor({
-    state: "visible",
-    timeout: 60_000
-  });
-
-  const pageUrl = page.url();
-  if (!pageUrl.startsWith("file://")) {
-    throw new Error(`Expected packaged app to load file:// renderer, got ${pageUrl}`);
+  let startupError = "";
+  child.stderr.on("data", (chunk) => { startupError = `${startupError}${chunk}`.slice(-4_000); });
+  try {
+    await waitForDirectory(port, child);
+  } catch (error) {
+    throw new Error(`${error.message}${startupError ? `\n${startupError}` : ""}`);
   }
 
   if (!(await pathExists(userDataPath))) {
@@ -166,8 +216,12 @@ try {
     `[packaged-startup-smoke] PASS ${targetPlatform}: direct executable loaded via file:// and created portable-data`
   );
 } finally {
-  if (electronApp) {
-    await electronApp.close();
+  try { browserCommand("close"); } catch { /* Browser may not have connected. */ }
+  if (child && child.exitCode === null) {
+    const exit = once(child, "exit").then(() => true);
+    child.kill();
+    const exited = await Promise.race([exit, delay(5_000).then(() => false)]);
+    if (!exited) child.kill("SIGKILL");
   }
   await fs.rm(userDataPath, { recursive: true, force: true });
 }
