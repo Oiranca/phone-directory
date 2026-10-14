@@ -59,10 +59,12 @@ Each variable says exactly one of these:
 | | For | Where the value lives |
 |---|---|---|
 | `secret: true` | fetched from somewhere — a dashboard, a provider | 1Password |
-| `generate` | nobody chooses it: a signing key, a session secret | 1Password, made by `kx creds` |
+| `generate` | nobody chooses it: a signing key, a session secret | 1Password, made by `kx creds` when it creates the field |
 | `value` | not secret and not fetched: `sandbox`, a region | the file itself |
 
-Recipes for `generate`: `hex32`, `hex64`, `uuid`.
+Recipes for `generate`: `hex32`, `hex64`, `uuid`. `kx creds` (with or without
+`--apply`) generates the value when it creates the field. A field that already
+holds `SET_ME` is not replaced: run `kx creds --guide` and pick "Generate one".
 
 **Making an existing variable per-environment.** Change it with `kx env add
 NAME --secret --per-environment`, or by hand, then `kx sync && kx creds
@@ -269,12 +271,13 @@ this credential" without sending anyone to hunt through a dashboard.
 ## What you cannot do
 
 **Filling anything in is interactive and has no JSON form.** `--json` with
-`--guide` or `--fix` refuses rather than pretending. Tell the person to run it
+`--guide`, `--roll` or `--fix` refuses rather than pretending. Tell the person to run it
 themselves:
 
 ```bash
 kx creds --project <id> --guide   # everything not yet answered
 kx creds --project <id> --fix     # only what the checks say is broken
+kx creds --project <id> --interactive --roll  # choose filled credentials to replace
 ```
 
 **Some commands refuse before the CLI starts.** `kx creds` and `kx add` write

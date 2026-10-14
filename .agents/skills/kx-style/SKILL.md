@@ -42,7 +42,10 @@ check whether it is true.
   "and then" twice.
 - End with the next action — one thing the reader can do now — never with a
   recap or a pleasantry.
-- Cap an action list at 5. Past five, split do-now from later.
+- Cap a list the reader acts on or picks from at 5 — actions, options. Past
+  five, group and rank: do-now first, the rest under "Later", still listed.
+- A list of results is never cut: every failure, every unchecked item, every
+  dropped finding (`kx-reporting`). Group it past five; do not truncate it.
 - Restate state every turn: where the work stands, what is next. State, not a
   recap of what you just said.
 
