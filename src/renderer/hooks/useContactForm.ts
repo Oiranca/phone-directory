@@ -188,7 +188,7 @@ const toFormState = (record: EditableContactRecord): ContactFormState => ({
     section: record.location?.section
   },
   contactMethods: {
-    phones: record.contactMethods.phones.length > 0 ? record.contactMethods.phones : [createPhoneDraft()],
+    phones: record.contactMethods.phones,
     emails: record.contactMethods.emails,
     socials: record.contactMethods.socials ?? []
   },
