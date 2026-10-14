@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog } from "electron";
 import type { IpcMain, WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
+import { JsonDataError } from "../services/json-data-reader.js";
 import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../services/duplicate-detection.service.js";
 import { ImportPreviewAbortError } from "../services/import-preview-control.js";
 import { env } from "../config/env.js";
@@ -132,6 +133,18 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
 
     try {
       return await importFile(controller.signal);
+    } catch (error) {
+      const filesystemError = error instanceof Error && (
+        ("code" in error && typeof error.code === "string" && /^E[A-Z0-9]+$/.test(error.code)) ||
+        ("path" in error && typeof error.path === "string") ||
+        ("dest" in error && typeof error.dest === "string")
+      );
+      if ((error instanceof JsonDataError && error.code === "worker") || filesystemError) {
+        console.error("[contacts.ipc] JSON import failed:", error);
+        const message = "No se pudo procesar el archivo JSON seleccionado.";
+        throw error instanceof JsonDataError ? new JsonDataError(error.code, message) : new Error(message);
+      }
+      throw error;
     } finally {
       event.sender.removeListener("destroyed", abort);
       event.sender.removeListener("did-start-navigation", abort);

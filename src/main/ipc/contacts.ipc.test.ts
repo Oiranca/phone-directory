@@ -1020,6 +1020,56 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
     expect(response).not.toHaveProperty("result.importedFilePath");
   });
 
+  it.each([
+    ["contacts:import-dataset", "importDataset", "/Users/operator/private/replacement.json"],
+    ["contacts:pick-and-import-dataset", "importJsonFile", "C:\\Users\\operator\\private\\replacement.json"]
+  ] as const)("hides filesystem paths in %s errors", async (channel, method, filePath) => {
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [filePath] });
+    const filesystemError = Object.assign(new Error(`ENOENT: ${filePath}`), { code: "ENOENT", path: filePath });
+    serviceMock[method].mockRejectedValueOnce(filesystemError);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const rejection = await (handlers.get(channel)!({ sender: makeWebContentsSender(1) }) as Promise<unknown>)
+      .catch((error: unknown) => error);
+
+    expect((rejection as Error).message).toBe("No se pudo procesar el archivo JSON seleccionado.");
+    expect((rejection as Error).message).not.toContain(filePath);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("JSON import"), filesystemError);
+  });
+
+  it("hides worker errors while preserving typed JSON cancellation errors", async () => {
+    const { JsonDataError } = await import("../services/json-data-reader.js");
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
+    const workerError = new JsonDataError("worker", "EACCES: C:\\Users\\operator\\private\\replacement.json");
+    serviceMock.importJsonFile.mockRejectedValueOnce(workerError);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const rejection = await (getHandler()({ sender: makeWebContentsSender(1) }) as Promise<unknown>)
+      .catch((error: unknown) => error);
+
+    expect((rejection as Error).message).toBe("No se pudo procesar el archivo JSON seleccionado.");
+    expect(rejection).toMatchObject({ code: "worker" });
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("JSON import"), workerError);
+
+    const cancellation = new JsonDataError("aborted", "La importación JSON fue cancelada.");
+    serviceMock.importJsonFile.mockRejectedValueOnce(cancellation);
+    await expect(getHandler()({ sender: makeWebContentsSender(1) })).rejects.toBe(cancellation);
+  });
+
+  it.each([
+    ["too-large", "El archivo JSON supera el tamaño máximo permitido."],
+    ["too-deep", "El archivo JSON supera el límite seguro."],
+    ["invalid-data", "El archivo JSON no tiene una estructura válida."],
+    ["aborted", "La importación JSON fue cancelada."]
+  ] as const)("preserves %s JSON errors", async (code, message) => {
+    const { JsonDataError } = await import("../services/json-data-reader.js");
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
+    const expected = new JsonDataError(code, message);
+    serviceMock.importJsonFile.mockRejectedValueOnce(expected);
+
+    await expect(getHandler()({ sender: makeWebContentsSender(1) })).rejects.toBe(expected);
+  });
+
   it("cancels an in-flight JSON worker through the existing import cancel action", async () => {
     showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
     serviceMock.importJsonFile.mockImplementation((_filePath: string, options: { signal: AbortSignal }) =>
