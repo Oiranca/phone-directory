@@ -217,8 +217,10 @@ describe("BeepersPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     // "Rol" uniquely matches the label (table header is "Rol" too — use id)
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
-    // "Turno" is now an accessible SelectField combobox, not a native
-    // <select> — open it and click the "Noche" option.
+    const optionalDetails = screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement;
+    expect(optionalDetails.open).toBe(false);
+    fireEvent.click(screen.getByText("Turno y grupo (opcional)"));
+    expect(optionalDetails.open).toBe(true);
     fireEvent.click(screen.getByLabelText(/turno/i));
     fireEvent.click(screen.getByRole("option", { name: "Noche" }));
 
@@ -230,6 +232,25 @@ describe("BeepersPage", () => {
       );
       expect(screen.getByText("B-003")).toBeInTheDocument();
     });
+  });
+
+  it("keeps the default shift when creating from the main fields", async () => {
+    setupWindowApi({ addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], deviceNumber: "B-003" }) });
+    renderPage();
+    await waitFor(() => screen.getByText("B-001"));
+    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+
+    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    expect((screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement).open).toBe(false);
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(window.hospitalDirectory.addBeeper).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceNumber: "B-003", shift: "mañana", group: "" })
+    ));
   });
 
   it("sanitizes IPC error boilerplate when addBeeper rejects", async () => {
@@ -271,6 +292,8 @@ describe("BeepersPage", () => {
     expect(numberInput.value).toBe("B-001");
     const assignedInput = screen.getByLabelText(/asignado a/i) as HTMLInputElement;
     expect(assignedInput.value).toBe("Ana García");
+    expect((screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement).open).toBe(true);
+    expect(screen.getByLabelText(/^Grupo$/i)).toHaveValue("Equipo A");
   });
 
   it("updates a beeper on edit form submit", async () => {

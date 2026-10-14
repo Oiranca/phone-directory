@@ -460,8 +460,17 @@ export const BeepersPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            {!editingImportedId && (
-              <>
+          </div>
+          {!editingImportedId && (
+            <details
+              key={editingId ?? "new"}
+              open={Boolean(editingId)}
+              className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60"
+            >
+              <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blueDark">
+                Turno y grupo (opcional)
+              </summary>
+              <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
                 <div>
                   <SelectField
                     id="form-shift"
@@ -483,9 +492,9 @@ export const BeepersPage = () => {
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
                   />
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </details>
+          )}
           <div className="mt-6 flex justify-end gap-3">
             {editingId ? (
               <button
