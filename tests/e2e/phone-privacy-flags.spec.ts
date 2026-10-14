@@ -1,17 +1,10 @@
 /**
- * Regression coverage for the removal of the redundant
- * "No facilitar a pacientes" display chip.
+ * Regression coverage for distinct advisory phone privacy labels.
  *
  * A phone can still be flagged `noPatientSharing: true` in the data model
  * (the field remains part of the schema — see src/shared/schemas/contact.ts),
- * but the UI must only ever surface the "Confidencial" marker. This test
- * seeds a contact with a phone that has BOTH `confidential: true` and
- * `noPatientSharing: true` set, then asserts that "No facilitar"/"No
- * pacientes" text never appears in any of the three places the app renders
- * privacy markers:
- *   1. The detail-header pills (selectedRecordPrivacyFlags in DirectoryPage)
- *   2. The per-phone card badge (DirectoryPage phone list)
- *   3. The edit form's phone-section checkboxes (PhonesSection)
+ * and both flags must be named in directory cards and detail. The edit form
+ * still exposes only the existing "Confidencial" checkbox.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -41,8 +34,8 @@ const buildSeededDataset = () => ({
   exportedAt: "2026-04-13T00:00:00Z",
   metadata: {
     recordCount: 1,
-    generatedFrom: "chip-removal-verification",
-    generatedBy: "tests/e2e/chip-removal-verification.spec.ts",
+    generatedFrom: "phone-privacy-flags",
+    generatedBy: "tests/e2e/phone-privacy-flags.spec.ts",
     editorName: "System",
     typeCounts: {
       service: 1
@@ -108,11 +101,11 @@ const buildSeededDataset = () => ({
   ]
 });
 
-test.describe("chip removal regression", () => {
-  test("only the Confidencial marker appears, never No facilitar/No pacientes", async () => {
+test.describe("phone privacy flags", () => {
+  test("directory names both advisory flags while the edit form preserves its existing controls", async () => {
     await fs.mkdir(screenshotsDir, { recursive: true });
 
-    const workspace = await createWorkspace("chip-removal");
+    const workspace = await createWorkspace("phone-privacy-flags");
     const dataDir = path.join(workspace.userDataPath, "data");
     await fs.mkdir(dataDir, { recursive: true });
     await fs.writeFile(
@@ -130,14 +123,19 @@ test.describe("chip removal regression", () => {
 
       // Filter the results list down to our seeded record and select it.
       await page.getByPlaceholder("Buscar contacto o servicio").fill(DISPLAY_NAME);
-      await page.getByRole("button", { name: new RegExp(DISPLAY_NAME) }).click();
+      const resultCard = page.getByRole("button", { name: new RegExp(DISPLAY_NAME) });
+      await resultCard.click();
+      await expect(resultCard.getByText("Ver teléfono en detalle")).toBeVisible();
+      await expect(resultCard.getByText("Confidencial", { exact: true })).toBeVisible();
+      await expect(resultCard.getByText("No facilitar a pacientes")).toBeVisible();
+      await expect(resultCard.getByText("Contacto restringido")).toHaveCount(0);
 
       // --- 1. Detail-header pills -----------------------------------------
       const detailHeader = page
         .getByRole("heading", { name: DISPLAY_NAME, level: 4 })
         .locator("..");
       await expect(detailHeader.getByText("Confidencial", { exact: true })).toBeVisible();
-      await expect(detailHeader.getByText("No facilitar a pacientes")).toHaveCount(0);
+      await expect(detailHeader.getByText("No facilitar a pacientes")).toBeVisible();
       await expect(detailHeader.getByText(/No pacientes/i)).toHaveCount(0);
 
       await page.screenshot({ path: path.join(screenshotsDir, "01-detail-header-pills.png") });
@@ -145,7 +143,7 @@ test.describe("chip removal regression", () => {
       // --- 2. Per-phone card badge -----------------------------------------
       const phoneCard = page.getByTestId("contact-phone-ph_chip_1");
       await expect(phoneCard.getByText("Confidencial", { exact: true })).toBeVisible();
-      await expect(phoneCard.getByText("No facilitar a pacientes")).toHaveCount(0);
+      await expect(phoneCard.getByText("No facilitar a pacientes")).toBeVisible();
       await expect(phoneCard.getByText(/No pacientes/i)).toHaveCount(0);
 
       await page.screenshot({ path: path.join(screenshotsDir, "02-phone-card.png") });
@@ -168,7 +166,7 @@ test.describe("chip removal regression", () => {
 
       await page.screenshot({ path: path.join(screenshotsDir, "03-edit-form-phone-section.png") });
 
-      // App-wide: the removed copy should never appear anywhere on screen.
+      // The edit form does not expose the imported patient-sharing flag.
       await expect(page.getByText("No facilitar a pacientes")).toHaveCount(0);
       await expect(page.getByText(/No pacientes/i)).toHaveCount(0);
     } finally {

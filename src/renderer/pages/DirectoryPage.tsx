@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
-import { getPhonePrivacyFlags, getPreferredResultPhone } from "../services/search.service";
+import { getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
 import type { ContactRecord, PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
@@ -236,17 +236,7 @@ const getSafeSocialUrl = (social: SocialContact): string | null => {
   return null;
 };
 
-// The list-card "Privacidad sensible" badge must reflect ANY
-// sensitive phone on the record, not just the single "preferred" phone whose
-// number is shown (getPreferredResultPhone intentionally favors a non-sensitive
-// number for display, so a record's ONLY sensitive phone can be a secondary one
-// that never becomes "preferred"). Scoping this check to the preferred phone
-// alone made the badge silently miss records where the just-edited phone
-// wasn't the one being displayed — looking stale until something else (e.g. a
-// different phone becoming preferred, or a full reload re-deriving state)
-// happened to surface it. Checking every phone on the record keeps the number
-// shown privacy-conscious while making the aggregate warning badge accurate
-// and immediate.
+// Card and detail flags describe every phone, including non-preferred ones.
 const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
   const flags: PrivacyFlag[] = [];
 
@@ -407,7 +397,7 @@ export const DirectoryPage = () => {
 
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
-  const selectedRecordPrivacyFlags = selectedRecord ? getPhonePrivacyFlags(selectedRecord) : [];
+  const selectedRecordPrivacyFlags = selectedRecord ? getPhoneInlinePrivacyFlags(selectedRecord.contactMethods.phones) : [];
   const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
   const primarySelectedPhone = selectedRecord ? getPreferredResultPhone(selectedRecord) : undefined;
 
@@ -546,7 +536,7 @@ export const DirectoryPage = () => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
-            const isPrimaryPhoneSafe = Boolean(primaryPhone && !primaryPhone.confidential && !primaryPhone.noPatientSharing);
+            const showPhoneOnCard = Boolean(primaryPhone && !primaryPhone.confidential && !primaryPhone.noPatientSharing);
             const listContext = [record.organization.department, buildLocationTitleFallback(record.location)]
               .filter((value, contextIndex, values) => Boolean(value?.trim()) && values.indexOf(value) === contextIndex)
               .join(" · ");
@@ -588,18 +578,22 @@ export const DirectoryPage = () => {
                       layout slot/gap stays consistent across rows. */}
                   <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium text-slate-700">{isPrimaryPhoneSafe ? primaryPhone?.number : "Contacto restringido"}</span>
+                    <span className="font-medium text-slate-700">{showPhoneOnCard ? primaryPhone?.number : primaryPhone ? "Ver teléfono en detalle" : "Sin teléfono"}</span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{record.status === "active" ? "Activo" : "Inactivo"}</span>
-                    {privacyFlags.length > 0 && (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900" title="Atención de privacidad">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
-                        <span>Privacidad sensible</span>
+                    {privacyFlags.map((flag) => (
+                      <span
+                        key={flag}
+                        className={flag === "Confidencial"
+                          ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700"
+                          : "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900"}
+                      >
+                        {flag}
                       </span>
-                    )}
+                    ))}
                   </div>
                   </div>
                 </button>
-                {isPrimaryPhoneSafe && primaryPhone && (
+                {showPhoneOnCard && primaryPhone && (
                   <a
                     href={`tel:${primaryPhone.number}`}
                     aria-label={`Llamar a ${buildDisplayTitle(record.displayName, record.organization, record.location)}`}
@@ -707,7 +701,9 @@ export const DirectoryPage = () => {
                           {selectedRecordPrivacyFlags.map((flag) => (
                             <span
                               key={flag}
-                              className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                              className={flag === "Confidencial"
+                                ? "rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                                : "rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900"}
                             >
                               {flag}
                             </span>
@@ -808,6 +804,11 @@ export const DirectoryPage = () => {
                             {phone.confidential && (
                               <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
                                 Confidencial
+                              </span>
+                            )}
+                            {phone.noPatientSharing && (
+                              <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                                No facilitar a pacientes
                               </span>
                             )}
                           </div>
