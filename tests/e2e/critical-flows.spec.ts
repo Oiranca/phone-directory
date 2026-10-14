@@ -217,23 +217,9 @@ test.describe("critical MVP flows", () => {
     }
   });
 
-  test("Directory page avoids horizontal and vertical page-level scroll at narrow viewport widths", async () => {
-    // Regression guard for the icon rail nav (replacing the old top nav):
-    // the rail is a fixed-width shell element sitting beside the page
-    // content via flexbox, so a narrow window could either force the
-    // content column to overflow horizontally (page-level scrollbar) or,
-    // like the desktop scenario above, reintroduce document-level vertical
-    // scroll. Neither the rail nor the directory content may cause the
-    // document itself to exceed the viewport at small widths.
-    //
-    // "Narrow" here is anchored to what this Electron app can actually be
-    // resized to, not generic mobile breakpoints: `src/main/index.ts` sets
-    // `minWidth: 1080` / `minHeight: 720` on the BrowserWindow, so no real
-    // user session can ever produce a viewport below that floor. Testing
-    // arbitrary phone-sized widths (e.g. 320-390px) would exercise a state
-    // that is unreachable in production and would just be measuring a
-    // pre-existing, unrelated CSS min-content quirk instead of this PR's
-    // shell-geometry change.
+  test("Directory page fits narrow simulated viewports without horizontal overflow", async () => {
+    // Electron's window minimum is 1080px; smaller Playwright viewports
+    // exercise the responsive CSS without changing the native window size.
     const workspace = await createWorkspace("narrow-viewport-scroll");
     const { electronApp, page } = await launchElectronApp({
       userDataPath: workspace.userDataPath
@@ -243,6 +229,8 @@ test.describe("critical MVP flows", () => {
       await waitForDirectory(page);
 
       const viewportsToCheck = [
+        { width: 390, height: 844 },
+        { width: 768, height: 1024 },
         { width: 1080, height: 720 },
         { width: 1100, height: 750 },
         { width: 1200, height: 800 }
@@ -251,7 +239,9 @@ test.describe("critical MVP flows", () => {
       for (const viewport of viewportsToCheck) {
         await page.setViewportSize(viewport);
         await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-        await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
+        if (viewport.width >= 1080) {
+          await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
+        }
       }
     } finally {
       await closeElectronApp(electronApp);

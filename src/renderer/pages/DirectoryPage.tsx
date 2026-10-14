@@ -497,7 +497,7 @@ export const DirectoryPage = () => {
       </div>
 
       {/* Main Layout: List (Left) / Detail (Right) */}
-      <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
         
         {/* Left Column: Results List */}
         {/* The height budget is bounded on THIS column, not just the
@@ -508,7 +508,7 @@ export const DirectoryPage = () => {
             for — previously the nav sat outside the bounded area entirely, so it
             was only reachable via page-level scroll that the internal list's own
             scrollbar silently absorbed. */}
-        <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 flex-col gap-3">
+        <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 min-w-0 flex-col gap-3">
           <DirectoryHighlightCard highlight={GENERIC_CCEE_APPOINTMENTS} />
           <ul
             ref={listRef}
@@ -683,7 +683,7 @@ export const DirectoryPage = () => {
           aria-label="Detalle del registro seleccionado"
           onKeyDown={handleDetailKeyDown}
           style={{ top: STICKY_CONTENT_TOP }}
-          className="lg:sticky"
+          className="min-w-0 lg:sticky"
         >
           {/* Bounded to the available viewport height with overflow-y-auto
               — no scrollbar appears while content fits; it only scrolls internally

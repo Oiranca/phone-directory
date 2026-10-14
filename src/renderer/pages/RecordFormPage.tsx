@@ -58,6 +58,7 @@ export const RecordFormPage = () => {
   const blocker = useBlocker(shouldBlock);
   const notFoundTitleRef = useRef<HTMLHeadingElement>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [extraDataOpen, setExtraDataOpen] = useState<boolean | null>(null);
 
   /**
    * Guard window close / reload / browser unload when the form is dirty.
@@ -109,46 +110,46 @@ export const RecordFormPage = () => {
     );
   }
 
+  const hasExtraData = Boolean(
+    formState.organization.department ||
+    formState.organization.service ||
+    formState.organization.area ||
+    formState.organization.specialty ||
+    formState.location.building ||
+    formState.location.floor ||
+    formState.location.room ||
+    formState.location.text ||
+    formState.contactMethods.emails.length ||
+    formState.contactMethods.socials.length ||
+    formState.customFields.length ||
+    formState.notes
+  );
+  const hasExtraErrors = Object.keys(fieldErrors).some((path) =>
+    path.startsWith("contactMethods.emails") || path.startsWith("customFields")
+  );
+
   return (
-    <section aria-labelledby="record-form-page-title" className="rounded-3xl bg-white p-5 shadow-panel sm:p-6">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
+    <section aria-labelledby="record-form-page-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-6">
+      <div className="border-b border-slate-200 pb-3 sm:pb-5">
         <div>
           <h2 id="record-form-page-title" className="text-2xl font-semibold text-scs-blueDark">
             {isEditing ? formState.displayName || "Actualizar contacto" : "Alta de contacto"}
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Completa los datos del contacto: teléfonos, correos, ubicación y notas.
-          </p>
         </div>
-        <Link
-          to="/"
-          data-keyboard-cancel
-          aria-label="Cancelar y volver al directorio"
-          className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-        >
-          Cancelar
-        </Link>
       </div>
 
       <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {liveMessage}
       </p>
 
-      <form className="mt-6 space-y-8" data-keyboard-submit noValidate onSubmit={handleSubmit}>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <IdentitySection
-            formState={formState}
-            fieldErrors={fieldErrors}
-            setFormState={setFormState}
-            displayNameInputRef={displayNameInputRef}
-            clearFieldError={clearFieldError}
-          />
-          <OrganizationLocationSection
-            formState={formState}
-            setFormState={setFormState}
-            availableAreas={availableAreas}
-          />
-        </div>
+      <form className="mt-4 space-y-4 sm:mt-6 sm:space-y-6" data-keyboard-submit noValidate onSubmit={handleSubmit}>
+        <IdentitySection
+          formState={formState}
+          fieldErrors={fieldErrors}
+          setFormState={setFormState}
+          displayNameInputRef={displayNameInputRef}
+          clearFieldError={clearFieldError}
+        />
 
         <PhonesSection
           phones={formState.contactMethods.phones}
@@ -163,57 +164,69 @@ export const RecordFormPage = () => {
           clearFieldError={clearFieldError}
         />
 
-        <EmailsSection
-          emails={formState.contactMethods.emails}
-          fieldErrors={fieldErrors}
-          addEmailButtonRef={addEmailButtonRef}
-          emailAddressInputRefs={emailAddressInputRefs}
-          setFormState={setFormState}
-          setLiveMessage={setLiveMessage}
-          setPendingFocusTarget={setPendingFocusTarget}
-          updateEmail={updateEmail}
-          removeEmail={removeEmail}
-          clearFieldError={clearFieldError}
-        />
-
-        <SocialsSection
-          socials={formState.contactMethods.socials}
-          setFormState={setFormState}
-          setLiveMessage={setLiveMessage}
-          updateSocial={updateSocial}
-          removeSocial={removeSocial}
-        />
-
-        <CustomFieldsSection
-          customFields={formState.customFields}
-          existingCustomFieldKeys={existingCustomFieldKeys}
-          fieldErrors={fieldErrors}
-          addCustomFieldButtonRef={addCustomFieldButtonRef}
-          customFieldKeyInputRefs={customFieldKeyInputRefs}
-          setFormState={setFormState}
-          setLiveMessage={setLiveMessage}
-          setPendingFocusTarget={setPendingFocusTarget}
-          updateCustomField={updateCustomField}
-          removeCustomField={removeCustomField}
-          clearFieldError={clearFieldError}
-        />
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
-            <label htmlFor="notes" className="text-sm font-medium text-slate-700">
-              Notas
-            </label>
-            <textarea
-              id="notes"
-              value={formState.notes ?? ""}
-              onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
-              rows={6}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+        <details
+          className="rounded-3xl border border-slate-200 bg-slate-50/60"
+          open={hasExtraErrors || (extraDataOpen ?? hasExtraData)}
+          onToggle={(event) => setExtraDataOpen(event.currentTarget.open)}
+        >
+          <summary className="focus-ring cursor-pointer rounded-3xl p-5 text-lg font-semibold text-scs-blueDark">
+            Más datos del contacto
+          </summary>
+          <div className="space-y-6 border-t border-slate-200 p-4">
+            <OrganizationLocationSection
+              formState={formState}
+              setFormState={setFormState}
+              availableAreas={availableAreas}
             />
-          </section>
-        </div>
+            <EmailsSection
+              emails={formState.contactMethods.emails}
+              fieldErrors={fieldErrors}
+              addEmailButtonRef={addEmailButtonRef}
+              emailAddressInputRefs={emailAddressInputRefs}
+              setFormState={setFormState}
+              setLiveMessage={setLiveMessage}
+              setPendingFocusTarget={setPendingFocusTarget}
+              updateEmail={updateEmail}
+              removeEmail={removeEmail}
+              clearFieldError={clearFieldError}
+            />
 
-        <div className="flex flex-col gap-3 pt-6 sm:flex-row sm:justify-end sm:pt-8">
+            <SocialsSection
+              socials={formState.contactMethods.socials}
+              setFormState={setFormState}
+              setLiveMessage={setLiveMessage}
+              updateSocial={updateSocial}
+              removeSocial={removeSocial}
+            />
+
+            <CustomFieldsSection
+              customFields={formState.customFields}
+              existingCustomFieldKeys={existingCustomFieldKeys}
+              fieldErrors={fieldErrors}
+              addCustomFieldButtonRef={addCustomFieldButtonRef}
+              customFieldKeyInputRefs={customFieldKeyInputRefs}
+              setFormState={setFormState}
+              setLiveMessage={setLiveMessage}
+              setPendingFocusTarget={setPendingFocusTarget}
+              updateCustomField={updateCustomField}
+              removeCustomField={removeCustomField}
+              clearFieldError={clearFieldError}
+            />
+
+            <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+              <label htmlFor="notes" className="text-sm font-medium text-slate-700">Notas</label>
+              <textarea
+                id="notes"
+                value={formState.notes ?? ""}
+                onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
+                rows={6}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+              />
+            </section>
+          </div>
+        </details>
+
+        <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-panel sm:static sm:mx-0 sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-8 sm:shadow-none">
           {isEditing ? (
             <button
               type="button"
@@ -226,15 +239,16 @@ export const RecordFormPage = () => {
           ) : null}
           <Link
             to="/"
+            data-keyboard-cancel
             aria-label="Cancelar sin guardar los cambios"
-            className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-700 sm:w-auto"
+            className="min-h-11 flex-1 whitespace-nowrap rounded-2xl border border-slate-300 bg-white px-2 py-3 text-center text-sm font-semibold text-slate-700 sm:flex-none sm:px-5"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:w-auto"
+            className="min-h-11 flex-1 whitespace-nowrap rounded-2xl bg-scs-blue px-2 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:flex-none sm:px-5"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>

@@ -53,6 +53,22 @@ const renderWithRoute = (initialEntry: string) => {
   return router;
 };
 
+const openExtraData = () => {
+  fireEvent.click(screen.getByText("Más datos del contacto"));
+};
+
+const loadRecordWithoutPhones = () => {
+  const record = {
+    ...defaultContacts.records[0],
+    contactMethods: { ...defaultContacts.records[0].contactMethods, phones: [] }
+  };
+  window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+    contacts: { ...defaultContacts, records: [record, ...defaultContacts.records.slice(1)] },
+    settings: editableSettings
+  });
+  return record;
+};
+
 describe("RecordFormPage", () => {
   beforeEach(() => {
     resetStore();
@@ -103,6 +119,18 @@ describe("RecordFormPage", () => {
       expect(window.hospitalDirectory.createRecord).toHaveBeenCalledTimes(1);
     });
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("shows essential fields first and keeps empty optional sections collapsed", async () => {
+    renderWithRoute("/contacts/new");
+    expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    expect(screen.getByText("Más datos de identidad").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Más datos del contacto").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Más opciones del teléfono").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText(/nombre visible/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/número/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear registro" })).toBeInTheDocument();
   });
 
   it("ignores repeated submit attempts while a save is already running", async () => {
@@ -207,6 +235,10 @@ describe("RecordFormPage", () => {
     expect(await screen.findByDisplayValue(defaultContacts.records[0].displayName)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Eliminar contacto" })).toBeInTheDocument();
+    expect(screen.getByText("Más datos de identidad").closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("Más datos del contacto").closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("Más opciones del teléfono").closest("details")).toHaveAttribute("open");
+    expect(screen.queryByLabelText("Nombre")).not.toBeInTheDocument();
   });
 
   it("normalizes allowed separators when pasting a phone number", async () => {
@@ -244,6 +276,43 @@ describe("RecordFormPage", () => {
       expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1);
     });
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("preserves an imported contact with no phones when editing its name", async () => {
+    const recordWithoutPhones = loadRecordWithoutPhones();
+
+    renderWithRoute(`/contacts/${recordWithoutPhones.id}/edit`);
+    expect(await screen.findByDisplayValue(recordWithoutPhones.displayName)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/número/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/nombre visible/i), {
+      target: { value: "Admisión actualizada" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1));
+    const [, submittedPayload] = (window.hospitalDirectory.updateRecord as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(submittedPayload.contactMethods.phones).toEqual([]);
+  });
+
+  it("requires a number when adding a phone to an imported contact without phones", async () => {
+    const recordWithoutPhones = loadRecordWithoutPhones();
+    renderWithRoute(`/contacts/${recordWithoutPhones.id}/edit`);
+    expect(await screen.findByDisplayValue(recordWithoutPhones.displayName)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir teléfono" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await screen.findByText("El teléfono es obligatorio.")).toBeInTheDocument();
+    expect(window.hospitalDirectory.updateRecord).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/número/i), { target: { value: "928700000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1));
+    const [, submittedPayload] = (window.hospitalDirectory.updateRecord as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(submittedPayload.contactMethods.phones).toHaveLength(1);
+    expect(submittedPayload.contactMethods.phones[0].number).toBe("928700000");
   });
 
   it("shows the record-not-found state and moves focus to its heading when editing a missing record", async () => {
@@ -392,6 +461,8 @@ describe("RecordFormPage", () => {
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
+    openExtraData();
+
     fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
 
     const emailInputs = screen.getAllByLabelText("Correo electrónico");
@@ -404,6 +475,8 @@ describe("RecordFormPage", () => {
     renderWithRoute("/contacts/new");
 
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+    openExtraData();
 
     fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
     // Button now has contextual aria-label: "Eliminar email 1" (empty address → position)
@@ -438,16 +511,14 @@ describe("RecordFormPage", () => {
     expect(loadingRegion).toHaveAttribute("aria-live", "polite");
   });
 
-  it("gives each Cancelar link a distinct accessible name", async () => {
+  it("gives the Cancelar link an accessible name", async () => {
     renderWithRoute("/contacts/new");
     expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
     expect(
-      screen.getByRole("link", { name: "Cancelar y volver al directorio" })
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("link", { name: "Cancelar sin guardar los cambios" })
     ).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Cancelar/i })).toHaveLength(1);
   });
 
   it("keeps footer tab order aligned with visual order (Cancelar before submit, no col-reverse)", async () => {
@@ -575,6 +646,8 @@ describe("RecordFormPage", () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
+      openExtraData();
+
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
 
       const handleInputs = screen.getAllByLabelText("Handle / usuario");
@@ -586,6 +659,8 @@ describe("RecordFormPage", () => {
     it("returns focus to the add button when a social row is removed", async () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      openExtraData();
 
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
       expect(screen.getAllByLabelText("Handle / usuario")).toHaveLength(1);
@@ -634,6 +709,8 @@ describe("RecordFormPage", () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
+      openExtraData();
+
       fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
 
       expect(screen.getByRole("button", { name: "Eliminar email 1" })).toBeInTheDocument();
@@ -642,6 +719,8 @@ describe("RecordFormPage", () => {
     it("includes the email address in the aria-label when the address is filled in", async () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      openExtraData();
 
       fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
       fireEvent.change(screen.getByLabelText("Correo electrónico"), {
@@ -656,6 +735,8 @@ describe("RecordFormPage", () => {
     it("keeps Eliminar aria-labels unique across emails sharing the same address", async () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      openExtraData();
 
       fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
       fireEvent.click(screen.getByRole("button", { name: "Añadir correo" }));
@@ -672,6 +753,8 @@ describe("RecordFormPage", () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
+      openExtraData();
+
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
 
       expect(screen.getByRole("button", { name: "Eliminar red social 1" })).toBeInTheDocument();
@@ -680,6 +763,8 @@ describe("RecordFormPage", () => {
     it("keeps Eliminar aria-labels unique across social rows sharing the same handle", async () => {
       renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
+
+      openExtraData();
 
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
       fireEvent.click(screen.getByRole("button", { name: "Añadir red social" }));
@@ -693,7 +778,7 @@ describe("RecordFormPage", () => {
     });
   });
 
-  describe("unsaved-changes guard on Cancelar links", () => {
+  describe("unsaved-changes guard on Cancelar", () => {
     it("opens the confirmation dialog instead of navigating when Cancelar is clicked on a dirty form", async () => {
       const router = renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
@@ -703,26 +788,22 @@ describe("RecordFormPage", () => {
         target: { value: "Hospital Norte" }
       });
 
-      // Both Cancelar links must be guarded — exercise each one in turn.
-      for (const cancelName of ["Cancelar y volver al directorio", "Cancelar sin guardar los cambios"]) {
-        fireEvent.click(screen.getByRole("link", { name: cancelName }));
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar sin guardar los cambios" }));
 
-        expect(
-          await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
-        ).toBeInTheDocument();
-        expect(router.state.location.pathname).toBe("/contacts/new");
+      expect(
+        await screen.findByText("¿Seguro que quieres salir? Los cambios no guardados se perderán.")
+      ).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/contacts/new");
 
-        // Dismiss so the next iteration starts from a clean dialog state
-        fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      }
+      fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
     it("navigates directly to / when Cancelar is clicked on a clean form", async () => {
       const router = renderWithRoute("/contacts/new");
       expect(await screen.findByText("Alta de contacto")).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("link", { name: "Cancelar y volver al directorio" }));
+      fireEvent.click(screen.getByRole("link", { name: "Cancelar sin guardar los cambios" }));
 
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/");

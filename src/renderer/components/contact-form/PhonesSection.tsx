@@ -39,10 +39,11 @@ export const PhonesSection = ({
   clearFieldError
 }: Props) => {
   const [pasteErrors, setPasteErrors] = useState<Record<string, string>>({});
+  const [expandedPhones, setExpandedPhones] = useState<Record<string, boolean>>({});
 
   return (
-  <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <section className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50/60 p-4 sm:space-y-4 sm:p-5">
+    <div className="flex items-center justify-between gap-2">
       <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
       <button
         ref={addPhoneButtonRef}
@@ -66,7 +67,7 @@ export const PhonesSection = ({
           setLiveMessage(`Teléfono ${phones.length + 1} añadido.`);
           setPendingFocusTarget({ kind: "phone", id: nextPhone.id, fallback: "add-phone" });
         }}
-        className="focus-ring rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
+        className="focus-ring min-h-11 rounded-lg p-2 text-sm font-medium text-scs-blue hover:bg-slate-100 hover:text-scs-blueDark"
       >
         Añadir teléfono
       </button>
@@ -74,7 +75,7 @@ export const PhonesSection = ({
 
     <ul className="space-y-4">
       {phones.map((phone, index) => (
-        <li key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+        <li key={phone.id} className="rounded-3xl border border-slate-200 bg-white p-3 sm:p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h4 className="text-sm font-semibold text-slate-700">Teléfono {index + 1}</h4>
             <button
@@ -91,16 +92,7 @@ export const PhonesSection = ({
             </button>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-3">
-            <div>
-              <label htmlFor={`phone-label-${phone.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
-              <input
-                id={`phone-label-${phone.id}`}
-                value={phone.label ?? ""}
-                onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
-              />
-            </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor={`phone-number-${phone.id}`} className="text-sm font-medium text-slate-700">
                 Número<span aria-hidden="true" className="ml-1 text-red-600">*</span>
@@ -162,26 +154,47 @@ export const PhonesSection = ({
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <div>
-              <SelectField
-                id={`phone-kind-${phone.id}`}
-                label="Tipo de teléfono"
-                value={phone.kind}
-                onChange={(value) => updatePhone(phone.id, { kind: value })}
-                options={phoneKindOptions}
-              />
+          <details
+            className="mt-4 rounded-2xl border border-slate-200"
+            open={expandedPhones[phone.id] ?? Boolean(phone.label || phone.notes || phone.kind !== "internal")}
+            onToggle={(event) => {
+              const isOpen = event.currentTarget.open;
+              setExpandedPhones((current) => ({ ...current, [phone.id]: isOpen }));
+            }}
+          >
+            <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blue">
+              Más opciones del teléfono
+            </summary>
+            <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`phone-label-${phone.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
+                <input
+                  id={`phone-label-${phone.id}`}
+                  value={phone.label ?? ""}
+                  onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                />
+              </div>
+              <div>
+                <SelectField
+                  id={`phone-kind-${phone.id}`}
+                  label="Tipo de teléfono"
+                  value={phone.kind}
+                  onChange={(value) => updatePhone(phone.id, { kind: value })}
+                  options={phoneKindOptions}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor={`phone-notes-${phone.id}`} className="text-sm font-medium text-slate-700">Notas</label>
+                <input
+                  id={`phone-notes-${phone.id}`}
+                  value={phone.notes ?? ""}
+                  onChange={(event) => updatePhone(phone.id, { notes: event.target.value })}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                />
+              </div>
             </div>
-            <div>
-              <label htmlFor={`phone-notes-${phone.id}`} className="text-sm font-medium text-slate-700">Notas</label>
-              <input
-                id={`phone-notes-${phone.id}`}
-                value={phone.notes ?? ""}
-                onChange={(event) => updatePhone(phone.id, { notes: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
-              />
-            </div>
-          </div>
+          </details>
 
           <div className="mt-4 flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm text-slate-700">

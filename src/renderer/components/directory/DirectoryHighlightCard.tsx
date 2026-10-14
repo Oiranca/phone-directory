@@ -12,7 +12,7 @@ const formatSpanishList = (values: readonly string[]): string => {
 export const DirectoryHighlightCard = ({ highlight }: DirectoryHighlightCardProps) => (
   <aside
     aria-label="Contacto destacado de citas"
-    className="shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel"
+    className="min-w-0 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel"
   >
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -24,7 +24,7 @@ export const DirectoryHighlightCard = ({ highlight }: DirectoryHighlightCardProp
       </span>
     </div>
 
-    <dl className="mt-4 grid grid-cols-2 gap-4">
+    <dl className="mt-4 grid gap-4 sm:grid-cols-2">
       <div>
         <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Teléfono</dt>
         <dd className="mt-1 text-2xl font-bold tabular-nums leading-none text-scs-blueDark">{highlight.phone}</dd>
