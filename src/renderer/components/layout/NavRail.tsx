@@ -84,19 +84,18 @@ const settingsNavItem: RailNavItem = {
 };
 
 const baseItemClasses =
-  "focus-ring flex items-center rounded-[10px] text-[13px] font-semibold whitespace-nowrap overflow-hidden transition-colors";
-const collapsedItemClasses = "h-10 w-10 justify-center p-0";
-const expandedItemClasses = "h-10 w-full justify-start gap-[10px] px-[11px]";
+  "focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[10px] px-1 text-center text-[10px] font-semibold leading-tight transition-colors sm:flex-none sm:flex-row sm:text-left sm:text-[13px]";
+const collapsedItemClasses = "sm:h-10 sm:w-10 sm:justify-center sm:p-0";
+const expandedItemClasses = "sm:h-10 sm:w-full sm:justify-start sm:gap-[10px] sm:px-[11px]";
 const activeItemClasses = "bg-scs-blue text-white";
 const inactiveItemClasses = "bg-transparent text-white/55 hover:text-white/80";
 
 const readStoredCollapsed = (): boolean => {
   try {
     const stored = localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY);
-    // Default collapsed when nothing (or a corrupt value) has been stored.
-    return stored === "false" ? false : true;
+    return stored === "true";
   } catch {
-    return true;
+    return false;
   }
 };
 
@@ -116,7 +115,7 @@ const RailNavLink = ({ item, collapsed }: { item: RailNavItem; collapsed: boolea
     }
   >
     {item.icon}
-    <span className={collapsed ? "hidden" : "inline"}>{item.label}</span>
+    <span className={collapsed ? "sm:hidden" : "inline"}>{item.label}</span>
   </NavLink>
   );
 };
@@ -137,25 +136,25 @@ export const NavRail = () => {
   return (
     <div
       className={[
-        "sticky top-0 flex h-screen shrink-0 flex-col overflow-hidden bg-scs-ink px-[10px] py-[14px]",
+        "fixed inset-x-0 bottom-0 z-50 flex h-[72px] w-full bg-scs-ink px-2 py-2 sm:sticky sm:inset-auto sm:top-0 sm:h-screen sm:shrink-0 sm:flex-col sm:overflow-hidden sm:px-[10px] sm:py-[14px]",
         "motion-safe:transition-[width] motion-safe:duration-150 motion-safe:ease-in-out motion-reduce:transition-none",
-        collapsed ? "w-[60px] items-center" : "w-[192px] items-stretch"
+        collapsed ? "sm:w-[60px] sm:items-center" : "sm:w-[192px] sm:items-stretch"
       ].join(" ")}
       style={{ gap: "6px" }}
     >
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-scs-blue text-[11px] font-bold text-white">
+      <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-scs-blue text-[11px] font-bold text-white sm:flex">
         HA
       </div>
 
       <nav
         aria-label="Navegación principal"
-        className={["flex flex-1 flex-col", collapsed ? "items-center" : "items-stretch"].join(" ")}
+        className={["flex min-w-0 flex-1 flex-row items-stretch", collapsed ? "sm:items-center" : "sm:items-stretch", "sm:flex-col"].join(" ")}
         style={{ gap: "6px" }}
       >
         {primaryNavItems.map((item) => (
           <RailNavLink key={item.to} item={item} collapsed={collapsed} />
         ))}
-        <div aria-hidden="true" className="flex-1" />
+        <div aria-hidden="true" className="hidden sm:flex-1" />
         <RailNavLink item={settingsNavItem} collapsed={collapsed} />
       </nav>
 
@@ -164,7 +163,7 @@ export const NavRail = () => {
         onClick={() => setCollapsed((prev) => !prev)}
         title={toggleLabel}
         aria-pressed={!collapsed}
-        className={[baseItemClasses, collapsed ? collapsedItemClasses : expandedItemClasses, inactiveItemClasses].join(" ")}
+        className={["hidden sm:flex", baseItemClasses, collapsed ? collapsedItemClasses : expandedItemClasses, inactiveItemClasses].join(" ")}
       >
         <ToggleIcon />
         <span className={collapsed ? "hidden" : "inline"}>{toggleLabel}</span>
