@@ -137,6 +137,17 @@ const launchElectron = async (openDialogPaths, userDataPath = path.join(workspac
     return browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true";
   });
 };
+const failures = [];
+const runScenario = async (name, check) => {
+  try {
+    await check();
+  } catch (error) {
+    failures.push(error);
+    console.error(`[agent-browser-e2e] FAIL ${name}:`, error);
+  } finally {
+    await closeElectron();
+  }
+};
 
 try {
   browserCommand("--version");
@@ -219,11 +230,23 @@ try {
     return (await fetch(`http://127.0.0.1:${vitePort}`, { signal: AbortSignal.timeout(2_000) })).ok;
   });
 
+  await runScenario("directory and import workflows", async () => {
   await launchElectron([csvPath, invalidCsvPath, mixedCsvPath, warningCsvPath, cancelCsvPath,
     overwriteCsvPath, skipCsvPath, mergeCsvPath, bulkCsvPath]);
   if (!browserCommand("get", "url").startsWith(`http://127.0.0.1:${vitePort}/`)) {
     throw new Error("ELECTRON_RENDERER_URL did not load the configured dev server");
   }
+
+  browserCommand("eval", "window.resizeTo(390, 844)");
+  await waitFor("390px native window", () => {
+    const size = JSON.parse(browserCommand("eval", `(() => ({
+      outerWidth, innerWidth,
+      navPosition: getComputedStyle(document.querySelector('nav[aria-label="Navegación principal"]').parentElement).position
+    }))()`));
+    return size.outerWidth <= 390 && size.innerWidth < 640 && size.navPosition === "fixed";
+  });
+  browserCommand("eval", "window.resizeTo(1440, 920)");
+  console.log("[agent-browser-e2e] Native 390px window and bottom navigation passed");
 
   for (const [width, height] of [[390, 844], [768, 1024], [1080, 720], [1100, 750], [1200, 800], [1440, 768], [1440, 900], [1920, 1080]]) {
     browserCommand("set", "viewport", String(width), String(height));
@@ -458,9 +481,14 @@ try {
   clickRole("button", "Elegir archivo");
   await waitFor("backup restore", () => hasText("Importación completada."));
   console.log("[agent-browser-e2e] Local backup and re-import passed");
+  });
 
+  await runScenario("phone privacy", async () => {
+  const privacyUserDataPath = path.join(workspace, "privacy-user-data");
+  const privacyContactsPath = path.join(privacyUserDataPath, "data", "contacts.json");
+  await launchElectron([], privacyUserDataPath);
   await closeElectron();
-  const privateDataset = JSON.parse(await fs.readFile(contactsPath, "utf8"));
+  const privateDataset = JSON.parse(await fs.readFile(privacyContactsPath, "utf8"));
   privateDataset.records = [{
     id: "cnt_chip_1", externalId: "chip-removal-1", type: "service", displayName: "Consulta Confidencial ",
     organization: { department: "Consultas", service: "Consulta Reservada", area: "sanitaria-asistencial" },
@@ -474,8 +502,8 @@ try {
   privateDataset.metadata.recordCount = 1;
   privateDataset.metadata.typeCounts = { service: 1 };
   privateDataset.metadata.areaCounts = { "sanitaria-asistencial": 1 };
-  await fs.writeFile(contactsPath, JSON.stringify(privateDataset));
-  await launchElectron([]);
+  await fs.writeFile(privacyContactsPath, JSON.stringify(privateDataset));
+  await launchElectron([], privacyUserDataPath);
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Consulta Confidencial");
   await waitFor("private contact", () => browserCommand("is", "visible", '[data-record-id="cnt_chip_1"]') === "true");
   browserCommand("click", '[data-record-id="cnt_chip_1"]');
@@ -507,10 +535,16 @@ try {
     throw new Error(`Phone privacy edit controls failed: ${JSON.stringify(editPrivacy)}`);
   }
   console.log("[agent-browser-e2e] Phone privacy labels and edit controls passed");
+  });
 
+  await runScenario("search performance", async () => {
+  const searchUserDataPath = path.join(workspace, "search-user-data");
+  const searchContactsPath = path.join(searchUserDataPath, "data", "contacts.json");
+  await launchElectron([], searchUserDataPath);
   await closeElectron();
+  const searchDataset = JSON.parse(await fs.readFile(searchContactsPath, "utf8"));
   const searchCount = 5_000;
-  privateDataset.records = Array.from({ length: searchCount }, (_, index) => ({
+  searchDataset.records = Array.from({ length: searchCount }, (_, index) => ({
     id: `search-performance-${index}`, type: "service", displayName: `Equipo ${index}`,
     organization: { department: index % 4 === 0 ? "Central" : "Norte", service: "Agenda", area: "otros" },
     contactMethods: { phones: [], emails: [], socials: [] }, beepers: [], aliases: [], tags: [], status: "active",
@@ -518,11 +552,11 @@ try {
     audit: { createdAt: "2026-08-31T00:00:00Z", updatedAt: "2026-08-31T00:00:00Z",
       createdBy: "E2E", updatedBy: "E2E" }
   }));
-  privateDataset.metadata.recordCount = searchCount;
-  privateDataset.metadata.typeCounts = { service: searchCount };
-  privateDataset.metadata.areaCounts = { otros: searchCount };
-  await fs.writeFile(contactsPath, JSON.stringify(privateDataset));
-  await launchElectron([]);
+  searchDataset.metadata.recordCount = searchCount;
+  searchDataset.metadata.typeCounts = { service: searchCount };
+  searchDataset.metadata.areaCounts = { otros: searchCount };
+  await fs.writeFile(searchContactsPath, JSON.stringify(searchDataset));
+  await launchElectron([], searchUserDataPath);
   browserCommand("eval", `(() => {
     const input = document.querySelector('input[placeholder="Buscar contacto o servicio"]');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -567,7 +601,9 @@ try {
     throw new Error(`Search performance failed: ${JSON.stringify({ durations, p95, finalSearch })}`);
   }
   console.log("[agent-browser-e2e] 5000-contact search met 100ms p95 budget", { durations, p95 });
+  });
 
+  if (failures.length) throw new AggregateError(failures, `${failures.length} E2E scenario(s) failed`);
   console.log("[agent-browser-e2e] PASS: directory, import, conflict, persistence, privacy, and search flows");
 } finally {
   await closeElectron();

@@ -114,7 +114,9 @@ Tests cover: clean pass, non-allowlisted advisory failure, allowlisted-only pass
 `pnpm install --frozen-lockfile` installs the pinned `agent-browser` CLI. The
 unbundled `pnpm run test:e2e` check uses it for eight viewport sizes, import
 and conflict flows, persistence, backup restore, phone privacy, and search
-performance. The runner stops on its first failure.
+performance. The directory/import, privacy, and search groups use separate
+profiles and continue independently after a group fails. Checks within a
+group stop at its first failure.
 
 Run the packaged startup smoke on each target OS before release handoff:
 

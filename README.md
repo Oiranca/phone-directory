@@ -102,7 +102,8 @@ pnpm run test:e2e
 The E2E runner uses temporary profiles to check eight viewport sizes, CSV and
 ODS import, conflict handling, contact persistence, backup restore, phone
 privacy, and 5,000-record search and import performance. It stops at the first
-failure, so later checks are unverified when a run fails early.
+failure within a group, then runs the other groups and reports every group
+that failed.
 
 Run the local pre-commit CI gate:
 
