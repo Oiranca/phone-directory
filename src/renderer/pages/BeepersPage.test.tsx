@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { BeepersPage } from "./BeepersPage";
 import type { BeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
@@ -53,42 +53,6 @@ const makeRecords = (count: number): BeeperRecord[] =>
     role: "Profesional",
     shift: "mañana"
   }));
-
-// Stub HTMLDialogElement.showModal/close since jsdom does not implement them
-let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
-let originalShowModal: (() => void) | undefined;
-let originalClose: (() => void) | undefined;
-
-beforeAll(() => {
-  if (typeof globalThis.HTMLDialogElement === "undefined") {
-    class HTMLDialogElementStub extends HTMLElement {
-      open = false;
-    }
-    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
-  }
-
-  dialogPrototype =
-    typeof globalThis.HTMLDialogElement !== "undefined"
-      ? globalThis.HTMLDialogElement.prototype
-      : HTMLElement.prototype;
-
-  originalShowModal = dialogPrototype.showModal;
-  originalClose = dialogPrototype.close;
-
-  dialogPrototype.showModal = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = true;
-  });
-  dialogPrototype.close = vi.fn(function(this: HTMLElement & { open?: boolean }) {
-    this.open = false;
-  });
-});
-
-afterAll(() => {
-  if (dialogPrototype) {
-    dialogPrototype.showModal = originalShowModal;
-    dialogPrototype.close = originalClose;
-  }
-});
 
 const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}) => {
   Object.defineProperty(window, "hospitalDirectory", {

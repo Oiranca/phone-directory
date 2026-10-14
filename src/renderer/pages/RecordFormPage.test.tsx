@@ -1,55 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { RecordFormPage } from "./RecordFormPage";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
-
-// Stub HTMLDialogElement.showModal/close since jsdom does not implement them.
-// Required for ConfirmDialog (used by the unsaved-changes blocker guard).
-const originalHTMLDialogElement = globalThis.HTMLDialogElement;
-let dialogPrototype: (HTMLElement & { showModal?: () => void; close?: () => void }) | undefined;
-let originalShowModal: (() => void) | undefined;
-let originalClose: (() => void) | undefined;
-
-beforeAll(() => {
-  if (typeof globalThis.HTMLDialogElement === "undefined") {
-    class HTMLDialogElementStub extends HTMLElement {
-      open = false;
-    }
-    vi.stubGlobal("HTMLDialogElement", HTMLDialogElementStub);
-  }
-
-  dialogPrototype =
-    typeof globalThis.HTMLDialogElement !== "undefined"
-      ? globalThis.HTMLDialogElement.prototype
-      : undefined;
-
-  originalShowModal = dialogPrototype?.showModal;
-  originalClose = dialogPrototype?.close;
-
-  if (dialogPrototype) {
-    dialogPrototype.showModal = vi.fn(function (this: HTMLElement & { open?: boolean }) {
-      this.open = true;
-    });
-    dialogPrototype.close = vi.fn(function (this: HTMLElement & { open?: boolean }) {
-      this.open = false;
-    });
-  }
-});
-
-afterAll(() => {
-  if (dialogPrototype) {
-    dialogPrototype.showModal = originalShowModal;
-    dialogPrototype.close = originalClose;
-  }
-
-  if (originalHTMLDialogElement) {
-    vi.stubGlobal("HTMLDialogElement", originalHTMLDialogElement);
-  }
-});
 
 const resetStore = () => {
   resetBootstrapInFlight();

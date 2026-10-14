@@ -24,6 +24,27 @@ if (typeof globalThis.localStorage === "undefined") {
 }
 
 const originalWarn = console.warn;
+let originalDialogConstructor: typeof HTMLDialogElement | undefined;
+let originalShowModal: PropertyDescriptor | undefined;
+let originalClose: PropertyDescriptor | undefined;
+
+beforeAll(() => {
+  if (typeof HTMLElement === "undefined") return;
+
+  originalDialogConstructor = globalThis.HTMLDialogElement;
+  if (typeof globalThis.HTMLDialogElement === "undefined") {
+    class HTMLDialogElementStub extends HTMLElement {
+      open = false;
+    }
+    Object.defineProperty(globalThis, "HTMLDialogElement", { configurable: true, value: HTMLDialogElementStub });
+  }
+
+  const prototype = globalThis.HTMLDialogElement.prototype;
+  originalShowModal = Object.getOwnPropertyDescriptor(prototype, "showModal");
+  originalClose = Object.getOwnPropertyDescriptor(prototype, "close");
+  prototype.showModal = function () { this.open = true; };
+  prototype.close = function () { this.open = false; };
+});
 
 // Without a reset, localStorage-backed state (e.g. the
 // dedup dismissed-pairs list, or any future storage key) can leak across test
@@ -55,5 +76,13 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  if (typeof HTMLElement !== "undefined") {
+    const prototype = globalThis.HTMLDialogElement.prototype;
+    if (originalShowModal) Object.defineProperty(prototype, "showModal", originalShowModal);
+    else delete (prototype as HTMLDialogElement & { showModal?: () => void }).showModal;
+    if (originalClose) Object.defineProperty(prototype, "close", originalClose);
+    else delete (prototype as HTMLDialogElement & { close?: () => void }).close;
+    if (!originalDialogConstructor) delete (globalThis as typeof globalThis & { HTMLDialogElement?: typeof HTMLDialogElement }).HTMLDialogElement;
+  }
   vi.restoreAllMocks();
 });
