@@ -7,7 +7,8 @@ Use this checklist for every operator-facing USB release.
 - Confirm the release branch is merged to `main`.
 - Confirm the local working tree is clean.
 - Pull the latest `main`.
-- Install dependencies with the locked package manager:
+- Use Node 24.16.0 and pnpm 11.28.2 (`corepack enable`), then install
+  dependencies with the locked package manager:
 
 ```bash
 pnpm install --frozen-lockfile

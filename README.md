@@ -59,10 +59,12 @@ tmp/                     Ignored local migration outputs
 
 ## Getting Started
 
-Install dependencies:
+Install Node 24.16.0 (also recorded in `.nvmrc`), then enable Corepack and
+install dependencies with the pinned pnpm 11.28.2:
 
 ```bash
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
 Start the development environment:
