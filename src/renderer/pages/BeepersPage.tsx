@@ -501,7 +501,7 @@ export const BeepersPage = () => {
                 type="button"
                 onClick={() => setDeleteConfirm({ id: editingId, deviceNumber: formData.deviceNumber })}
                 disabled={isSaving}
-                className="focus-ring mr-auto rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                className="focus-ring mr-auto scroll-mb-[88px] rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60 sm:scroll-mb-0"
               >
                 Eliminar busca
               </button>
@@ -511,14 +511,14 @@ export const BeepersPage = () => {
               data-keyboard-cancel
               onClick={handleCancel}
               disabled={isSaving}
-              className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              className="focus-ring scroll-mb-[88px] rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 sm:scroll-mb-0"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
+              className="focus-ring scroll-mb-[88px] rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60 sm:scroll-mb-0"
             >
               {isSaving ? "Guardando…" : editingId || editingImportedId ? "Guardar cambios" : "Crear busca"}
             </button>
