@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This project ships unsigned portable builds by default. To reduce SmartScreen and Gatekeeper warnings for USB-distributed releases, release builds should be code signed before distribution.
+This project ships unsigned portable builds by default, including USB releases. Code signing is optional. It can reduce SmartScreen and Gatekeeper warnings when distributing builds to other machines.
 
 ## Current repository support
 
@@ -12,7 +12,7 @@ This project ships unsigned portable builds by default. To reduce SmartScreen an
 
 ## Windows
 
-Recommended release path:
+Optional signed release path:
 
 1. Use an EV code-signing certificate if immediate SmartScreen trust is required
 2. If EV hardware-token signing is not practical, use Azure Trusted Signing or a standard code-signing certificate and accept SmartScreen reputation warm-up
@@ -39,7 +39,7 @@ Notes:
 
 ## macOS
 
-Recommended release path:
+Optional signed release path:
 
 1. Import a `Developer ID Application` certificate into the macOS keychain, or provide it via `CSC_LINK` / `CSC_KEY_PASSWORD`
 2. Provide one notarization credential set supported by electron-builder:
@@ -57,7 +57,7 @@ The checked-in entitlements enable the Electron requirements called out by the o
 - `com.apple.security.cs.allow-jit`
 - `com.apple.security.cs.disable-library-validation`
 
-## Verification checklist
+## Verification checklist for signed releases
 
 - Windows: verify the packaged executable shows a valid signature in file properties and does not trigger SmartScreen on a fresh test machine
 - macOS: run `codesign --verify --deep --strict <App>.app`
