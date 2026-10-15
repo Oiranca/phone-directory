@@ -43,6 +43,7 @@ Planning and migration reference files:
 - Zustand
 - Zod
 - Vitest
+- agent-browser (Electron E2E checks)
 
 ## Project Structure
 
@@ -58,10 +59,12 @@ tmp/                     Ignored local migration outputs
 
 ## Getting Started
 
-Install dependencies:
+Install Node 24.16.0 (also recorded in `.nvmrc`), then enable Corepack and
+install dependencies with the pinned pnpm 11.28.2:
 
 ```bash
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
 Start the development environment:
@@ -89,6 +92,18 @@ Run the test suite:
 ```bash
 pnpm test
 ```
+
+After `pnpm install --frozen-lockfile`, run the Electron E2E checks:
+
+```bash
+pnpm run test:e2e
+```
+
+The E2E runner uses temporary profiles to check eight viewport sizes, CSV and
+ODS import, conflict handling, contact persistence, backup restore, phone
+privacy, and 5,000-record search and import performance. It stops at the first
+failure within a group, then runs the other groups and reports every group
+that failed.
 
 Run the local pre-commit CI gate:
 

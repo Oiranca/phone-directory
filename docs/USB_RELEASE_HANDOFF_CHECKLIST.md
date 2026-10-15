@@ -7,7 +7,8 @@ Use this checklist for every operator-facing USB release.
 - Confirm the release branch is merged to `main`.
 - Confirm the local working tree is clean.
 - Pull the latest `main`.
-- Install dependencies with the locked package manager:
+- Use Node 24.16.0 and pnpm 11.28.2 (`corepack enable`), then install
+  dependencies with the locked package manager:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -47,10 +48,13 @@ The release script runs:
 2. **Dependency audit gate** (`pnpm audit --json` filtered against `scripts/audit-allowlist.json`)
 3. `pnpm test`
 4. `pnpm run build`
-5. `pnpm run test:e2e`
+5. `pnpm run test:e2e` — agent-browser checks eight viewport sizes, CSV/ODS import, conflict handling, persistence, backup restore, phone privacy, and search performance
 6. `electron-builder` direct-executable packaging for the selected platform
-7. Packaged startup smoke for the selected platform when it matches the host OS
+7. Packaged startup smoke from a temporary payload copy with agent-browser when the target matches the host OS
 8. USB package staging under `dist-portable/usb-package/`
+
+Before handoff, use agent-browser with an isolated Electron profile to check other affected
+flows and layouts beyond the automated smoke.
 
 The audit gate exits non-zero (aborting the release) if any high- or
 critical-severity advisory is not covered by an unexpired allowlist entry.

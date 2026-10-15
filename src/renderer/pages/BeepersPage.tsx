@@ -460,8 +460,17 @@ export const BeepersPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            {!editingImportedId && (
-              <>
+          </div>
+          {!editingImportedId && (
+            <details
+              key={editingId ?? "new"}
+              open={Boolean(editingId)}
+              className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60"
+            >
+              <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blueDark">
+                Turno y grupo (opcional)
+              </summary>
+              <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
                 <div>
                   <SelectField
                     id="form-shift"
@@ -483,16 +492,16 @@ export const BeepersPage = () => {
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
                   />
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </details>
+          )}
           <div className="mt-6 flex justify-end gap-3">
             {editingId ? (
               <button
                 type="button"
                 onClick={() => setDeleteConfirm({ id: editingId, deviceNumber: formData.deviceNumber })}
                 disabled={isSaving}
-                className="focus-ring mr-auto rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                className="focus-ring mr-auto scroll-mb-[88px] rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60 sm:scroll-mb-0"
               >
                 Eliminar busca
               </button>
@@ -502,14 +511,14 @@ export const BeepersPage = () => {
               data-keyboard-cancel
               onClick={handleCancel}
               disabled={isSaving}
-              className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              className="focus-ring scroll-mb-[88px] rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 sm:scroll-mb-0"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
+              className="focus-ring scroll-mb-[88px] rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60 sm:scroll-mb-0"
             >
               {isSaving ? "Guardando…" : editingId || editingImportedId ? "Guardar cambios" : "Crear busca"}
             </button>

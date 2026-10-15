@@ -226,7 +226,7 @@ export const RecordFormPage = () => {
           </div>
         </details>
 
-        <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-panel sm:static sm:mx-0 sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-8 sm:shadow-none">
+        <div className="sticky bottom-[72px] z-20 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-panel sm:static sm:mx-0 sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-8 sm:shadow-none">
           {isEditing ? (
             <button
               type="button"

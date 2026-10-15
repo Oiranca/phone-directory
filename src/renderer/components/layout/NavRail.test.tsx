@@ -81,43 +81,44 @@ describe("NavRail — active route highlighting", () => {
 });
 
 describe("NavRail — collapse/expand toggle", () => {
-  it("defaults to collapsed (60px) when no preference is stored", () => {
+  it("shows destination labels by default when no preference is stored", () => {
     renderRail();
-    const toggle = screen.getByRole("button", { name: "Mostrar títulos" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const toggle = screen.getByRole("button", { name: "Ocultar títulos" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toHaveTextContent("Nuevo registro");
   });
 
-  it("expands to 192px and flips the toggle label/aria-pressed when clicked", () => {
+  it("collapses to 60px and flips the toggle label/aria-pressed when clicked", () => {
     renderRail();
-    const toggle = screen.getByRole("button", { name: "Mostrar títulos" });
+    const toggle = screen.getByRole("button", { name: "Ocultar títulos" });
 
     fireEvent.click(toggle);
 
-    const expandedToggle = screen.getByRole("button", { name: "Ocultar títulos" });
-    expect(expandedToggle).toHaveAttribute("aria-pressed", "true");
+    const collapsedToggle = screen.getByRole("button", { name: "Mostrar títulos" });
+    expect(collapsedToggle).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("collapses again on a second click", () => {
+  it("expands again on a second click", () => {
     renderRail();
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar títulos" }));
     fireEvent.click(screen.getByRole("button", { name: "Ocultar títulos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar títulos" }));
 
-    expect(screen.getByRole("button", { name: "Mostrar títulos" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Ocultar títulos" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("persists the collapsed preference to localStorage across remounts", () => {
     const { unmount } = renderRail();
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar títulos" }));
-    expect(localStorage.getItem("nav-rail-collapsed:v1")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar títulos" }));
+    expect(localStorage.getItem("nav-rail-collapsed:v1")).toBe("true");
     unmount();
 
     renderRail();
-    expect(screen.getByRole("button", { name: "Ocultar títulos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mostrar títulos" })).toBeInTheDocument();
   });
 
-  it("falls back to collapsed when a corrupt value is stored", () => {
+  it("falls back to expanded when a corrupt value is stored", () => {
     localStorage.setItem("nav-rail-collapsed:v1", "not-a-boolean");
     renderRail();
-    expect(screen.getByRole("button", { name: "Mostrar títulos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ocultar títulos" })).toBeInTheDocument();
   });
 });

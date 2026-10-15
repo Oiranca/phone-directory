@@ -51,6 +51,7 @@ const isE2E = parseBooleanFlag(process.env.ELECTRON_E2E) && !app.isPackaged;
 
 export const env = {
   isE2E,
+  backgroundSmoke: parseBooleanFlag(process.env.ELECTRON_BACKGROUND_SMOKE),
   openDevTools: parseBooleanFlag(process.env.ELECTRON_OPEN_DEVTOOLS),
   rendererUrl: parseRendererUrl(process.env.ELECTRON_RENDERER_URL, isE2E),
   userDataPath: parseUserDataPath(process.env.ELECTRON_USER_DATA_PATH, isE2E),

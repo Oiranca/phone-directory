@@ -1,8 +1,10 @@
 {
   "name": "hospiagenda",
   "version": "0.1.0",
+  "packageManager": "pnpm@11.28.2",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0 <12.0.0"
   },
   "private": true,
   "type": "module",
@@ -15,7 +17,7 @@
     "dev:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:app": "wait-on http://localhost:5173 dist-electron/main/index.js dist-electron/preload/index.cjs && node scripts/run-electron-dev.mjs",
     "build": "pnpm run build:renderer && pnpm run build:electron",
-    "lint": "eslint src tests",
+    "lint": "eslint src scripts/agent-browser-e2e.mjs scripts/packaged-startup-smoke.mjs",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:dist": "pnpm run build && electron-builder --dir",
@@ -25,12 +27,11 @@
     "release:usb": "bash scripts/release-usb.sh",
     "test:audit-gate": "bash scripts/release-usb.audit.test.sh",
     "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
+    "test:e2e": "node scripts/agent-browser-e2e.mjs",
     "test:e2e:packaged": "node scripts/packaged-startup-smoke.mjs",
     "preview": "vite preview",
     "pretest": "pnpm run build:electron",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
@@ -45,7 +46,6 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@types/node": "^24.12.2",
@@ -53,6 +53,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "5.1.0",
+    "agent-browser": "0.37.1",
     "autoprefixer": "^10.4.20",
     "concurrently": "^10.0.4",
     "electron": "^43.4.0",
@@ -68,26 +69,6 @@
     "vite": "^7.3.6",
     "vitest": "^4.1.11",
     "wait-on": "^9.1.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@xmldom/xmldom@>=0.7.0 <0.9.0": "0.8.15",
-      "@xmldom/xmldom@>=0.9.0 <0.9.12": "0.9.12",
-      "brace-expansion@<1.1.18": "1.1.18",
-      "brace-expansion@>=2.0.0 <2.1.4": "2.1.4",
-      "brace-expansion@>=3.0.0 <5.0.9": "5.0.9",
-      "browserslist@<=4.28.6": "4.28.7",
-      "fast-uri@>=3.0.0 <3.1.6": "3.1.6",
-      "form-data": "^4.0.6",
-      "joi@>=18.0.0 <18.2.5": "18.2.5",
-      "js-yaml@>=4.0.0 <4.3.2": "4.3.2",
-      "nanoid@<3.3.18": "3.3.18",
-      "postcss-selector-parser@>=6.1.0 <6.1.3": "6.1.3",
-      "tar": "^7.5.22",
-      "tmp": "^0.2.7",
-      "undici": "^6.27.0",
-      "ws": "^8.21.1"
-    }
   },
   "build": {
     "appId": "com.oiranca.phone-directory",

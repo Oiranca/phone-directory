@@ -40,7 +40,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Read package version without require() so it works under Node 22+ ESM projects.
+# Read package version without require() so it works under this ESM project.
 # node --input-type=module feeds the snippet as an ES module — no CJS assumption.
 read_package_version() {
   node --input-type=module <<'NODESCRIPT'
@@ -255,7 +255,7 @@ pnpm test
 log "Building renderer and Electron main/preload"
 pnpm run build
 
-log "Running E2E tests (critical import flow gate)"
+log "Running agent-browser E2E checks"
 pnpm run test:e2e
 
 log "Building portable app artifact"

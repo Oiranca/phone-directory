@@ -68,15 +68,6 @@ uses its parent directory as the USB root for `portable-data`.
 - **Set by:** AppImage runtime — do not set manually
 - **Example:** *(set automatically)*
 
-### CI
-
-Set to a non-empty string by most CI providers (GitHub Actions, CircleCI, etc.). Used by
-`playwright.config.ts` to switch to the `dot` reporter and disable server reuse.
-
-- **Type:** string (any non-empty value is truthy; conventionally `true`)
-- **Set by:** CI provider — do not set manually in local `.env`
-- **Example:** *(set automatically by CI)*
-
 ---
 
 ## Release / Portable
@@ -86,19 +77,19 @@ opened platform executable; no environment variable activates portable mode.
 
 ## E2E-Only
 
-Variables consumed exclusively by the Playwright E2E test harness. They are injected by the
-test runner and must never be set in production or developer `.env` files.
+Variables used only when launching an isolated Electron profile for agent-browser checks.
+Set them on that launch command, never in production or developer `.env` files.
 
-### PLAYWRIGHT_BACKGROUND
+### ELECTRON_BACKGROUND_SMOKE
 
-Selects the JSON reporter used by detached local Playwright runs. Background automation sets
-this flag so results remain available in `test-results/e2e-background.json` without requiring
-an interactive terminal. It does not enable headed mode; Playwright remains headless by default.
+Keeps the packaged startup smoke window hidden and prevents its Dock icon from
+interrupting the active application on macOS. It does not enable E2E data or
+dialog overrides.
 
-- **Type:** exact flag — `1` enables the background JSON reporter; any other value is ignored
-- **Default:** unset (the local list reporter is used; CI uses the dot reporter)
-- **Set by:** background E2E automation — do not set in `.env`
-- **Example:** `PLAYWRIGHT_BACKGROUND=1`
+- **Type:** boolean flag — truthy values: `1`, `true`
+- **Default:** unset
+- **Set by:** packaged startup smoke — do not set in `.env`
+- **Example:** `ELECTRON_BACKGROUND_SMOKE=1`
 
 ### USB_IMPORT_FIXTURE_ROOT
 
@@ -117,8 +108,8 @@ path overrides are honoured, and file-dialog handlers are intercepted.
 
 - **Type:** boolean flag — truthy values: `1`, `true`
 - **Default:** unset
-- **Set by:** Playwright global setup — do not set in `.env`
-- **Example:** *(injected by test harness)*
+- **Set by:** isolated agent-browser launch command — do not set in `.env`
+- **Example:** `ELECTRON_E2E=1`
 
 ### E2E_OPEN_DIALOG_PATHS
 
@@ -127,8 +118,8 @@ E2E tests.
 
 - **Type:** JSON string — e.g. `["/path/to/fixture.csv"]`
 - **Default:** unset
-- **Set by:** Playwright global setup — do not set in `.env`
-- **Example:** *(injected by test harness)*
+- **Set by:** isolated agent-browser launch command — do not set in `.env`
+- **Example:** `E2E_OPEN_DIALOG_PATHS=["/path/to/fixture.csv"]`
 
 ### E2E_SAVE_DIALOG_PATHS
 
@@ -137,5 +128,5 @@ E2E tests.
 
 - **Type:** JSON string — e.g. `["/path/to/output.csv"]`
 - **Default:** unset
-- **Set by:** Playwright global setup — do not set in `.env`
-- **Example:** *(injected by test harness)*
+- **Set by:** isolated agent-browser launch command — do not set in `.env`
+- **Example:** `E2E_SAVE_DIALOG_PATHS=["/path/to/output.csv"]`

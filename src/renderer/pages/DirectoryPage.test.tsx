@@ -423,7 +423,7 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByText("Enfermero/a")).toBeInTheDocument();
   });
 
-  it("shows privacy-only pills in the detail header for sensitive phones", async () => {
+  it("names both advisory phone flags in the detail header", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
 
@@ -443,10 +443,33 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     expect(screen.getAllByText("Confidencial").length).toBeGreaterThan(0);
-    expect(screen.queryByText("No facilitar a pacientes")).not.toBeInTheDocument();
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
     expect(screen.queryByText("No pacientes")).not.toBeInTheDocument();
     expect(screen.queryByText("Trata este registro como información de uso interno y confirma el contexto antes de compartirlo.")).not.toBeInTheDocument();
     expect(screen.queryByText("Ubicación disponible")).not.toBeInTheDocument();
+  });
+
+  it("shows patient-sharing advice without labeling the phone confidential", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("No facilitar a pacientes")).toBeInTheDocument();
+    expect(within(row).queryByText("Confidencial")).not.toBeInTheDocument();
+
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
+    expect(within(detail).queryByText("Confidencial")).not.toBeInTheDocument();
   });
 
   it("does not render the type pill in the detail view header", async () => {
@@ -986,7 +1009,7 @@ describe("DirectoryPage", () => {
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("renders record actions without visual ordinal or type markers and without exposing restricted phone values", async () => {
+  it("renders record actions without visual ordinal or type markers and keeps flagged numbers in detail", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.location = { building: "Hospital General" };
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
@@ -1003,7 +1026,9 @@ describe("DirectoryPage", () => {
     expect(within(row).queryByLabelText("Resultado 1")).not.toBeInTheDocument();
     expect(within(row).queryByLabelText("Servicio")).not.toBeInTheDocument();
     expect(within(row).getByText("Admisión · Hospital General")).toBeInTheDocument();
-    expect(within(row).getByText("Contacto restringido")).toBeInTheDocument();
+    expect(within(row).getByText("Ver teléfono en detalle")).toBeInTheDocument();
+    expect(within(row).getByText("Confidencial")).toBeInTheDocument();
+    expect(within(row).getByText("No facilitar a pacientes")).toBeInTheDocument();
     expect(within(row).queryByText(contacts.records[0]!.contactMethods.phones[0]!.number)).not.toBeInTheDocument();
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
@@ -1625,7 +1650,7 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText("No hay correos registrados.")).not.toBeInTheDocument();
   });
 
-  it("shows the 'Privacidad sensible' list-card badge immediately after marking a non-preferred phone confidential", async () => {
+  it("shows the confidential list-card flag immediately after marking a non-preferred phone confidential", async () => {
     // Regression test: the badge previously only checked the single "preferred"
     // (non-sensitive) phone returned by getPreferredResultPhone, so a record
     // whose ONLY confidential phone is a secondary/non-preferred one never
@@ -1670,7 +1695,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    expect(screen.queryByText("Privacidad sensible")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confidencial")).not.toBeInTheDocument();
 
     // Simulate the save flow's store update (useContactForm's submit handler
     // calls setContacts(result.contacts) with the freshly saved dataset — no
@@ -1682,7 +1707,9 @@ describe("DirectoryPage", () => {
     useAppStore.getState().setContacts(savedContacts);
 
     await waitFor(() => {
-      expect(screen.getByText("Privacidad sensible")).toBeInTheDocument();
+      const list = screen.getByRole("list", { name: "Resultados del directorio" });
+      const row = within(list).getByRole("button", { name: /admisión general/i });
+      expect(within(row).getByText("Confidencial")).toBeInTheDocument();
     });
 
     // The displayed number stays the safe/preferred one — only the aggregate

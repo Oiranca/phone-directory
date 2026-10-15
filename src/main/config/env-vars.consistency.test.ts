@@ -28,8 +28,6 @@ const PROJECT_ROOT = path.resolve(import.meta.dirname, "../../..");
 const SCAN_DIRS = [
   "src",
   "scripts",
-  "tests/e2e",
-  "playwright.config.ts",
   "vite.config.ts"
 ];
 
