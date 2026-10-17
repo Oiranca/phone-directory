@@ -1,4 +1,4 @@
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, CSSProperties, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
@@ -75,6 +75,40 @@ const toastStyles: Record<ToastType, string> = {
   info: "border-slate-200 bg-white text-slate-900"
 };
 
+const isFocusableControl = (element: HTMLElement) => element.matches(
+  'a[href], button, input, select, summary, textarea, [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+);
+
+const rectanglesIntersect = (first: DOMRect, second: DOMRect) =>
+  first.left < second.right && first.right > second.left && first.top < second.bottom && first.bottom > second.top;
+
+const isInViewport = (rect: DOMRect) =>
+  rect.left < window.innerWidth && rect.right > 0 && rect.top < window.innerHeight && rect.bottom > 0;
+
+const positionPersistentToast = (target: DOMRect, toast: DOMRect): CSSProperties => {
+  const gap = 16;
+  const spaceAbove = target.top - gap;
+  const spaceBelow = window.innerHeight - target.bottom - gap;
+  const placeBelow = spaceBelow >= toast.height || spaceBelow >= spaceAbove;
+  const top = Math.min(Math.max(0, target.bottom + gap), window.innerHeight);
+  const bottom = Math.min(Math.max(0, window.innerHeight - target.top + gap), window.innerHeight);
+
+  return placeBelow
+    ? {
+        maxHeight: Math.max(0, window.innerHeight - top),
+        overflowY: "auto",
+        position: "fixed",
+        top
+      }
+    : {
+        bottom,
+        maxHeight: Math.max(0, window.innerHeight - bottom),
+        overflowY: "auto",
+        position: "fixed",
+        top: "auto"
+      };
+};
+
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export const ToastProvider = ({ children }: PropsWithChildren) => {
@@ -82,6 +116,9 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
   const nextToastId = useRef(1);
   const timersRef = useRef<Map<number, number>>(new Map());
   const toastKeysByIdRef = useRef<Map<number, string>>(new Map());
+  const toastElementsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const toastRegionRef = useRef<HTMLElement>(null);
+  const [toastPosition, setToastPosition] = useState<CSSProperties>();
 
   const dismissToast = useCallback((id: number) => {
     const timer = timersRef.current.get(id);
@@ -131,6 +168,103 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
     timersRef.current.set(id, timeout);
   }, [dismissToast]);
 
+  const handleToastsObscuring = useCallback((target: EventTarget | null, dismissTransient: boolean) => {
+    if (!(target instanceof HTMLElement) || !isFocusableControl(target)) return;
+
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.width === 0 || targetRect.height === 0 || !isInViewport(targetRect)) return;
+
+    let persistentToastOverlaps = false;
+    for (const toast of toasts) {
+      const toastElement = toastElementsRef.current.get(toast.id);
+      if (!toastElement || toastElement.contains(target)) continue;
+      if (!rectanglesIntersect(targetRect, toastElement.getBoundingClientRect())) continue;
+
+      if (dismissTransient && toast.durationMs !== undefined) {
+        dismissToast(toast.id);
+      } else persistentToastOverlaps = true;
+    }
+    if (persistentToastOverlaps) {
+      const toastRegion = toastRegionRef.current;
+      if (toastRegion) setToastPosition(positionPersistentToast(targetRect, toastRegion.getBoundingClientRect()));
+    }
+  }, [dismissToast, toasts]);
+
+  useEffect(() => {
+    const handleFocus = (event: FocusEvent) => handleToastsObscuring(event.target, true);
+
+    document.addEventListener("focusin", handleFocus);
+    handleToastsObscuring(document.activeElement, false);
+    return () => document.removeEventListener("focusin", handleFocus);
+  }, [handleToastsObscuring]);
+
+  useEffect(() => {
+    if (!toasts.some((toast) => toast.durationMs === undefined) && toastPosition) setToastPosition(undefined);
+  }, [toastPosition, toasts]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const target = document.activeElement;
+      const toastRegion = toastRegionRef.current;
+      if (!(target instanceof HTMLElement) || !isFocusableControl(target) || !toastRegion) return;
+      if (!isInViewport(target.getBoundingClientRect())) {
+        setToastPosition(undefined);
+        return;
+      }
+      if (toastPosition) setToastPosition(positionPersistentToast(target.getBoundingClientRect(), toastRegion.getBoundingClientRect()));
+      else handleToastsObscuring(target, false);
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleResize, true);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleResize, true);
+    };
+  }, [handleToastsObscuring, toastPosition]);
+
+  useEffect(() => {
+    const scrollToastRegion = (clientX: number, clientY: number, deltaY: number) => {
+      const toastRegion = toastRegionRef.current;
+      if (!toastRegion || toastRegion.scrollHeight <= toastRegion.clientHeight) return false;
+
+      const rect = toastRegion.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
+
+      const nextScrollTop = Math.min(
+        Math.max(0, toastRegion.scrollTop + deltaY),
+        toastRegion.scrollHeight - toastRegion.clientHeight
+      );
+      if (nextScrollTop === toastRegion.scrollTop) return false;
+      toastRegion.scrollTop = nextScrollTop;
+      return true;
+    };
+
+    let touchY: number | null = null;
+    const handleWheel = (event: WheelEvent) => {
+      if (scrollToastRegion(event.clientX, event.clientY, event.deltaY)) event.preventDefault();
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      touchY = touch ? touch.clientY : null;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch || touchY === null) return;
+      if (scrollToastRegion(touch.clientX, touch.clientY, touchY - touch.clientY)) event.preventDefault();
+      touchY = touch.clientY;
+    };
+
+    document.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+    document.addEventListener("touchstart", handleTouchStart, { capture: true, passive: true });
+    document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
+    return () => {
+      document.removeEventListener("wheel", handleWheel, true);
+      document.removeEventListener("touchstart", handleTouchStart, true);
+      document.removeEventListener("touchmove", handleTouchMove, true);
+    };
+  }, []);
+
   useEffect(() => () => {
     timersRef.current.forEach((timer) => {
       window.clearTimeout(timer);
@@ -146,8 +280,10 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
       {children}
       {toasts.length > 0 ? (
         <section
+          ref={toastRegionRef}
           aria-label="Notificaciones"
-          className="pointer-events-none fixed inset-x-4 top-4 z-50 flex flex-col gap-3 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm"
+          style={toastPosition}
+          className="pointer-events-none fixed inset-x-4 top-4 z-50 flex max-h-[calc(100dvh-2rem)] flex-col gap-3 overflow-y-auto sm:left-auto sm:right-4 sm:w-full sm:max-w-sm"
         >
           {toasts.map((toast) => {
             const isAlert = toast.type === "error" || toast.type === "warning";
@@ -155,6 +291,10 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
             return (
               <div
                 key={toast.id}
+                ref={(element) => {
+                  if (element) toastElementsRef.current.set(toast.id, element);
+                  else toastElementsRef.current.delete(toast.id);
+                }}
                 role={isAlert ? "alert" : "status"}
                 aria-live={isAlert ? "assertive" : "polite"}
                 aria-atomic="true"
@@ -174,7 +314,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                     type="button"
                     onClick={() => dismissToast(toast.id)}
                     aria-label="Cerrar notificación"
-                    className="pointer-events-auto min-h-11 min-w-11 self-end rounded-full px-3 py-2 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current sm:self-auto"
+                    className="pointer-events-auto sticky bottom-0 min-h-11 min-w-11 self-end rounded-full px-3 py-2 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current sm:self-auto"
                   >
                     Cerrar
                   </button>

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, useToast } from "./ToastRegion";
 
@@ -31,6 +31,18 @@ const renderWithProvider = (
       <ToastTrigger {...props} />
     </ToastProvider>
   );
+
+const rectangle = (left: number, top: number, width: number, height: number) => ({
+  bottom: top + height,
+  height,
+  left,
+  right: left + width,
+  top,
+  width,
+  x: left,
+  y: top,
+  toJSON: () => ({})
+}) as DOMRect;
 
 describe("ToastRegion", () => {
   afterEach(() => {
@@ -107,6 +119,212 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Directorio")).toBeInTheDocument();
     expect(screen.getByText("Preferencias")).toBeInTheDocument();
     expect(screen.getAllByRole("status")).toHaveLength(2);
+  });
+
+  it("dismisses a transient toast that obscures a focused control", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Guardado" type="success" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("status");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
+
+    act(() => { control.focus(); });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("keeps a persistent alert when it obscures a focused control", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error persistente" type="error" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("alert");
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
+
+    act(() => { control.focus(); });
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(region).toHaveClass("pointer-events-none");
+    expect(region).toHaveStyle({ position: "fixed" });
+    expect(region.getBoundingClientRect().top).toBeGreaterThanOrEqual(control.getBoundingClientRect().bottom);
+  });
+
+  it("positions a persistent alert above a focused control near the viewport bottom", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error persistente" type="error" />
+        <button type="button">Control inferior</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("alert");
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control inferior" });
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, window.innerHeight - 68, 100, 100));
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => {
+      const top = region.style.top && region.style.top !== "auto"
+        ? Number.parseInt(region.style.top, 10)
+        : window.innerHeight - Number.parseInt(region.style.bottom || "0", 10) - 100;
+      return rectangle(0, top, 100, 100);
+    });
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rectangle(20, window.innerHeight - 64, 44, 44));
+
+    act(() => { control.focus(); });
+
+    expect(region).toHaveClass("pointer-events-none");
+    expect(region).toHaveStyle({ position: "fixed" });
+    expect(region.getBoundingClientRect().bottom).toBeLessThanOrEqual(control.getBoundingClientRect().top);
+  });
+
+  it("keeps persistent alerts in one repositioned group and updates it on resize", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error uno" type="error" />
+        <ToastTrigger message="Error dos" type="error" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    const triggers = screen.getAllByRole("button", { name: "Push toast" });
+    fireEvent.click(triggers[0]);
+    fireEvent.click(triggers[1]);
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    let controlTop = 20;
+    screen.getAllByRole("alert").forEach((toast) => {
+      vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    });
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockImplementation(() => rectangle(20, controlTop, 44, 44));
+
+    act(() => { control.focus(); });
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(region.style.top).toBe("80px");
+
+    controlTop = 160;
+    act(() => { window.dispatchEvent(new Event("resize")); });
+
+    expect(region.style.top).toBe("220px");
+  });
+
+  it("detects an overlap introduced by resize when the notification group is initially unpositioned", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error persistente" type="error" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("alert");
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    let controlTop = 160;
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockImplementation(() => rectangle(20, controlTop, 44, 44));
+
+    act(() => { control.focus(); });
+    expect(region.style.position).toBe("");
+
+    controlTop = 20;
+    act(() => { window.dispatchEvent(new Event("resize")); });
+
+    expect(region.style.top).toBe("80px");
+  });
+
+  it("restores the default notification position when the focused control leaves the viewport", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error persistente" type="error" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("alert");
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    let controlTop = 20;
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockImplementation(() => rectangle(20, controlTop, 44, 44));
+
+    act(() => { control.focus(); });
+    expect(region.style.position).toBe("fixed");
+
+    controlTop = -100;
+    act(() => { window.dispatchEvent(new Event("scroll")); });
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(region.style.position).toBe("");
+  });
+
+  it("scrolls an overflowing persistent notification group without intercepting clicks", async () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Error persistente" type="error" />
+        <button type="button">Control cubierto</button>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("alert");
+    const region = screen.getByLabelText("Notificaciones");
+    const control = screen.getByRole("button", { name: "Control cubierto" });
+    Object.defineProperties(region, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, value: 0, writable: true }
+    });
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
+
+    act(() => { control.focus(); });
+
+    await waitFor(() => expect(region).toHaveClass("pointer-events-none"));
+    act(() => {
+      document.dispatchEvent(new WheelEvent("wheel", { cancelable: true, clientX: 50, clientY: 100, deltaY: 80 }));
+    });
+
+    expect(region.scrollTop).toBe(80);
+    expect(screen.getByRole("button", { name: "Cerrar notificación" })).toHaveClass("sticky", "bottom-0");
+  });
+
+  it("dismisses a transient toast that obscures a focused summary", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Guardado" type="success" />
+        <details><summary>Opciones avanzadas</summary></details>
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    const toast = screen.getByRole("status");
+    const summary = screen.getByText("Opciones avanzadas");
+    vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
+    vi.spyOn(summary, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
+
+    act(() => { summary.focus(); });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("info toast uses role=status", () => {
