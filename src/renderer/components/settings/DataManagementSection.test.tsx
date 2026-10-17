@@ -55,6 +55,10 @@ const openImportPicker = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Importar" }));
 };
 
+const openAdvancedRecovery = () => {
+  fireEvent.click(screen.getByText("Recuperación avanzada"));
+};
+
 const defaultCsvPreview = {
   importToken: "csv-token-1",
   fileName: "directory.csv",
@@ -210,15 +214,44 @@ describe("DataManagementSection (Configuración data section)", () => {
     cleanup();
   });
 
-  it("loads backup inventory and current dataset summary", async () => {
+  it("loads backup inventory and the total current dataset summary", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     // The fetched backup inventory now only drives the single
     // "Última copia de seguridad" date indicator — no per-backup list.
     expect(await screen.findByText(/Última copia de seguridad:/)).toBeInTheDocument();
+    expect(screen.getByText("Registros totales en memoria")).toBeInTheDocument();
     expect(screen.getByText(String(defaultContacts.records.length))).toBeInTheDocument();
     expect(screen.getByText("Última actualización del directorio")).toBeInTheDocument();
+  });
+
+  it("distinguishes local contact backups from the portable combined export", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    expect(screen.getByText("Crea una copia local solo de los contactos.")).toBeInTheDocument();
+    expect(screen.getByText("Exporta contactos y buscas en un único archivo portable.")).toBeInTheDocument();
+  });
+
+  it("keeps recovery guidance and audit reset in an advanced native disclosure", async () => {
+    renderPage();
+
+    const disclosureToggle = await screen.findByText("Recuperación avanzada");
+    const details = disclosureToggle.closest("details");
+
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    expect(disclosureToggle.tagName).toBe("SUMMARY");
+    disclosureToggle.focus();
+    expect(disclosureToggle).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Restablecer registro de auditoría" }).closest("details")).not.toHaveAttribute("open");
+
+    fireEvent.click(disclosureToggle);
+
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "Restablecer registro de auditoría" })).toBeInTheDocument();
+    expect(screen.getByText(/Ábrela desde el botón «Importar» de arriba/)).toBeInTheDocument();
   });
 
   it("explains the supported imported data and formats", async () => {
@@ -257,6 +290,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    openAdvancedRecovery();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Restablecer registro de auditoría" });
@@ -272,6 +306,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    openAdvancedRecovery();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
 
@@ -287,6 +322,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    openAdvancedRecovery();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
 
@@ -302,6 +338,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    openAdvancedRecovery();
     fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
     fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
 
@@ -1493,6 +1530,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    openAdvancedRecovery();
     expect(
       await screen.findByText(/Ábrela desde el botón «Importar» de arriba/)
     ).toBeInTheDocument();

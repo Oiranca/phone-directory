@@ -623,7 +623,7 @@ export const DataManagementSection = () => {
         <article className="rounded-3xl bg-white p-6 shadow-panel">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-500">Registros activos en memoria</p>
+            <p className="text-sm font-semibold text-slate-500">Registros totales en memoria</p>
             <p className="mt-2 text-3xl font-semibold text-scs-blueDark">{contacts.records.length}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -644,17 +644,20 @@ export const DataManagementSection = () => {
               folder is never needed, so this card is now just a title, one
               description line and the single button. The underlying
               createBackup() keeps producing the local contacts-only safety copy. */}
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="min-w-0 rounded-3xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-lg font-semibold text-scs-blueDark">Copia de seguridad</p>
             <p className="mt-2 text-sm text-slate-600">
-              Crea una copia local o exporta agenda y buscas en un único archivo portable.
+              Crea una copia local solo de los contactos.
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Exporta contactos y buscas en un único archivo portable.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void handleCreateBackup()}
                 disabled={isMutating}
-                className="focus-ring rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="focus-ring w-full rounded-2xl bg-scs-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
               >
                 {isCreatingBackup ? "Creando…" : "Crear copia de seguridad"}
               </button>
@@ -662,7 +665,7 @@ export const DataManagementSection = () => {
                 type="button"
                 onClick={() => void handleExport()}
                 disabled={isMutating}
-                className="focus-ring rounded-2xl border border-scs-blue bg-white px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60"
+                className="focus-ring w-full rounded-2xl border border-scs-blue bg-white px-4 py-2 text-sm font-semibold text-scs-blue disabled:opacity-60 sm:w-auto"
               >
                 {isExporting ? "Exportando…" : "Exportar archivo portable"}
               </button>
@@ -670,7 +673,7 @@ export const DataManagementSection = () => {
           </div>
 
           {/* One picker supports typed JSON stores and spreadsheet previews. */}
-          <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
+          <div className="min-w-0 rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
             <p className="text-lg font-semibold text-amber-900">Importar</p>
             <p className="mt-2 text-sm text-amber-900/80">
               Importa agenda, buscas o configuración. Los datos reemplazados se respaldan antes.
@@ -742,9 +745,9 @@ export const DataManagementSection = () => {
             the single-column stack (no longer a sticky sidebar beside it),
             so it never steals width from the article above. */}
         <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Recuperación</p>
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-scs-blue">Copias locales</p>
             <h3 className="mt-2 text-2xl font-semibold text-scs-blueDark">Última copia de seguridad</h3>
           </div>
           <button
@@ -767,23 +770,30 @@ export const DataManagementSection = () => {
               Última copia de seguridad: <span>{formatTimestamp(lastBackupAt)}</span>
             </p>
           )}
-          <p className="mt-3 text-xs text-slate-500">
-            ¿Necesitas recuperar una copia de seguridad anterior? Ábrela desde el botón «Importar» de arriba: seleccionar un archivo de copia de seguridad reemplaza el directorio actual con ese contenido.
-          </p>
-          <div className="mt-6 border-t border-slate-200 pt-6">
-            <p className="text-sm font-semibold text-scs-blueDark">Registro de auditoría</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Restablece un registro de auditoría activo dañado. Las copias en cuarentena se conservan.
-            </p>
-            <button
-              type="button"
-              onClick={() => setPendingConfirmation({ kind: "recover-audit-log" })}
-              disabled={isMutating}
-              className="focus-ring mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-60"
-            >
-              {isRecoveringAuditLog ? "Restableciendo…" : "Restablecer registro de auditoría"}
-            </button>
-          </div>
+          <details className="mt-6 border-t border-slate-200 pt-4">
+            <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blueDark">
+              Recuperación avanzada
+            </summary>
+            <div className="px-4 pb-4">
+              <p className="text-sm text-slate-600">
+                ¿Necesitas recuperar una copia de seguridad anterior? Ábrela desde el botón «Importar» de arriba: seleccionar un archivo de copia de seguridad reemplaza el directorio actual con ese contenido.
+              </p>
+              <div className="mt-6 border-t border-slate-200 pt-6">
+                <p className="text-sm font-semibold text-scs-blueDark">Registro de auditoría</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Restablece un registro de auditoría activo dañado. Las copias en cuarentena se conservan.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPendingConfirmation({ kind: "recover-audit-log" })}
+                  disabled={isMutating}
+                  className="focus-ring mt-4 w-full rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-60 sm:w-auto"
+                >
+                  {isRecoveringAuditLog ? "Restableciendo…" : "Restablecer registro de auditoría"}
+                </button>
+              </div>
+            </div>
+          </details>
         </div>
         </aside>
       </div>
