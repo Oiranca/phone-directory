@@ -240,28 +240,13 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
       return true;
     };
 
-    let touchY: number | null = null;
     const handleWheel = (event: WheelEvent) => {
       if (scrollToastRegion(event.clientX, event.clientY, event.deltaY)) event.preventDefault();
     };
-    const handleTouchStart = (event: TouchEvent) => {
-      const touch = event.touches[0];
-      touchY = touch ? touch.clientY : null;
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      const touch = event.touches[0];
-      if (!touch || touchY === null) return;
-      if (scrollToastRegion(touch.clientX, touch.clientY, touchY - touch.clientY)) event.preventDefault();
-      touchY = touch.clientY;
-    };
 
     document.addEventListener("wheel", handleWheel, { capture: true, passive: false });
-    document.addEventListener("touchstart", handleTouchStart, { capture: true, passive: true });
-    document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     return () => {
       document.removeEventListener("wheel", handleWheel, true);
-      document.removeEventListener("touchstart", handleTouchStart, true);
-      document.removeEventListener("touchmove", handleTouchMove, true);
     };
   }, []);
 
