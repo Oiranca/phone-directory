@@ -1464,10 +1464,9 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(screen.getByText(/Confianza media en la detección del formato\. Revisa la vista previa\./)
     ).toBeInTheDocument();
 
-    // The toast must NOT include the confidence note — it covers status/count only.
-    // Warning toasts use role="alert". No alert element must mention confidence.
+    // The panel carries the confidence note without another alert.
     const alerts = screen
-      .getAllByRole("alert")
+      .queryAllByRole("alert")
       .filter((el) => el.textContent?.includes("Confianza media"));
     expect(alerts).toHaveLength(0);
   });
