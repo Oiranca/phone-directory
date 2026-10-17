@@ -74,6 +74,7 @@ const bulkPerformanceCsvPath = path.join(workspace, "5000-conflicts.csv");
 const odsPath = path.join(workspace, "agenda-large.ods");
 const crossDocumentCsvPath = path.join(workspace, "cross-document.csv");
 const contactsPath = path.join(workspace, "user-data", "data", "contacts.json");
+const visualArtifactDirectory = path.join(repoRootDir, "test-results", "agent-browser");
 let vite;
 let electron;
 let connected = false;
@@ -110,6 +111,15 @@ const closeElectron = async () => {
   }
   await stop(electron);
   electron = undefined;
+};
+const closeAdvancedPaths = () => {
+  const closed = browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    if (!details) return false;
+    details.open = false;
+    return !details.open;
+  })()`);
+  if (closed !== "true") throw new Error("Advanced path disclosure did not close before screenshot");
 };
 const launchElectron = async (openDialogPaths, userDataPath = path.join(workspace, "user-data")) => {
   browserSession = `directory-e2e-${process.pid}-${Date.now()}`;
@@ -148,6 +158,7 @@ const runScenario = async (name, check) => {
 };
 
 try {
+  await fs.mkdir(visualArtifactDirectory, { recursive: true });
   browserCommand("--version");
   execFileSync("pnpm", ["run", "build"], { cwd: repoRootDir, stdio: "inherit" });
   const html = await fs.readFile(path.join(repoRootDir, "dist", "index.html"), "utf8");
@@ -277,6 +288,81 @@ try {
   const savedRetention = JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
   if (savedRetention !== 7) throw new Error(`Retention was not persisted: ${savedRetention}`);
   console.log("[agent-browser-e2e] Disabled-auto retention saves and persists");
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
+  await waitFor("advanced path controls", () => browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    if (!details?.open || !details.querySelector("#settings-data-file-path") || !details.querySelector("#settings-backup-directory-path")) return false;
+    const labels = ["Seleccionar archivo de datos", "Seleccionar carpeta de copias de seguridad"];
+    return labels.every(label => [...details.querySelectorAll("button")].some(button => button.getAttribute("aria-label") === label));
+  })()`) === "true");
+  const advancedRecovery = `(() => {
+    const buttons = ["Crear copia de seguridad", "Exportar archivo portable", "Importar"];
+    const summary = [...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada");
+    return Boolean(buttons.every(label => [...document.querySelectorAll("button")].some(item => item.textContent.trim() === label)) && summary && !summary.parentElement.open && (summary.focus(), document.activeElement === summary));
+  })()`;
+  if (browserCommand("eval", advancedRecovery) !== "true") throw new Error("Routine data controls or closed advanced recovery disclosure missing");
+  browserCommand("press", "Enter");
+  await waitFor("advanced recovery disclosure", () => browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Recuperación avanzada");
+    return Boolean(details?.open && [...details.querySelectorAll("button")].some(item => item.textContent.trim() === "Restablecer registro de auditoría"));
+  })()`) === "true");
+  browserCommand("set", "viewport", "320", "844");
+  browserCommand("eval", "document.documentElement.style.fontSize = '200%'");
+  const settingsReflowMetrics = () => JSON.parse(browserCommand("eval", `(() => {
+    const advancedPathsOpen = [...document.querySelectorAll("details")].some(item => item.open && item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, rootFontSize: getComputedStyle(document.documentElement).fontSize, advancedPathsOpen };
+  })()`));
+  try {
+    await waitFor("320px settings reflow", () => {
+      const metrics = settingsReflowMetrics();
+      return metrics.innerWidth === 320 && metrics.advancedPathsOpen && metrics.scrollWidth <= metrics.innerWidth + 1;
+    });
+  } catch (error) {
+    const failureMetrics = settingsReflowMetrics();
+    closeAdvancedPaths();
+    browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-failure.png"));
+    throw new Error(`Settings reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
+  }
+  closeAdvancedPaths();
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada"))?.scrollIntoView()`);
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200.png"));
+  await waitFor("initial settings toast dismissal", () => !hasText("Configuración guardada."));
+  browserCommand("fill", retentionInput, "8");
+  clickRole("button", "Guardar configuración");
+  await waitFor("retention resaved", () => hasText("Configuración guardada."));
+  const toastOverlap = JSON.parse(browserCommand("eval", `(() => {
+    const target = document.querySelector(${JSON.stringify(retentionInput)});
+    const toast = document.querySelector('[aria-label="Notificaciones"] [role="status"]');
+    if (!target || !toast) return { overlaps: false, targetAtCenter: false };
+    target.scrollIntoView({ block: "start" });
+    const targetBeforeScroll = target.getBoundingClientRect();
+    window.scrollBy(0, targetBeforeScroll.top + targetBeforeScroll.height / 2 - 160);
+    const targetRect = target.getBoundingClientRect();
+    const toastRect = toast.getBoundingClientRect();
+    const dismissRect = toast.querySelector('button[aria-label="Cerrar notificación"]')?.getBoundingClientRect();
+    const centerX = targetRect.left + targetRect.width / 2;
+    const centerY = targetRect.top + targetRect.height / 2;
+    const elementAtCenter = document.elementFromPoint(centerX, centerY);
+    return {
+      innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      overlaps: centerX >= toastRect.left && centerX <= toastRect.right && centerY >= toastRect.top && centerY <= toastRect.bottom,
+      outsideDismissButton: !dismissRect || centerX < dismissRect.left || centerX > dismissRect.right || centerY < dismissRect.top || centerY > dismissRect.bottom,
+      targetAtCenter: elementAtCenter === target,
+      targetCenter: { x: centerX, y: centerY },
+      toast: { left: toastRect.left, top: toastRect.top, right: toastRect.right, bottom: toastRect.bottom }
+    };
+  })()`));
+  if (toastOverlap.innerWidth !== 320 || toastOverlap.scrollWidth > toastOverlap.innerWidth + 1 || !toastOverlap.overlaps || !toastOverlap.outsideDismissButton || !toastOverlap.targetAtCenter) throw new Error(`Toast did not allow pointer hit testing: ${JSON.stringify(toastOverlap)}`);
+  browserCommand("click", retentionInput);
+  if (browserCommand("eval", `document.activeElement?.id === ${JSON.stringify(retentionInput.slice(1))}`) !== "true") throw new Error("Toast blocked the retention input click");
+  if (!hasText("Configuración guardada.")) throw new Error("Toast dismissed before the retention input click was verified");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-toast.png"));
+  browserCommand("eval", "document.documentElement.style.fontSize = ''");
+  browserCommand("set", "viewport", "1440", "920");
+  browserCommand("eval", "window.scrollTo(0, 0)");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-desktop.png"));
+  console.log("[agent-browser-e2e] Data controls and advanced recovery reflow passed");
   await openPreview();
   const validPreview = previewState();
   if (!validPreview.enabled || validPreview.alert ||

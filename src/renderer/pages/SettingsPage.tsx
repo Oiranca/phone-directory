@@ -263,7 +263,7 @@ export const SettingsPage = () => {
       <h2 id="settings-page-title" className="sr-only">Configuración</h2>
       <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
-          <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
+          <h3 className="break-words text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
             Define quién firma los cambios locales y cómo debe arrancar el directorio cuando se vuelva a abrir.
           </p>
@@ -298,7 +298,7 @@ export const SettingsPage = () => {
                   aria-describedby="settings-autobackup-enabled-desc"
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
                 />
-                <div>
+                <div className="min-w-0">
                   <label htmlFor="settings-autobackup-enabled" className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</label>
                   <p id="settings-autobackup-enabled-desc" className="mt-1 text-sm text-slate-600">
                     Crea copias automáticas en segundo plano para reducir el riesgo entre copias de seguridad manuales.
@@ -402,7 +402,7 @@ export const SettingsPage = () => {
               <div className="space-y-5 border-t border-slate-200 p-4">
                 <div>
                   <label htmlFor="settings-data-file-path" className="block text-sm font-semibold text-slate-700">Ruta del archivo de datos</label>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       id="settings-data-file-path"
                       type="text"
@@ -410,7 +410,7 @@ export const SettingsPage = () => {
                       onChange={handleDataFilePathChange}
                       placeholder="/ruta/al/directorio/contacts.json"
                       aria-describedby="settings-data-file-path-hint"
-                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"
@@ -430,7 +430,7 @@ export const SettingsPage = () => {
 
                 <div>
                   <label htmlFor="settings-backup-directory-path" className="block text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</label>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       id="settings-backup-directory-path"
                       type="text"
@@ -438,7 +438,7 @@ export const SettingsPage = () => {
                       onChange={handleBackupDirectoryPathChange}
                       placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
                       aria-describedby="settings-backup-directory-path-hint"
-                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"

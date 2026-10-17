@@ -61,6 +61,54 @@ describe("ToastRegion", () => {
     expect(screen.queryByText("Manual dismiss")).not.toBeInTheDocument();
   });
 
+  it("keeps one active toast when the same save result is reported twice", () => {
+    renderWithProvider({ message: "Configuración guardada.", type: "success" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+
+    expect(screen.getAllByText("Configuración guardada.")).toHaveLength(1);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar notificación" }));
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+
+    expect(screen.getAllByText("Configuración guardada.")).toHaveLength(1);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("refreshes the lifetime when the same save result is reported again", () => {
+    vi.useFakeTimers();
+    renderWithProvider({ message: "Configuración guardada.", type: "success" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+    act(() => { vi.advanceTimersByTime(4700); });
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    act(() => { vi.advanceTimersByTime(101); });
+    expect(screen.getByText("Configuración guardada.")).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(4700); });
+    expect(screen.queryByText("Configuración guardada.")).not.toBeInTheDocument();
+  });
+
+  it("keeps toasts with different titles visible", () => {
+    render(
+      <ToastProvider>
+        <ToastTrigger message="Configuración guardada." type="success" title="Directorio" />
+        <ToastTrigger message="Configuración guardada." type="success" title="Preferencias" />
+      </ToastProvider>
+    );
+
+    const triggers = screen.getAllByRole("button", { name: "Push toast" });
+    fireEvent.click(triggers[0]);
+    fireEvent.click(triggers[1]);
+
+    expect(screen.getByText("Directorio")).toBeInTheDocument();
+    expect(screen.getByText("Preferencias")).toBeInTheDocument();
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+  });
+
   it("info toast uses role=status", () => {
     renderWithProvider({ message: "Info msg", type: "info" });
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));

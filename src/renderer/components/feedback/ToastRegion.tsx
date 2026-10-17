@@ -81,6 +81,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const nextToastId = useRef(1);
   const timersRef = useRef<Map<number, number>>(new Map());
+  const toastKeysByIdRef = useRef<Map<number, string>>(new Map());
 
   const dismissToast = useCallback((id: number) => {
     const timer = timersRef.current.get(id);
@@ -90,20 +91,30 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
       timersRef.current.delete(id);
     }
 
+    const toastKey = toastKeysByIdRef.current.get(id);
+    if (toastKey !== undefined) {
+      toastKeysByIdRef.current.delete(id);
+    }
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
   const pushToast = useCallback((toast: ToastInput) => {
+    const type = toast.type ?? "info";
+    const toastKey = JSON.stringify([type, toast.title ?? null, toast.message]);
+    const activeToast = [...toastKeysByIdRef.current].find(([, key]) => key === toastKey);
+    if (activeToast) dismissToast(activeToast[0]);
+
     const id = nextToastId.current++;
     const durationMs = toast.durationMs ?? DEFAULT_DURATION_MS;
     const isPersistentAlert = (toast.type === "error" || toast.type === "warning") && toast.durationMs === undefined;
+    toastKeysByIdRef.current.set(id, toastKey);
 
     setToasts((current) => [
       ...current,
       {
         durationMs: isPersistentAlert ? undefined : durationMs,
         id,
-        type: toast.type ?? "info",
+        type,
         title: toast.title,
         message: toast.message
       }
@@ -125,6 +136,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
       window.clearTimeout(timer);
     });
     timersRef.current.clear();
+    toastKeysByIdRef.current.clear();
   }, []);
 
   const value = useMemo(() => ({ pushToast }), [pushToast]);
@@ -147,11 +159,11 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                 aria-live={isAlert ? "assertive" : "polite"}
                 aria-atomic="true"
                 className={[
-                  "pointer-events-auto rounded-3xl border px-4 py-3 shadow-lg shadow-slate-900/10 backdrop-blur",
+                  "pointer-events-none rounded-3xl border px-4 py-3 shadow-lg shadow-slate-900/10 backdrop-blur",
                   toastStyles[toast.type]
                 ].join(" ")}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <ToastIcon type={toast.type} />
                   <div className="min-w-0 flex-1">
                     <span className="sr-only">{TOAST_SR_PREFIXES[toast.type]}</span>
@@ -162,7 +174,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                     type="button"
                     onClick={() => dismissToast(toast.id)}
                     aria-label="Cerrar notificación"
-                    className="min-h-11 min-w-11 rounded-full px-3 py-2 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current"
+                    className="pointer-events-auto min-h-11 min-w-11 self-end rounded-full px-3 py-2 text-xs font-semibold text-current/70 transition hover:bg-black/5 hover:text-current sm:self-auto"
                   >
                     Cerrar
                   </button>
