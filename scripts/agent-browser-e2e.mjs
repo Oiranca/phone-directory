@@ -74,6 +74,7 @@ const bulkPerformanceCsvPath = path.join(workspace, "5000-conflicts.csv");
 const odsPath = path.join(workspace, "agenda-large.ods");
 const crossDocumentCsvPath = path.join(workspace, "cross-document.csv");
 const contactsPath = path.join(workspace, "user-data", "data", "contacts.json");
+const visualArtifactDirectory = path.join(repoRootDir, "test-results", "agent-browser");
 let vite;
 let electron;
 let connected = false;
@@ -89,8 +90,6 @@ const importReady = () => browserCommand("eval", `(() => {
 const openPreview = async () => {
   await waitFor("import action ready", importReady);
   clickRole("button", "Importar");
-  await waitFor("file picker confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
-  clickRole("button", "Elegir archivo");
   await waitFor("CSV preview", () => browserCommand("is", "visible", '[aria-label="Vista previa de importación"]') === "true");
 };
 const previewState = () => JSON.parse(browserCommand("eval", `(() => {
@@ -112,6 +111,15 @@ const closeElectron = async () => {
   }
   await stop(electron);
   electron = undefined;
+};
+const closeAdvancedPaths = () => {
+  const closed = browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    if (!details) return false;
+    details.open = false;
+    return !details.open;
+  })()`);
+  if (closed !== "true") throw new Error("Advanced path disclosure did not close before screenshot");
 };
 const launchElectron = async (openDialogPaths, userDataPath = path.join(workspace, "user-data")) => {
   browserSession = `directory-e2e-${process.pid}-${Date.now()}`;
@@ -150,6 +158,7 @@ const runScenario = async (name, check) => {
 };
 
 try {
+  await fs.mkdir(visualArtifactDirectory, { recursive: true });
   browserCommand("--version");
   execFileSync("pnpm", ["run", "build"], { cwd: repoRootDir, stdio: "inherit" });
   const html = await fs.readFile(path.join(repoRootDir, "dist", "index.html"), "utf8");
@@ -267,6 +276,173 @@ try {
 
   clickRole("link", "Configuración");
   await waitFor("settings", () => hasText("Datos e importación"));
+  const retentionInput = "#settings-autobackup-retention";
+  if (browserCommand("eval", `(() => {
+    const input = document.querySelector(${JSON.stringify(retentionInput)});
+    const automatic = document.querySelector("#settings-autobackup-enabled");
+    return Boolean(input && !input.disabled && automatic && !automatic.checked);
+  })()`) !== "true") throw new Error("Retention must be editable while automatic backup is disabled");
+  browserCommand("fill", retentionInput, "7");
+  clickRole("button", "Guardar configuración");
+  await waitFor("retention saved", () => hasText("Configuración guardada."));
+  const savedRetention = JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
+  if (savedRetention !== 7) throw new Error(`Retention was not persisted: ${savedRetention}`);
+  console.log("[agent-browser-e2e] Disabled-auto retention saves and persists");
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
+  await waitFor("advanced path controls", () => browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    if (!details?.open || !details.querySelector("#settings-data-file-path") || !details.querySelector("#settings-backup-directory-path")) return false;
+    const labels = ["Seleccionar archivo de datos", "Seleccionar carpeta de copias de seguridad"];
+    return labels.every(label => [...details.querySelectorAll("button")].some(button => button.getAttribute("aria-label") === label));
+  })()`) === "true");
+  const advancedRecovery = `(() => {
+    const buttons = ["Crear copia de seguridad", "Exportar archivo portable", "Importar"];
+    const summary = [...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada");
+    return Boolean(buttons.every(label => [...document.querySelectorAll("button")].some(item => item.textContent.trim() === label)) && summary && !summary.parentElement.open && (summary.focus(), document.activeElement === summary));
+  })()`;
+  if (browserCommand("eval", advancedRecovery) !== "true") throw new Error("Routine data controls or closed advanced recovery disclosure missing");
+  browserCommand("press", "Enter");
+  await waitFor("advanced recovery disclosure", () => browserCommand("eval", `(() => {
+    const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Recuperación avanzada");
+    return Boolean(details?.open && [...details.querySelectorAll("button")].some(item => item.textContent.trim() === "Restablecer registro de auditoría"));
+  })()`) === "true");
+  browserCommand("set", "viewport", "320", "844");
+  browserCommand("eval", "document.documentElement.style.fontSize = '200%'");
+  const settingsReflowMetrics = () => JSON.parse(browserCommand("eval", `(() => {
+    const advancedPathsOpen = [...document.querySelectorAll("details")].some(item => item.open && item.querySelector("summary")?.textContent.trim() === "Avanzado");
+    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, rootFontSize: getComputedStyle(document.documentElement).fontSize, advancedPathsOpen };
+  })()`));
+  try {
+    await waitFor("320px settings reflow", () => {
+      const metrics = settingsReflowMetrics();
+      return metrics.innerWidth === 320 && metrics.advancedPathsOpen && metrics.scrollWidth <= metrics.innerWidth + 1;
+    });
+  } catch (error) {
+    const failureMetrics = settingsReflowMetrics();
+    closeAdvancedPaths();
+    browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-failure.png"));
+    throw new Error(`Settings reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
+  }
+  closeAdvancedPaths();
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada"))?.scrollIntoView()`);
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200.png"));
+  await waitFor("initial settings toast dismissal", () => !hasText("Configuración guardada."));
+  browserCommand("fill", retentionInput, "8");
+  clickRole("button", "Guardar configuración");
+  await waitFor("retention resaved", () => hasText("Configuración guardada."));
+  const toastOverlap = JSON.parse(browserCommand("eval", `(() => {
+    const target = document.querySelector(${JSON.stringify(retentionInput)});
+    const toast = document.querySelector('[aria-label="Notificaciones"] [role="status"]');
+    if (!target || !toast) return { overlaps: false, targetAtCenter: false };
+    target.scrollIntoView({ block: "start" });
+    const targetBeforeScroll = target.getBoundingClientRect();
+    window.scrollBy(0, targetBeforeScroll.top + targetBeforeScroll.height / 2 - 160);
+    const targetRect = target.getBoundingClientRect();
+    const toastRect = toast.getBoundingClientRect();
+    const dismissRect = toast.querySelector('button[aria-label="Cerrar notificación"]')?.getBoundingClientRect();
+    const centerX = targetRect.left + targetRect.width / 2;
+    const centerY = targetRect.top + targetRect.height / 2;
+    const elementAtCenter = document.elementFromPoint(centerX, centerY);
+    return {
+      innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      overlaps: centerX >= toastRect.left && centerX <= toastRect.right && centerY >= toastRect.top && centerY <= toastRect.bottom,
+      outsideDismissButton: !dismissRect || centerX < dismissRect.left || centerX > dismissRect.right || centerY < dismissRect.top || centerY > dismissRect.bottom,
+      targetAtCenter: elementAtCenter === target,
+      targetCenter: { x: centerX, y: centerY },
+      toast: { left: toastRect.left, top: toastRect.top, right: toastRect.right, bottom: toastRect.bottom }
+    };
+  })()`));
+  if (toastOverlap.innerWidth !== 320 || toastOverlap.scrollWidth > toastOverlap.innerWidth + 1 || !toastOverlap.overlaps || !toastOverlap.outsideDismissButton || !toastOverlap.targetAtCenter) throw new Error(`Toast did not allow pointer hit testing: ${JSON.stringify(toastOverlap)}`);
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-toast-before-focus.png"));
+  if (!hasText("Configuración guardada.")) throw new Error("Toast was not present before the retention input click");
+  browserCommand("click", retentionInput);
+  if (browserCommand("eval", `document.activeElement?.id === ${JSON.stringify(retentionInput.slice(1))}`) !== "true") throw new Error("Toast blocked the retention input click");
+  if (hasText("Configuración guardada.")) throw new Error("Toast was not dismissed by the retention input focus");
+  const focusClear = JSON.parse(browserCommand("eval", `(() => {
+    const target = document.querySelector(${JSON.stringify(retentionInput)});
+    if (!target) return false;
+    const targetRect = target.getBoundingClientRect();
+    return [...document.querySelectorAll('[aria-label="Notificaciones"] [role]')].every(toast => {
+      const toastRect = toast.getBoundingClientRect();
+      return targetRect.left >= toastRect.right || targetRect.right <= toastRect.left || targetRect.top >= toastRect.bottom || targetRect.bottom <= toastRect.top;
+    });
+  })()`));
+  if (!focusClear) throw new Error("Focused retention input remained obscured by a toast");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-toast-after-focus.png"));
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
+  const originalDataPath = JSON.parse(browserCommand("eval", `(() => {
+    const input = document.querySelector("#settings-data-file-path");
+    return input?.value ?? "";
+  })()`));
+  if (!originalDataPath) throw new Error("Could not retain the original data path for restoration");
+  browserCommand("fill", "#settings-data-file-path", "relative/contacts.json");
+  clickRole("button", "Guardar configuración");
+  await waitFor("relative data path error", () => hasText("La ruta del archivo de datos debe ser absoluta."));
+  closeAdvancedPaths();
+  browserCommand("eval", `(() => {
+    const input = document.querySelector(${JSON.stringify(retentionInput)});
+    if (!input) return false;
+    input.scrollIntoView({ block: "start" });
+    const rect = input.getBoundingClientRect();
+    window.scrollBy(0, rect.top + rect.height / 2 - 160);
+    return true;
+  })()`);
+  const persistentToastOverlap = JSON.parse(browserCommand("eval", `(() => {
+    const input = document.querySelector(${JSON.stringify(retentionInput)});
+    const toast = document.querySelector('[aria-label="Notificaciones"] [role="alert"]');
+    if (!input || !toast) return false;
+    const inputRect = input.getBoundingClientRect();
+    const toastRect = toast.getBoundingClientRect();
+    const centerX = inputRect.left + inputRect.width / 2;
+    const centerY = inputRect.top + inputRect.height / 2;
+    return {
+      overlaps: !(inputRect.left >= toastRect.right || inputRect.right <= toastRect.left || inputRect.top >= toastRect.bottom || inputRect.bottom <= toastRect.top),
+      inputAtCenter: document.elementFromPoint(centerX, centerY) === input
+    };
+  })()`));
+  if (!persistentToastOverlap.overlaps || !persistentToastOverlap.inputAtCenter) throw new Error("Persistent path error did not cover the retention input before focus");
+  browserCommand("click", retentionInput);
+  if (browserCommand("eval", `document.activeElement?.id === ${JSON.stringify(retentionInput.slice(1))}`) !== "true") throw new Error("Persistent path error blocked the retention input click");
+  const persistentToastClear = JSON.parse(browserCommand("eval", `(() => {
+    const input = document.querySelector(${JSON.stringify(retentionInput)});
+    const toast = document.querySelector('[aria-label="Notificaciones"] [role="alert"]');
+    if (!input || !toast) return false;
+    const inputRect = input.getBoundingClientRect();
+    const toastRect = toast.getBoundingClientRect();
+    return inputRect.left >= toastRect.right || inputRect.right <= toastRect.left || inputRect.top >= toastRect.bottom || inputRect.bottom <= toastRect.top;
+  })()`));
+  if (!persistentToastClear) throw new Error("Persistent path error remained over the focused retention input");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-persistent-toast.png"));
+  const persistentToastScrollable = JSON.parse(browserCommand("eval", `(() => {
+    const region = document.querySelector('[aria-label="Notificaciones"]');
+    const message = region?.querySelector('[role="alert"] p:not(.sr-only)');
+    if (!region || !message) return false;
+    message.textContent = "Error persistente de prueba. ".repeat(200);
+    const rect = region.getBoundingClientRect();
+    const before = region.scrollTop;
+    region.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + Math.min(32, rect.height / 2), deltaY: 120 }));
+    const closeRect = region.querySelector('button[aria-label="Cerrar notificación"]')?.getBoundingClientRect();
+    return region.scrollHeight > region.clientHeight && region.scrollTop > before && Boolean(closeRect && closeRect.left >= rect.left && closeRect.right <= rect.right && closeRect.top >= rect.top && closeRect.bottom <= rect.bottom && closeRect.top >= 0 && closeRect.bottom <= innerHeight);
+  })()`));
+  if (!persistentToastScrollable) throw new Error("Persistent toast did not scroll while keeping its close control");
+  browserCommand("click", '[aria-label="Notificaciones"] [role="alert"] button[aria-label="Cerrar notificación"]');
+  await waitFor("persistent toast dismissal", () => browserCommand("eval", 'document.querySelector(\'[aria-label="Notificaciones"] [role="alert"]\') === null') === "true");
+  browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
+  await waitFor("advanced data path input", () => browserCommand("eval", 'document.querySelector("#settings-data-file-path") !== null') === "true");
+  browserCommand("fill", "#settings-data-file-path", originalDataPath);
+  await waitFor("restored pristine settings", () => browserCommand("eval", `(() => {
+    const input = document.querySelector("#settings-data-file-path");
+    const save = [...document.querySelectorAll("button")].find(item => item.textContent.trim() === "Guardar configuración");
+    return Boolean(input?.value === ${JSON.stringify(originalDataPath)} && save?.disabled && !document.body.innerText.includes("La ruta del archivo de datos debe ser absoluta."));
+  })()`) === "true");
+  if (browserCommand("eval", 'document.querySelector(\'[aria-label="Notificaciones"] [role="alert"]\') === null') !== "true") throw new Error("Path error remained after restoring settings");
+  closeAdvancedPaths();
+  browserCommand("eval", "document.documentElement.style.fontSize = ''");
+  browserCommand("set", "viewport", "1440", "920");
+  browserCommand("eval", "window.scrollTo(0, 0)");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-desktop.png"));
+  console.log("[agent-browser-e2e] Data controls and advanced recovery reflow passed");
   await openPreview();
   const validPreview = previewState();
   if (!validPreview.enabled || validPreview.alert ||
@@ -477,8 +653,8 @@ try {
   clickRole("link", "Configuración");
   await waitFor("settings for backup restore", () => hasText("Datos e importación"));
   clickRole("button", "Importar");
-  await waitFor("backup picker confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
-  clickRole("button", "Elegir archivo");
+  await waitFor("backup import confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
+  clickRole("button", "Importar archivo");
   await waitFor("backup restore", () => hasText("Importación completada."));
   console.log("[agent-browser-e2e] Local backup and re-import passed");
   });

@@ -11,6 +11,7 @@ interface ConfirmDialogProps {
   isDestructive?: boolean;
   confirmDisabled?: boolean;
   cancelDisabled?: boolean;
+  busyMessage?: string;
   /**
    * Optional extra content rendered between the message and the
    * action buttons (e.g. the merge-fields editor on the Deduplicate page).
@@ -30,11 +31,13 @@ export function ConfirmDialog({
   isDestructive = false,
   confirmDisabled = false,
   cancelDisabled = false,
+  busyMessage,
   children
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const busyStatusRef = useRef<HTMLParagraphElement>(null);
   const titleId = useId();
   const messageId = useId();
 
@@ -64,8 +67,14 @@ export function ConfirmDialog({
           ? cancelButtonRef.current
           : !confirmDisabled
             ? confirmButtonRef.current
-            : null;
+            : busyStatusRef.current;
         focusTarget?.focus();
+      } else if (
+        cancelDisabled &&
+        confirmDisabled &&
+        (document.activeElement === cancelButtonRef.current || document.activeElement === confirmButtonRef.current)
+      ) {
+        busyStatusRef.current?.focus();
       }
     } else {
       const dialog = lastDialogNodeRef.current;
@@ -108,10 +117,15 @@ export function ConfirmDialog({
       aria-labelledby={titleId}
       aria-describedby={messageId}
     >
-      <h2 id={titleId} className="text-xl font-semibold mb-4 text-scs-ink">{title}</h2>
-      <p id={messageId} className={`text-slate-600 leading-relaxed ${children ? 'mb-4' : 'mb-8'}`}>{message}</p>
+      <h2 id={titleId} className="mb-4 break-words text-xl font-semibold text-scs-ink">{title}</h2>
+      <p id={messageId} className={`break-words text-slate-600 leading-relaxed ${children ? 'mb-4' : 'mb-8'}`}>{message}</p>
+      {busyMessage && (confirmDisabled || cancelDisabled) && (
+        <p ref={busyStatusRef} role="status" aria-live="polite" tabIndex={-1} className="mb-4 break-words text-sm font-medium text-slate-700">
+          {busyMessage}
+        </p>
+      )}
       {children && <div className="mb-6">{children}</div>}
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-3">
         <button
           ref={cancelButtonRef}
           type="button"

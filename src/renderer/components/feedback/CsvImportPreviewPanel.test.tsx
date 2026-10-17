@@ -18,6 +18,8 @@ const basePreview: CsvImportPreviewWithConflicts = {
   beepersSkippedRowCount: 0,
   socialHandleSkippedRowCount: 0,
   parsedBeepersCellCount: 0,
+  incomingBeeperRecordCount: 0,
+  currentBeeperRecordCount: null,
   typeCounts: {},
   areaCounts: {},
   rowIssues: [],
@@ -53,6 +55,18 @@ afterEach(() => {
 });
 
 describe("CsvImportPreviewPanel", () => {
+  it("shows incoming and replaced imported-beeper counts", () => {
+    renderPanel({
+      ...basePreview,
+      fileName: "buscas.ods",
+      parsedBeepersCellCount: 2,
+      incomingBeeperRecordCount: 2,
+      currentBeeperRecordCount: 3
+    });
+
+    expect(screen.getByRole("status", { name: "" })).toHaveTextContent("Se importarán 2 buscas y se reemplazarán 3 buscas actuales.");
+  });
+
   describe("zero-row file", () => {
     it("renders the file name and empty-file notice", () => {
       renderPanel({

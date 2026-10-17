@@ -90,6 +90,13 @@ describe("App recovery flow", () => {
         listBackups: vi.fn(),
         exportDataset: vi.fn(),
         importDataset: vi.fn(),
+        pickAndImportDataset: vi.fn().mockResolvedValue({
+          kind: "json-preview",
+          preview: { importToken: "recovery-json", fileName: "contacts.json", detectedType: "contacts", recordCount: 0, currentRecordCount: null }
+        }),
+        confirmJsonImport: vi.fn(),
+        cancelJsonImport: vi.fn(),
+        cancelCsvImportPreview: vi.fn(),
         resetDataset: vi.fn(),
         previewCsvImport: vi.fn(),
         importCsvDataset: vi.fn()
@@ -132,21 +139,58 @@ describe("App recovery flow", () => {
       },
       settings: editableSettings
     });
-    window.hospitalDirectory.importDataset = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: editableSettings,
-      recordCount: defaultContacts.records.length
-    });
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({ kind: "json-preview", preview: { importToken: "recovery-ok", fileName: "contacts.json", detectedType: "contacts", recordCount: defaultContacts.records.length, currentRecordCount: null } });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "contacts-import", result: { contacts: defaultContacts, settings: editableSettings, recordCount: defaultContacts.records.length } });
 
     renderApp();
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
 
-    await waitFor(() => {
-      expect(window.hospitalDirectory.importDataset).toHaveBeenCalledTimes(1);
-    });
+    fireEvent.click(await screen.findByRole("button", { name: "Importar copia" }));
+    await waitFor(() => expect(window.hospitalDirectory.confirmJsonImport).toHaveBeenCalledWith("recovery-ok"));
     expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
+  });
+
+  it("keeps the JSON confirmation open and disables both actions while applying it", async () => {
+    let resolveImport!: (value: unknown) => void;
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: { reason: "invalid-contacts-json", contactsFilePath: "/tmp/data/contacts.json", message: "El archivo local contacts.json está dañado." },
+      settings: editableSettings
+    });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockReturnValue(new Promise((resolve) => { resolveImport = resolve; }));
+
+    renderApp();
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Importar copia" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Importar copia" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Importar copia" }));
+    expect(window.hospitalDirectory.confirmJsonImport).toHaveBeenCalledTimes(1);
+
+    resolveImport({ kind: "contacts-import", result: { contacts: defaultContacts, settings: editableSettings, recordCount: defaultContacts.records.length } });
+    expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
+  });
+
+  it("cancels a spreadsheet preview selected from recovery", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      recovery: { reason: "invalid-contacts-json", contactsFilePath: "/tmp/data/contacts.json", message: "El archivo local contacts.json está dañado." },
+      settings: editableSettings
+    });
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: { importToken: "recovery-csv", fileName: "contacts.csv" }
+    });
+
+    renderApp();
+    expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+
+    await waitFor(() => expect(window.hospitalDirectory.cancelCsvImportPreview).toHaveBeenCalledWith("recovery-csv"));
+    expect(await screen.findByText("Selecciona una copia JSON válida para recuperar el directorio.")).toBeInTheDocument();
   });
 
   it("resets to an empty dataset and exits recovery mode", async () => {
@@ -186,7 +230,7 @@ describe("App recovery flow", () => {
     expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
   });
 
-  it("shows the error message in the recovery panel when importDataset throws", async () => {
+  it("shows the error message in the recovery panel when confirmation throws", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       recovery: {
         reason: "invalid-contacts-json",
@@ -195,14 +239,14 @@ describe("App recovery flow", () => {
       },
       settings: editableSettings
     });
-    window.hospitalDirectory.importDataset = vi.fn().mockRejectedValue(
-      new Error("No se pudo importar una copia JSON válida.")
-    );
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({ kind: "json-preview", preview: { importToken: "recovery-error", fileName: "contacts.json", detectedType: "contacts", recordCount: 0, currentRecordCount: null } });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockRejectedValue(new Error("No se pudo importar una copia JSON válida."));
 
     renderApp();
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Importar copia" }));
 
     expect(await screen.findByText("No se pudo importar una copia JSON válida.")).toBeInTheDocument();
   });
@@ -275,7 +319,7 @@ describe("App recovery flow", () => {
     expect(await screen.findByText("Directorio disponible")).toBeInTheDocument();
   });
 
-  it("importDataset throws with a custom message → custom message appears (not the hardcoded fallback)", async () => {
+  it("confirmation throws with a custom message → custom message appears (not the hardcoded fallback)", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       recovery: {
         reason: "invalid-contacts-json",
@@ -284,14 +328,14 @@ describe("App recovery flow", () => {
       },
       settings: editableSettings
     });
-    window.hospitalDirectory.importDataset = vi.fn().mockRejectedValue(
-      new Error("Custom import failure")
-    );
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({ kind: "json-preview", preview: { importToken: "recovery-custom", fileName: "contacts.json", detectedType: "contacts", recordCount: 0, currentRecordCount: null } });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockRejectedValue(new Error("Custom import failure"));
 
     renderApp();
 
     expect(await screen.findByText("Recuperación obligatoria")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Importar JSON válido" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Importar copia" }));
 
     expect(await screen.findByText("Custom import failure")).toBeInTheDocument();
     expect(screen.queryByText("No se pudo importar una copia JSON válida.")).not.toBeInTheDocument();

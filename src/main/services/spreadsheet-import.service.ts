@@ -1236,7 +1236,8 @@ export const buildSpreadsheetImportPreview = async (
     ...result,
     preview: {
       ...result.preview,
-      parsedBeepersCellCount: normalized.beepersParseResult.parsedCellCount
+      parsedBeepersCellCount: normalized.beepersParseResult.parsedCellCount,
+      incomingBeeperRecordCount: normalized.beepersParseResult.records.length
     },
     beepersParseResult: normalized.beepersParseResult
   };

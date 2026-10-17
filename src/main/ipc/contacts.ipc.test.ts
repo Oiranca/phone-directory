@@ -475,6 +475,8 @@ function makeWebContentsSender(id: number): {
 }
 
 describe("contacts:import-csv-dataset — sender binding", () => {
+  let testRoot: string;
+  let sourceFilePath: string;
   // Captured handler registry, reset per test so each test gets a fresh
   // registerContactsIpc call with its own token map.
   let handlers: Map<string, (...args: unknown[]) => unknown>;
@@ -488,7 +490,6 @@ describe("contacts:import-csv-dataset — sender binding", () => {
   // Minimal preview stub that the IPC handler returns as-is (plus importToken)
   const previewStub = {
     importToken: "",
-    sourceFilePath: "/tmp/test.csv",
     fileName: "test.csv",
     totalRowCount: 1,
     validRowCount: 1,
@@ -518,8 +519,12 @@ describe("contacts:import-csv-dataset — sender binding", () => {
   beforeEach(async () => {
     vi.resetModules();
 
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-csv-binding-"));
+    sourceFilePath = path.join(testRoot, "test.csv");
+    await fs.writeFile(sourceFilePath, "name\nTest\n");
+
     handlers = new Map();
-    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/tmp/test.csv"] });
+    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: [sourceFilePath] });
 
     // Re-mock electron with a fresh ipcMain that captures into the local map.
     // dialog.showOpenDialog is configured to return a valid path by default so that
@@ -543,8 +548,10 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     }));
 
     serviceMock = {
-      previewCsvImport: vi.fn().mockResolvedValue({ ...previewStub }),
+      previewCsvImport: vi.fn().mockResolvedValue({ ...previewStub, sourceFilePath }),
       importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 0, beepers: 0 }),
+      getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
       getBootstrapData: vi.fn(),
       createBackup: vi.fn(),
       resetDataset: vi.fn(),
@@ -564,8 +571,9 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
     vi.clearAllMocks();
   });
 
@@ -898,318 +906,276 @@ describe("contacts:import-csv-dataset — sender binding", () => {
 // ---------------------------------------------------------------------------
 // pickAndImportDataset: single unified "Importar" entry point
 //
-// Verifies the extension-based dispatch: main owns the one dialog, and routes
-// to the same underlying pipelines used by the existing importDataset /
-// previewCsvImport channels, without ever accepting a renderer-supplied path.
+// Main owns file selection, preview, and sender-bound confirmation without
+// accepting a renderer-supplied path.
 // ---------------------------------------------------------------------------
 
-describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
+describe("contacts:pick-and-import-dataset — JSON preview confirmation", () => {
+  let testRoot: string;
   let handlers: Map<string, (...args: unknown[]) => unknown>;
-  let serviceMock: {
-    importDataset: ReturnType<typeof vi.fn>;
-    importJsonFile: ReturnType<typeof vi.fn>;
-    previewCsvImport: ReturnType<typeof vi.fn>;
-    [key: string]: unknown;
-  };
+  let sourceFilePath: string;
+  let serviceMock: Record<string, ReturnType<typeof vi.fn>>;
   let showOpenDialogMock: ReturnType<typeof vi.fn>;
-
-  const jsonImportResult = {
-    contacts: { records: [], exportedAt: "2026-07-04T00:00:00.000Z", metadata: {}, catalogs: {} },
-    settings: {},
-    backupPath: "/tmp/backups/auto.json",
-    importedFilePath: "/tmp/incoming/replacement.json",
-    recordCount: 0
-  };
-
-  const csvPreviewStub = {
-    sourceFilePath: "/tmp/incoming/directory.csv",
-    fileName: "directory.csv",
-    totalRowCount: 1,
-    validRowCount: 1,
-    invalidRowCount: 0,
-    warningCount: 0,
-    recordCount: 1,
-    mergedRecordCount: 1,
-    createdCount: 1,
-    updatedCount: 0,
-    unchangedCount: 0,
-    beepersSkippedRowCount: 0,
-    socialHandleSkippedRowCount: 0,
-    parsedBeepersCellCount: 0,
-    typeCounts: {},
-    areaCounts: {},
-    rowIssues: [],
-    warnings: [],
-    previewRows: [],
-    conflictCount: 0,
-    conflictedRecords: [],
-    policiesResolved: true
-  };
 
   beforeEach(async () => {
     vi.resetModules();
-
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-json-preview-"));
+    sourceFilePath = path.join(testRoot, "contacts.json");
+    await fs.writeFile(sourceFilePath, "{\"records\":[]}");
+    await fs.writeFile(path.join(testRoot, "directory.csv"), "type,displayName\nservice,Test\n");
     handlers = new Map();
-    showOpenDialogMock = vi.fn();
-
+    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: [sourceFilePath] });
     vi.doMock("electron", () => ({
-      ipcMain: {
-        handle: (channel: string, fn: (...args: unknown[]) => unknown) => {
-          handlers.set(channel, fn);
-        }
-      },
-      BrowserWindow: {
-        fromWebContents: vi.fn().mockReturnValue(null)
-      },
-      dialog: {
-        showOpenDialog: showOpenDialogMock,
-        showSaveDialog: vi.fn()
-      },
-      app: {
-        getPath: vi.fn().mockReturnValue("/tmp")
-      }
+      app: { getPath: vi.fn().mockReturnValue(testRoot) },
+      ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler) },
+      BrowserWindow: { fromWebContents: vi.fn().mockReturnValue(null) },
+      dialog: { showOpenDialog: showOpenDialogMock, showSaveDialog: vi.fn(), showMessageBox: vi.fn() }
     }));
-
     serviceMock = {
-      importDataset: vi.fn().mockResolvedValue(jsonImportResult),
-      importJsonFile: vi.fn().mockResolvedValue({ kind: "contacts-import", result: jsonImportResult }),
-      previewCsvImport: vi.fn().mockResolvedValue({ ...csvPreviewStub }),
-      getBootstrapData: vi.fn(),
-      createBackup: vi.fn(),
-      resetDataset: vi.fn(),
-      createRecord: vi.fn(),
-      updateRecord: vi.fn(),
-      listBackups: vi.fn(),
-      restoreBackup: vi.fn(),
-      exportDataset: vi.fn(),
-      importCsvDataset: vi.fn(),
-      detectDuplicates: vi.fn(),
-      mergeDuplicates: vi.fn()
+      previewJsonFile: vi.fn().mockResolvedValue({ kind: "contacts", data: { records: [{ id: "incoming" }] } }),
+      importPreviewedJson: vi.fn().mockResolvedValue({ kind: "contacts-import", result: { contacts: { records: [], exportedAt: "2026-01-01", metadata: {}, catalogs: {} }, settings: {}, backupPath: "hidden", importedFilePath: "hidden", recordCount: 1 } }),
+      getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 2, beepers: 0 }),
+      getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
+      getBootstrapData: vi.fn(), createBackup: vi.fn(), resetDataset: vi.fn(), createRecord: vi.fn(), updateRecord: vi.fn(), deleteRecord: vi.fn(), listBackups: vi.fn(), restoreBackup: vi.fn(), exportDataset: vi.fn(), importDataset: vi.fn(), previewCsvImport: vi.fn(), importCsvDataset: vi.fn(), detectDuplicates: vi.fn(), mergeDuplicates: vi.fn()
     };
-
     const { registerContactsIpc } = await import("./contacts.ipc.js");
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    vi.clearAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
   });
 
-  const getHandler = () => {
-    const handler = handlers.get("contacts:pick-and-import-dataset");
-    if (!handler) throw new Error("pickAndImportDataset handler not registered");
-    return handler;
-  };
+  it("previews a JSON source before creating a backup or applying it", async () => {
+    const sender = makeWebContentsSender(90);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { kind: string; preview: { importToken: string; currentRecordCount: number } };
 
-  it("classifies and imports a contacts JSON file", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
-    const sender = makeWebContentsSender(1);
-
-    const response = await getHandler()({ sender } as unknown);
-
-    expect(serviceMock.importJsonFile.mock.calls[0]?.[0]).toBe("/tmp/incoming/replacement.json");
-    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
-    // backupPath/importedFilePath are absolute filesystem paths and must be
-    // stripped before the result crosses the IPC boundary into the renderer
-    // (OIR-276) — the handler never forwards service.importDataset()'s raw
-    // result, so the response must NOT contain either field.
-    const { backupPath: _backupPath, importedFilePath: _importedFilePath, ...safeJsonImportResult } = jsonImportResult;
-    expect(response).toEqual({ kind: "json-import", result: safeJsonImportResult });
-    expect(response).not.toHaveProperty("result.backupPath");
-    expect(response).not.toHaveProperty("result.importedFilePath");
+    expect(preview.kind).toBe("json-preview");
+    expect(preview.preview.currentRecordCount).toBe(2);
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
   });
 
   it.each([
-    ["contacts:import-dataset", "importDataset", "/Users/operator/private/replacement.json"],
-    ["contacts:pick-and-import-dataset", "importJsonFile", "C:\\Users\\operator\\private\\replacement.json"]
-  ] as const)("hides filesystem paths in %s errors", async (channel, method, filePath) => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [filePath] });
-    const filesystemError = Object.assign(new Error(`ENOENT: ${filePath}`), { code: "ENOENT", path: filePath });
-    serviceMock[method].mockRejectedValueOnce(filesystemError);
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    ["combined", { contacts: { records: [] }, beepers: { records: [], importedRecords: [] } }, "combined"],
+    ["beepers", { records: [], importedRecords: [] }, "beepers"],
+    ["settings", {}, "settings"]
+  ])("returns a %s JSON preview without applying it", async (kind, data, detectedType) => {
+    serviceMock.previewJsonFile.mockResolvedValueOnce({ kind, data });
 
-    const rejection = await (handlers.get(channel)!({ sender: makeWebContentsSender(1) }) as Promise<unknown>)
-      .catch((error: unknown) => error);
+    const response = await handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(70) }) as { kind: string; preview: { detectedType: string } };
 
-    expect((rejection as Error).message).toBe("No se pudo procesar el archivo JSON seleccionado.");
-    expect((rejection as Error).message).not.toContain(filePath);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("JSON import"), filesystemError);
+    expect(response).toMatchObject({ kind: "json-preview", preview: { detectedType } });
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
   });
 
-  it("hides worker errors while preserving typed JSON cancellation errors", async () => {
-    const { JsonDataError } = await import("../services/json-data-reader.js");
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
-    const workerError = new JsonDataError("worker", "EACCES: C:\\Users\\operator\\private\\replacement.json");
-    serviceMock.importJsonFile.mockRejectedValueOnce(workerError);
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  it("opens one native dialog restricted to supported file types", async () => {
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: true, filePaths: [] });
 
-    const rejection = await (getHandler()({ sender: makeWebContentsSender(1) }) as Promise<unknown>)
-      .catch((error: unknown) => error);
+    await handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(79) });
 
-    expect((rejection as Error).message).toBe("No se pudo procesar el archivo JSON seleccionado.");
-    expect(rejection).toMatchObject({ code: "worker" });
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("JSON import"), workerError);
-
-    const cancellation = new JsonDataError("aborted", "La importación JSON fue cancelada.");
-    serviceMock.importJsonFile.mockRejectedValueOnce(cancellation);
-    await expect(getHandler()({ sender: makeWebContentsSender(1) })).rejects.toBe(cancellation);
-  });
-
-  it.each([
-    ["too-large", "El archivo JSON supera el tamaño máximo permitido."],
-    ["too-deep", "El archivo JSON supera el límite seguro."],
-    ["invalid-data", "El archivo JSON no tiene una estructura válida."],
-    ["aborted", "La importación JSON fue cancelada."]
-  ] as const)("preserves %s JSON errors", async (code, message) => {
-    const { JsonDataError } = await import("../services/json-data-reader.js");
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
-    const expected = new JsonDataError(code, message);
-    serviceMock.importJsonFile.mockRejectedValueOnce(expected);
-
-    await expect(getHandler()({ sender: makeWebContentsSender(1) })).rejects.toBe(expected);
-  });
-
-  it("cancels an in-flight JSON worker through the existing import cancel action", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/replacement.json"] });
-    serviceMock.importJsonFile.mockImplementation((_filePath: string, options: { signal: AbortSignal }) =>
-      new Promise((_resolve, reject) => {
-        options.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
-      })
-    );
-    const sender = makeWebContentsSender(1);
-    const importPromise = getHandler()({ sender } as unknown);
-    await new Promise<void>((resolve) => setImmediate(resolve));
-
-    await handlers.get("contacts:cancel-csv-import-preview")!({ sender } as unknown);
-
-    await expect(importPromise).rejects.toThrow("cancelled");
-  });
-
-  it("strips every internal path from a combined JSON import", async () => {
-    serviceMock.importJsonFile.mockResolvedValueOnce({
-      kind: "combined-import",
-      result: {
-        ...jsonImportResult,
-        beeperBackupPath: "/tmp/backups/beepers.json",
-        beeperRecordCount: 4,
-        importedBeeperRecordCount: 5
-      }
-    });
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/combined.json"] });
-
-    const response = await getHandler()({ sender: makeWebContentsSender(8) } as unknown);
-
-    expect(response).toEqual({
-      kind: "combined-import",
-      result: {
-        contacts: jsonImportResult.contacts,
-        settings: jsonImportResult.settings,
-        recordCount: 0,
-        beeperRecordCount: 4,
-        importedBeeperRecordCount: 5
-      }
-    });
-    expect(response).not.toHaveProperty("result.backupPath");
-    expect(response).not.toHaveProperty("result.beeperBackupPath");
-    expect(response).not.toHaveProperty("result.importedFilePath");
-  });
-
-  it("routes a beepers JSON file to the beepers store", async () => {
-    serviceMock.importJsonFile.mockResolvedValueOnce({
-      kind: "beepers-import",
-      recordCount: 0,
-      importedRecordCount: 231
-    });
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/beepers.json"] });
-
-    const response = await getHandler()({ sender: makeWebContentsSender(7) } as unknown);
-
-    expect(response).toEqual({ kind: "beepers-import", recordCount: 0, importedRecordCount: 231 });
-    expect(serviceMock.importDataset).not.toHaveBeenCalled();
-  });
-
-  it("routes a settings JSON file while returning managed settings", async () => {
-    const settings = {
-      editorName: "Operador",
-      dataFilePath: "/usb/portable-data/data/contacts.json",
-      backupDirectoryPath: "/usb/portable-data/backups",
-      ui: { showInactiveByDefault: false, autoBackup: { enabled: true, trigger: "launch", intervalHours: 24, editCountThreshold: 20, retentionCount: 10 } }
-    };
-    serviceMock.importJsonFile.mockResolvedValueOnce({ kind: "settings-import", settings });
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/settings.json"] });
-
-    const response = await getHandler()({ sender: makeWebContentsSender(8) } as unknown);
-
-    expect(response).toEqual({ kind: "settings-import", settings });
-    expect(serviceMock.importDataset).not.toHaveBeenCalled();
-  });
-
-  it("dispatches to the same normalize/validate/preview pipeline as previewCsvImport for a .csv pick", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/directory.csv"] });
-    const sender = makeWebContentsSender(2);
-
-    const response = await getHandler()({ sender } as unknown) as {
-      kind: string;
-      preview: { importToken: string; sourceFilePath?: string; fileName: string };
-    };
-
-    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(
-      "/tmp/incoming/directory.csv",
-      { signal: expect.any(AbortSignal) }
-    );
-    expect(serviceMock.importDataset).not.toHaveBeenCalled();
-    expect(response.kind).toBe("csv-preview");
-    // Parity with previewCsvImport — the absolute source path must never reach the renderer here either.
-    expect(Object.prototype.hasOwnProperty.call(response.preview, "sourceFilePath")).toBe(false);
-    expect(typeof response.preview.importToken).toBe("string");
-    expect(response.preview.fileName).toBe("directory.csv");
-  });
-
-  it.each(["ods", "xls", "xlsx"])("also dispatches .%s picks to the CSV-like pipeline", async (extension) => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [`/tmp/incoming/directory.${extension}`] });
-    const sender = makeWebContentsSender(3);
-
-    const response = await getHandler()({ sender } as unknown) as { kind: string };
-
-    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(
-      `/tmp/incoming/directory.${extension}`,
-      { signal: expect.any(AbortSignal) }
-    );
-    expect(response.kind).toBe("csv-preview");
-  });
-
-  it("returns { kind: 'cancelled' } when the dialog is dismissed without a selection", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
-    const sender = makeWebContentsSender(4);
-
-    const response = await getHandler()({ sender } as unknown);
-
-    expect(response).toEqual({ kind: "cancelled" });
-    expect(serviceMock.importDataset).not.toHaveBeenCalled();
-    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
-  });
-
-  it("returns { kind: 'unsupported-extension' } and touches neither pipeline for an unexpected extension", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/tmp/incoming/malware.exe"] });
-    const sender = makeWebContentsSender(5);
-
-    const response = await getHandler()({ sender } as unknown);
-
-    expect(response).toEqual({ kind: "unsupported-extension", extension: "exe" });
-    expect(serviceMock.importDataset).not.toHaveBeenCalled();
-    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
-  });
-
-  it("opens exactly one native dialog filtered to json/csv/ods/xls/xlsx", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
-    const sender = makeWebContentsSender(6);
-
-    await getHandler()({ sender } as unknown);
-
-    expect(showOpenDialogMock).toHaveBeenCalledTimes(1);
     const [options] = showOpenDialogMock.mock.calls[0] as [{ filters: Array<{ extensions: string[] }> }];
-    expect(options.filters[0]?.extensions.sort()).toEqual(["csv", "json", "ods", "xls", "xlsx"]);
+    expect(options.filters[0]?.extensions.slice().sort()).toEqual(["csv", "json", "ods", "xls", "xlsx"]);
+  });
+
+  it("returns an import result without internal filesystem paths after confirmation", async () => {
+    const sender = makeWebContentsSender(89);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { preview: { importToken: string } };
+
+    const result = await handlers.get("contacts:confirm-json-import")!({ sender }, preview.preview.importToken) as { result: Record<string, unknown> };
+
+    expect(result.result).not.toHaveProperty("backupPath");
+    expect(result.result).not.toHaveProperty("importedFilePath");
+  });
+
+  it.each(["csv", "ods", "xls", "xlsx"])("routes .%s through the CSV preview contract", async (extension) => {
+    const filePath = path.join(testRoot, `directory.${extension}`);
+    if (extension !== "csv") await fs.writeFile(filePath, "test");
+    serviceMock.previewCsvImport.mockResolvedValueOnce({
+      sourceFilePath: filePath,
+      fileName: path.basename(filePath),
+      totalRowCount: 1,
+      validRowCount: 1,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      createdCount: 1,
+      updatedCount: 0,
+      unchangedCount: 0,
+      beepersSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBeepersCellCount: 0,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      conflictCount: 0,
+      conflictedRecords: [],
+      policiesResolved: true
+    });
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [filePath] });
+
+    const response = await handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(80) }) as { kind: string; preview: Record<string, unknown> };
+
+    expect(response.kind).toBe("csv-preview");
+    expect(response.preview).not.toHaveProperty("sourceFilePath");
+    expect(serviceMock.previewCsvImport).toHaveBeenCalledWith(expect.stringContaining("hospiagenda-import-"), { signal: expect.any(AbortSignal) });
+    expect(path.basename(serviceMock.previewCsvImport.mock.calls[0]?.[0] as string)).toBe(`directory.${extension}`);
+  });
+
+  it("hides a snapshot access error when confirming a spreadsheet import", async () => {
+    const csvPath = path.join(testRoot, "directory.csv");
+    serviceMock.previewCsvImport.mockResolvedValueOnce({
+      sourceFilePath: csvPath,
+      fileName: "directory.csv",
+      totalRowCount: 1,
+      validRowCount: 1,
+      invalidRowCount: 0,
+      warningCount: 0,
+      recordCount: 1,
+      mergedRecordCount: 1,
+      createdCount: 1,
+      updatedCount: 0,
+      unchangedCount: 0,
+      beepersSkippedRowCount: 0,
+      socialHandleSkippedRowCount: 0,
+      parsedBeepersCellCount: 0,
+      typeCounts: {},
+      areaCounts: {},
+      rowIssues: [],
+      warnings: [],
+      previewRows: [],
+      conflictCount: 0,
+      conflictedRecords: [],
+      policiesResolved: true
+    });
+    const accessError = Object.assign(new Error(`EACCES: ${csvPath}`), { code: "EACCES", path: csvPath });
+    serviceMock.importCsvDataset.mockRejectedValueOnce(accessError);
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [csvPath] });
+    const sender = makeWebContentsSender(81);
+
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { preview: { importToken: string } };
+    const error = await handlers.get("contacts:import-csv-dataset")!({ sender }, preview.preview.importToken, []).catch((reason: Error) => reason);
+
+    expect(error).toHaveProperty("message", "No se pudo acceder al archivo seleccionado.");
+    expect((error as Error).message).not.toContain(csvPath);
+  });
+
+  it("removes a crash-left snapshot on the recurring cleanup pass", async () => {
+    vi.useFakeTimers();
+    const recurringHandlers = new Map<string, (...args: unknown[]) => unknown>();
+    const { registerContactsIpc } = await import("./contacts.ipc.js");
+    registerContactsIpc(serviceMock as never, captureIpcHandle(recurringHandlers));
+    const snapshotDirectory = await fs.mkdtemp(path.join(testRoot, "hospiagenda-import-crash-"));
+    await fs.utimes(snapshotDirectory, new Date(0), new Date(Date.now() - 11 * 60 * 1000));
+
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(fs.access(snapshotDirectory)).rejects.toThrow();
+  });
+
+  it("returns cancellation and unsupported extensions without previewing a source", async () => {
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(81) })).resolves.toEqual({ kind: "cancelled" });
+
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [path.join(testRoot, "malware.exe")] });
+    await expect(handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(82) })).resolves.toEqual({ kind: "unsupported-extension", extension: "exe" });
+    expect(serviceMock.previewJsonFile).not.toHaveBeenCalled();
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+  });
+
+  it("rejects a changed source and removes the snapshot without applying it", async () => {
+    const sender = makeWebContentsSender(91);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { preview: { importToken: string } };
+    const snapshotPath = serviceMock.previewJsonFile.mock.calls[0]?.[0] as string;
+    await fs.writeFile(sourceFilePath, "{\"records\":[{\"id\":\"changed\"}]}");
+
+    await expect(handlers.get("contacts:confirm-json-import")!({ sender }, preview.preview.importToken)).rejects.toThrow("cambió después de la vista previa");
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
+    await expect(fs.access(snapshotPath)).rejects.toThrow();
+  });
+
+  it("cancels a pending JSON preview without applying it", async () => {
+    const sender = makeWebContentsSender(92);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { preview: { importToken: string } };
+
+    await handlers.get("contacts:cancel-json-import")!({ sender }, preview.preview.importToken);
+    await expect(handlers.get("contacts:confirm-json-import")!({ sender }, preview.preview.importToken)).rejects.toThrow("ya no es válida");
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
+  });
+
+  it("removes a pending JSON snapshot when its renderer is destroyed", async () => {
+    const sender = makeWebContentsSender(92);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender }) as { preview: { importToken: string } };
+
+    sender.emit("destroyed");
+
+    await expect(handlers.get("contacts:confirm-json-import")!({ sender }, preview.preview.importToken)).rejects.toThrow("ya no es válida");
+  });
+
+  it("rejects confirmation from a different renderer and keeps the pending preview for its owner", async () => {
+    const owner = makeWebContentsSender(93);
+    const preview = await handlers.get("contacts:pick-and-import-dataset")!({ sender: owner }) as { preview: { importToken: string } };
+
+    await expect(
+      handlers.get("contacts:confirm-json-import")!({ sender: makeWebContentsSender(94) }, preview.preview.importToken)
+    ).rejects.toThrow("ya no es válida");
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
+
+    await handlers.get("contacts:confirm-json-import")!({ sender: owner }, preview.preview.importToken);
+    expect(serviceMock.importPreviewedJson).toHaveBeenCalledOnce();
+  });
+
+  it("does not create a JSON snapshot for a source above the supported limit", async () => {
+    const oversizedPath = path.join(testRoot, "oversized.json");
+    await fs.writeFile(oversizedPath, "");
+    await fs.truncate(oversizedPath, 10 * 1024 * 1024 + 1);
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [oversizedPath] });
+
+    await expect(handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(95) })).rejects.toThrow(
+      "El archivo JSON supera el tamaño máximo permitido de 10 MB."
+    );
+    expect(serviceMock.previewJsonFile).not.toHaveBeenCalled();
+    expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
+    expect((await fs.readdir(testRoot)).some((entry) => entry.startsWith("hospiagenda-import-"))).toBe(false);
+  });
+
+  it("maps an unreadable selected source to a path-free error", async () => {
+    const missingPath = path.join(testRoot, "missing", "contacts.json");
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [missingPath] });
+
+    const error = await handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(95) }).catch((reason: Error) => reason);
+
+    expect(error).toHaveProperty("message", "No se pudo acceder al archivo seleccionado.");
+    expect((error as Error).message).not.toContain(missingPath);
+  });
+
+  it("does not create a CSV snapshot for a source above the supported limit", async () => {
+    const oversizedPath = path.join(testRoot, "oversized.csv");
+    await fs.writeFile(oversizedPath, "");
+    await fs.truncate(oversizedPath, 5 * 1024 * 1024 + 1);
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: [oversizedPath] });
+
+    await expect(handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(96) })).rejects.toThrow(
+      "El CSV supera el tamaño máximo permitido de 5 MB. Divide el archivo antes de importarlo."
+    );
+    expect(serviceMock.previewCsvImport).not.toHaveBeenCalled();
+    expect((await fs.readdir(testRoot)).some((entry) => entry.startsWith("hospiagenda-import-"))).toBe(false);
+  });
+
+  it("preserves the localized invalid JSON error before creating a confirmation token", async () => {
+    serviceMock.previewJsonFile.mockRejectedValueOnce(
+      new Error("El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda.")
+    );
+
+    await expect(handlers.get("contacts:pick-and-import-dataset")!({ sender: makeWebContentsSender(97) })).rejects.toThrow(
+      "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+    );
+    expect(serviceMock.getJsonImportCurrentCounts).not.toHaveBeenCalled();
+    expect((await fs.readdir(testRoot)).some((entry) => entry.startsWith("hospiagenda-import-"))).toBe(false);
   });
 });
 
@@ -1223,6 +1189,8 @@ describe("contacts:pick-and-import-dataset — unified picker dispatch", () => {
 // ---------------------------------------------------------------------------
 
 describe("contacts:preview-csv-import — global pending-import cap", () => {
+  let testRoot: string;
+  let sourceFilePath: string;
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;
@@ -1234,8 +1202,12 @@ describe("contacts:preview-csv-import — global pending-import cap", () => {
   beforeEach(async () => {
     vi.resetModules();
 
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-csv-cap-"));
+    sourceFilePath = path.join(testRoot, "test.csv");
+    await fs.writeFile(sourceFilePath, "name\nTest\n");
+
     handlers = new Map();
-    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/tmp/test.csv"] });
+    showOpenDialogMock = vi.fn().mockResolvedValue({ canceled: false, filePaths: [sourceFilePath] });
 
     vi.doMock("electron", () => ({
       ipcMain: {
@@ -1257,10 +1229,12 @@ describe("contacts:preview-csv-import — global pending-import cap", () => {
 
     serviceMock = {
       previewCsvImport: vi.fn().mockResolvedValue({
-        sourceFilePath: "/tmp/test.csv",
+        sourceFilePath,
         fileName: "test.csv"
       }),
       importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 0, beepers: 0 }),
+      getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
       getBootstrapData: vi.fn(),
       createBackup: vi.fn(),
       resetDataset: vi.fn(),
@@ -1278,9 +1252,10 @@ describe("contacts:preview-csv-import — global pending-import cap", () => {
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
   });
 
   it("evicts the oldest pending import once the global cap is exceeded, admitting the newest", async () => {
@@ -1417,6 +1392,8 @@ describe("csvImportPolicySelectionSchema", () => {
 });
 
 describe("contacts:import-csv-dataset — IPC handler rejects malformed policies via Zod", () => {
+  let testRoot: string;
+  let sourceFilePath: string;
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;
@@ -1426,6 +1403,10 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
 
   beforeEach(async () => {
     vi.resetModules();
+
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-csv-policy-"));
+    sourceFilePath = path.join(testRoot, "test.csv");
+    await fs.writeFile(sourceFilePath, "name\nTest\n");
 
     handlers = new Map();
 
@@ -1439,7 +1420,7 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
         fromWebContents: vi.fn().mockReturnValue(null)
       },
       dialog: {
-        showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/tmp/test.csv"] }),
+        showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: [sourceFilePath] }),
         showSaveDialog: vi.fn()
       },
       app: {
@@ -1448,8 +1429,10 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
     }));
 
     serviceMock = {
-      previewCsvImport: vi.fn().mockResolvedValue({ sourceFilePath: "/tmp/test.csv", fileName: "test.csv" }),
+      previewCsvImport: vi.fn().mockResolvedValue({ sourceFilePath, fileName: "test.csv" }),
       importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 0, beepers: 0 }),
+      getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
       getBootstrapData: vi.fn(),
       createBackup: vi.fn(),
       resetDataset: vi.fn(),
@@ -1467,9 +1450,10 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
   });
 
   it("rejects a malformed policies array (invalid policy value) before it ever reaches the service", async () => {
@@ -1516,7 +1500,7 @@ describe("contacts:import-csv-dataset — IPC handler rejects malformed policies
 
     await importHandler({ sender } as unknown, importToken, policies);
 
-    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith("/tmp/test.csv", policies);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith(expect.stringContaining("hospiagenda-import-"), policies);
   });
 });
 
@@ -1638,6 +1622,8 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
 // fields before its result reaches the renderer.
 // ---------------------------------------------------------------------------
 describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
+  let testRoot: string;
+  let sourceFilePath: string;
   let handlers: Map<string, (...args: unknown[]) => unknown>;
   let serviceMock: {
     createBackup: ReturnType<typeof vi.fn>;
@@ -1661,6 +1647,9 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "phone-directory-ipc-paths-"));
+    sourceFilePath = path.join(testRoot, "directory.csv");
+    await fs.writeFile(sourceFilePath, "type,displayName\nservice,Test\n");
     handlers = new Map();
     showOpenDialogMock = vi.fn();
 
@@ -1706,6 +1695,8 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
       exportDataset: vi.fn(),
       importDataset: vi.fn().mockResolvedValue({ ...importResultInternal }),
       previewCsvImport: vi.fn(),
+      getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 0, beepers: 0 }),
+      getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
       importCsvDataset: vi.fn().mockResolvedValue({
         ...importResultInternal,
         warningCount: 0,
@@ -1725,9 +1716,10 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
   });
 
   it("createBackup: never forwards the resolved backup path to the renderer", async () => {
@@ -1766,21 +1758,6 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     expect((result as Array<Record<string, unknown>>)[0]).not.toHaveProperty("filePath");
   });
 
-  it("importDataset (direct channel): strips backupPath/importedFilePath", async () => {
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/replacement.json"] });
-
-    const handler = handlers.get("contacts:import-dataset");
-    const result = await handler!({ sender: makeWebContentsSender(1) });
-
-    expect(result).toEqual({
-      contacts: importResultInternal.contacts,
-      settings: importResultInternal.settings,
-      recordCount: importResultInternal.recordCount
-    });
-    expect(result).not.toHaveProperty("backupPath");
-    expect(result).not.toHaveProperty("importedFilePath");
-  });
-
   it("restoreBackup: resolves a bare fileName against the backup directory and strips backupPath/importedFilePath", async () => {
     const handler = handlers.get("contacts:restore-backup");
     const result = await handler!({ sender: { id: 1 } }, "contacts-1.json");
@@ -1817,7 +1794,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
   it("importCsvDataset: strips backupPath/importedFilePath", async () => {
     // Set up a pending CSV import the same way previewCsvImport would.
     serviceMock.previewCsvImport = vi.fn().mockResolvedValue({
-      sourceFilePath: "/Users/operator/Desktop/directory.csv",
+      sourceFilePath,
       fileName: "directory.csv",
       totalRowCount: 0,
       validRowCount: 0,
@@ -1856,7 +1833,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     registerContactsIpc(serviceMock as never, captureIpcHandle(handlers));
 
     const sender = { id: 7, on: vi.fn(), once: vi.fn(), removeListener: vi.fn() };
-    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ["/Users/operator/Desktop/directory.csv"] });
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: [sourceFilePath] });
     const previewHandler = handlers.get("contacts:preview-csv-import");
     const preview = await previewHandler!({ sender });
     const importToken = (preview as { importToken: string }).importToken;
@@ -1864,7 +1841,7 @@ describe("contacts IPC channels — absolute path stripping (OIR-276)", () => {
     const importHandler = handlers.get("contacts:import-csv-dataset");
     const result = await importHandler!({ sender }, importToken, []);
 
-    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith("/Users/operator/Desktop/directory.csv", []);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledWith(expect.stringContaining("hospiagenda-import-"), []);
     expect(result).not.toHaveProperty("backupPath");
     expect(result).not.toHaveProperty("importedFilePath");
   });

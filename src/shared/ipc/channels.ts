@@ -23,15 +23,15 @@ export const CONTACTS_CHANNELS = {
   listBackups:      "contacts:list-backups",
   restoreBackup:    "contacts:restore-backup",
   exportDataset:    "contacts:export-dataset",
-  importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
   cancelCsvImportPreview: "contacts:cancel-csv-import-preview",
   importCsvDataset: "contacts:import-csv-dataset",
   // Single unified "Importar" entry point. Opens ONE native dialog
   // (json/csv/ods/xls/xlsx filter) and dispatches internally by extension to
-  // the existing importDataset()/previewCsvImport() pipelines. The old two
-  // channels above are kept — this is additive, not a replacement.
+  // the JSON-preview/CSV-preview pipelines.
   pickAndImportDataset: "contacts:pick-and-import-dataset",
+  confirmJsonImport: "contacts:confirm-json-import",
+  cancelJsonImport: "contacts:cancel-json-import",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates"
 } as const;

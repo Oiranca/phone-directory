@@ -94,7 +94,7 @@ const SUPPORTED_COLUMNS = [
 ] as const;
 const SUPPORTED_PHONE_KINDS = new Set(["internal", "external", "mobile", "fax", "corporativo", "other"]);
 const SUPPORTED_STATUSES = new Set(["active", "inactive"]);
-const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
+export const MAX_CSV_IMPORT_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CSV_IMPORT_ROWS = 5000;
 const MAX_PREVIEW_DETAILS = 100;
 
@@ -785,6 +785,8 @@ export const buildImportPreviewFromRows = async (
       beepersSkippedRowCount: options.beepersSkippedRowCount ?? 0,
       socialHandleSkippedRowCount: options.socialHandleSkippedRowCount ?? 0,
       parsedBeepersCellCount: 0,
+      incomingBeeperRecordCount: 0,
+      currentBeeperRecordCount: null,
       typeCounts: dataset.metadata.typeCounts,
       areaCounts: dataset.metadata.areaCounts,
       rowIssues,

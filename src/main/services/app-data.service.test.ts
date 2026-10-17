@@ -5959,4 +5959,34 @@ describe("AppDataService", () => {
     });
   });
 
+  it("keeps the current contact count when imported-beeper storage is unavailable", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService({
+      beepersService: {
+        list: vi.fn().mockResolvedValue([]),
+        listImported: vi.fn().mockRejectedValue(new Error("beepers unavailable"))
+      } as never
+    });
+    await service.ensureInitialFiles();
+
+    await expect(service.getJsonImportCurrentCounts()).resolves.toEqual({
+      contacts: defaultContacts.records.length,
+      beepers: null
+    });
+  });
+
+  it("counts both JSON beeper stores but only imported beepers for spreadsheets", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService({
+      beepersService: {
+        list: vi.fn().mockResolvedValue([{ id: "manual-1" }, { id: "manual-2" }]),
+        listImported: vi.fn().mockResolvedValue([{ id: "imported-1" }, { id: "imported-2" }, { id: "imported-3" }])
+      } as never
+    });
+    await service.ensureInitialFiles();
+
+    await expect(service.getJsonImportCurrentCounts()).resolves.toMatchObject({ beepers: 5 });
+    await expect(service.getSpreadsheetImportCurrentBeeperCount()).resolves.toBe(3);
+  });
+
 });

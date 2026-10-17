@@ -36,13 +36,14 @@ const CONTACTS_CHANNELS = {
   listBackups:      "contacts:list-backups",
   restoreBackup:    "contacts:restore-backup",
   exportDataset:    "contacts:export-dataset",
-  importDataset:    "contacts:import-dataset",
   previewCsvImport: "contacts:preview-csv-import",
   cancelCsvImportPreview: "contacts:cancel-csv-import-preview",
   importCsvDataset: "contacts:import-csv-dataset",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates",
-  pickAndImportDataset: "contacts:pick-and-import-dataset"
+  pickAndImportDataset: "contacts:pick-and-import-dataset",
+  confirmJsonImport: "contacts:confirm-json-import",
+  cancelJsonImport: "contacts:cancel-json-import"
 } as const satisfies typeof _CanonicalContacts;
 
 const SETTINGS_CHANNELS = {
@@ -83,15 +84,22 @@ const api: HospitalDirectoryApi = {
   restoreBackup: (backupFileName) =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.restoreBackup, backupFileName) as ReturnType<HospitalDirectoryApi["restoreBackup"]>,
   exportDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.exportDataset) as ReturnType<HospitalDirectoryApi["exportDataset"]>,
-  importDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.importDataset) as ReturnType<HospitalDirectoryApi["importDataset"]>,
   resetDataset: () => ipcRenderer.invoke(CONTACTS_CHANNELS.resetDataset) as ReturnType<HospitalDirectoryApi["resetDataset"]>,
   recoverAuditLog: () => ipcRenderer.invoke(CONTACTS_CHANNELS.recoverAuditLog) as ReturnType<HospitalDirectoryApi["recoverAuditLog"]>,
   previewCsvImport: () => ipcRenderer.invoke(CONTACTS_CHANNELS.previewCsvImport) as ReturnType<HospitalDirectoryApi["previewCsvImport"]>,
-  cancelCsvImportPreview: () => ipcRenderer.invoke(CONTACTS_CHANNELS.cancelCsvImportPreview) as ReturnType<HospitalDirectoryApi["cancelCsvImportPreview"]>,
+  cancelCsvImportPreview: (importToken) => (
+    importToken === undefined
+      ? ipcRenderer.invoke(CONTACTS_CHANNELS.cancelCsvImportPreview)
+      : ipcRenderer.invoke(CONTACTS_CHANNELS.cancelCsvImportPreview, importToken)
+  ) as ReturnType<HospitalDirectoryApi["cancelCsvImportPreview"]>,
   importCsvDataset: (importToken, policies = []) =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.importCsvDataset, importToken, policies) as ReturnType<HospitalDirectoryApi["importCsvDataset"]>,
   pickAndImportDataset: () =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.pickAndImportDataset) as ReturnType<HospitalDirectoryApi["pickAndImportDataset"]>,
+  confirmJsonImport: (importToken) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.confirmJsonImport, importToken) as ReturnType<HospitalDirectoryApi["confirmJsonImport"]>,
+  cancelJsonImport: (importToken) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.cancelJsonImport, importToken) as ReturnType<HospitalDirectoryApi["cancelJsonImport"]>,
   browseForPath: (type) =>
     ipcRenderer.invoke(SETTINGS_CHANNELS.browsePath, type) as ReturnType<HospitalDirectoryApi["browseForPath"]>,
   listBeepers: () => ipcRenderer.invoke(BEEPERS_CHANNELS.list) as ReturnType<HospitalDirectoryApi["listBeepers"]>,

@@ -265,6 +265,19 @@ export type JsonFileImportResultInternal =
   | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
   | { kind: "settings-import"; settings: EditableAppSettings };
 
+export type JsonFileImportResult =
+  | { kind: "combined-import"; result: ImportCombinedDataResult }
+  | { kind: "contacts-import"; result: ImportContactsResult }
+  | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
+  | { kind: "settings-import"; settings: EditableAppSettings };
+
+/** Summary shown before a JSON payload is allowed to replace local data. */
+export type JsonImportPreview =
+  | { importToken: string; fileName: string; detectedType: "contacts"; recordCount: number; currentRecordCount: number | null }
+  | { importToken: string; fileName: string; detectedType: "combined"; recordCount: number; beeperRecordCount: number; importedBeeperRecordCount: number; currentRecordCount: number | null; currentBeeperRecordCount: number | null }
+  | { importToken: string; fileName: string; detectedType: "beepers"; recordCount: number; importedBeeperRecordCount: number; currentBeeperRecordCount: number | null }
+  | { importToken: string; fileName: string; detectedType: "settings" };
+
 /**
  * Main-process-internal shape of a reset result — includes the absolute
  * backupPath so AppDataService tests can verify the real file on disk. The
@@ -357,6 +370,10 @@ export interface CsvImportPreview {
    * Always 0 for the CSV path and for workbooks with no beeper sheets.
    */
   parsedBeepersCellCount: number;
+  /** Imported beeper records that will replace the current imported beepers store. */
+  incomingBeeperRecordCount: number;
+  /** Current imported beeper records replaced by this spreadsheet, when readable. */
+  currentBeeperRecordCount: number | null;
   typeCounts: Partial<Record<RecordType, number>>;
   areaCounts: Partial<Record<AreaType, number>>;
   rowIssues: CsvImportIssue[];
@@ -521,10 +538,7 @@ export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "impo
  *   - "cancelled"             → the user closed the dialog without picking a file
  */
 export type PickAndImportDatasetResult =
-  | { kind: "combined-import"; result: ImportCombinedDataResult }
-  | { kind: "json-import"; result: ImportContactsResult }
-  | { kind: "beepers-import"; recordCount: number; importedRecordCount: number }
-  | { kind: "settings-import"; settings: EditableAppSettings }
+  | { kind: "json-preview"; preview: JsonImportPreview }
   | { kind: "csv-preview"; preview: CsvImportPreviewWithConflicts }
   | { kind: "unsupported-extension"; extension: string }
   | { kind: "cancelled" };

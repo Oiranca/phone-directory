@@ -91,6 +91,10 @@ export const SettingsPage = () => {
     return <LoadingStatus message="Cargando configuración…" className="rounded-3xl bg-white p-6 shadow-panel" busy />;
   }
 
+  const retentionCount = Number(autoBackupRetentionCount);
+  const retentionError = Number.isInteger(retentionCount) && retentionCount >= 1 && retentionCount <= 100
+    ? ""
+    : "Indica un número entero entre 1 y 100.";
   const isDirty =
     (hasEditorDraft && editorName !== settings.editorName) ||
     dataFilePath !== settings.dataFilePath ||
@@ -198,7 +202,7 @@ export const SettingsPage = () => {
   };
 
   const handleSave = async () => {
-    if (!isDirty) {
+    if (!isDirty || retentionError) {
       return;
     }
 
@@ -210,7 +214,7 @@ export const SettingsPage = () => {
       trigger: autoBackupTrigger,
       intervalHours: clampInteger(autoBackupIntervalHours, 1, 168),
       editCountThreshold: clampInteger(autoBackupEditCountThreshold, 1, 1000),
-      retentionCount: clampInteger(autoBackupRetentionCount, 1, 100)
+      retentionCount
     };
 
     try {
@@ -259,7 +263,7 @@ export const SettingsPage = () => {
       <h2 id="settings-page-title" className="sr-only">Configuración</h2>
       <section className="rounded-3xl bg-white p-6 shadow-panel">
         <div>
-          <h3 className="text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
+          <h3 className="break-words text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
             Define quién firma los cambios locales y cómo debe arrancar el directorio cuando se vuelva a abrir.
           </p>
@@ -294,7 +298,7 @@ export const SettingsPage = () => {
                   aria-describedby="settings-autobackup-enabled-desc"
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
                 />
-                <div>
+                <div className="min-w-0">
                   <label htmlFor="settings-autobackup-enabled" className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</label>
                   <p id="settings-autobackup-enabled-desc" className="mt-1 text-sm text-slate-600">
                     Crea copias automáticas en segundo plano para reducir el riesgo entre copias de seguridad manuales.
@@ -360,7 +364,7 @@ export const SettingsPage = () => {
                 ) : null}
 
                 <div>
-                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Retención de copias de seguridad automáticas</label>
+                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Copias de seguridad que se conservan</label>
                   <input
                     id="settings-autobackup-retention"
                     type="number"
@@ -372,9 +376,16 @@ export const SettingsPage = () => {
                       setAutoBackupRetentionCount(event.target.value);
                       setSaveError("");
                     }}
-                    disabled={!autoBackupEnabled}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                    aria-describedby={retentionError
+                      ? "settings-autobackup-retention-hint settings-autobackup-retention-error"
+                      : "settings-autobackup-retention-hint"}
+                    aria-invalid={Boolean(retentionError)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
+                  <p id="settings-autobackup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
+                    De 1 a 100 por tipo: contactos (manuales y de seguridad al importar, restaurar, eliminar o restablecer), automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar.
+                  </p>
+                  {retentionError ? <p id="settings-autobackup-retention-error" role="alert" className="mt-1 text-base text-rose-700 sm:text-sm">{retentionError}</p> : null}
                 </div>
               </div>
             </div>
@@ -391,7 +402,7 @@ export const SettingsPage = () => {
               <div className="space-y-5 border-t border-slate-200 p-4">
                 <div>
                   <label htmlFor="settings-data-file-path" className="block text-sm font-semibold text-slate-700">Ruta del archivo de datos</label>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       id="settings-data-file-path"
                       type="text"
@@ -399,7 +410,7 @@ export const SettingsPage = () => {
                       onChange={handleDataFilePathChange}
                       placeholder="/ruta/al/directorio/contacts.json"
                       aria-describedby="settings-data-file-path-hint"
-                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"
@@ -419,7 +430,7 @@ export const SettingsPage = () => {
 
                 <div>
                   <label htmlFor="settings-backup-directory-path" className="block text-sm font-semibold text-slate-700">Ruta de la carpeta de copias de seguridad</label>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       id="settings-backup-directory-path"
                       type="text"
@@ -427,7 +438,7 @@ export const SettingsPage = () => {
                       onChange={handleBackupDirectoryPathChange}
                       placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
                       aria-describedby="settings-backup-directory-path-hint"
-                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"
@@ -472,7 +483,7 @@ export const SettingsPage = () => {
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={isSaving || isResettingPaths || !isDirty}
+              disabled={isSaving || isResettingPaths || !isDirty || Boolean(retentionError)}
               className="focus-ring w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
