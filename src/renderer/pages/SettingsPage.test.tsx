@@ -215,7 +215,7 @@ describe("SettingsPage", () => {
 
     const retentionInput = screen.getByLabelText("Copias de seguridad que se conservan");
     expect(retentionInput).toBeEnabled();
-    expect(screen.getByText(/de 1 a 100 por tipo: contactos .*importar, restaurar, eliminar o restablecer.*automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar/i)).toBeInTheDocument();
+    expect(screen.getByText("De 1 a 100 por tipo: contactos, buscas, configuración y automáticas.")).toBeInTheDocument();
 
     fireEvent.change(retentionInput, { target: { value: "0" } });
     expect(retentionInput).toHaveAttribute("aria-invalid", "true");
@@ -301,7 +301,8 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
-    expect((await screen.findAllByText("write failed")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("write failed")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert").filter((alert) => alert.textContent?.includes("write failed"))).toHaveLength(1);
     expect(useAppStore.getState().settings).toEqual(editableSettings);
   });
 

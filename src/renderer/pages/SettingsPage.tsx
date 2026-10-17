@@ -239,10 +239,6 @@ export const SettingsPage = () => {
     } catch (error) {
       const message = toCompactToastMessage(error, "No se pudo guardar la configuración.");
       setSaveError(message);
-      pushToast({
-        type: "error",
-        message
-      });
     } finally {
       setIsSaving(false);
     }
@@ -383,7 +379,7 @@ export const SettingsPage = () => {
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
                   <p id="settings-autobackup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
-                    De 1 a 100 por tipo: contactos (manuales y de seguridad al importar, restaurar, eliminar o restablecer), automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar.
+                    De 1 a 100 por tipo: contactos, buscas, configuración y automáticas.
                   </p>
                   {retentionError ? <p id="settings-autobackup-retention-error" role="alert" className="mt-1 text-base text-rose-700 sm:text-sm">{retentionError}</p> : null}
                 </div>

@@ -388,46 +388,14 @@ try {
     window.scrollBy(0, rect.top + rect.height / 2 - 160);
     return true;
   })()`);
-  const persistentToastOverlap = JSON.parse(browserCommand("eval", `(() => {
-    const input = document.querySelector(${JSON.stringify(retentionInput)});
-    const toast = document.querySelector('[aria-label="Notificaciones"] [role="alert"]');
-    if (!input || !toast) return false;
-    const inputRect = input.getBoundingClientRect();
-    const toastRect = toast.getBoundingClientRect();
-    const centerX = inputRect.left + inputRect.width / 2;
-    const centerY = inputRect.top + inputRect.height / 2;
-    return {
-      overlaps: !(inputRect.left >= toastRect.right || inputRect.right <= toastRect.left || inputRect.top >= toastRect.bottom || inputRect.bottom <= toastRect.top),
-      inputAtCenter: document.elementFromPoint(centerX, centerY) === input
-    };
-  })()`));
-  if (!persistentToastOverlap.overlaps || !persistentToastOverlap.inputAtCenter) throw new Error("Persistent path error did not cover the retention input before focus");
+  const inlinePathError = JSON.parse(browserCommand("eval", `(() => ({
+    bannerCount: [...document.querySelectorAll('[role="alert"]')].filter(item => item.textContent.includes('La ruta del archivo de datos debe ser absoluta.')).length,
+    toastCount: document.querySelectorAll('[aria-label="Notificaciones"] [role="alert"]').length
+  }))()`));
+  if (inlinePathError.bannerCount !== 1 || inlinePathError.toastCount !== 0) throw new Error(`Path error feedback was duplicated or missing: ${JSON.stringify(inlinePathError)}`);
   browserCommand("click", retentionInput);
-  if (browserCommand("eval", `document.activeElement?.id === ${JSON.stringify(retentionInput.slice(1))}`) !== "true") throw new Error("Persistent path error blocked the retention input click");
-  const persistentToastClear = JSON.parse(browserCommand("eval", `(() => {
-    const input = document.querySelector(${JSON.stringify(retentionInput)});
-    const toast = document.querySelector('[aria-label="Notificaciones"] [role="alert"]');
-    if (!input || !toast) return false;
-    const inputRect = input.getBoundingClientRect();
-    const toastRect = toast.getBoundingClientRect();
-    return inputRect.left >= toastRect.right || inputRect.right <= toastRect.left || inputRect.top >= toastRect.bottom || inputRect.bottom <= toastRect.top;
-  })()`));
-  if (!persistentToastClear) throw new Error("Persistent path error remained over the focused retention input");
-  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-persistent-toast.png"));
-  const persistentToastScrollable = JSON.parse(browserCommand("eval", `(() => {
-    const region = document.querySelector('[aria-label="Notificaciones"]');
-    const message = region?.querySelector('[role="alert"] p:not(.sr-only)');
-    if (!region || !message) return false;
-    message.textContent = "Error persistente de prueba. ".repeat(200);
-    const rect = region.getBoundingClientRect();
-    const before = region.scrollTop;
-    region.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + Math.min(32, rect.height / 2), deltaY: 120 }));
-    const closeRect = region.querySelector('button[aria-label="Cerrar notificación"]')?.getBoundingClientRect();
-    return region.scrollHeight > region.clientHeight && region.scrollTop > before && Boolean(closeRect && closeRect.left >= rect.left && closeRect.right <= rect.right && closeRect.top >= rect.top && closeRect.bottom <= rect.bottom && closeRect.top >= 0 && closeRect.bottom <= innerHeight);
-  })()`));
-  if (!persistentToastScrollable) throw new Error("Persistent toast did not scroll while keeping its close control");
-  browserCommand("click", '[aria-label="Notificaciones"] [role="alert"] button[aria-label="Cerrar notificación"]');
-  await waitFor("persistent toast dismissal", () => browserCommand("eval", 'document.querySelector(\'[aria-label="Notificaciones"] [role="alert"]\') === null') === "true");
+  if (browserCommand("eval", `document.activeElement?.id === ${JSON.stringify(retentionInput.slice(1))}`) !== "true") throw new Error("Inline path error blocked the retention input click");
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-inline-error.png"));
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
   await waitFor("advanced data path input", () => browserCommand("eval", 'document.querySelector("#settings-data-file-path") !== null') === "true");
   browserCommand("fill", "#settings-data-file-path", originalDataPath);
