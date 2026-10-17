@@ -215,7 +215,7 @@ describe("SettingsPage", () => {
 
     const retentionInput = screen.getByLabelText("Copias de seguridad que se conservan");
     expect(retentionInput).toBeEnabled();
-    expect(screen.getByText(/de 1 a 100 por tipo: contactos .*importar, restaurar, eliminar o restablecer.*automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar/i)).toBeInTheDocument();
+    expect(screen.getByText("De 1 a 100 por tipo: contactos, buscas, configuración y automáticas.")).toBeInTheDocument();
 
     fireEvent.change(retentionInput, { target: { value: "0" } });
     expect(retentionInput).toHaveAttribute("aria-invalid", "true");
