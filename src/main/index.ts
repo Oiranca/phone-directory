@@ -21,8 +21,9 @@ import {
 
 // Registered as early as possible so an uncaught exception
 // or unhandled rejection during startup (before the window even exists) is
-// still logged and surfaced instead of silently killing the process.
-registerCrashHandlers({ targetApp: app });
+// still logged and surfaced in interactive runs instead of silently exiting.
+// Background E2E failures still log and exit, without interrupting the desktop.
+registerCrashHandlers({ targetApp: app, showErrorBox: env.isE2E ? () => undefined : undefined });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
