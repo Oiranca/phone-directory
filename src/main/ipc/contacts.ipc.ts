@@ -10,23 +10,99 @@ import { mergeContactsSchema } from "../../shared/schemas/merge-contacts.schema.
 import { csvImportPolicySelectionListSchema } from "../../shared/schemas/csv-import-policy.schema.js";
 import { CONTACTS_CHANNELS as CHANNELS } from "../../shared/ipc/channels.js";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { BrowserWindow, app, dialog } from "electron";
 import type { IpcMain, WebContents } from "electron";
 import { AppDataService } from "../services/app-data.service.js";
+import type { JsonImportPreviewInternal } from "../services/app-data.service.js";
 import { JsonDataError } from "../services/json-data-reader.js";
 import { DuplicateDetectionService, DuplicateDetectionAbortError } from "../services/duplicate-detection.service.js";
 import { ImportPreviewAbortError } from "../services/import-preview-control.js";
+import { MAX_CSV_IMPORT_SIZE_BYTES } from "../services/csv-import.service.js";
+import { MAX_JSON_FILE_SIZE_BYTES, MAX_JSON_FILE_SIZE_MB } from "../../shared/constants/json-limits.js";
 import { env } from "../config/env.js";
 
 const CSV_IMPORT_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CSV_IMPORT_PREVIEW_TIMEOUT_MS = 10_000;
 const CSV_IMPORT_MAX_WRONG_SENDER_ATTEMPTS = 3;
+const STALE_IMPORT_SNAPSHOT_MS = CSV_IMPORT_TOKEN_TTL_MS * 2;
 // Defensive global cap on concurrent pending CSV imports; see
 // pendingCsvImports below.
 const MAX_PENDING_CSV_IMPORTS = 30;
+const MAX_PENDING_JSON_IMPORTS = 30;
 // Extensions accepted by the unified pickAndImportDataset dialog filter.
 const CSV_LIKE_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
+const isFilesystemError = (error: unknown) => error instanceof Error && (
+  ("code" in error && typeof error.code === "string" && /^E[A-Z0-9]+$/.test(error.code)) ||
+  ("path" in error && typeof error.path === "string") ||
+  ("dest" in error && typeof error.dest === "string")
+);
+const sourceFileAccessError = () => new Error("No se pudo acceder al archivo seleccionado.");
+const sourceFingerprint = async (sourceFilePath: string) => {
+  try {
+    return createHash("sha256").update(await fs.readFile(sourceFilePath)).digest("hex");
+  } catch (error) {
+    if (isFilesystemError(error)) throw sourceFileAccessError();
+    throw error;
+  }
+};
+const removeImportSnapshot = async (snapshotPath: string) => {
+  try {
+    await fs.rm(path.dirname(snapshotPath), { recursive: true, force: true });
+  } catch (error) {
+    console.error("[contacts.ipc] Could not remove import snapshot:", error);
+  }
+};
+const cleanupStaleImportSnapshots = async () => {
+  try {
+    const tempDirectory = app.getPath("temp");
+    const entries = await fs.readdir(tempDirectory, { withFileTypes: true });
+    const oldestAllowed = Date.now() - STALE_IMPORT_SNAPSHOT_MS;
+    await Promise.all(entries.map(async (entry) => {
+      if (!entry.isDirectory() || !entry.name.startsWith("hospiagenda-import-")) return;
+      const snapshotDirectory = path.join(tempDirectory, entry.name);
+      const stats = await fs.stat(snapshotDirectory);
+      if (stats.mtimeMs < oldestAllowed) await fs.rm(snapshotDirectory, { recursive: true, force: true });
+    }));
+  } catch (error) {
+    console.error("[contacts.ipc] Could not clean stale import snapshots:", error);
+  }
+};
+const createImportSnapshot = async (sourceFilePath: string) => {
+  let directory: string | null = null;
+  try {
+    const sourceStats = await fs.stat(sourceFilePath);
+    const extension = path.extname(sourceFilePath).toLowerCase();
+
+    if (extension === ".json" && sourceStats.size > MAX_JSON_FILE_SIZE_BYTES) {
+      throw new JsonDataError(
+        "too-large",
+        `El archivo JSON supera el tamaño máximo permitido de ${MAX_JSON_FILE_SIZE_MB} MB.`
+      );
+    }
+
+    if (CSV_LIKE_EXTENSIONS.has(extension.slice(1)) && sourceStats.size > MAX_CSV_IMPORT_SIZE_BYTES) {
+      throw new Error("El CSV supera el tamaño máximo permitido de 5 MB. Divide el archivo antes de importarlo.");
+    }
+
+    const fingerprint = await sourceFingerprint(sourceFilePath);
+    directory = await fs.mkdtemp(path.join(app.getPath("temp"), "hospiagenda-import-"));
+    const snapshotPath = path.join(directory, path.basename(sourceFilePath));
+    await fs.copyFile(sourceFilePath, snapshotPath);
+    if (
+      await sourceFingerprint(snapshotPath) !== fingerprint ||
+      await sourceFingerprint(sourceFilePath) !== fingerprint
+    ) {
+      throw new Error("El archivo seleccionado cambió durante la vista previa. Vuelve a seleccionarlo.");
+    }
+    return { fingerprint, snapshotPath };
+  } catch (error) {
+    if (directory) await removeImportSnapshot(path.join(directory, "snapshot"));
+    if (isFilesystemError(error)) throw sourceFileAccessError();
+    throw error;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Renderer-safe result mappers (OIR-276)
@@ -97,12 +173,16 @@ const toSafeExportResult = (result: ExportContactsResultInternal): ExportContact
 });
 
 export const registerContactsIpc = (service: AppDataService, handle: IpcMain["handle"]) => {
+  void cleanupStaleImportSnapshots();
+  setInterval(() => void cleanupStaleImportSnapshots(), STALE_IMPORT_SNAPSHOT_MS).unref();
   // sourceFilePath and senderId identify the import; sender/navListener are held so
   // cleanup can detach the navigation listener without a secondary lookup.
   const pendingCsvImports = new Map<
     string,
     {
       sourceFilePath: string;
+      selectedSourceFilePath: string;
+      sourceFingerprint: string;
       senderId: number;
       sender: WebContents;
       navListener: (details?: { isSameDocument?: boolean }) => void;
@@ -110,8 +190,19 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
       wrongSenderAttempts: number;
     }
   >();
+  const pendingJsonImports = new Map<string, {
+    sourceFilePath: string;
+    selectedSourceFilePath: string;
+    sourceFingerprint: string;
+    parsed: JsonImportPreviewInternal;
+    senderId: number;
+    sender: WebContents;
+    navListener: (details?: { isSameDocument?: boolean }) => void;
+    timeout: NodeJS.Timeout;
+  }>();
   const activePreviewControllers = new Map<number, AbortController>();
   const senderTokens = new Map<number, string>();
+  const senderJsonTokens = new Map<number, string>();
   const senderCleanupAttached = new Set<number>();
   const pendingE2eOpenDialogPaths = [...env.e2eOpenDialogPaths];
   const pendingE2eSaveDialogPaths = [...env.e2eSaveDialogPaths];
@@ -154,7 +245,7 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     }
   };
 
-  const clearPendingCsvImport = (importToken: string) => {
+  const clearPendingCsvImport = (importToken: string, removeSnapshot = true) => {
     const pendingImport = pendingCsvImports.get(importToken);
 
     if (!pendingImport) {
@@ -163,6 +254,7 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
 
     clearTimeout(pendingImport.timeout);
     pendingCsvImports.delete(importToken);
+    if (removeSnapshot) void removeImportSnapshot(pendingImport.sourceFilePath);
 
     if (senderTokens.get(pendingImport.senderId) === importToken) {
       senderTokens.delete(pendingImport.senderId);
@@ -174,6 +266,34 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     } catch {
       // sender destroyed before cleanup; nothing to remove.
     }
+  };
+
+  const clearPendingJsonImport = (importToken: string, removeSnapshot = true) => {
+    const pendingImport = pendingJsonImports.get(importToken);
+    if (!pendingImport) return;
+    clearTimeout(pendingImport.timeout);
+    pendingJsonImports.delete(importToken);
+    if (removeSnapshot) void removeImportSnapshot(pendingImport.sourceFilePath);
+    if (senderJsonTokens.get(pendingImport.senderId) === importToken) {
+      senderJsonTokens.delete(pendingImport.senderId);
+    }
+    try {
+      pendingImport.sender.removeListener("did-start-navigation", pendingImport.navListener);
+    } catch {
+      // The sender may already be destroyed.
+    }
+  };
+
+  const ensureSenderCleanup = (sender: WebContents) => {
+    if (senderCleanupAttached.has(sender.id)) return;
+    senderCleanupAttached.add(sender.id);
+    sender.once("destroyed", () => {
+      const csvToken = senderTokens.get(sender.id);
+      const jsonToken = senderJsonTokens.get(sender.id);
+      if (csvToken) clearPendingCsvImport(csvToken);
+      if (jsonToken) clearPendingJsonImport(jsonToken);
+      senderCleanupAttached.delete(sender.id);
+    });
   };
 
   handle(CHANNELS.bootstrap, () => service.getBootstrapData());
@@ -256,36 +376,6 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
 
     return toSafeExportResult(await service.exportDataset(filePath));
   });
-  handle(CHANNELS.importDataset, async (event) => {
-    const e2eFilePath = consumeE2eOpenDialogPath();
-
-    if (e2eFilePath) {
-      return stripImportPaths(await runJsonImport(
-        event,
-        (signal) => service.importDataset(e2eFilePath, { signal })
-      ));
-    }
-
-    const browserWindow = BrowserWindow.fromWebContents(event.sender);
-    const openOptions = {
-      title: "Importar directorio JSON",
-      filters: [{ name: "JSON", extensions: ["json"] }],
-      properties: ["openFile"]
-    } satisfies Electron.OpenDialogOptions;
-    const { canceled, filePaths } = browserWindow
-      ? await dialog.showOpenDialog(browserWindow, openOptions)
-      : await dialog.showOpenDialog(openOptions);
-
-    if (canceled || filePaths.length === 0) {
-      return null;
-    }
-
-    const sourceFilePath = filePaths[0]!;
-    return stripImportPaths(await runJsonImport(
-      event,
-      (signal) => service.importDataset(sourceFilePath, { signal })
-    ));
-  });
   // Shared by CHANNELS.previewCsvImport and CHANNELS.pickAndImportDataset —
   // both dispatch to the same normalize/validate/preview pipeline and the same
   // importToken bookkeeping once a source file path has been resolved.
@@ -313,10 +403,16 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     // previewCsvImport declares { sourceFilePath: string } in its return type so
     // TypeScript proves the field exists here; we destructure it out before the
     // renderer payload is assembled (no cast needed).
+    let snapshot: Awaited<ReturnType<typeof createImportSnapshot>> | null = null;
     let preview;
     try {
-      preview = await service.previewCsvImport(sourceFilePath, { signal: controller.signal });
+      snapshot = await createImportSnapshot(sourceFilePath);
+      if (controller.signal.aborted) {
+        throw new ImportPreviewAbortError();
+      }
+      preview = await service.previewCsvImport(snapshot.snapshotPath, { signal: controller.signal });
     } catch (error) {
+      if (snapshot) await removeImportSnapshot(snapshot.snapshotPath);
       if (error instanceof ImportPreviewAbortError || controller.signal.aborted) {
         throw new Error(
           timedOut
@@ -384,8 +480,13 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
       }
     }
 
+    if (!snapshot) {
+      throw new Error("No se pudo preparar el archivo seleccionado.");
+    }
     pendingCsvImports.set(importToken, {
-      sourceFilePath,
+      sourceFilePath: snapshot.snapshotPath,
+      selectedSourceFilePath: sourceFilePath,
+      sourceFingerprint: snapshot.fingerprint,
       senderId,
       sender: event.sender,
       navListener,
@@ -394,25 +495,16 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     });
     senderTokens.set(senderId, importToken);
 
-    if (!senderCleanupAttached.has(senderId)) {
-      senderCleanupAttached.add(senderId);
-      event.sender.once("destroyed", () => {
-        const activeImportToken = senderTokens.get(senderId);
-
-        if (activeImportToken) {
-          clearPendingCsvImport(activeImportToken);
-        }
-
-        senderCleanupAttached.delete(senderId);
-      });
-    }
+    ensureSenderCleanup(event.sender);
 
     // Strip the absolute sourceFilePath before sending to the renderer.
     // The path is retained server-side in pendingCsvImports; the renderer
     // identifies the import by importToken only.
     const { sourceFilePath: _stripped, ...safePreview } = preview;
+    const currentBeeperRecordCount = await service.getSpreadsheetImportCurrentBeeperCount();
     return {
       ...safePreview,
+      currentBeeperRecordCount,
       importToken
     };
   };
@@ -446,14 +538,18 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     return runCsvImportPreview(event, sourceFilePath);
   });
 
-  handle(CHANNELS.cancelCsvImportPreview, (event) => {
+  handle(CHANNELS.cancelCsvImportPreview, (event, importToken?: string) => {
     activePreviewControllers.get(event.sender.id)?.abort();
+    const pendingImport = importToken ? pendingCsvImports.get(importToken) : undefined;
+    if (importToken && pendingImport && pendingImport.senderId === event.sender.id) {
+      clearPendingCsvImport(importToken);
+    }
   });
 
   // Single unified "Importar" entry point. Opens ONE native dialog
   // filtered to .json/.csv/.ods/.xls/.xlsx and internally dispatches, by the
   // extension of whatever file the user picked, to the EXISTING pipelines:
-  //   .json                → service.importDataset() (full-replace, unchanged)
+  //   .json                → preview then confirm full replacement
   //   .csv/.ods/.xls/.xlsx → runCsvImportPreview() (normalize/validate/preview, unchanged)
   // The picked file path never crosses back to the renderer — main owns the
   // dialog, main reads the file, and only the discriminated-union result
@@ -488,20 +584,61 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     const extension = path.extname(sourceFilePath).toLowerCase().replace(/^\./, "");
 
     if (extension === "json") {
-      const result = await runJsonImport(
-        event,
-        (signal) => service.importJsonFile(sourceFilePath, { signal })
-      );
-
-      if (result.kind === "combined-import") {
-        return { kind: "combined-import", result: stripCombinedImportPaths(result.result) } as const;
+      const snapshot = await createImportSnapshot(sourceFilePath);
+      let parsed: JsonImportPreviewInternal;
+      try {
+        parsed = await runJsonImport(
+          event,
+          (signal) => service.previewJsonFile(snapshot.snapshotPath, { signal })
+        );
+      } catch (error) {
+        await removeImportSnapshot(snapshot.snapshotPath);
+        throw error;
       }
-
-      if (result.kind === "contacts-import") {
-        return { kind: "json-import", result: stripImportPaths(result.result) } as const;
+      const importToken = randomUUID();
+      const previousImportToken = senderJsonTokens.get(event.sender.id);
+      if (previousImportToken) clearPendingJsonImport(previousImportToken);
+      if (pendingJsonImports.size >= MAX_PENDING_JSON_IMPORTS) {
+        const oldestImportToken = pendingJsonImports.keys().next().value;
+        if (oldestImportToken) clearPendingJsonImport(oldestImportToken);
       }
-
-      return result;
+      let currentCounts;
+      try {
+        currentCounts = await service.getJsonImportCurrentCounts();
+      } catch (error) {
+        await removeImportSnapshot(snapshot.snapshotPath);
+        throw error;
+      }
+      const navListener = (details: { isSameDocument?: boolean } | undefined) => {
+        if (!details?.isSameDocument) clearPendingJsonImport(importToken);
+      };
+      event.sender.on("did-start-navigation", navListener);
+      pendingJsonImports.set(importToken, {
+        sourceFilePath: snapshot.snapshotPath,
+        selectedSourceFilePath: sourceFilePath,
+        sourceFingerprint: snapshot.fingerprint,
+        parsed,
+        senderId: event.sender.id,
+        sender: event.sender,
+        navListener,
+        timeout: setTimeout(() => clearPendingJsonImport(importToken), CSV_IMPORT_TOKEN_TTL_MS)
+      });
+      senderJsonTokens.set(event.sender.id, importToken);
+      ensureSenderCleanup(event.sender);
+      const fileName = path.basename(sourceFilePath);
+      if (parsed.kind === "contacts") {
+        const data = parsed.data as { records: unknown[] };
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "contacts", recordCount: data.records.length, currentRecordCount: currentCounts.contacts } } as const;
+      }
+      if (parsed.kind === "combined") {
+        const data = parsed.data as { contacts: { records: unknown[] }; beepers: { records: unknown[]; importedRecords: unknown[] } };
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "combined", recordCount: data.contacts.records.length, beeperRecordCount: data.beepers.records.length, importedBeeperRecordCount: data.beepers.importedRecords.length, currentRecordCount: currentCounts.contacts, currentBeeperRecordCount: currentCounts.beepers } } as const;
+      }
+      if (parsed.kind === "beepers") {
+        const data = parsed.data as { records: unknown[]; importedRecords: unknown[] };
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: data.records.length, importedBeeperRecordCount: data.importedRecords.length, currentBeeperRecordCount: currentCounts.beepers } } as const;
+      }
+      return { kind: "json-preview", preview: { importToken, fileName, detectedType: "settings" } } as const;
     }
 
     if (CSV_LIKE_EXTENSIONS.has(extension)) {
@@ -512,6 +649,31 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     // Defensive fallback — the dialog filter above should prevent this, but some
     // platforms/window managers allow bypassing open-dialog filters.
     return { kind: "unsupported-extension", extension } as const;
+  });
+  handle(CHANNELS.confirmJsonImport, async (event, importToken: string) => {
+    const pendingImport = pendingJsonImports.get(importToken);
+    if (!pendingImport || event.sender.id !== pendingImport.senderId) {
+      throw new Error("La importación JSON ya no es válida. Vuelve a seleccionar el archivo.");
+    }
+    clearPendingJsonImport(importToken, false);
+    try {
+      if (await sourceFingerprint(pendingImport.selectedSourceFilePath) !== pendingImport.sourceFingerprint) {
+        throw new Error("El archivo seleccionado cambió después de la vista previa. Vuelve a seleccionarlo.");
+      }
+      const result = await service.importPreviewedJson(pendingImport.parsed, pendingImport.sourceFilePath);
+      if (result.kind === "combined-import") return { kind: result.kind, result: stripCombinedImportPaths(result.result) };
+      if (result.kind === "contacts-import") return { kind: result.kind, result: stripImportPaths(result.result) };
+      return result;
+    } catch (error) {
+      if (isFilesystemError(error)) throw sourceFileAccessError();
+      throw error;
+    } finally {
+      await removeImportSnapshot(pendingImport.sourceFilePath);
+    }
+  });
+  handle(CHANNELS.cancelJsonImport, (event, importToken: string) => {
+    const pendingImport = pendingJsonImports.get(importToken);
+    if (pendingImport && pendingImport.senderId === event.sender.id) clearPendingJsonImport(importToken);
   });
   handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
     // Atomically take the token before any await — a second concurrent confirmation
@@ -548,8 +710,18 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
 
     // Synchronously consume the token before the first await so concurrent
     // confirmations cannot race past this point with the same token.
-    clearPendingCsvImport(importToken);
-    return stripImportPaths(await service.importCsvDataset(pendingImport.sourceFilePath, policies));
+    clearPendingCsvImport(importToken, false);
+    try {
+      if (await sourceFingerprint(pendingImport.selectedSourceFilePath) !== pendingImport.sourceFingerprint) {
+        throw new Error("El archivo seleccionado cambió después de la vista previa. Vuelve a seleccionarlo.");
+      }
+      return stripImportPaths(await service.importCsvDataset(pendingImport.sourceFilePath, policies));
+    } catch (error) {
+      if (isFilesystemError(error)) throw sourceFileAccessError();
+      throw error;
+    } finally {
+      await removeImportSnapshot(pendingImport.sourceFilePath);
+    }
   });
 
   handle(CHANNELS.detectDuplicates, async () => {

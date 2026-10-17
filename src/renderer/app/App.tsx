@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { isRecoveryBootstrap } from "../../shared/types/contact";
-import type { ImportContactsResult, ResetContactsResult } from "../../shared/types/contact";
+import type { ImportContactsResult, JsonImportPreview, ResetContactsResult } from "../../shared/types/contact";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { ErrorBoundary } from "../components/feedback/ErrorBoundary";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -18,7 +18,9 @@ const RecoveryPanel = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [isRestoringPaths, setIsRestoringPaths] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [jsonPreview, setJsonPreview] = useState<JsonImportPreview | null>(null);
   const resetConfirmInFlightRef = useRef(false);
+  const jsonConfirmInFlightRef = useRef(false);
   const { pushToast } = useToast();
 
   if (!recovery) {
@@ -35,13 +37,21 @@ const RecoveryPanel = () => {
   const handleImportJson = async () => {
     try {
       setIsImporting(true);
-      const result = await window.hospitalDirectory.importDataset();
-
-      if (!result) {
+      const response = await window.hospitalDirectory.pickAndImportDataset();
+      if (response.kind === "cancelled") {
         return;
       }
-
-      applyRecoveredData(result);
+      if (response.kind !== "json-preview") {
+        if (response.kind === "csv-preview") {
+          void window.hospitalDirectory.cancelCsvImportPreview(response.preview.importToken);
+        }
+        throw new Error("Selecciona una copia JSON válida para recuperar el directorio.");
+      }
+      if (response.preview.detectedType !== "contacts" && response.preview.detectedType !== "combined") {
+        void window.hospitalDirectory.cancelJsonImport(response.preview.importToken);
+        throw new Error("El JSON seleccionado no contiene un directorio para recuperar.");
+      }
+      setJsonPreview(response.preview);
     } catch (error) {
       pushToast({
         type: "error",
@@ -50,6 +60,31 @@ const RecoveryPanel = () => {
     } finally {
       setIsImporting(false);
     }
+  };
+
+  const handleConfirmJsonImport = async () => {
+    if (!jsonPreview || jsonConfirmInFlightRef.current) return;
+    jsonConfirmInFlightRef.current = true;
+    try {
+      setIsImporting(true);
+      const result = await window.hospitalDirectory.confirmJsonImport(jsonPreview.importToken);
+      if (result.kind === "contacts-import" || result.kind === "combined-import") {
+        applyRecoveredData(result.result);
+        return;
+      }
+      throw new Error("El JSON seleccionado no contiene un directorio para recuperar.");
+    } catch (error) {
+      pushToast({ type: "error", message: toCompactToastMessage(error, "No se pudo importar una copia JSON válida.") });
+    } finally {
+      jsonConfirmInFlightRef.current = false;
+      setIsImporting(false);
+      setJsonPreview(null);
+    }
+  };
+
+  const cancelJsonImport = () => {
+    if (jsonPreview) void window.hospitalDirectory.cancelJsonImport(jsonPreview.importToken);
+    setJsonPreview(null);
   };
 
   const handleResetDataset = async () => {
@@ -142,6 +177,19 @@ const RecoveryPanel = () => {
         </button>
       </div>
 
+      <ConfirmDialog
+        isOpen={jsonPreview !== null}
+        title="Revisar copia JSON"
+        message={jsonPreview ? `${jsonPreview.fileName}: ${jsonPreview.detectedType === "contacts" ? `${jsonPreview.recordCount} contactos` : jsonPreview.detectedType === "combined" ? `${jsonPreview.recordCount} contactos y ${jsonPreview.beeperRecordCount + jsonPreview.importedBeeperRecordCount} buscas` : "este tipo de JSON no recupera el directorio"}.` : ""}
+        confirmLabel="Importar copia"
+        cancelLabel="Cancelar"
+        isDestructive={true}
+        confirmDisabled={isImporting}
+        cancelDisabled={isImporting}
+        busyMessage="Importando la copia JSON…"
+        onConfirm={() => { void handleConfirmJsonImport(); }}
+        onCancel={cancelJsonImport}
+      />
       <ConfirmDialog
         isOpen={isResetDialogOpen}
         title="Restablecer directorio vacío"

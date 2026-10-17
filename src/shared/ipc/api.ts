@@ -26,6 +26,7 @@ import type {
   ExportContactsResult,
   ImportContactsResult,
   PickAndImportDatasetResult,
+  JsonFileImportResult,
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
@@ -61,18 +62,19 @@ export interface HospitalDirectoryApi {
 
   // Dataset import/export
   exportDataset: () => Promise<ExportContactsResult | null>;
-  importDataset: () => Promise<ImportContactsResult | null>;
   resetDataset: () => Promise<ResetContactsResult>;
   recoverAuditLog: () => Promise<void>;
 
   // CSV import
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
-  cancelCsvImportPreview: () => Promise<void>;
+  cancelCsvImportPreview: (importToken?: string) => Promise<void>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
 
   // Unified single-picker import entry point. Opens one native
-  // dialog and dispatches by extension to importDataset()/previewCsvImport().
+  // dialog and dispatches by extension to the JSON preview or CSV preview flow.
   pickAndImportDataset: () => Promise<PickAndImportDatasetResult>;
+  confirmJsonImport: (importToken: string) => Promise<JsonFileImportResult>;
+  cancelJsonImport: (importToken: string) => Promise<void>;
 
   // Beepers — manual registry
   listBeepers: () => Promise<BeeperRecord[]>;

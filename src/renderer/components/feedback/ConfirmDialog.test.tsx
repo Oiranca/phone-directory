@@ -84,6 +84,11 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
   });
 
+  it('wraps action buttons when narrow viewports cannot fit both labels', () => {
+    render(<ConfirmDialog {...defaultProps} confirmLabel="Importar archivo con nombre largo" />);
+    expect(screen.getByRole('button', { name: 'Cancelar' }).parentElement).toHaveClass('flex-wrap');
+  });
+
   it('applies destructive styling when isDestructive is true', () => {
     render(<ConfirmDialog {...defaultProps} isDestructive={true} />);
     const confirmButton = screen.getByRole('button', { name: 'Confirmar' });
@@ -172,6 +177,35 @@ describe('ConfirmDialog', () => {
   it('falls back to focusing the first enabled action (Confirm) when Cancel is disabled', () => {
     render(<ConfirmDialog {...defaultProps} cancelDisabled={true} />);
     expect(screen.getByRole('button', { name: 'Confirmar' })).toHaveFocus();
+  });
+
+  it('keeps focus inside the dialog on the busy status when both actions are disabled', () => {
+    render(
+      <ConfirmDialog
+        {...defaultProps}
+        confirmDisabled={true}
+        cancelDisabled={true}
+        busyMessage="Importando el archivo JSON…"
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveFocus();
+  });
+
+  it('moves focus from the disabled confirm action to the busy status', () => {
+    const { rerender } = render(<ConfirmDialog {...defaultProps} busyMessage="Importando el archivo JSON…" />);
+    screen.getByRole('button', { name: 'Confirmar' }).focus();
+
+    rerender(
+      <ConfirmDialog
+        {...defaultProps}
+        confirmDisabled={true}
+        cancelDisabled={true}
+        busyMessage="Importando el archivo JSON…"
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveFocus();
   });
 
   it('restores focus to the trigger element when the dialog is closed via Cancel', () => {

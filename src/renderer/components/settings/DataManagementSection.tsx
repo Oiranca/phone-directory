@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import type { BackupListItem, CsvImportPreviewWithConflicts, MergePolicy } from "../../../shared/types/contact";
+import type { BackupListItem, CsvImportPreviewWithConflicts, JsonImportPreview, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
 import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
 import { LoadingStatus } from "../feedback/LoadingStatus";
@@ -32,7 +32,7 @@ const yieldToRenderer = () => new Promise<void>((resolve) => {
 });
 
 type PendingConfirmation =
-  | { kind: "pick-import" }
+  | { kind: "import-json"; preview: JsonImportPreview }
   | { kind: "import-csv"; preview: CsvImportPreviewWithConflicts }
   | { kind: "recover-audit-log" };
 
@@ -85,6 +85,8 @@ export const DataManagementSection = () => {
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [csvPreview, setCsvPreview] = useState<CsvImportPreviewWithConflicts | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const csvPreviewRef = useRef<CsvImportPreviewWithConflicts | null>(null);
+  const jsonPreviewRef = useRef<JsonImportPreview | null>(null);
   const confirmationInFlightRef = useRef(false);
   const policyUpdateSequenceRef = useRef(0);
   const pendingPolicyUpdatesRef = useRef<{
@@ -130,6 +132,15 @@ export const DataManagementSection = () => {
   }, [ensureBootstrapLoaded]);
 
   useFocusOnMount(panelHeadingRef, isPanelOpen);
+
+  useEffect(() => () => {
+    if (csvPreviewRef.current) {
+      void window.hospitalDirectory.cancelCsvImportPreview(csvPreviewRef.current.importToken);
+    }
+    if (jsonPreviewRef.current) {
+      void window.hospitalDirectory.cancelJsonImport(jsonPreviewRef.current.importToken);
+    }
+  }, []);
 
   useEffect(() => {
     if (storeIsLoading) return;
@@ -238,52 +249,9 @@ export const DataManagementSection = () => {
         return;
       }
 
-      if (response.kind === "json-import") {
-        const result = response.result;
-
-        initialize({
-          contacts: result.contacts,
-          settings: result.settings
-        });
-        await refreshBackups();
-        pushToast({
-          type: "success",
-          message: "Importación completada."
-        });
-        return;
-      }
-
-      if (response.kind === "combined-import") {
-        const result = response.result;
-        initialize({ contacts: result.contacts, settings: result.settings });
-        await refreshBackups();
-        const totalBeepers = result.beeperRecordCount + result.importedBeeperRecordCount;
-        pushToast({
-          type: "success",
-          message: `Importación completada: ${result.recordCount} contactos y ${totalBeepers} buscas.`
-        });
-        return;
-      }
-
-      if (response.kind === "beepers-import") {
-        await refreshBackups();
-        pushToast({
-          type: "success",
-          message: `Buscas importadas: ${response.recordCount + response.importedRecordCount}.`
-        });
-        return;
-      }
-
-      if (response.kind === "settings-import") {
-        if (!contacts) {
-          throw new Error("No se pudo conservar el directorio actual al importar la configuración.");
-        }
-        initialize({ contacts, settings: response.settings });
-        await refreshBackups();
-        pushToast({
-          type: "success",
-          message: "Configuración importada. Las rutas portables del USB se han conservado."
-        });
+      if (response.kind === "json-preview") {
+        jsonPreviewRef.current = response.preview;
+        setPendingConfirmation({ kind: "import-json", preview: response.preview });
         return;
       }
 
@@ -291,6 +259,7 @@ export const DataManagementSection = () => {
       // former handlePreviewCsvImport.
       const preview = response.preview;
 
+      csvPreviewRef.current = preview;
       setCsvPreview(preview);
 
       // Nothing importable at all is still blocked (no valid contact
@@ -344,6 +313,30 @@ export const DataManagementSection = () => {
     } finally {
       setIsImporting(false);
     }
+  };
+
+  const handleImportJson = async (preview: JsonImportPreview) => {
+    try {
+      setIsImporting(true);
+      const response = await window.hospitalDirectory.confirmJsonImport(preview.importToken);
+      if (response.kind === "contacts-import") initialize(response.result);
+      if (response.kind === "combined-import") initialize(response.result);
+      if (response.kind === "settings-import") {
+        if (!contacts) throw new Error("No se pudo conservar el directorio actual al importar la configuración.");
+        initialize({ contacts, settings: response.settings });
+      }
+      await refreshBackups();
+      pushToast({ type: "success", message: "Importación completada." });
+    } catch (error) {
+      pushToast({ type: "error", message: toCompactToastMessage(error, "No se pudo importar el archivo seleccionado.") });
+    } finally {
+      if (jsonPreviewRef.current?.importToken === preview.importToken) jsonPreviewRef.current = null;
+      setIsImporting(false);
+    }
+  };
+
+  const cancelJsonImport = (preview: JsonImportPreview) => {
+    void window.hospitalDirectory.cancelJsonImport(preview.importToken);
   };
 
   const handleImportCsv = async (preview: CsvImportPreviewWithConflicts) => {
@@ -415,6 +408,7 @@ export const DataManagementSection = () => {
         message: toCompactToastMessage(error, "No se pudo importar el archivo seleccionado.")
       });
     } finally {
+      if (csvPreviewRef.current?.importToken === preview.importToken) csvPreviewRef.current = null;
       setIsImportingCsv(false);
     }
   };
@@ -496,11 +490,10 @@ export const DataManagementSection = () => {
     }
 
     confirmationInFlightRef.current = true;
-    setPendingConfirmation(null);
 
     try {
-      if (confirmation.kind === "pick-import") {
-        await handlePickAndImport();
+      if (confirmation.kind === "import-json") {
+        await handleImportJson(confirmation.preview);
         return;
       }
 
@@ -512,6 +505,7 @@ export const DataManagementSection = () => {
       await handleImportCsv(confirmation.preview);
     } finally {
       confirmationInFlightRef.current = false;
+      setPendingConfirmation(null);
     }
   };
 
@@ -520,12 +514,26 @@ export const DataManagementSection = () => {
       return null;
     }
 
-    if (pendingConfirmation.kind === "pick-import") {
+    if (pendingConfirmation.kind === "import-json") {
+      const preview = pendingConfirmation.preview;
+      const summary = preview.detectedType === "contacts"
+        ? `${preview.recordCount} contactos`
+        : preview.detectedType === "combined"
+          ? `${preview.recordCount} contactos y ${preview.beeperRecordCount + preview.importedBeeperRecordCount} buscas`
+          : preview.detectedType === "beepers"
+            ? `${preview.recordCount + preview.importedBeeperRecordCount} buscas`
+            : "preferencias";
+      const replacement = preview.detectedType === "contacts"
+        ? preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`
+        : preview.detectedType === "combined"
+          ? `${preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`}${preview.currentBeeperRecordCount === null ? " Las buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`}`
+          : preview.detectedType === "beepers"
+            ? preview.currentBeeperRecordCount === null ? " Las buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`
+            : "";
       return {
-        title: "Seleccionar archivo para importar",
-        message:
-          "Vas a elegir un archivo para importar. Un JSON de agenda o buscas reemplazará esos datos después de crear su copia de seguridad. Un JSON de configuración importará las preferencias después de respaldarlas y conservará las rutas portables del USB. Las hojas de cálculo (CSV, ODS, XLS o XLSX) mostrarán una vista previa antes de aplicar cambios. ¿Deseas continuar?",
-        confirmLabel: "Elegir archivo"
+        title: "Revisar importación JSON",
+        message: `${preview.fileName}: ${summary}.${replacement} Se creará una copia de seguridad antes de aplicar los cambios.`,
+        confirmLabel: "Importar archivo"
       };
     }
 
@@ -556,6 +564,9 @@ export const DataManagementSection = () => {
       const confidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
         ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
         : "";
+      const beeperReplacement = preview.incomingBeeperRecordCount > 0
+        ? ` Se importarán ${preview.incomingBeeperRecordCount} ${preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán ${preview.currentBeeperRecordCount ?? "las"} ${preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.`
+        : "";
 
       return {
         title: "Confirmar importación de agenda",
@@ -563,7 +574,7 @@ export const DataManagementSection = () => {
           preview.invalidRowCount > 0
             ? ` Se ${preview.invalidRowCount === 1 ? "omitirá" : "omitirán"} ${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
             : ""
-        }${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
+        }${beeperReplacement}${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
         confirmLabel: "Confirmar importación"
       };
     }
@@ -671,7 +682,7 @@ export const DataManagementSection = () => {
               <button
                 ref={triggerButtonRef}
                 type="button"
-                onClick={() => setPendingConfirmation({ kind: "pick-import" })}
+                onClick={() => void handlePickAndImport()}
                 disabled={isMutating}
                 className="focus-ring rounded-2xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:border-amber-400 disabled:opacity-60"
               >
@@ -698,13 +709,6 @@ export const DataManagementSection = () => {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
             <span>Seleccionando y analizando el archivo, por favor espera…</span>
-            <button
-              type="button"
-              onClick={() => void window.hospitalDirectory.cancelCsvImportPreview()}
-              className="focus-ring ml-auto rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-semibold text-emerald-900"
-            >
-              Cancelar análisis
-            </button>
           </div>
         )}
 
@@ -718,6 +722,8 @@ export const DataManagementSection = () => {
               void handleConflictPoliciesChange(csvPreview, recordIndices, policy)
             }
             onClose={() => {
+              void window.hospitalDirectory.cancelCsvImportPreview(csvPreview.importToken);
+              if (csvPreviewRef.current?.importToken === csvPreview.importToken) csvPreviewRef.current = null;
               setCsvPreview(null);
               triggerButtonRef.current?.focus();
             }}
@@ -793,10 +799,27 @@ export const DataManagementSection = () => {
         confirmLabel={confirmationContent?.confirmLabel ?? "Confirmar"}
         cancelLabel="Cancelar"
         isDestructive={true}
+        confirmDisabled={isMutating}
+        cancelDisabled={isMutating}
+        busyMessage={
+          pendingConfirmation?.kind === "import-json"
+            ? "Importando el archivo JSON…"
+            : pendingConfirmation?.kind === "import-csv"
+              ? "Importando la hoja de cálculo…"
+              : pendingConfirmation?.kind === "recover-audit-log"
+                ? "Restableciendo el registro de auditoría…"
+                : undefined
+        }
         onConfirm={() => {
           void handleConfirmAction();
         }}
-        onCancel={() => setPendingConfirmation(null)}
+        onCancel={() => {
+          if (pendingConfirmation?.kind === "import-json") {
+            cancelJsonImport(pendingConfirmation.preview);
+            if (jsonPreviewRef.current?.importToken === pendingConfirmation.preview.importToken) jsonPreviewRef.current = null;
+          }
+          setPendingConfirmation(null);
+        }}
       />
     </section>
   );

@@ -374,7 +374,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             tabIndex={-1}
             className="mt-2 text-xl font-semibold text-emerald-950"
           >
-            {preview.fileName}
+            <span className="break-all">{preview.fileName}</span>
           </h3>
           {preview.detectedFormat && (
             <>
@@ -492,6 +492,14 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             {preview.beepersSkippedRowCount} {preview.beepersSkippedRowCount === 1 ? "fila de buscas sin número" : "filas de buscas sin número"}
           </span>{" "}
           omitidas (filas vacías o solo comentarios en las hojas de buscas)
+        </div>
+      )}
+      {preview.incomingBeeperRecordCount > 0 && (
+        <div
+          role="status"
+          className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+        >
+          Se importarán {preview.incomingBeeperRecordCount} {preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán {preview.currentBeeperRecordCount ?? "las"} {preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.
         </div>
       )}
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (

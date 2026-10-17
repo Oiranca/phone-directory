@@ -63,8 +63,15 @@ import {
 import {
   JsonDataError,
   readJsonData,
+  type ParsedJsonData,
   type ReadJsonDataOptions
 } from "./json-data-reader.js";
+
+export type JsonImportPreviewInternal = ParsedJsonData;
+export type JsonImportCurrentCounts = {
+  contacts: number | null;
+  beepers: number | null;
+};
 
 /**
  * Union `customFields` from both records of a duplicate-merge pair.
@@ -472,6 +479,63 @@ export class AppDataService {
       throw error;
     }
 
+    return this.importParsedJsonData(parsed, sourceFilePath);
+  }
+
+  async previewJsonFile(
+    sourceFilePath: string,
+    options: ReadJsonDataOptions = {}
+  ): Promise<JsonImportPreviewInternal> {
+    try {
+      return await readJsonData(sourceFilePath, "auto", options);
+    } catch (error) {
+      if (error instanceof JsonDataError && error.code === "invalid-data") {
+        throw new Error(
+          "El JSON no es un archivo combinado, una agenda, un archivo de buscas ni una configuración válida de HospiAgenda."
+        );
+      }
+      throw error;
+    }
+  }
+
+  async getJsonImportCurrentCounts(): Promise<JsonImportCurrentCounts> {
+    const contacts = await this.getBootstrapData()
+      .then((bootstrap) => "recovery" in bootstrap ? null : bootstrap.contacts.records.length)
+      .catch(() => null);
+    const beepersService = this.options.beepersService;
+
+    if (!beepersService) {
+      return { contacts, beepers: null };
+    }
+
+    const beepers = await Promise.all([
+      beepersService.list(),
+      beepersService.listImported()
+    ])
+      .then(([records, importedRecords]) => records.length + importedRecords.length)
+      .catch(() => null);
+    return { contacts, beepers };
+  }
+
+  async getSpreadsheetImportCurrentBeeperCount(): Promise<number | null> {
+    const beepersService = this.options.beepersService;
+    if (!beepersService) return null;
+    return beepersService.listImported()
+      .then((importedRecords) => importedRecords.length)
+      .catch(() => null);
+  }
+
+  async importPreviewedJson(
+    parsed: JsonImportPreviewInternal,
+    sourceFilePath: string
+  ): Promise<JsonFileImportResultInternal> {
+    return this.importParsedJsonData(parsed, sourceFilePath);
+  }
+
+  private async importParsedJsonData(
+    parsed: JsonImportPreviewInternal,
+    sourceFilePath: string
+  ): Promise<JsonFileImportResultInternal> {
     if (parsed.kind === "combined") {
       return {
         kind: "combined-import",

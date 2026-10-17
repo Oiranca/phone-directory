@@ -50,13 +50,9 @@ const renderPage = () =>
     </ToastProvider>
   );
 
-// The "Importar" card is now a single button. Clicking it opens the
-// pre-selection safety confirmation (covers typed JSON imports and CSV
-// preview outcomes) before pickAndImportDataset()
-// is actually invoked. Tests drive that two-click sequence through this helper.
+// The native picker opens directly from the single Importar button.
 const openImportPicker = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Importar" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Elegir archivo" }));
 };
 
 const defaultCsvPreview = {
@@ -184,6 +180,8 @@ describe("DataManagementSection (Configuración data section)", () => {
           kind: "csv-preview",
           preview: { ...defaultCsvPreview }
         }),
+        confirmJsonImport: vi.fn(),
+        cancelJsonImport: vi.fn().mockResolvedValue(undefined),
         cancelCsvImportPreview: vi.fn().mockResolvedValue(undefined),
         importCsvDataset: vi.fn().mockResolvedValue({
           contacts: {
@@ -283,6 +281,20 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText("Registro de auditoría restablecido.")).toBeInTheDocument();
   });
 
+  it("keeps focus on the audit recovery status while the confirmation is applying", async () => {
+    let resolveRecovery!: () => void;
+    window.hospitalDirectory.recoverAuditLog = vi.fn().mockReturnValue(new Promise<void>((resolve) => { resolveRecovery = resolve; }));
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer registro de auditoría" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restablecer registro" }));
+
+    const status = await screen.findByText("Restableciendo el registro de auditoría…");
+    expect(status).toHaveFocus();
+    resolveRecovery();
+  });
+
   it("does not show filesystem paths when audit-log recovery fails", async () => {
     window.hospitalDirectory.recoverAuditLog = vi.fn().mockRejectedValue(
       new Error("EACCES: /Users/operator/Library/Application Support/HospiAgenda/data/audit-log.json")
@@ -312,17 +324,12 @@ describe("DataManagementSection (Configuración data section)", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the pre-selection confirmation dialog before opening the file picker", async () => {
+  it("opens the native picker directly", async () => {
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Importar" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Seleccionar archivo para importar" });
-    expect(dialog).toBeVisible();
-    expect(window.hospitalDirectory.pickAndImportDataset).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Elegir archivo" }));
     await waitFor(() => {
       expect(window.hospitalDirectory.pickAndImportDataset).toHaveBeenCalledTimes(1);
     });
@@ -330,9 +337,10 @@ describe("DataManagementSection (Configuración data section)", () => {
 
   it("imports a JSON dataset after confirmation and refreshes the store", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
-      kind: "json-import",
-      result: defaultJsonImportResult
+      kind: "json-preview",
+      preview: { importToken: "contacts-json", fileName: "contacts.json", detectedType: "contacts", recordCount: 1, currentRecordCount: 2 }
     });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "contacts-import", result: defaultJsonImportResult });
 
     renderPage();
 
@@ -342,26 +350,25 @@ describe("DataManagementSection (Configuración data section)", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.pickAndImportDataset).toHaveBeenCalledTimes(1);
     });
-    expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
+    fireEvent.click(await screen.findByRole("button", { name: "Importar archivo" }));
+    await waitFor(() => expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado"));
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
   it("imports a combined JSON dataset and reports both stores", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
-      kind: "combined-import",
-      result: {
-        ...defaultJsonImportResult,
-        beeperRecordCount: 2,
-        importedBeeperRecordCount: 3
-      }
+      kind: "json-preview",
+      preview: { importToken: "combined-json", fileName: "all.json", detectedType: "combined", recordCount: 1, beeperRecordCount: 2, importedBeeperRecordCount: 3, currentRecordCount: 2, currentBeeperRecordCount: 4 }
     });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "combined-import", result: { ...defaultJsonImportResult, beeperRecordCount: 2, importedBeeperRecordCount: 3 } });
 
     renderPage();
     await screen.findByText("Datos e importación");
     await openImportPicker();
+    fireEvent.click(await screen.findByRole("button", { name: "Importar archivo" }));
 
-    expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado");
-    expect(await screen.findByText("Importación completada: 1 contactos y 5 buscas.")).toBeInTheDocument();
+    await waitFor(() => expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado"));
+    expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
   it("exports contacts and beepers in one portable file", async () => {
@@ -383,18 +390,19 @@ describe("DataManagementSection (Configuración data section)", () => {
 
   it("imports a beepers JSON dataset through the unified picker", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
-      kind: "beepers-import",
-      recordCount: 0,
-      importedRecordCount: 231
+      kind: "json-preview",
+      preview: { importToken: "beepers-json", fileName: "beepers.json", detectedType: "beepers", recordCount: 0, importedBeeperRecordCount: 231, currentBeeperRecordCount: 4 }
     });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "beepers-import", recordCount: 0, importedRecordCount: 231 });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
+    fireEvent.click(await screen.findByRole("button", { name: "Importar archivo" }));
 
-    expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("Buscas importadas: 231.")).toBeInTheDocument();
+    await waitFor(() => expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
   it("imports settings while keeping the current contacts loaded", async () => {
@@ -407,14 +415,16 @@ describe("DataManagementSection (Configuración data section)", () => {
       }
     };
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
-      kind: "settings-import",
-      settings: importedSettings
+      kind: "json-preview",
+      preview: { importToken: "settings-json", fileName: "settings.json", detectedType: "settings" }
     });
+    window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "settings-import", settings: importedSettings });
 
     renderPage();
 
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
+    fireEvent.click(await screen.findByRole("button", { name: "Importar archivo" }));
 
     await waitFor(() => {
       expect(useAppStore.getState().settings?.editorName).toBe("Configuración importada");
@@ -422,7 +432,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(useAppStore.getState().contacts?.records).toHaveLength(defaultContacts.records.length);
     expect(window.hospitalDirectory.listBackups).toHaveBeenCalledTimes(2);
     expect(
-      await screen.findByText("Configuración importada. Las rutas portables del USB se han conservado.")
+      await screen.findByText("Importación completada.")
     ).toBeInTheDocument();
   });
 
@@ -583,6 +593,30 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
     expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio CSV");
     expect(await screen.findByText("Importación completada. 1 alta y 1 actualización.")).toBeInTheDocument();
+  });
+
+  it("keeps focus on the spreadsheet import status while the confirmation is applying", async () => {
+    let resolveImport!: (result: unknown) => void;
+    window.hospitalDirectory.importCsvDataset = vi.fn().mockReturnValue(new Promise((resolve) => { resolveImport = resolve; }));
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
+
+    const status = await screen.findByText("Importando la hoja de cálculo…");
+    expect(status).toHaveFocus();
+    resolveImport({
+      contacts: defaultContacts,
+      settings: editableSettings,
+      recordCount: defaultContacts.records.length,
+      warningCount: 0,
+      invalidRowCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+      beeperImportStatus: { status: "not-applicable", parsedCellCount: 0 }
+    });
   });
 
   it("surfaces partial beeper import failure after contacts import succeeds", async () => {
@@ -1114,6 +1148,34 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
   });
 
+  it("cancels a pending spreadsheet preview when the section unmounts", async () => {
+    const page = renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    expect(await screen.findByText("Vista previa importación")).toBeInTheDocument();
+
+    page.unmount();
+
+    expect(window.hospitalDirectory.cancelCsvImportPreview).toHaveBeenCalledWith("csv-token-1");
+  });
+
+  it("cancels a pending JSON preview when the section unmounts", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "json-preview",
+      preview: { importToken: "json-token-unmount", fileName: "contacts.json", detectedType: "contacts", recordCount: 1, currentRecordCount: 1 }
+    });
+    const page = renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    page.unmount();
+
+    expect(window.hospitalDirectory.cancelJsonImport).toHaveBeenCalledWith("json-token-unmount");
+  });
+
   it("does NOT re-issue listBackups when contacts change after initial load (backupsRequestedRef guard)", async () => {
     // Regression lock for the loaded-once guarantee: after the initial load,
     // subsequent store mutations (e.g. after a JSON import) update contacts,
@@ -1177,8 +1239,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText(/Seleccionando y analizando el archivo/)).toBeInTheDocument();
     const spinnerStatus = screen.getByRole("status");
     expect(spinnerStatus).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar análisis" }));
-    expect(window.hospitalDirectory.cancelCsvImportPreview).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Cancelar análisis" })).not.toBeInTheDocument();
 
     // Resolve to avoid state-update-after-unmount warning
     resolvePick({ kind: "cancelled" });

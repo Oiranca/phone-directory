@@ -89,8 +89,6 @@ const importReady = () => browserCommand("eval", `(() => {
 const openPreview = async () => {
   await waitFor("import action ready", importReady);
   clickRole("button", "Importar");
-  await waitFor("file picker confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
-  clickRole("button", "Elegir archivo");
   await waitFor("CSV preview", () => browserCommand("is", "visible", '[aria-label="Vista previa de importación"]') === "true");
 };
 const previewState = () => JSON.parse(browserCommand("eval", `(() => {
@@ -477,8 +475,8 @@ try {
   clickRole("link", "Configuración");
   await waitFor("settings for backup restore", () => hasText("Datos e importación"));
   clickRole("button", "Importar");
-  await waitFor("backup picker confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
-  clickRole("button", "Elegir archivo");
+  await waitFor("backup import confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
+  clickRole("button", "Importar archivo");
   await waitFor("backup restore", () => hasText("Importación completada."));
   console.log("[agent-browser-e2e] Local backup and re-import passed");
   });
