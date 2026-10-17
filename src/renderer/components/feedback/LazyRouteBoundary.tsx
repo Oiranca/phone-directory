@@ -13,11 +13,13 @@ type LazyComponentFactory = () => Promise<{ default: ComponentType }>;
 
 interface LazyRouteBoundaryProps {
   factory: LazyComponentFactory;
+  initialLazyComponent: ComponentType;
 }
 
 interface LazyRouteBoundaryState {
   error: Error | null;
   LazyComponent: ComponentType;
+  factory: LazyComponentFactory;
 }
 
 /**
@@ -53,7 +55,17 @@ interface LazyRouteBoundaryState {
 class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRouteBoundaryState> {
   constructor(props: LazyRouteBoundaryProps) {
     super(props);
-    this.state = { error: null, LazyComponent: lazy(props.factory) };
+    this.state = { error: null, LazyComponent: props.initialLazyComponent, factory: props.factory };
+  }
+
+  static getDerivedStateFromProps(
+    props: LazyRouteBoundaryProps,
+    state: LazyRouteBoundaryState
+  ): Partial<LazyRouteBoundaryState> | null {
+    // React reuses this boundary between lazy routes; each route needs its own component.
+    return props.factory === state.factory
+      ? null
+      : { error: null, LazyComponent: props.initialLazyComponent, factory: props.factory };
   }
 
   static getDerivedStateFromError(error: Error): Pick<LazyRouteBoundaryState, "error"> {
@@ -105,6 +117,8 @@ class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRoute
  * `React.lazy()` element) so the boundary can re-invoke `React.lazy()` on
  * retry — see the class doc comment above.
  */
-export const withLazyRouteBoundary = (factory: LazyComponentFactory): ReactElement => (
-  <LazyRouteErrorBoundary factory={factory} />
-);
+export const withLazyRouteBoundary = (factory: LazyComponentFactory): ReactElement => {
+  // Suspense must retry the same lazy component while its import is pending.
+  const initialLazyComponent = lazy(factory);
+  return <LazyRouteErrorBoundary factory={factory} initialLazyComponent={initialLazyComponent} />;
+};
