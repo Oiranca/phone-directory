@@ -301,7 +301,8 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     expect(await screen.findByText("No se pudo guardar la configuración")).toBeInTheDocument();
-    expect((await screen.findAllByText("write failed")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("write failed")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert").filter((alert) => alert.textContent?.includes("write failed"))).toHaveLength(1);
     expect(useAppStore.getState().settings).toEqual(editableSettings);
   });
 

@@ -1085,7 +1085,7 @@ describe("CsvImportPreviewPanel", () => {
   });
 
   describe("detected format display", () => {
-    it("shows format and confidence label for high confidence", () => {
+    it("shows detected format without a redundant confidence label", () => {
       renderPanel({
         ...basePreview,
         detectedFormat: "plantilla normalizada",
@@ -1093,17 +1093,17 @@ describe("CsvImportPreviewPanel", () => {
       });
 
       expect(screen.getByText(/plantilla normalizada/)).toBeInTheDocument();
-      expect(screen.getByText(/confianza alta/)).toBeInTheDocument();
+      expect(screen.queryByText(/confianza/)).not.toBeInTheDocument();
     });
 
-    it("shows medium confidence label", () => {
+    it("shows medium confidence in a single warning", () => {
       renderPanel({
         ...basePreview,
         detectedFormat: "exportación cruda de servicios",
         detectionConfidence: "medium"
       });
 
-      expect(screen.getByText(/confianza media/)).toBeInTheDocument();
+      expect(screen.getAllByText(/confianza media/i)).toHaveLength(1);
     });
 
     it("does not render format line when detectedFormat is absent", () => {

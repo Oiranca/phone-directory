@@ -239,10 +239,6 @@ export const SettingsPage = () => {
     } catch (error) {
       const message = toCompactToastMessage(error, "No se pudo guardar la configuración.");
       setSaveError(message);
-      pushToast({
-        type: "error",
-        message
-      });
     } finally {
       setIsSaving(false);
     }

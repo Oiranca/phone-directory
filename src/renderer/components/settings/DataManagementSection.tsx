@@ -234,10 +234,6 @@ export const DataManagementSection = () => {
       const response = await window.hospitalDirectory.pickAndImportDataset();
 
       if (response.kind === "cancelled") {
-        pushToast({
-          type: "warning",
-          message: "Selección cancelada."
-        });
         return;
       }
 
@@ -262,48 +258,6 @@ export const DataManagementSection = () => {
       csvPreviewRef.current = preview;
       setCsvPreview(preview);
 
-      // Nothing importable at all is still blocked (no valid contact
-      // rows and no beepers content) — everything else is a partial import.
-      const hasImportableContent = preview.validRowCount > 0 || preview.parsedBeepersCellCount > 0;
-
-      if (preview.invalidRowCount > 0 && !hasImportableContent) {
-        pushToast({
-          type: "error",
-          message: "El archivo no contiene filas válidas para importar. Corrige el origen antes de importar."
-        });
-        return;
-      }
-
-      // Single toast per action; gate "Todo listo" when conflicts exist.
-      // Confidence note shown in panel — toast covers status/count only.
-      const unresolvedCount = preview.conflictCount ?? 0;
-
-      // A partial import (some rows skipped, rest still importable) takes
-      // priority over the conflict/success messaging below — it is the most
-      // surprising outcome for the operator, so it gets its own single toast.
-      if (preview.invalidRowCount > 0) {
-        pushToast({
-          type: "warning",
-          message: `${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila será omitida" : "filas serán omitidas"} al importar. ${preview.createdCount} altas y ${preview.updatedCount} actualizaciones previstas para las filas válidas.`,
-          durationMs: 4000
-        });
-      } else if (unresolvedCount > 0) {
-        // Item 10: "Todo listo" is contradictory when conflicts still need resolving.
-        pushToast({
-          type: "warning",
-          message: `${unresolvedCount === 1
-            ? "Hay 1 registro que ya existe en la agenda"
-            : `Hay ${unresolvedCount} registros que ya existen en la agenda`}. Para cada uno elige qué hacer antes de continuar.`
-        });
-      } else {
-        // Item 9: clean status/count toast — confidence note shown in panel.
-        pushToast({
-          type: preview.warningCount > 0 ? "warning" : "success",
-          message: preview.warningCount > 0
-            ? `Todo listo (con ${preview.warningCount} ${preview.warningCount === 1 ? "advertencia" : "advertencias"}): ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
-            : `Todo listo: ${preview.createdCount} ${preview.createdCount === 1 ? "nuevo" : "nuevos"} y ${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}.`
-        });
-      }
     } catch (error) {
       setCsvPreview(null);
       pushToast({
@@ -391,8 +345,9 @@ export const DataManagementSection = () => {
       if (result.beeperImportStatus?.status === "partial-failure") {
         pushToast({
           type: "warning",
-          message: `Contactos importados, pero no se pudieron guardar las buscas. ${result.beeperImportStatus.message}`
+          message: "Contactos importados; no se pudieron guardar las buscas."
         });
+        return;
       }
       pushToast({
         type: "success",
@@ -561,8 +516,8 @@ export const DataManagementSection = () => {
         if (mergeCount > 0) policyParts.push(`${mergeCount} ${mergeCount === 1 ? "se combinará" : "se combinarán"}`);
       }
       const policyNote = policyParts.length > 0 ? ` Conflictos: ${policyParts.join(", ")}.` : "";
-      const confidenceWarning = preview.detectionConfidence === "medium" || preview.detectionConfidence === "low"
-        ? ` La detección del formato tiene confianza ${preview.detectionConfidence === "medium" ? "media" : "baja"} y debe revisarse con atención.`
+      const confidenceWarning = preview.detectionConfidence === "low"
+        ? " Formato incierto: revisa la vista previa."
         : "";
       const beeperReplacement = preview.incomingBeeperRecordCount > 0
         ? ` Se importarán ${preview.incomingBeeperRecordCount} ${preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán ${preview.currentBeeperRecordCount ?? "las"} ${preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.`
@@ -570,11 +525,11 @@ export const DataManagementSection = () => {
 
       return {
         title: "Confirmar importación de agenda",
-        message: `${preview.validRowCount === 1 ? "Se importará" : "Se importarán"} ${preview.validRowCount} ${preview.validRowCount === 1 ? "registro válido" : "registros válidos"} desde ${preview.fileName}. ${preview.createdCount} se crearán y ${preview.updatedCount} se actualizarán.${
+        message: `Importar ${preview.fileName}.${
           preview.invalidRowCount > 0
             ? ` Se ${preview.invalidRowCount === 1 ? "omitirá" : "omitirán"} ${preview.invalidRowCount} ${preview.invalidRowCount === 1 ? "fila rechazada" : "filas rechazadas"}.`
             : ""
-        }${beeperReplacement}${policyNote}${confidenceWarning} Antes se guardará una copia de seguridad automática. ¿Quieres continuar?`,
+        }${beeperReplacement}${policyNote}${confidenceWarning} Se creará una copia de seguridad antes de importar.`,
         confirmLabel: "Confirmar importación"
       };
     }

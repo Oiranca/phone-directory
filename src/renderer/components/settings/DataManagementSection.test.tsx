@@ -473,7 +473,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a cancellation toast when the file dialog is dismissed", async () => {
+  it("dismisses the file dialog without a warning", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({ kind: "cancelled" });
 
     renderPage();
@@ -481,7 +481,8 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
 
-    expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Importar" })).toBeEnabled());
+    expect(screen.queryByText("Selección cancelada.")).not.toBeInTheDocument();
   });
 
   it("shows an error toast for an unsupported file extension", async () => {
@@ -692,8 +693,9 @@ describe("DataManagementSection (Configuración data section)", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
     expect(
-      await screen.findByText(/Contactos importados, pero no se pudieron guardar las buscas/)
+      await screen.findByText("Contactos importados; no se pudieron guardar las buscas.")
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Importación completada/)).not.toBeInTheDocument();
   });
 
   it("passes selected conflict policies when confirming a spreadsheet import", async () => {
@@ -840,7 +842,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
-    expect(await screen.findByText(/0 se crearán y 0 se actualizarán/)).toBeInTheDocument();
+    expect(await screen.findByText(/Conflictos: 1 se omitirá/)).toBeInTheDocument();
   });
 
   it("blocks stale resolved previews when a conflict is missing its selected policy", async () => {
@@ -988,16 +990,14 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
 
-    expect(
-      await screen.findByText("1 fila será omitida al importar. 0 altas y 1 actualizaciones previstas para las filas válidas.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/1 fila rechazada se omitirá al importar/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
 
     expect(
       await screen.findByText((content) =>
-        content.includes("1 registro válido") && content.includes("Se omitirá 1 fila rechazada")
+        content.includes("Se omitirá 1 fila rechazada") && content.includes("copia de seguridad")
       )
     ).toBeInTheDocument();
 
@@ -1052,9 +1052,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
     await openImportPicker();
 
-    expect(
-      await screen.findByText("El archivo no contiene filas válidas para importar. Corrige el origen antes de importar.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Hay 1 fila con errores que no se importará/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
@@ -1112,7 +1110,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     await waitFor(() => {
       expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument();
     });
-    expect(await screen.findByText("Selección cancelada.")).toBeInTheDocument();
+    expect(screen.queryByText("Selección cancelada.")).not.toBeInTheDocument();
   });
 
   // The dedicated "Restaurar esta copia de seguridad"
@@ -1282,7 +1280,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     resolvePick({ kind: "cancelled" });
   });
 
-  it("shows conflict warning toast (not 'Todo listo') when conflictCount > 0", async () => {
+  it("shows conflicts in the preview without a duplicate toast", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "csv-preview",
       preview: {
@@ -1341,8 +1339,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     // "Todo listo" must NOT appear when there are conflicts to resolve
     expect(screen.queryByText(/Todo listo/)).not.toBeInTheDocument();
 
-    // The conflict warning message (in toast or panel alert) must contain "Para cada uno"
-    expect(screen.getByText(/Para cada uno elige qué hacer antes de continuar/)).toBeInTheDocument();
+    expect(screen.getByText(/Para cada uno elige qué hacer/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Omitir a todos" }));
 
@@ -1353,7 +1350,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
-    expect(await screen.findByText(/0 se crearán y 0 se actualizarán/)).toBeInTheDocument();
+    expect(await screen.findByText(/Conflictos: 2 se omitirán/)).toBeInTheDocument();
   });
 
   it("keeps only the latest policy when a 5000-conflict batch is replaced", async () => {

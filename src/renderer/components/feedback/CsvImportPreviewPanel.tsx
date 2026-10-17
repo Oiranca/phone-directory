@@ -71,13 +71,6 @@ const CONFLICT_REASON_LABELS: Record<string, string> = {
   "conflict_reason.email_match": "Correo coincidente"
 };
 
-const formatDetectionConfidence = (value: CsvImportPreviewWithConflicts["detectionConfidence"]) => {
-  if (value === "high") return "alta";
-  if (value === "medium") return "media";
-  if (value === "low") return "baja";
-  return "";
-};
-
 // ---------------------------------------------------------------------------
 // ConflictFieldDiff — field-level diff for a single conflict pair.
 // ---------------------------------------------------------------------------
@@ -380,7 +373,6 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
             <>
               <p className="mt-2 text-sm text-emerald-900/80">
                 Formato detectado: {preview.detectedFormat}
-                {preview.detectionConfidence ? ` (confianza ${formatDetectionConfidence(preview.detectionConfidence)})` : ""}
               </p>
               {preview.detectionConfidence === "medium" && (
                 <p className="mt-1 text-sm text-amber-800">
