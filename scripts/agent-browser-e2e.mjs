@@ -426,6 +426,30 @@ try {
     return region.scrollHeight > region.clientHeight && region.scrollTop > before && Boolean(closeRect && closeRect.left >= rect.left && closeRect.right <= rect.right && closeRect.top >= rect.top && closeRect.bottom <= rect.bottom && closeRect.top >= 0 && closeRect.bottom <= innerHeight);
   })()`));
   if (!persistentToastScrollable) throw new Error("Persistent toast did not scroll while keeping its close control");
+  const toastRect = JSON.parse(browserCommand("eval", `(() => {
+    const rect = document.querySelector('[aria-label="Notificaciones"]').getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + Math.min(200, rect.height - 16) };
+  })()`));
+  const beforeTouch = Number(browserCommand("eval", `document.querySelector('[aria-label="Notificaciones"]').scrollTop`));
+  const streamStatus = JSON.parse(browserCommand("--json", "stream", "status"));
+  if (!streamStatus.success || !streamStatus.data?.port) throw new Error("agent-browser touch stream is unavailable");
+  const touchSocket = new WebSocket(`ws://127.0.0.1:${streamStatus.data.port}`);
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("agent-browser touch stream did not connect")), 3000);
+      touchSocket.addEventListener("open", () => { clearTimeout(timeout); resolve(); }, { once: true });
+      touchSocket.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("agent-browser touch stream failed")); }, { once: true });
+    });
+    const touchPoint = (y) => [{ x: toastRect.x, y }];
+    touchSocket.send(JSON.stringify({ type: "input_touch", eventType: "touchStart", touchPoints: touchPoint(toastRect.y) }));
+    await delay(50);
+    touchSocket.send(JSON.stringify({ type: "input_touch", eventType: "touchMove", touchPoints: touchPoint(toastRect.y - 80) }));
+    await delay(50);
+    touchSocket.send(JSON.stringify({ type: "input_touch", eventType: "touchEnd", touchPoints: [] }));
+    await waitFor("persistent toast touch scroll", () => Number(browserCommand("eval", `document.querySelector('[aria-label="Notificaciones"]').scrollTop`)) > beforeTouch);
+  } finally {
+    touchSocket.close();
+  }
   browserCommand("click", '[aria-label="Notificaciones"] [role="alert"] button[aria-label="Cerrar notificación"]');
   await waitFor("persistent toast dismissal", () => browserCommand("eval", 'document.querySelector(\'[aria-label="Notificaciones"] [role="alert"]\') === null') === "true");
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
