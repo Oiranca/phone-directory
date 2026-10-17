@@ -91,6 +91,10 @@ export const SettingsPage = () => {
     return <LoadingStatus message="Cargando configuración…" className="rounded-3xl bg-white p-6 shadow-panel" busy />;
   }
 
+  const retentionCount = Number(autoBackupRetentionCount);
+  const retentionError = Number.isInteger(retentionCount) && retentionCount >= 1 && retentionCount <= 100
+    ? ""
+    : "Indica un número entero entre 1 y 100.";
   const isDirty =
     (hasEditorDraft && editorName !== settings.editorName) ||
     dataFilePath !== settings.dataFilePath ||
@@ -198,7 +202,7 @@ export const SettingsPage = () => {
   };
 
   const handleSave = async () => {
-    if (!isDirty) {
+    if (!isDirty || retentionError) {
       return;
     }
 
@@ -210,7 +214,7 @@ export const SettingsPage = () => {
       trigger: autoBackupTrigger,
       intervalHours: clampInteger(autoBackupIntervalHours, 1, 168),
       editCountThreshold: clampInteger(autoBackupEditCountThreshold, 1, 1000),
-      retentionCount: clampInteger(autoBackupRetentionCount, 1, 100)
+      retentionCount
     };
 
     try {
@@ -360,7 +364,7 @@ export const SettingsPage = () => {
                 ) : null}
 
                 <div>
-                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Retención de copias de seguridad automáticas</label>
+                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Copias de seguridad que se conservan</label>
                   <input
                     id="settings-autobackup-retention"
                     type="number"
@@ -372,9 +376,16 @@ export const SettingsPage = () => {
                       setAutoBackupRetentionCount(event.target.value);
                       setSaveError("");
                     }}
-                    disabled={!autoBackupEnabled}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                    aria-describedby={retentionError
+                      ? "settings-autobackup-retention-hint settings-autobackup-retention-error"
+                      : "settings-autobackup-retention-hint"}
+                    aria-invalid={Boolean(retentionError)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
+                  <p id="settings-autobackup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
+                    De 1 a 100 por tipo: contactos (manuales y de seguridad al importar, restaurar, eliminar o restablecer), automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar.
+                  </p>
+                  {retentionError ? <p id="settings-autobackup-retention-error" role="alert" className="mt-1 text-base text-rose-700 sm:text-sm">{retentionError}</p> : null}
                 </div>
               </div>
             </div>
@@ -472,7 +483,7 @@ export const SettingsPage = () => {
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={isSaving || isResettingPaths || !isDirty}
+              disabled={isSaving || isResettingPaths || !isDirty || Boolean(retentionError)}
               className="focus-ring w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}

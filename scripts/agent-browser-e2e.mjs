@@ -265,6 +265,18 @@ try {
 
   clickRole("link", "Configuración");
   await waitFor("settings", () => hasText("Datos e importación"));
+  const retentionInput = "#settings-autobackup-retention";
+  if (browserCommand("eval", `(() => {
+    const input = document.querySelector(${JSON.stringify(retentionInput)});
+    const automatic = document.querySelector("#settings-autobackup-enabled");
+    return Boolean(input && !input.disabled && automatic && !automatic.checked);
+  })()`) !== "true") throw new Error("Retention must be editable while automatic backup is disabled");
+  browserCommand("fill", retentionInput, "7");
+  clickRole("button", "Guardar configuración");
+  await waitFor("retention saved", () => hasText("Configuración guardada."));
+  const savedRetention = JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
+  if (savedRetention !== 7) throw new Error(`Retention was not persisted: ${savedRetention}`);
+  console.log("[agent-browser-e2e] Disabled-auto retention saves and persists");
   await openPreview();
   const validPreview = previewState();
   if (!validPreview.enabled || validPreview.alert ||

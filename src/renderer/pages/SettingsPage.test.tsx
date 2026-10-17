@@ -151,7 +151,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 
-  it("normalizes auto-backup numeric values before saving", async () => {
+  it("requires a valid retention value before saving automatic backup settings", async () => {
     renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
@@ -163,8 +163,26 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Horas entre copias de seguridad automáticas"), {
       target: { value: "1.5" }
     });
-    fireEvent.change(screen.getByLabelText("Retención de copias de seguridad automáticas"), {
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
+      target: { value: "1.5" }
+    });
+    expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
       target: { value: "999" }
+    });
+    expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
+      target: { value: "100" }
     });
     fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
       target: { value: "launch" }
@@ -184,6 +202,46 @@ describe("SettingsPage", () => {
             intervalHours: 1,
             editCountThreshold: 10,
             retentionCount: 100
+          }
+        }
+      });
+    });
+  });
+
+  it("requires then saves the retention limit when automatic backups are disabled", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
+
+    const retentionInput = screen.getByLabelText("Copias de seguridad que se conservan");
+    expect(retentionInput).toBeEnabled();
+    expect(screen.getByText(/de 1 a 100 por tipo: contactos .*importar, restaurar, eliminar o restablecer.*automáticas, configuración al importar, buscas antes de importar y buscas antes de eliminar/i)).toBeInTheDocument();
+
+    fireEvent.change(retentionInput, { target: { value: "0" } });
+    expect(retentionInput).toHaveAttribute("aria-invalid", "true");
+    expect(retentionInput).toHaveAttribute("aria-describedby", "settings-autobackup-retention-hint settings-autobackup-retention-error");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(retentionInput, { target: { value: "7" } });
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    await waitFor(() => {
+      expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledWith({
+        editorName: "Samuel",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: {
+          showInactiveByDefault: false,
+          autoBackup: {
+            enabled: false,
+            trigger: "launch",
+            intervalHours: 2,
+            editCountThreshold: 10,
+            retentionCount: 7
           }
         }
       });
