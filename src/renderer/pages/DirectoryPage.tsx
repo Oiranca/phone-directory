@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
-import type { ContactRecord, PhoneContact, SocialContact, SocialPlatform } from "../../shared/types/contact";
+import type { ContactRecord, PhoneContact, SocialPlatform } from "../../shared/types/contact";
 import { APP_HEADER_HEIGHT_CSS_VAR } from "../components/layout/AppShell";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatePanel } from "../components/feedback/StatePanel";
@@ -183,58 +183,6 @@ const CopyIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7.5V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 20 6v7.5a2.25 2.25 0 0 1-2.25 2.25H16M6.25 8h7.5A2.25 2.25 0 0 1 16 10.25v7.5A2.25 2.25 0 0 1 13.75 20h-7.5A2.25 2.25 0 0 1 4 17.75v-7.5A2.25 2.25 0 0 1 6.25 8Z" />
   </svg>
 );
-
-/**
- * Derives a safe external URL for a social contact.
- * XSS-safe approach: only `http:` and `https:` schemes are allowed.
- * For handle-only entries, a platform-specific base URL is used.
- * Returns null when no safe URL can be derived.
- */
-const SAFE_SOCIAL_BASE_URLS: Partial<Record<SocialPlatform, string>> = {
-  instagram: "https://instagram.com/",
-  twitter: "https://twitter.com/",
-  facebook: "https://facebook.com/",
-  linkedin: "https://linkedin.com/in/",
-  youtube: "https://youtube.com/@",
-  tiktok: "https://tiktok.com/@"
-};
-
-const ALLOWED_URL_SCHEMES = new Set(["https:", "http:"]);
-
-const getSafeSocialUrl = (social: SocialContact): string | null => {
-  // Prefer explicit URL when present.
-  if (social.url) {
-    try {
-      const parsed = new URL(social.url);
-      if (ALLOWED_URL_SCHEMES.has(parsed.protocol)) {
-        return social.url;
-      }
-    } catch {
-      // Malformed URL — fall through to handle derivation.
-    }
-  }
-
-  // Derive from handle + platform base URL.
-  if (social.handle) {
-    const base = SAFE_SOCIAL_BASE_URLS[social.platform];
-    if (base) {
-      // Encode the handle to prevent injection via handle values.
-      return `${base}${encodeURIComponent(social.handle)}`;
-    }
-    // For platforms without a known base URL (web, other), attempt to treat
-    // the handle itself as a direct URL if it is http(s):.
-    try {
-      const parsed = new URL(social.handle);
-      if (ALLOWED_URL_SCHEMES.has(parsed.protocol)) {
-        return social.handle;
-      }
-    } catch {
-      // Not a valid URL — fall through to null (rendered as plain text).
-    }
-  }
-
-  return null;
-};
 
 // Card and detail flags describe every phone, including non-preferred ones.
 const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
@@ -861,48 +809,27 @@ export const DirectoryPage = () => {
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
-                      {(selectedRecord.contactMethods.socials ?? []).map((social) => {
-                        const safeUrl = getSafeSocialUrl(social);
-                        return (
-                          <div key={social.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                  {social.label ?? socialPlatformLabels[social.platform]}
-                                </p>
-                                {/* XSS-safe: only render anchor when URL passes scheme allowlist.
-                                    Never use dangerouslySetInnerHTML. React auto-escapes text nodes. */}
-                                {safeUrl ? (
-                                  <a
-                                    href={safeUrl}
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      // In Electron, open external URLs through the IPC-safe path.
-                                      // window.open with noopener is the renderer-safe fallback.
-                                      window.open(safeUrl, "_blank", "noopener,noreferrer");
-                                    }}
-                                    rel="noopener noreferrer"
-                                    className="mt-2 block break-words text-base font-semibold text-scs-blue underline underline-offset-2 hover:text-scs-blueDark [overflow-wrap:anywhere]"
-                                  >
-                                    {social.handle ?? safeUrl}
-                                  </a>
-                                ) : (
-                                  <p className="mt-2 break-words text-base font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
-                                    {social.handle ?? social.url ?? "—"}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-2 shrink-0">
-                                {social.isPrimary ? (
-                                  <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
-                                    Principal
-                                  </span>
-                                ) : null}
-                              </div>
+                      {(selectedRecord.contactMethods.socials ?? []).map((social) => (
+                        <div key={social.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                {social.label ?? socialPlatformLabels[social.platform]}
+                              </p>
+                              <p className="mt-2 break-words text-base font-semibold text-scs-blueDark [overflow-wrap:anywhere]">
+                                {social.handle ?? social.url ?? "—"}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                              {social.isPrimary ? (
+                                <span className="rounded-full bg-scs-mist px-3 py-1.5 text-xs font-semibold text-scs-blueDark">
+                                  Principal
+                                </span>
+                              ) : null}
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -88,6 +88,31 @@ describe("AppDataService", () => {
     expect(copiedDataset.records).toHaveLength(defaultContacts.records.length);
   });
 
+  it("keeps current contacts when returning to an existing managed data file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const managedFilePath = path.join(testRoot, "data", "contacts.json");
+    const customDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDirectory);
+    const customFilePath = path.join(customDirectory, "contacts.json");
+    await service.saveSettings(buildEditableSettings({ dataFilePath: customFilePath }));
+
+    const currentContacts = {
+      ...defaultContacts,
+      records: [{ ...defaultContacts.records[0]!, displayName: "Current contact" }],
+      metadata: { ...defaultContacts.metadata, recordCount: 1 }
+    };
+    await fs.writeFile(customFilePath, JSON.stringify(currentContacts));
+
+    await service.saveSettings(buildEditableSettings());
+
+    expect(JSON.parse(await fs.readFile(managedFilePath, "utf8"))).toEqual(currentContacts);
+    const backupNames = await fs.readdir(path.join(testRoot, "backups"));
+    expect(backupNames.some((name) => name.startsWith("contacts-before-path-change-"))).toBe(true);
+  });
+
   it("rejects a custom backup directory that does not exist", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const missingBackupDirectory = path.join(testRoot, "missing-backups");
@@ -1702,6 +1727,40 @@ describe("AppDataService", () => {
     if (process.platform !== "win32") {
       expect((await fs.stat(firstBackupPath)).mode & 0o777).toBe(0o600);
       expect((await fs.stat(secondBackupPath)).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it("refuses to export over live contacts or managed settings", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new AppDataService({ beepersService: new BeepersService() });
+    await service.ensureInitialFiles();
+
+    for (const fileName of ["contacts.json", "settings.json"]) {
+      const filePath = path.join(testRoot, "data", fileName);
+      const before = await fs.readFile(filePath, "utf8");
+      await expect(service.exportDataset(filePath)).rejects.toThrow("fuera de los datos de HospiAgenda");
+      expect(await fs.readFile(filePath, "utf8")).toBe(before);
+    }
+  });
+
+  it("refuses to export over custom contacts or a backup file", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new AppDataService({ beepersService: new BeepersService() });
+    await service.ensureInitialFiles();
+
+    const customDirectory = path.join(testRoot, "custom-data");
+    await fs.mkdir(customDirectory);
+    const customContactsPath = path.join(customDirectory, "contacts.json");
+    await service.saveSettings(buildEditableSettings({ dataFilePath: customContactsPath }));
+    const backupPath = path.join(testRoot, "backups", "keep.json");
+    await fs.writeFile(backupPath, "backup contents");
+
+    for (const filePath of [customContactsPath, backupPath]) {
+      const before = await fs.readFile(filePath, "utf8");
+      await expect(service.exportDataset(filePath)).rejects.toThrow("fuera de los datos de HospiAgenda");
+      expect(await fs.readFile(filePath, "utf8")).toBe(before);
     }
   });
 

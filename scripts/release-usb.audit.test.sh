@@ -32,10 +32,10 @@ FAILURES=()
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf '  PASS: %s\n' "$1"; }
 fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); FAILURES+=("$1"); printf '  FAIL: %s\n' "$1"; }
 
-if [[ "$(tr -d '[:space:]' < "$REPO_ALLOWLIST")" == '[]' ]]; then
-  pass "repository allowlist stays empty while the raw audit is clean"
+if node -e 'const a=require(process.argv[1]); process.exit(a.length === 1 && a[0].id === "GHSA-vfj7-8cjw-p6xm" && a[0].package === "braces" && a[0].severity === "high" ? 0 : 1)' "$REPO_ALLOWLIST"; then
+  pass "repository allowlist contains only the reviewed braces advisory"
 else
-  fail "repository allowlist contains stale entries"
+  fail "repository allowlist differs from the reviewed braces advisory"
 fi
 
 assert_exit_0() {
@@ -223,6 +223,10 @@ case "\${1:-}" in
       *)
         if ! printf '%s' "\$eb_argv" | grep -qw -- '--dir'; then
           printf 'FAKE-PNPM: Linux electron-builder missing --dir (argv: %s)\n' "\$eb_argv" >&2
+          exit 92
+        fi
+        if ! printf '%s' "\$eb_argv" | grep -qw -- '--x64'; then
+          printf 'FAKE-PNPM: Linux electron-builder missing --x64 (argv: %s)\n' "\$eb_argv" >&2
           exit 92
         fi
         mkdir -p '${sandbox}/dist-portable/linux-unpacked'
@@ -3823,10 +3827,10 @@ if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST89"; t
 else
   fail "Commit2 e2e audited: manifest missing PASSED line (got: $(cat "$MANIFEST89" 2>/dev/null || echo MISSING))"
 fi
-if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED (allowlist 0 entries)' "$MANIFEST89"; then
-  pass "Commit2 e2e audited: clean production allowlist count is zero"
+if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED (allowlist 1 entries)' "$MANIFEST89"; then
+  pass "Commit2 e2e audited: production allowlist count is one"
 else
-  fail "Commit2 e2e audited: manifest does not record an empty production allowlist"
+  fail "Commit2 e2e audited: manifest does not record the reviewed production allowlist"
 fi
 assert_packaged_smoke_gate "$SANDBOX89" linux "Commit2 e2e audited"
 rm -rf "$SANDBOX89" "$BIN89"

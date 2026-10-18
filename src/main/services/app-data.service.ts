@@ -52,7 +52,7 @@ import {
   readJsonFile,
   writeJsonFile
 } from "../utils/fs-json.js";
-import { getContactsFilePath, getManagedBackupDirectory, getSettingsFilePath } from "../utils/paths.js";
+import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
 import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizeDisplayName, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
@@ -226,12 +226,22 @@ export class AppDataService {
 
     await this.validateEditableSettings(nextSettings, currentSettings);
 
-    if (
-      !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) &&
-      !(await this.fileExists(nextSettings.dataFilePath))
-    ) {
-      const currentContacts = await this.readContacts(currentSettings);
-      await this.writeDatasetToPath(nextSettings.dataFilePath, currentContacts);
+    if (!this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath)) {
+      const targetExists = await this.fileExists(nextSettings.dataFilePath);
+      if (await this.fileExists(currentSettings.dataFilePath)) {
+        const currentContacts = await this.readContacts(currentSettings);
+        if (targetExists) {
+          await this.createManagedBackupCopy(
+            nextSettings,
+            "contacts-before-path-change",
+            "No se pudo proteger el directorio anterior al cambiar la ruta de datos.",
+            nextSettings.dataFilePath
+          );
+        }
+        await this.writeDatasetToPath(nextSettings.dataFilePath, currentContacts);
+      } else if (!targetExists) {
+        await this.readContacts(currentSettings);
+      }
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
@@ -399,11 +409,26 @@ export class AppDataService {
       beepers
     });
     const directory = path.dirname(targetFilePath);
+    const protectedDestinationMessage = "Elige una ubicación fuera de los datos de HospiAgenda para exportar.";
 
     try {
       await ensureDirectory(directory);
+      const target = await this.resolveCanonicalDataFilePath(targetFilePath, protectedDestinationMessage, true);
+      const activeContacts = await this.resolveCanonicalDataFilePath(settings.dataFilePath, protectedDestinationMessage, false);
+      const managedDataDirectory = await this.resolveCanonicalDirectoryPath(getManagedDataDirectory(), protectedDestinationMessage);
+      const backupDirectory = await this.resolveCanonicalDirectoryPath(settings.backupDirectoryPath, protectedDestinationMessage);
+      const inside = (parent: string) => {
+        const relative = path.relative(parent, target);
+        return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      };
+      if (this.pathsMatch(target, activeContacts) || inside(managedDataDirectory) || inside(backupDirectory)) {
+        throw new Error(protectedDestinationMessage);
+      }
       await writeJsonFile(targetFilePath, envelope);
     } catch (error) {
+      if (error instanceof Error && error.message === protectedDestinationMessage) {
+        throw error;
+      }
       throw this.toFilesystemError(
         error,
         "No se pudo exportar el directorio al destino seleccionado.",

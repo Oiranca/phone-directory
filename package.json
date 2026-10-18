@@ -23,7 +23,7 @@
     "build:dist": "pnpm run build && electron-builder --dir",
     "build:dist:win": "pnpm run build && electron-builder --win --x64 --dir",
     "build:dist:mac": "pnpm run build && electron-builder --mac --dir",
-    "build:dist:linux": "pnpm run build && electron-builder --linux --dir",
+    "build:dist:linux": "pnpm run build && electron-builder --linux --x64 --dir",
     "release:usb": "bash scripts/release-usb.sh",
     "test:audit-gate": "bash scripts/release-usb.audit.test.sh",
     "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
@@ -55,8 +55,8 @@
     "@vitejs/plugin-react": "5.1.0",
     "agent-browser": "0.37.1",
     "autoprefixer": "^10.4.20",
-    "concurrently": "^10.0.4",
-    "electron": "^43.4.0",
+    "concurrently": "^10.0.6",
+    "electron": "^43.8.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -68,7 +68,7 @@
     "typescript-eslint": "^8.68.0",
     "vite": "^7.3.6",
     "vitest": "^4.1.11",
-    "wait-on": "^9.1.0"
+    "wait-on": "^9.5.1"
   },
   "build": {
     "appId": "com.oiranca.phone-directory",
