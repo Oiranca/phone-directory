@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+/* Agent documentation contains examples that are not app utilities. */
+@source "../../";
+@source "../../../index.html";
 
 @theme {
   --color-scs-blue: #005DA8;
