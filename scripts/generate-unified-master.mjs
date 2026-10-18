@@ -15,6 +15,14 @@ const fold = (value) => clean(value).normalize("NFKD").replace(/\p{M}/gu, "").to
 const digits = (value) => clean(value).replace(/\D/g, "");
 const filled = (value) => clean(value).length > 0;
 const isPagerNumber = (value) => /^\d[\d\s.\-]*$/.test(value) && value.length <= 20;
+const confirmedPersonLinks = [
+  { firstName: "Rosa", service: "Asesoría Jurídica", extension: "70907", title: "SECRETARÍA ASESORÍA JURÍDICA" }
+];
+const confirmedPersonLink = (record) => confirmedPersonLinks.find((person) =>
+  fold(record.displayName) === fold(person.firstName) &&
+  fold(record.organization.service) === fold(person.service) &&
+  record.contactMethods.phones.some((entry) => digits(entry.number) === person.extension)
+);
 
 const phone = (number, kind, label, extension, id) => ({
   id,
@@ -33,7 +41,13 @@ const addPhone = (record, candidate) => {
     if (!existing.extension && candidate.extension) existing.extension = candidate.extension;
     existing.confidential ||= candidate.confidential;
     existing.noPatientSharing ||= candidate.noPatientSharing;
+    if (candidate.isPrimary) {
+      for (const entry of record.contactMethods.phones) entry.isPrimary = entry === existing;
+    }
     return;
+  }
+  if (candidate.isPrimary) {
+    for (const entry of record.contactMethods.phones) entry.isPrimary = false;
   }
   record.contactMethods.phones.push(candidate);
 };
@@ -80,10 +94,12 @@ const readBeeperRows = (filePath) => {
 const beeperKey = (row) => row.beepers.length
   ? [fold(row.service), ...row.beepers.map(fold).sort()].join("|")
   : [fold(row.service), fold(row.name), fold(row.category), digits(row.extension), digits(row.corporate)].join("|");
-const compatible = (left, right) =>
-  ["name", "category", "schedule"].every((field) =>
+const compatible = (left, right) => {
+  if (Boolean(left.name) !== Boolean(right.name) || fold(left.name) !== fold(right.name)) return false;
+  return ["category", "schedule"].every((field) =>
     !left[field] || !right[field] || fold(left[field]) === fold(right[field])
   );
+};
 
 const mergeBeeperRows = (rows, review) => {
   const groups = new Map();
@@ -92,7 +108,6 @@ const mergeBeeperRows = (rows, review) => {
     const matches = groups.get(key) ?? [];
     const target = matches.find((candidate) => compatible(candidate, row));
     if (!target) {
-      if (matches.length) review.push({ kind: "beeper-identity", service: row.service, beepers: row.beepers, sources: [matches[0].source, row.source], rows: [matches[0].row, row.row], names: [matches[0].name, row.name], categories: [matches[0].category, row.category] });
       matches.push({ ...row, comments: row.comments ? [row.comments] : [], sources: [{ file: row.source, sheet: row.sheet, row: row.row }] });
       groups.set(key, matches);
       continue;
@@ -128,61 +143,87 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     throw new Error("Phone source must be an array of objects.");
   }
 
-  const records = structuredClone(agenda.dataset.records);
+  const records = structuredClone(agenda.dataset.records).filter((record) =>
+    record.contactMethods.phones.length || record.beepers.length
+  );
+  for (const record of records) {
+    const sourcePhones = record.contactMethods.phones;
+    record.contactMethods.phones = [];
+    for (const entry of sourcePhones) addPhone(record, entry);
+    const person = confirmedPersonLink(record);
+    if (person) record.person = { ...record.person, firstName: person.firstName };
+  }
   const review = [];
   const sourceRows = normalizeWorkbookRowsFromFile(agendaPath).rows;
-  let recoveredAgendaRows = 0;
+  let skippedAgendaRows = 0;
   for (const issue of agenda.preview.rowIssues) {
     const raw = sourceRows[issue.rowNumber - 2];
     if (!raw?.displayName || !issue.messages.every((message) => message.includes("Cada fila necesita al menos"))) {
       throw new Error(`Agenda row ${issue.rowNumber} needs manual correction before generating the master.`);
     }
-    const record = blankContact(`cnt_master_agenda_${issue.rowNumber}`, raw.externalId, raw.displayName, raw.service, now);
-    record.organization.role = raw.role || undefined;
-    record.notes = raw.notes || undefined;
-    records.push(record);
-    recoveredAgendaRows += 1;
-    review.push({ kind: "agenda-without-contact-method", row: issue.rowNumber, externalId: raw.externalId, displayName: raw.displayName, service: raw.service });
+    skippedAgendaRows += 1;
   }
 
   const agendaRecords = [...records];
   let matchedJson = 0;
+  let separateSharedExtensionCount = 0;
+  const conflictedLocationFields = new Map();
+  const jsonOnlyRecords = new Map();
+  const mergeLocation = (record, incomingLocation) => {
+    record.location ??= {};
+    const conflicts = conflictedLocationFields.get(record.id) ?? new Set();
+    for (const [field, incoming] of Object.entries(incomingLocation)) {
+      if (!incoming || conflicts.has(field)) continue;
+      const current = record.location[field];
+      if (current && fold(current) !== fold(incoming)) {
+        delete record.location[field];
+        conflicts.add(field);
+      } else if (!current) {
+        record.location[field] = incoming;
+      }
+    }
+    conflictedLocationFields.set(record.id, conflicts);
+  };
   for (const [index, row] of jsonRows.entries()) {
     const extension = clean(row["Ext."]);
     const fullNumber = clean(row["Número"]);
     const service = clean(row.Servicio);
     const title = clean(row.Titular);
-    if (!fullNumber) review.push({ kind: "json-extension-only", jsonRow: index + 1, extension, title, service });
+    if (!extension && !fullNumber) continue;
     const candidates = agendaRecords.filter((record) => extension && record.contactMethods.phones.some((entry) =>
       digits(entry.number) === digits(extension) || digits(entry.extension) === digits(extension)
     ));
     const sourceLocation = { center: clean(row.Centro), floor: clean(row.Nivel), text: clean(row["Ubicación"]) };
-    const locationCompatible = (record) => Object.entries(sourceLocation).every(([field, value]) =>
-      !value || !record.location?.[field] || fold(record.location[field]) === fold(value)
-    );
-    const phoneCompatible = (record) => !fullNumber || record.contactMethods.phones.every((entry) =>
-      digits(entry.number) !== digits(fullNumber) || !entry.extension || digits(entry.extension) === digits(extension)
-    );
-    const match = candidates.length === 1 && service && fold(candidates[0].organization.service) === fold(service) && locationCompatible(candidates[0]) && phoneCompatible(candidates[0])
-      ? candidates[0] : undefined;
-    const candidatePhone = phone(fullNumber || extension, fullNumber ? "external" : "internal", undefined, fullNumber ? extension : undefined, `ph_master_json_${index + 1}`);
+    const identityMatches = candidates.filter((record) => {
+      if (service && fold(record.organization.service) !== fold(service)) return false;
+      const person = confirmedPersonLink(record);
+      return title && [record.displayName, record.organization.role, person?.title]
+        .some((value) => value && fold(value) === fold(title));
+    });
+    const match = identityMatches.length === 1 ? identityMatches[0] : undefined;
+    const addJsonPhones = (record) => {
+      if (extension) {
+        const primary = phone(extension, "internal", undefined, undefined, `ph_master_json_ext_${index + 1}`);
+        primary.isPrimary = true;
+        addPhone(record, primary);
+      }
+      if (fullNumber) addPhone(record, phone(fullNumber, "external", undefined, extension, `ph_master_json_${index + 1}`));
+    };
     if (match) {
       matchedJson += 1;
-      addPhone(match, candidatePhone);
-      match.location ??= {};
-      match.location.center ??= clean(row.Centro) || undefined;
-      match.location.floor ??= clean(row.Nivel) || undefined;
-      match.location.text ??= clean(row["Ubicación"]) || undefined;
-      if (title && fold(title) !== fold(match.displayName) && !match.aliases.some((alias) => fold(alias) === fold(title))) {
-        match.aliases.push(title);
-        review.push({ kind: "json-name-variant", jsonRow: index + 1, agendaExternalId: match.externalId, names: [match.displayName, title], service, extension });
-      }
+      addJsonPhones(match);
+      mergeLocation(match, sourceLocation);
+      const person = confirmedPersonLink(match);
+      if (person && fold(person.title) === fold(title)) match.organization.role ??= title;
       continue;
     }
-    if (candidates.length) review.push({
-      kind: "json-identity", jsonRow: index + 1, title, service, extension, fullNumber,
-      candidates: candidates.map((candidate) => ({ externalId: candidate.externalId, displayName: candidate.displayName, service: candidate.organization.service }))
-    });
+    if (candidates.length) separateSharedExtensionCount += 1;
+    const jsonKey = [title, service, extension, fullNumber].map(fold).join("|");
+    const prior = jsonOnlyRecords.get(jsonKey);
+    if (prior) {
+      mergeLocation(prior, sourceLocation);
+      continue;
+    }
     const record = blankContact(`cnt_master_json_${index + 1}`, `telefonos-json-${index + 1}`, title || service || `Teléfono ${index + 1}`, service, now);
     record.location = {
       center: clean(row.Centro) || undefined,
@@ -190,8 +231,9 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       text: clean(row["Ubicación"]) || undefined
     };
     record.source = { externalId: record.externalId, sheetSlug: "telefonos-json", sheetRow: String(index + 1) };
-    addPhone(record, candidatePhone);
+    addJsonPhones(record);
     records.push(record);
+    jsonOnlyRecords.set(jsonKey, record);
   }
 
   const allBeeperRows = [...readBeeperRows(agendaPath), ...readBeeperRows(beeperPath)];
@@ -202,7 +244,9 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
   const contactCandidates = [...records];
   let matchedBeeperContacts = 0;
   for (const [index, row] of beeperRows.entries()) {
+    if (!row.beepers.length && !row.extension && !row.corporate) continue;
     const candidate = matchUnique(contactCandidates, (record) =>
+      row.name && fold(record.displayName) === fold(row.name) &&
       fold(record.organization.service) === fold(row.service) &&
       row.beepers.some((code) => record.beepers.some((entry) => fold(entry.number) === fold(code)))
     );
@@ -211,13 +255,11 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       [candidate.organization.schedule, row.schedule]
     ].every(([left, right]) => !left || !right || fold(left) === fold(right));
     const match = metadataCompatible ? candidate : undefined;
-    if (candidate && !metadataCompatible) review.push({ kind: "beeper-contact-identity", service: row.service, beepers: row.beepers, beeperSources: row.sources, agendaExternalId: candidate.externalId });
     const record = match ?? blankContact(`cnt_master_beeper_${index + 1}`, `beeper-${index + 1}`, row.name || row.service, row.service, now);
     if (match) matchedBeeperContacts += 1;
     if (!match) records.push(record);
     if (row.name && fold(row.name) !== fold(record.displayName) && !record.aliases.some((alias) => fold(alias) === fold(row.name))) {
       record.aliases.push(row.name);
-      if (match) review.push({ kind: "beeper-name-variant", beeperSources: row.sources, agendaExternalId: record.externalId, names: [record.displayName, row.name] });
     }
     record.organization.role ??= row.category || undefined;
     record.organization.schedule ??= row.schedule || undefined;
@@ -235,15 +277,37 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     }
   }
 
+  for (const record of records) {
+    const phones = record.contactMethods.phones;
+    if (!phones.some((entry) => digits(entry.number).length >= 7)) continue;
+    const primary = phones.find((entry) => digits(entry.number).length <= 6 && entry.isPrimary) ??
+      phones.find((entry) => digits(entry.number).length <= 6);
+    if (!primary) continue;
+    for (const entry of phones) {
+      entry.isPrimary = entry === primary;
+      if (entry !== primary && digits(entry.number).length >= 7) {
+        entry.kind = "external";
+        entry.extension ||= primary.number;
+      }
+    }
+    phones.splice(phones.indexOf(primary), 1);
+    phones.unshift(primary);
+  }
+
   const importedBeepers = new Map();
   for (const source of [...agenda.beepersParseResult.records, ...list.beepersParseResult.records]) {
     const key = `${fold(source.department)}|${fold(source.deviceNumber)}`;
     const candidates = importedBeepers.get(key) ?? [];
-    const current = candidates.find((candidate) => ["name", "category", "service"].every((field) =>
-      !candidate[field] || !source[field] || fold(candidate[field]) === fold(source[field])
-    ));
+    const current = candidates.find((candidate) => {
+      if (!source.name || !candidate.name) {
+        return !source.name && !candidate.name &&
+          ["category", "service"].every((field) => !candidate[field] || !source[field] || fold(candidate[field]) === fold(source[field]));
+      }
+      return fold(candidate.name) === fold(source.name) && ["category", "service"].every((field) =>
+        !candidate[field] || !source[field] || fold(candidate[field]) === fold(source[field])
+      );
+    });
     if (!current) {
-      if (candidates.length) review.push({ kind: "beeper-catalog-identity", service: source.department, deviceNumber: source.deviceNumber, names: [candidates[0].name, source.name], categories: [candidates[0].category, source.category], sourceSheets: [candidates[0].sourceSheet, source.sourceSheet], sourceRows: [candidates[0].sourceRow, source.sourceRow] });
       candidates.push({ ...source });
       importedBeepers.set(key, candidates);
     } else {
@@ -273,9 +337,10 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
   });
   const summary = {
     agendaContacts: agenda.dataset.records.length,
-    agendaRowsRecovered: recoveredAgendaRows,
+    agendaRowsSkipped: skippedAgendaRows,
     jsonRows: jsonRows.length,
     jsonMatched: matchedJson,
+    separateSharedExtensionCount,
     beeperSourceRows: allBeeperRows.length,
     beeperContacts: beeperRows.length,
     beeperContactsMatched: matchedBeeperContacts,
