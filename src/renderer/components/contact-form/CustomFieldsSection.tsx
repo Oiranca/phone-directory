@@ -32,7 +32,7 @@ export const CustomFieldsSection = ({
   clearFieldError
 }: Props) => (
   <section className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div>
         <h3 className="text-lg font-semibold text-scs-blueDark">Campos personalizados</h3>
         <p className="mt-1 text-sm text-slate-600">
