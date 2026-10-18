@@ -1,8 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-scs-blue: #005DA8;
+  --color-scs-blueDark: #003F73;
+  --color-scs-yellow: #F3C400;
+  --color-scs-ink: #15304B;
+  --color-scs-mist: #E8F1F8;
+  --color-scs-danger: #B42318;
+  --color-scs-warning: #B54708;
+  --shadow-panel: 0 12px 32px rgba(21, 48, 75, 0.08);
+}
 
 @layer base {
+  *, ::before, ::after, ::backdrop, ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
   :root {
     color-scheme: light;
     font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
@@ -25,6 +38,18 @@
 
   p {
     @apply leading-relaxed max-w-[70ch];
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
   }
 }
 

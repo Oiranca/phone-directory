@@ -30,10 +30,11 @@ The following vulnerabilities have been addressed as of this release:
 - **react-router / react-router-dom**: Upgraded to `>=6.30.4` (patches GHSA-2j2x-hqr9-3h42 — moderate severity open redirect vulnerability)
 - **esbuild** (via vite): Upgraded to vite `>=6.4.3` which pulls esbuild `>=0.25.0` (patches GHSA-67mh-4wv8-2f99 — moderate severity CORS bypass during development)
 - **Build and release toolchain**: Upgraded direct tooling (`concurrently`, `electron-builder`, `postcss`, `vite`, and `wait-on`) and pinned patched transitives with `pnpm.overrides` for `form-data`, `js-yaml`, `tar`, `tmp`, `undici`, and `ws`.
+- **`braces` (GHSA-vfj7-8cjw-p6xm)**: Tailwind CSS 4 removes the development dependency path that installed the vulnerable package. The release allowlist is empty.
 
 ### Accepted Risks
 
-- **`braces@3.0.3` (high, CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm)**: The only dependency path is through the `tailwindcss` development dependency (`chokidar` and `micromatch`). It processes project-controlled build patterns and is not bundled into the Electron app. No patched `braces` release exists. Keep untrusted patterns out of the build, track an upstream fix or a Tailwind dependency path that removes `braces`, and remove this exception once the raw audit is clear. The release gate records this exception through [`scripts/audit-allowlist.json`](scripts/audit-allowlist.json).
+No active high or critical advisory exceptions. The release allowlist is [`scripts/audit-allowlist.json`](scripts/audit-allowlist.json).
 
 ## Import Rate Limiting
 
