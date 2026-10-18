@@ -619,8 +619,30 @@ try {
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Mostrador E2E");
   await waitFor("imported contact", () => browserCommand("eval", 'Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Mostrador E2E"))') === "true");
 
+  browserCommand("eval", "document.documentElement.style.fontSize = '200%'");
   clickRole("link", "Nuevo registro");
   await waitFor("new contact form", () => browserCommand("is", "visible", "#displayName") === "true");
+  const formReflowMetrics = () => JSON.parse(browserCommand("eval", `(() => {
+    const buttons = ["Añadir teléfono", "Añadir correo", "Añadir campo"].map(label => {
+      const button = [...document.querySelectorAll("button")].find(item => item.textContent.trim() === label);
+      return button ? { label, right: button.getBoundingClientRect().right, direction: getComputedStyle(button.parentElement).flexDirection } : null;
+    });
+    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, buttons };
+  })()`));
+  for (const [width, direction] of [[320, "column"], [640, "column"], [768, "row"]]) {
+    browserCommand("set", "viewport", String(width), "844");
+    try {
+      await waitFor(`new contact form ${width}px reflow`, () => {
+        const metrics = formReflowMetrics();
+        return metrics.innerWidth === width && metrics.scrollWidth <= width &&
+          metrics.buttons.every(button => button && button.right <= width && button.direction === direction);
+      });
+    } catch (error) {
+      throw new Error(`New contact form did not reflow at ${width}px and 200% text: ${JSON.stringify(formReflowMetrics())}`, { cause: error });
+    }
+  }
+  browserCommand("eval", "document.documentElement.style.fontSize = ''");
+  browserCommand("set", "viewport", "1440", "920");
   browserCommand("fill", "#displayName", "Laboratorio E2E");
   browserCommand("fill", 'input[id^="phone-number-"]', "88123");
   clickRole("button", "Crear registro");

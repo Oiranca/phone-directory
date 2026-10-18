@@ -43,7 +43,7 @@ export const PhonesSection = ({
 
   return (
   <section className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50/60 p-4 sm:space-y-4 sm:p-5">
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <h3 className="text-lg font-semibold text-scs-blueDark">Teléfonos</h3>
       <button
         ref={addPhoneButtonRef}
