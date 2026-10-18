@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withLazyRouteBoundary } from "./LazyRouteBoundary";
 
@@ -69,15 +70,19 @@ describe("withLazyRouteBoundary", () => {
   // rejects on its first invocation and resolves on its second.
   it("actually re-attempts the dynamic import and recovers when Reintentar is clicked", async () => {
     let attempt = 0;
+    let resolveRetry: (() => void) | undefined;
+    const retryPromise = new Promise<{ default: () => ReactElement }>((resolve) => {
+      resolveRetry = () => resolve({ default: () => <div>Contenido recuperado</div> });
+    });
     const factory = () => {
       attempt += 1;
       if (attempt === 1) {
         return Promise.reject(new Error("Failed to fetch dynamically imported module"));
       }
-      return Promise.resolve({ default: () => <div>Contenido recuperado</div> });
+      return retryPromise;
     };
 
-    render(withLazyRouteBoundary(factory));
+    render(<main id="main-content" tabIndex={-1}>{withLazyRouteBoundary(factory)}</main>);
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -86,8 +91,38 @@ describe("withLazyRouteBoundary", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
+    expect(await screen.findByText("Cargando…")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveFocus();
+
+    if (!resolveRetry) {
+      throw new Error("Retry import resolver was not registered");
+    }
+    resolveRetry();
+
     expect(await screen.findByText("Contenido recuperado")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(attempt).toBe(2);
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
+
+  it("moves focus to the retry error heading when a second import attempt fails", async () => {
+    let attempt = 0;
+    const factory = () => {
+      attempt += 1;
+      return Promise.reject(new Error("Failed to fetch dynamically imported module"));
+    };
+
+    render(<main id="main-content" tabIndex={-1}>{withLazyRouteBoundary(factory)}</main>);
+
+    const retryButton = await screen.findByRole("button", { name: "Reintentar" });
+    retryButton.focus();
+    fireEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(attempt).toBe(2);
+    });
+
+    expect(await screen.findByRole("heading", { name: "No se pudo cargar esta sección" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 });
