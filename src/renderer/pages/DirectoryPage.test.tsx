@@ -91,6 +91,31 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("shows social details as text without an external link", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.socials = [{
+      id: "soc_review",
+      platform: "web",
+      handle: "Hospital website",
+      url: "https://example.org",
+      isPrimary: false
+    }];
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Hospital website")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Hospital website" })).not.toBeInTheDocument();
+  });
+
   it("announces result counts as a polite atomic status update", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records.push({
