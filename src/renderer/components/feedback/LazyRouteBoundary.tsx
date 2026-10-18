@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy } from "react";
+import { Component, Suspense, createRef, lazy } from "react";
 import type { ComponentType, ErrorInfo, ReactElement, ReactNode } from "react";
 import { StatePanel } from "./StatePanel";
 import { LoadingStatus } from "./LoadingStatus";
@@ -53,6 +53,8 @@ interface LazyRouteBoundaryState {
  * clearing the error, so the next render attempts the import from scratch.
  */
 class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRouteBoundaryState> {
+  private readonly errorTitleRef = createRef<HTMLHeadingElement>();
+
   constructor(props: LazyRouteBoundaryProps) {
     super(props);
     this.state = { error: null, LazyComponent: props.initialLazyComponent, factory: props.factory };
@@ -76,8 +78,16 @@ class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRoute
     console.error("[LazyRouteErrorBoundary] Failed to load a route chunk:", error, errorInfo);
   }
 
+  componentDidUpdate(_previousProps: LazyRouteBoundaryProps, previousState: LazyRouteBoundaryState): void {
+    if (!previousState.error && this.state.error) {
+      this.errorTitleRef.current?.focus();
+    }
+  }
+
   private handleRetry = (): void => {
-    this.setState({ error: null, LazyComponent: lazy(this.props.factory) });
+    this.setState({ error: null, LazyComponent: lazy(this.props.factory) }, () => {
+      document.getElementById("main-content")?.focus();
+    });
   };
 
   render(): ReactNode {
@@ -89,6 +99,7 @@ class LazyRouteErrorBoundary extends Component<LazyRouteBoundaryProps, LazyRoute
           role="alert"
           title="No se pudo cargar esta sección"
           message="Ha ocurrido un error al cargar esta parte de la aplicación. Esto puede deberse a una actualización incompleta. Intenta de nuevo o reinicia la aplicación."
+          titleRef={this.errorTitleRef}
           action={
             <button
               type="button"
