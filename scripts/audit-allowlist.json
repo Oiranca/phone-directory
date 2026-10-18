@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "severity": "high",
+    "reason": "Tailwind build dependency only; no fixed release exists and project-controlled patterns are used",
+    "expires": "2027-01-18"
+  }
+]

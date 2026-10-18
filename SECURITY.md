@@ -33,8 +33,7 @@ The following vulnerabilities have been addressed as of this release:
 
 ### Accepted Risks
 
-No advisories are currently accepted. The machine-readable source of truth is
-[`scripts/audit-allowlist.json`](scripts/audit-allowlist.json), which remains empty while the raw audit is clean.
+- **`braces@3.0.3` (high, CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm)**: The only dependency path is through the `tailwindcss` development dependency (`chokidar` and `micromatch`). It processes project-controlled build patterns and is not bundled into the Electron app. No patched `braces` release exists. Keep untrusted patterns out of the build, track an upstream fix or a Tailwind dependency path that removes `braces`, and remove this exception once the raw audit is clear. The release gate records this exception through [`scripts/audit-allowlist.json`](scripts/audit-allowlist.json).
 
 ## Import Rate Limiting
 

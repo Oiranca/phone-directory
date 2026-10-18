@@ -262,7 +262,7 @@ log "Building portable app artifact"
 case "$PLATFORM" in
   win) pnpm exec electron-builder --win --x64 --dir ;;
   mac) pnpm exec electron-builder --mac --dir ;;
-  linux) pnpm exec electron-builder --linux --dir ;;
+  linux) pnpm exec electron-builder --linux --x64 --dir ;;
 esac
 
 HOST_PLATFORM="$(node -p "process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : process.platform === 'linux' ? 'linux' : process.platform")"
