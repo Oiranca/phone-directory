@@ -371,7 +371,7 @@ export const BeepersPage = () => {
                 placeholder="Número, titular, departamento o rol…"
                 type="search"
                 title="Buscar buscas — pulsa / para enfocar"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <button
@@ -418,7 +418,7 @@ export const BeepersPage = () => {
                 required
                 value={formData.deviceNumber}
                 onChange={(e) => setField("deviceNumber", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -431,7 +431,7 @@ export const BeepersPage = () => {
                 required={!editingImportedId}
                 value={formData.assignedTo}
                 onChange={(e) => setField("assignedTo", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -444,7 +444,7 @@ export const BeepersPage = () => {
                 required
                 value={formData.department}
                 onChange={(e) => setField("department", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
             <div>
@@ -457,7 +457,7 @@ export const BeepersPage = () => {
                 required={!editingImportedId}
                 value={formData.role}
                 onChange={(e) => setField("role", e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
           </div>
@@ -489,7 +489,7 @@ export const BeepersPage = () => {
                     type="text"
                     value={formData.group ?? ""}
                     onChange={(e) => setField("group", e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
                   />
                 </div>
               </div>

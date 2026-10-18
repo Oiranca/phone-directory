@@ -100,7 +100,7 @@ export const ComboboxField = ({
   ].filter(Boolean).join(" ") || undefined;
 
   const inputClassName = [
-    "mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none ring-scs-blue transition",
+    "mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue transition",
     invalid
       ? "border-scs-danger focus-visible:border-scs-danger focus-visible:ring-2 focus-visible:ring-scs-danger/20"
       : "border-slate-200 focus-visible:border-scs-blue focus-visible:ring-2",

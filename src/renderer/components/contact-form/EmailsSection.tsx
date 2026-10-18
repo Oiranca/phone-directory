@@ -84,7 +84,7 @@ export const EmailsSection = ({
                 id={`email-label-${email.id}`}
                 value={email.label ?? ""}
                 onChange={(event) => updateEmail(email.id, { label: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
             <div>
@@ -104,7 +104,7 @@ export const EmailsSection = ({
                 }}
                 aria-invalid={!!fieldErrors[`contactMethods.emails.${index}.address`]}
                 aria-describedby={fieldErrors[`contactMethods.emails.${index}.address`] ? `email-address-${email.id}-error` : undefined}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
               {fieldErrors[`contactMethods.emails.${index}.address`] && (
                 <p id={`email-address-${email.id}-error`} role="alert" className="mt-2 text-sm text-red-600">

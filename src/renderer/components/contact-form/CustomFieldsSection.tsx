@@ -110,7 +110,7 @@ export const CustomFieldsSection = ({
                 }}
                 aria-invalid={!!fieldErrors[`customFields.${index}.value`]}
                 aria-describedby={fieldErrors[`customFields.${index}.value`] ? `custom-field-value-${field.id}-error` : undefined}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
               {fieldErrors[`customFields.${index}.value`] && (
                 <p id={`custom-field-value-${field.id}-error`} role="alert" className="mt-2 text-sm text-red-600">

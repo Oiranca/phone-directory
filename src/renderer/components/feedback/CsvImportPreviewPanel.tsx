@@ -131,7 +131,7 @@ const ConflictRecordCol = ({
             <li
               key={`${phone.number}|${phone.label ?? ""}|${phoneIndex}`}
               className={[
-                "rounded px-1.5 py-0.5 text-xs",
+                "rounded-sm px-1.5 py-0.5 text-xs",
                 isMatchingPhone(phone.number)
                   ? "bg-amber-100 font-semibold text-amber-900 ring-1 ring-amber-400"
                   : "text-slate-700"
@@ -160,7 +160,7 @@ const ConflictRecordCol = ({
             <li
               key={`${email.address}|${email.label ?? ""}|${emailIndex}`}
               className={[
-                "rounded px-1.5 py-0.5 text-xs",
+                "rounded-sm px-1.5 py-0.5 text-xs",
                 isMatchingEmail(email.address)
                   ? "bg-amber-100 font-semibold text-amber-900 ring-1 ring-amber-400"
                   : "text-slate-700"
@@ -995,7 +995,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       )}
 
       {/* Single sticky confirm footer — CTA appears in one place only */}
-      <div className="sticky bottom-[72px] mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-sm sm:bottom-0">
+      <div className="sticky bottom-[72px] mt-6 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-xs backdrop-blur-xs sm:bottom-0">
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex flex-col items-end gap-1">
             {hasUnresolvedConflicts && (

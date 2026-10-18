@@ -257,7 +257,8 @@ export const SettingsPage = () => {
   return (
     <section aria-labelledby="settings-page-title" className="space-y-6">
       <h2 id="settings-page-title" className="sr-only">Configuración</h2>
-      <section className="rounded-3xl bg-white p-6 shadow-panel">
+      {/* Tailwind 4's space-y no longer adds a top gap after the absolute sr-only heading. */}
+      <section className="mt-6 rounded-3xl bg-white p-6 shadow-panel">
         <div>
           <h3 className="break-words text-xl font-semibold text-scs-blueDark">Configuración básica</h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
@@ -274,7 +275,7 @@ export const SettingsPage = () => {
                 onChange={handleEditorNameChange}
                 placeholder="Ej. Turno mañana"
                 aria-describedby="settings-editor-name-hint"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
               />
               <p id="settings-editor-name-hint" className="mt-2 text-xs text-slate-500">
                 Se usa en auditoría, importaciones CSV y futuras exportaciones.
@@ -292,7 +293,7 @@ export const SettingsPage = () => {
                   checked={autoBackupEnabled}
                   onChange={handleAutoBackupEnabledChange}
                   aria-describedby="settings-autobackup-enabled-desc"
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
+                  className="mt-1 h-4 w-4 rounded-sm border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
                 />
                 <div className="min-w-0">
                   <label htmlFor="settings-autobackup-enabled" className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</label>
@@ -313,7 +314,7 @@ export const SettingsPage = () => {
                       setSaveError("");
                     }}
                     disabled={!autoBackupEnabled}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
                   >
                     <option value="launch">Al abrir la app</option>
                     <option value="intervalHours">Cada N horas</option>
@@ -335,7 +336,7 @@ export const SettingsPage = () => {
                         setAutoBackupIntervalHours(event.target.value);
                         setSaveError("");
                       }}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                   </div>
                 ) : null}
@@ -354,7 +355,7 @@ export const SettingsPage = () => {
                         setAutoBackupEditCountThreshold(event.target.value);
                         setSaveError("");
                       }}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                   </div>
                 ) : null}
@@ -376,7 +377,7 @@ export const SettingsPage = () => {
                       ? "settings-autobackup-retention-hint settings-autobackup-retention-error"
                       : "settings-autobackup-retention-hint"}
                     aria-invalid={Boolean(retentionError)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                   />
                   <p id="settings-autobackup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
                     De 1 a 100 por tipo: contactos, buscas, configuración y automáticas.
@@ -406,7 +407,7 @@ export const SettingsPage = () => {
                       onChange={handleDataFilePathChange}
                       placeholder="/ruta/al/directorio/contacts.json"
                       aria-describedby="settings-data-file-path-hint"
-                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"
@@ -414,7 +415,7 @@ export const SettingsPage = () => {
                       disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                       aria-label={isBrowsingDataFile ? "Examinando archivos…" : "Seleccionar archivo de datos"}
                       aria-busy={isBrowsingDataFile}
-                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-xs transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isBrowsingDataFile ? "Examinando…" : "Examinar"}
                     </button>
@@ -434,7 +435,7 @@ export const SettingsPage = () => {
                       onChange={handleBackupDirectoryPathChange}
                       placeholder="/ruta/a/la/carpeta/copia-de-seguridad"
                       aria-describedby="settings-backup-directory-path-hint"
-                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
                     />
                     <button
                       type="button"
@@ -442,7 +443,7 @@ export const SettingsPage = () => {
                       disabled={isBrowsingDataFile || isBrowsingBackupDir || isSaving || isResettingPaths}
                       aria-label="Seleccionar carpeta de copias de seguridad"
                       aria-busy={isBrowsingBackupDir}
-                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="focus-ring shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-xs transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isBrowsingBackupDir ? "…" : "Examinar"}
                     </button>
@@ -480,7 +481,7 @@ export const SettingsPage = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={isSaving || isResettingPaths || !isDirty || Boolean(retentionError)}
-              className="focus-ring w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="focus-ring w-full rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white shadow-xs disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {isSaving ? "Guardando…" : "Guardar configuración"}
             </button>

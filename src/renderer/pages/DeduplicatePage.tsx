@@ -469,7 +469,7 @@ export const DeduplicatePage = () => {
           id="deduplicate-page-title"
           ref={headingRef}
           tabIndex={-1}
-          className="text-2xl font-semibold text-scs-blueDark focus:outline-none"
+          className="text-2xl font-semibold text-scs-blueDark focus:outline-hidden"
         >
           Duplicados detectados
         </h2>
