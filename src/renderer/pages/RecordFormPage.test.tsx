@@ -235,7 +235,8 @@ describe("RecordFormPage", () => {
     expect(await screen.findByDisplayValue(defaultContacts.records[0].displayName)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Eliminar contacto" })).toBeInTheDocument();
-    expect(screen.getByText("Más datos de identidad").closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("Más datos de identidad").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByLabelText("Identificador externo")).not.toBeInTheDocument();
     expect(screen.getByText("Más datos del contacto").closest("details")).toHaveAttribute("open");
     expect(screen.getByText("Más opciones del teléfono").closest("details")).toHaveAttribute("open");
     expect(screen.queryByLabelText("Nombre")).not.toBeInTheDocument();
@@ -275,6 +276,8 @@ describe("RecordFormPage", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.updateRecord).toHaveBeenCalledTimes(1);
     });
+    const [, submittedPayload] = (window.hospitalDirectory.updateRecord as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(submittedPayload.externalId).toBe(defaultContacts.records[0].externalId);
     expect(router.state.location.pathname).toBe("/");
   });
 
@@ -345,6 +348,7 @@ describe("RecordFormPage", () => {
       },
       location: {
         ...defaultContacts.records[0].location,
+        center: "Hospital Central",
         sector: "Enfermería",
         section: "Consulta"
       }
@@ -376,6 +380,7 @@ describe("RecordFormPage", () => {
       .calls[0]!;
     expect(submittedPayload.organization.role).toBe("Enfermera");
     expect(submittedPayload.organization.schedule).toBe("8:00-15:00");
+    expect(submittedPayload.location.center).toBe("Hospital Central");
     expect(submittedPayload.location.sector).toBe("Enfermería");
     expect(submittedPayload.location.section).toBe("Consulta");
   });

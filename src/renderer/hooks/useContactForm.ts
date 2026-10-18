@@ -15,6 +15,7 @@ export type ContactFormState = Omit<EditableContactRecord, "person" | "location"
     lastName: string;
   };
   location: {
+    center: string;
     building: string;
     floor: string;
     room: string;
@@ -143,6 +144,7 @@ const createEmptyFormState = (): ContactFormState => ({
     specialty: ""
   },
   location: {
+    center: "",
     building: "",
     floor: "",
     room: "",
@@ -180,6 +182,7 @@ const toFormState = (record: EditableContactRecord): ContactFormState => ({
     schedule: record.organization.schedule
   },
   location: {
+    center: record.location?.center ?? "",
     building: record.location?.building ?? "",
     floor: record.location?.floor ?? "",
     room: record.location?.room ?? "",

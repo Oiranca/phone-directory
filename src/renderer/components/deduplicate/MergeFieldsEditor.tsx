@@ -4,6 +4,7 @@ import type { ContactRecord, EditablePhoneContact } from "../../../shared/types/
 import { normalizePhoneForMergeDedup } from "../../../shared/utils/matching";
 import { recordTypeOptions } from "../../hooks/useContactForm";
 import { SelectField } from "../inputs/SelectField";
+import { getVisiblePhoneLabel } from "../../utils/phoneLabel";
 
 export interface MergeFieldsDraft {
   displayName: string;
@@ -194,7 +195,7 @@ export const MergeFieldsEditor = ({
               (p) => normalizePhoneForMergeDedup(p.number) === normalizePhoneForMergeDedup(phone.number)
             );
             const canCopyLabel =
-              discardMatch && (discardMatch.label ?? "") !== (phone.label ?? "");
+              discardMatch && (getVisiblePhoneLabel(discardMatch.label) ?? "") !== (getVisiblePhoneLabel(phone.label) ?? "");
 
             return (
               <li key={phone.id} className="rounded-xl border border-slate-200 bg-white p-3">
@@ -204,7 +205,7 @@ export const MergeFieldsEditor = ({
                   </label>
                   <input
                     id={`merge-phone-label-${phone.id}`}
-                    value={phone.label ?? ""}
+                    value={getVisiblePhoneLabel(phone.label) ?? ""}
                     placeholder="Etiqueta"
                     onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
                     className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
@@ -231,10 +232,10 @@ export const MergeFieldsEditor = ({
                 {canCopyLabel && (
                   <button
                     type="button"
-                    onClick={() => updatePhone(phone.id, { label: discardMatch!.label })}
+                    onClick={() => updatePhone(phone.id, { label: getVisiblePhoneLabel(discardMatch!.label) })}
                     className="focus-ring mt-1.5 rounded-lg text-xs font-medium text-scs-blue hover:underline"
                   >
-                    Usar etiqueta de la otra ficha: «{discardMatch!.label || "(sin etiqueta)"}»
+                    Usar etiqueta de la otra ficha: «{getVisiblePhoneLabel(discardMatch!.label) || "(sin etiqueta)"}»
                   </button>
                 )}
               </li>
@@ -251,7 +252,7 @@ export const MergeFieldsEditor = ({
                 onClick={() => addPhoneFromDiscard(phone)}
                 className="focus-ring block rounded-lg text-xs font-medium text-scs-blue hover:underline"
               >
-                Añadir de la otra ficha: {phone.label ? `${phone.label}: ${phone.number}` : phone.number}
+                Añadir de la otra ficha: {getVisiblePhoneLabel(phone.label) ? `${getVisiblePhoneLabel(phone.label)}: ${phone.number}` : phone.number}
               </button>
             ))}
           </div>

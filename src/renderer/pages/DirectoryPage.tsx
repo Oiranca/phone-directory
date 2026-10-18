@@ -12,6 +12,7 @@ import { formatLocationFloor, formatLocationRoom } from "../../shared/utils/cont
 import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 import { DirectoryHighlightCard } from "../components/directory/DirectoryHighlightCard";
 import { GENERIC_CCEE_APPOINTMENTS } from "../../shared/constants/directoryHighlights";
+import { getVisiblePhoneLabel } from "../utils/phoneLabel";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -59,6 +60,7 @@ const serviceContainsDisplayName = (service: string, displayName: string): boole
 const buildLocationTitleFallback = (location: ContactRecord["location"]): string => {
   const seen = new Set<string>();
   return [
+    location?.center,
     location?.building,
     formatLocationFloor(location?.floor),
     formatLocationRoom(location?.room),
@@ -541,15 +543,6 @@ export const DirectoryPage = () => {
                   </div>
                   </div>
                 </button>
-                {showPhoneOnCard && primaryPhone && (
-                  <a
-                    href={`tel:${primaryPhone.number}`}
-                    aria-label={`Llamar a ${buildDisplayTitle(record.displayName, record.organization, record.location)}`}
-                    className="focus-ring flex min-h-11 items-center justify-center rounded-b-2xl border-t border-slate-200 px-4 text-sm font-semibold text-scs-blue hover:bg-scs-mist"
-                  >
-                    Llamar {primaryPhone.number}
-                  </a>
-                )}
               </li>
             );
           })}
@@ -735,7 +728,7 @@ export const DirectoryPage = () => {
                         <div key={phone.id} data-testid={`contact-phone-${phone.id}`} className="rounded-2xl border border-slate-200 bg-white p-4">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{phone.label ?? "Teléfono"}</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{getVisiblePhoneLabel(phone.label) ?? "Teléfono"}</p>
                             <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
                             {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
                             {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}

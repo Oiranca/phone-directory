@@ -4,6 +4,7 @@ import { normalizePhoneForDedup } from "../../../shared/utils/matching";
 import { RECORD_TYPE_LABELS } from "../../../shared/constants/catalogs";
 import type { RecordType } from "../../../shared/constants/catalogs";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { getVisiblePhoneLabel } from "../../utils/phoneLabel";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -147,7 +148,7 @@ const ConflictRecordCol = ({
                 </span>
               )}
               {phone.number}
-              {phone.label && <span className="ml-1 text-slate-500">({phone.label})</span>}
+              {getVisiblePhoneLabel(phone.label) && <span className="ml-1 text-slate-500">({getVisiblePhoneLabel(phone.label)})</span>}
             </li>
           ))}
         </ul>

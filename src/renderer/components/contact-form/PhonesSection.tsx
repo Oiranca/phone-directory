@@ -4,6 +4,7 @@ import { normalizePhoneForStorage } from "../../../shared/utils/matching";
 import { SelectField } from "../inputs/SelectField";
 import type { ContactFormState, PendingFocusTarget } from "../../hooks/useContactForm";
 import { createPhoneDraft, phoneKindOptions } from "../../hooks/useContactForm";
+import { getVisiblePhoneLabel } from "../../utils/phoneLabel";
 
 type Props = {
   phones: ContactFormState["contactMethods"]["phones"];
@@ -156,7 +157,7 @@ export const PhonesSection = ({
 
           <details
             className="mt-4 rounded-2xl border border-slate-200"
-            open={expandedPhones[phone.id] ?? Boolean(phone.label || phone.notes || phone.kind !== "internal")}
+            open={expandedPhones[phone.id] ?? Boolean(getVisiblePhoneLabel(phone.label) || phone.notes || phone.kind !== "internal")}
             onToggle={(event) => {
               const isOpen = event.currentTarget.open;
               setExpandedPhones((current) => ({ ...current, [phone.id]: isOpen }));
@@ -170,7 +171,7 @@ export const PhonesSection = ({
                 <label htmlFor={`phone-label-${phone.id}`} className="text-sm font-medium text-slate-700">Etiqueta</label>
                 <input
                   id={`phone-label-${phone.id}`}
-                  value={phone.label ?? ""}
+                  value={getVisiblePhoneLabel(phone.label) ?? ""}
                   onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />

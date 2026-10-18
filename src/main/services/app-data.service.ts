@@ -1200,6 +1200,7 @@ export class AppDataService {
       location:
         keepRecord.location || discardRecord.location
           ? {
+              center: keepRecord.location?.center || discardRecord.location?.center,
               building: keepRecord.location?.building || discardRecord.location?.building,
               floor: keepRecord.location?.floor || discardRecord.location?.floor,
               room: keepRecord.location?.room || discardRecord.location?.room,
@@ -2269,6 +2270,7 @@ export class AppDataService {
       location:
         currentRecord.location ?? importedRecord.location
           ? {
+              center: currentRecord.location?.center ?? importedRecord.location?.center,
               building: currentRecord.location?.building ?? importedRecord.location?.building,
               floor: currentRecord.location?.floor ?? importedRecord.location?.floor,
               room: currentRecord.location?.room ?? importedRecord.location?.room,

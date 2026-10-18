@@ -3,6 +3,7 @@ import type { ContactRecord } from "../../shared/types/contact";
 import type { DuplicatePair, DuplicateRecordSummary } from "../../shared/types/duplicate";
 import { useToast } from "../components/feedback/ToastRegion";
 import { toCompactToastMessage } from "../utils/toastMessage";
+import { getVisiblePhoneLabel } from "../utils/phoneLabel";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { MergeLossPreview } from "../components/deduplicate/MergeLossPreview";
 import {
@@ -553,7 +554,7 @@ export const DeduplicatePage = () => {
                         <ul className="mt-3 space-y-1">
                           {record.phones.map((phone) => (
                             <li key={phone.id} className="text-sm text-slate-700">
-                              {phone.label ? <span className="font-medium">{phone.label}: </span> : null}
+                              {getVisiblePhoneLabel(phone.label) ? <span className="font-medium">{getVisiblePhoneLabel(phone.label)}: </span> : null}
                               {phone.number}
                             </li>
                           ))}

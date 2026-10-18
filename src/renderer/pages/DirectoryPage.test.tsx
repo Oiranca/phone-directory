@@ -91,6 +91,43 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
   });
 
+  it("shows phone numbers as text without a call link", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("928000000")).toBeInTheDocument();
+    expect(document.querySelector('a[href^="tel:"]')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Llamar /)).not.toBeInTheDocument();
+  });
+
+  it("does not show the source filename as a phone label", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[1]!.contactMethods.phones[0]!.label = "telefonos.json";
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: contacts.records[1]!.id,
+      isLoading: false,
+      bootstrapStatus: "success"
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByText("928000000")).toBeInTheDocument();
+    expect(within(detail).getByText("Teléfono")).toBeInTheDocument();
+    expect(within(detail).queryByText("telefonos.json")).not.toBeInTheDocument();
+  });
+
   it("shows social details as text without an external link", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.socials = [{
@@ -914,6 +951,7 @@ describe("DirectoryPage", () => {
     const target = contacts.records[1]!;
     target.location = {
       ...target.location,
+      center: "Hospital Central",
       floor: "6",
       room: "301"
     };
@@ -942,6 +980,7 @@ describe("DirectoryPage", () => {
     const locationText = within(detail).getByText(/Planta 6/);
     expect(locationText).toBeInTheDocument();
     expect(locationText.textContent).toContain("Planta 6");
+    expect(locationText.textContent).toContain("Hospital Central");
     expect(locationText.textContent).toContain("Hab 301");
     expect(locationText.textContent).not.toMatch(/·\s*6\s*·/);
   });

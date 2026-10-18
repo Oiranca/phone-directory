@@ -55,7 +55,7 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
 
       <details
         className="rounded-2xl border border-slate-200 bg-white"
-        open={detailsOpen ?? Boolean(formState.externalId || formState.status === "inactive" || formState.person.firstName || formState.person.lastName)}
+        open={detailsOpen ?? Boolean(formState.status === "inactive" || formState.person.firstName || formState.person.lastName)}
         onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
         <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blue">
@@ -112,15 +112,6 @@ export const IdentitySection = ({ formState, fieldErrors, setFormState, displayN
             </div>
           )}
 
-          <div>
-            <label htmlFor="externalId" className="text-sm font-medium text-slate-700">Identificador externo</label>
-            <input
-              id="externalId"
-              value={formState.externalId}
-              onChange={(event) => setFormState((current) => ({ ...current, externalId: event.target.value }))}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
-            />
-          </div>
         </div>
       </details>
     </section>

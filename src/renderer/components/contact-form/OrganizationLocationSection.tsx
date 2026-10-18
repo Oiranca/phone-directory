@@ -93,6 +93,22 @@ export const OrganizationLocationSection = ({ formState, setFormState, available
 
     <div className="grid gap-4 sm:grid-cols-2">
       <div>
+        <label htmlFor="center" className="text-sm font-medium text-slate-700">
+          Centro
+        </label>
+        <input
+          id="center"
+          value={formState.location.center}
+          onChange={(event) =>
+            setFormState((current) => ({
+              ...current,
+              location: { ...current.location, center: event.target.value }
+            }))
+          }
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+        />
+      </div>
+      <div>
         <label htmlFor="building" className="text-sm font-medium text-slate-700">
           Edificio
         </label>

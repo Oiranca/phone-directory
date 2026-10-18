@@ -21,8 +21,8 @@ const parseRendererUrl = (value: string | undefined, isE2E: boolean) => {
   return `${parsed.origin}${normalizedPathname}`;
 };
 
-const parseUserDataPath = (value: string | undefined, isE2E: boolean) => {
-  if (!isE2E || !value) {
+const parseUserDataPath = (value: string | undefined) => {
+  if (app.isPackaged || !value) {
     return null;
   }
 
@@ -54,7 +54,7 @@ export const env = {
   backgroundSmoke: parseBooleanFlag(process.env.ELECTRON_BACKGROUND_SMOKE),
   openDevTools: parseBooleanFlag(process.env.ELECTRON_OPEN_DEVTOOLS),
   rendererUrl: parseRendererUrl(process.env.ELECTRON_RENDERER_URL, isE2E),
-  userDataPath: parseUserDataPath(process.env.ELECTRON_USER_DATA_PATH, isE2E),
+  userDataPath: parseUserDataPath(process.env.ELECTRON_USER_DATA_PATH),
   e2eOpenDialogPaths: isE2E ? parseJsonStringArray(process.env.E2E_OPEN_DIALOG_PATHS) : [],
   e2eSaveDialogPaths: isE2E ? parseJsonStringArray(process.env.E2E_SAVE_DIALOG_PATHS) : []
 };

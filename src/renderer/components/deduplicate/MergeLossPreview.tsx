@@ -1,5 +1,6 @@
 import type { DuplicateRecordSummary } from "../../../shared/types/duplicate";
 import { normalizePhoneForMergeDedup } from "../../../shared/utils/matching";
+import { getVisiblePhoneLabel } from "../../utils/phoneLabel";
 
 /**
  * A field from the discarded record that will be lost during merge because
@@ -115,7 +116,7 @@ export function MergeLossPreview({ keepRecord, discardRecord }: MergeLossPreview
               {phonesAdded.length === 1 ? "1 teléfono" : `${phonesAdded.length} teléfonos`} del
               descartado:{" "}
               {phonesAdded
-                .map((p) => (p.label ? `${p.label}: ${p.number}` : p.number))
+                .map((p) => (getVisiblePhoneLabel(p.label) ? `${getVisiblePhoneLabel(p.label)}: ${p.number}` : p.number))
                 .join(", ")}
               .
             </span>

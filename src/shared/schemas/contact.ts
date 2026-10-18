@@ -142,6 +142,7 @@ const contactRecordSchemaBase = z.object({
     schedule: z.string().optional()
   }),
   location: z.object({
+    center: z.string().optional(),
     building: z.string().optional(),
     floor: z.string().optional(),
     room: z.string().optional(),
@@ -359,6 +360,7 @@ export const editableContactRecordSchema = z.object({
     schedule: optionalTextField()
   }),
   location: z.object({
+    center: optionalTextField(),
     building: optionalTextField(),
     floor: optionalTextField(),
     room: optionalTextField(),

@@ -146,6 +146,7 @@ export interface EditableContactRecord {
     schedule?: string;
   };
   location?: {
+    center?: string;
     building?: string;
     floor?: string;
     room?: string;

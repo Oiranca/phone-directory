@@ -63,6 +63,12 @@ describe("searchRecords", () => {
     expect(result[0]?.displayName).toBe("Centro de Salud Demo - Información");
   });
 
+  it("finds a record by center", () => {
+    const withCenter = structuredClone(records);
+    withCenter[0]!.location = { ...withCenter[0]!.location, center: "Hospital Central" };
+    expect(searchRecords(withCenter, "Hospital Central", defaultFilters)[0]?.id).toBe(withCenter[0]!.id);
+  });
+
   it("filters inactive records when showInactive is false", () => {
     const recordsWithInactive = structuredClone(records);
     recordsWithInactive[1]!.status = "inactive";

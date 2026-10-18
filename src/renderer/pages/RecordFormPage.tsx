@@ -115,6 +115,7 @@ export const RecordFormPage = () => {
     formState.organization.service ||
     formState.organization.area ||
     formState.organization.specialty ||
+    formState.location.center ||
     formState.location.building ||
     formState.location.floor ||
     formState.location.room ||
