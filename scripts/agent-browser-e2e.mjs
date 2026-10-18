@@ -339,6 +339,26 @@ try {
     browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-failure.png"));
     throw new Error(`Settings reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
   }
+  const duplicateSearchReflowMetrics = () => JSON.parse(browserCommand("eval", `(() => {
+    const action = [...document.querySelectorAll('a')].find(item => item.textContent.trim() === "Buscar duplicados");
+    const actionRect = action?.getBoundingClientRect();
+    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, actionRight: actionRect?.right ?? null };
+  })()`));
+  for (const width of [640, 768]) {
+    browserCommand("set", "viewport", String(width), "844");
+    try {
+      await waitFor(`${width}px duplicate search reflow`, () => {
+        const metrics = duplicateSearchReflowMetrics();
+        return metrics.innerWidth === width && metrics.scrollWidth <= metrics.innerWidth + 1 &&
+          metrics.actionRight !== null && metrics.actionRight <= metrics.innerWidth + 1;
+      });
+    } catch (error) {
+      const failureMetrics = duplicateSearchReflowMetrics();
+      browserCommand("screenshot", path.join(visualArtifactDirectory, `settings-${width}-200-duplicate-search-failure.png`));
+      throw new Error(`Settings duplicate-search reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
+    }
+  }
+  browserCommand("set", "viewport", "320", "844");
   closeAdvancedPaths();
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada"))?.scrollIntoView()`);
   browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200.png"));
