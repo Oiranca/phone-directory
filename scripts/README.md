@@ -118,6 +118,15 @@ performance. The directory/import, privacy, and search groups use separate
 profiles and continue independently after a group fails. Checks within a
 group stop at its first failure.
 
+The same command writes the Tailwind visual baseline for Directory, New record,
+Beepers, and Settings at 320, 768, 1100, and 1440 CSS px to
+`test-results/agent-browser/tailwind-baseline/`. Each screenshot shows a focused
+control. `metrics.json` records viewport, navigation, heading, border, and
+focus styles. Compare these files with the checked-in Tailwind 3 reference in
+`docs/visual-baseline/tailwind3/`; see `docs/TAILWIND_VISUAL_BASELINE.md` for
+review steps. On macOS, follow `AGENTS.md` and launch this command through
+`launchctl submit` instead of running it in the foreground.
+
 Run the packaged startup smoke on each target OS before release handoff:
 
 ```bash

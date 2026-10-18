@@ -278,6 +278,57 @@ try {
   }
   console.log("[agent-browser-e2e] Directory layout: 8 viewports passed");
 
+  const baselineDirectory = path.join(visualArtifactDirectory, "tailwind-baseline");
+  await fs.mkdir(baselineDirectory, { recursive: true });
+  const baseline = [];
+  for (const page of [
+    { name: "directory", link: null, heading: "Búsqueda de contactos", focus: "#directory-search", border: "main li.rounded-2xl.border" },
+    { name: "new-record", link: "Nuevo registro", heading: "Alta de contacto", focus: "#displayName", border: "main section.rounded-3xl.border" },
+    { name: "beepers", link: "Buscas", heading: "Registro de Buscas", focus: "#beeper-search", border: "#beeper-search" },
+    { name: "settings", link: "Configuración", heading: "Configuración", focus: "#settings-editor-name", border: "#settings-editor-name" }
+  ]) {
+    if (page.link) await navigateWithinBudget(page.link, page.heading);
+    for (const [width, height] of [[320, 844], [768, 1024], [1100, 750], [1440, 900]]) {
+      browserCommand("set", "viewport", String(width), String(height));
+      await waitFor(`${page.name} ${width}px baseline`, () => browserCommand("eval", `(() =>
+        innerWidth === ${width} && innerHeight === ${height} && document.fonts.status === 'loaded' &&
+        Boolean(document.querySelector(${JSON.stringify(page.focus)}) && document.querySelector(${JSON.stringify(page.border)}))
+      )()`) === "true");
+      browserCommand("press", "Tab");
+      browserCommand("eval", `(() => {
+        document.querySelector(${JSON.stringify(page.focus)}).focus();
+        window.scrollTo(0, 0);
+      })()`);
+      await delay(250);
+      const metrics = JSON.parse(browserCommand("eval", `(() => {
+        const focus = document.querySelector(${JSON.stringify(page.focus)});
+        const border = document.querySelector(${JSON.stringify(page.border)});
+        const rail = document.querySelector('nav[aria-label="Navegación principal"]').parentElement;
+        const focusStyle = getComputedStyle(focus);
+        const borderStyle = getComputedStyle(border);
+        const headingStyle = getComputedStyle(document.querySelector('main h2'));
+        const railStyle = getComputedStyle(rail);
+        return {
+          route: ${JSON.stringify(page.name)}, viewport: { width: innerWidth, height: innerHeight },
+          documentWidth: document.documentElement.scrollWidth,
+          navigation: { width: rail.getBoundingClientRect().width, position: railStyle.position },
+          heading: { fontFamily: headingStyle.fontFamily, fontSize: headingStyle.fontSize, fontWeight: headingStyle.fontWeight, lineHeight: headingStyle.lineHeight },
+          border: { selector: ${JSON.stringify(page.border)}, width: borderStyle.borderTopWidth, color: borderStyle.borderTopColor, radius: borderStyle.borderTopLeftRadius },
+          focus: { selector: ${JSON.stringify(page.focus)}, visible: focus.matches(':focus-visible'), boxShadow: focusStyle.boxShadow, outlineStyle: focusStyle.outlineStyle }
+        };
+      })()`));
+      if (!metrics.focus.visible || metrics.documentWidth > width + 1) {
+        throw new Error(`Invalid ${page.name} ${width}px visual baseline: ${JSON.stringify(metrics)}`);
+      }
+      browserCommand("screenshot", path.join(baselineDirectory, `${page.name}-${width}.png`));
+      baseline.push(metrics);
+    }
+  }
+  await fs.writeFile(path.join(baselineDirectory, "metrics.json"), `${JSON.stringify(baseline, null, 2)}\n`);
+  await navigateWithinBudget("Directorio", "Búsqueda de contactos");
+  browserCommand("set", "viewport", "1440", "900");
+  console.log("[agent-browser-e2e] Tailwind baseline: 16 focused screenshots and computed styles passed");
+
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Centro de Salud Demo");
   await waitFor("seeded search result", () => hasText("Centro de Salud Demo"));
   clickRole("button", "Centro de Salud Demo - Información");
