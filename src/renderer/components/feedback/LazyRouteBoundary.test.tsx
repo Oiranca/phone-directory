@@ -42,6 +42,22 @@ describe("withLazyRouteBoundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("loads the next route when its factory changes", async () => {
+    const firstFactory = () => Promise.resolve({ default: () => <div>Primera sección</div> });
+    const secondFactory = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { default: () => <div>Segunda sección</div> };
+    };
+    const { rerender } = render(withLazyRouteBoundary(firstFactory));
+
+    expect(await screen.findByText("Primera sección")).toBeInTheDocument();
+
+    rerender(withLazyRouteBoundary(secondFactory));
+
+    expect(await screen.findByText("Segunda sección")).toBeInTheDocument();
+    expect(screen.queryByText("Primera sección")).not.toBeInTheDocument();
+  });
+
   // `React.lazy()` memoizes the promise
   // returned by its factory *per call* — once that promise has rejected,
   // re-rendering the *same* lazy component reference just re-throws the

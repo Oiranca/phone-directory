@@ -82,6 +82,17 @@ let vitePort;
 
 const hasText = (value) => browserCommand("eval", `document.body.innerText.includes(${JSON.stringify(value)})`) === "true";
 const clickRole = (role, name) => browserCommand("find", "role", role, "click", "--name", name);
+const navigateWithinBudget = async (link, heading) => {
+  const startedAt = Date.now();
+  clickRole("link", link);
+  while (Date.now() - startedAt < 3_000) {
+    if (browserCommand("eval", `document.querySelector('main h2')?.textContent?.trim() === ${JSON.stringify(heading)}`) === "true") {
+      return Date.now() - startedAt;
+    }
+    await delay(50);
+  }
+  throw new Error(`${link} did not render ${heading} within 3 seconds`);
+};
 const importReady = () => browserCommand("eval", `(() => {
   const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === 'Importar');
   return Boolean(button && !button.disabled && !document.querySelector('dialog[open]') &&
@@ -274,8 +285,13 @@ try {
     browserCommand("eval", 'Boolean(document.querySelector("a[aria-label^=\\"Editar\\"]"))') === "true");
   console.log("[agent-browser-e2e] Search opens record detail");
 
-  clickRole("link", "Configuración");
-  await waitFor("settings", () => hasText("Datos e importación"));
+  const navigationDurations = [
+    await navigateWithinBudget("Configuración", "Configuración"),
+    await navigateWithinBudget("Buscas", "Registro de Buscas"),
+    await navigateWithinBudget("Nuevo registro", "Alta de contacto"),
+    await navigateWithinBudget("Configuración", "Configuración")
+  ];
+  console.log("[agent-browser-e2e] Section navigation stayed under 3 seconds", navigationDurations);
   const retentionInput = "#settings-autobackup-retention";
   if (browserCommand("eval", `(() => {
     const input = document.querySelector(${JSON.stringify(retentionInput)});
