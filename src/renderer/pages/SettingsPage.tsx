@@ -497,7 +497,7 @@ export const SettingsPage = () => {
       </section>
 
       <section aria-labelledby="duplicate-search-title" className="rounded-3xl bg-white p-6 shadow-panel">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 id="duplicate-search-title" className="text-xl font-semibold text-scs-blueDark">
               Buscar duplicados
