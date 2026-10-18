@@ -7,6 +7,8 @@ profile and writes 16 PNGs plus `metrics.json` to
 
 The checked-in Tailwind 3 reference is in `docs/visual-baseline/tailwind3/`.
 The verified Tailwind 4 capture is in `docs/visual-baseline/tailwind4/`.
+The E2E test compares all 16 computed-style entries against the Tailwind 4
+reference and fails on any change, including borders and focus shadows.
 Compare each route at 320 × 844, 768 × 1024, 1100 × 750, and 1440 × 900 CSS
 pixels. Review navigation placement and width, text size and weight, card
 borders and radius, input focus rings, and spacing. The focused inputs are
@@ -23,5 +25,5 @@ Ignore raster differences caused only by OS font rendering when comparing
 another platform with this macOS reference.
 
 The migration in #484 regenerated the output with this same command and
-reviewed all 16 pairs. Keep both captures for review; replace either only
-after an intentional visual change has been reviewed.
+reviewed all 16 pairs. Keep both captures for review; update the Tailwind 4
+reference only after an intentional visual change has been reviewed.

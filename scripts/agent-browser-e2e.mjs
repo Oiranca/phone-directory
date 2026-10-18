@@ -9,6 +9,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
+import { assertVisualBaseline } from "./visual-baseline-metrics.mjs";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const electronBinary = createRequire(import.meta.url)("electron");
@@ -325,9 +326,12 @@ try {
     }
   }
   await fs.writeFile(path.join(baselineDirectory, "metrics.json"), `${JSON.stringify(baseline, null, 2)}\n`);
+  const reference = JSON.parse(await fs.readFile(path.join(repoRootDir,
+    "docs", "visual-baseline", "tailwind4", "metrics.json"), "utf8"));
+  assertVisualBaseline(baseline, reference);
   await navigateWithinBudget("Directorio", "Búsqueda de contactos");
   browserCommand("set", "viewport", "1440", "900");
-  console.log("[agent-browser-e2e] Tailwind baseline: 16 focused screenshots and computed styles passed");
+  console.log("[agent-browser-e2e] Tailwind baseline: 16 focused screenshots and computed styles match reference");
 
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Centro de Salud Demo");
   await waitFor("seeded search result", () => hasText("Centro de Salud Demo"));
