@@ -122,8 +122,8 @@ The same command writes the Tailwind visual baseline for Directory, New record,
 Beepers, and Settings at 320, 768, 1100, and 1440 CSS px to
 `test-results/agent-browser/tailwind-baseline/`. Each screenshot shows a focused
 control. `metrics.json` records viewport, navigation, heading, border, and
-focus styles. Compare these files with the checked-in Tailwind 3 reference in
-`docs/visual-baseline/tailwind3/`; see `docs/TAILWIND_VISUAL_BASELINE.md` for
+focus styles. Compare these files with the checked-in Tailwind 3 and 4 captures
+under `docs/visual-baseline/`; see `docs/TAILWIND_VISUAL_BASELINE.md` for
 review steps. On macOS, follow `AGENTS.md` and launch this command through
 `launchctl submit` instead of running it in the foreground.
 
