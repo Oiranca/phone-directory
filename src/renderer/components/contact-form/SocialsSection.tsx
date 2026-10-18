@@ -116,7 +116,7 @@ export const SocialsSection = ({
                   ref={(el) => { handleInputRefs.current[social.id] = el; }}
                   value={social.handle ?? ""}
                   onChange={(event) => updateSocial(social.id, { handle: event.target.value })}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
               <div>
@@ -126,7 +126,7 @@ export const SocialsSection = ({
                   id={`social-url-${social.id}`}
                   value={social.url ?? ""}
                   onChange={(event) => updateSocial(social.id, { url: event.target.value })}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
             </div>
@@ -138,7 +138,7 @@ export const SocialsSection = ({
                   id={`social-label-${social.id}`}
                   value={social.label ?? ""}
                   onChange={(event) => updateSocial(social.id, { label: event.target.value })}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
               <label className="mt-4 flex items-center gap-2 text-sm text-slate-700 xl:mt-8">

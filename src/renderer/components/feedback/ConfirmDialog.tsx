@@ -111,7 +111,7 @@ export function ConfirmDialog({
         event.preventDefault();
         if (!cancelDisabled) onCancel();
       }}
-      className={`backdrop:bg-slate-900/50 p-6 rounded-3xl shadow-xl w-full border-0 focus:outline-none ${
+      className={`backdrop:bg-slate-900/50 p-6 rounded-3xl shadow-xl w-full border-0 focus:outline-hidden ${
         children ? 'max-w-lg' : 'max-w-md'
       }`}
       aria-labelledby={titleId}

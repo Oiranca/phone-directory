@@ -126,7 +126,7 @@ describe("AppShell — default mode", () => {
     // use the shared `focus-ring` utility — with the bounded-height layout, that
     // ring rendered as full-viewport-height vertical blue lines on every route
     // change (main.focus() below always sets focus-visible for this container).
-    expect(screen.getByRole("main")).toHaveClass("focus:outline-none");
+    expect(screen.getByRole("main")).toHaveClass("focus:outline-hidden");
     expect(screen.getByRole("main")).not.toHaveClass("focus-ring");
   });
 

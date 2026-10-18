@@ -216,7 +216,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-scs-blue">Agenda Hospitalaria</p>
                 </div>
                 {isRecoveryMode ? (
-                  <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-sm">
+                  <div className="inline-flex w-fit rounded-full bg-scs-yellow px-3 py-1.5 text-sm font-semibold text-scs-blueDark shadow-xs">
                     Recuperación
                   </div>
                 ) : lastImportedAtLabel ? (
@@ -240,9 +240,9 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
             // NOT show the shared `focus-ring` visual treatment. Since this element's
             // height is bounded to (almost exactly) the viewport, that ring's
             // left/right edges rendered as two full-viewport-height vertical blue
-            // lines flanking the page on every load. `focus:outline-none` alone still
+            // lines flanking the page on every load. `focus:outline-hidden` alone still
             // suppresses the native focus outline without introducing a visible ring.
-            className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-none sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+            className="mx-auto w-full max-w-7xl px-4 py-5 focus:outline-hidden sm:px-6 sm:py-6 lg:px-8 lg:py-8"
           >
             {children}
           </main>

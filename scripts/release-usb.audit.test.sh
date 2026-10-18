@@ -32,10 +32,10 @@ FAILURES=()
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf '  PASS: %s\n' "$1"; }
 fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); FAILURES+=("$1"); printf '  FAIL: %s\n' "$1"; }
 
-if node -e 'const a=require(process.argv[1]); process.exit(a.length === 1 && a[0].id === "GHSA-vfj7-8cjw-p6xm" && a[0].package === "braces" && a[0].severity === "high" ? 0 : 1)' "$REPO_ALLOWLIST"; then
-  pass "repository allowlist contains only the reviewed braces advisory"
+if node -e 'const a=require(process.argv[1]); process.exit(Array.isArray(a) && a.length === 0 ? 0 : 1)' "$REPO_ALLOWLIST"; then
+  pass "repository allowlist is empty"
 else
-  fail "repository allowlist differs from the reviewed braces advisory"
+  fail "repository allowlist is not empty"
 fi
 
 assert_exit_0() {
@@ -3827,10 +3827,10 @@ if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED' "$MANIFEST89"; t
 else
   fail "Commit2 e2e audited: manifest missing PASSED line (got: $(cat "$MANIFEST89" 2>/dev/null || echo MISSING))"
 fi
-if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED (allowlist 1 entries)' "$MANIFEST89"; then
-  pass "Commit2 e2e audited: production allowlist count is one"
+if [[ -f "$MANIFEST89" ]] && grep -q 'Dependency audit: PASSED (allowlist 0 entries)' "$MANIFEST89"; then
+  pass "Commit2 e2e audited: production allowlist is empty"
 else
-  fail "Commit2 e2e audited: manifest does not record the reviewed production allowlist"
+  fail "Commit2 e2e audited: manifest does not record the empty production allowlist"
 fi
 assert_packaged_smoke_gate "$SANDBOX89" linux "Commit2 e2e audited"
 rm -rf "$SANDBOX89" "$BIN89"

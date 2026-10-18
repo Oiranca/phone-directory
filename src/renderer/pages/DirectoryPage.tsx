@@ -393,7 +393,7 @@ export const DirectoryPage = () => {
                 placeholder="Buscar contacto o servicio"
                 type="search"
                 title="Buscar contactos — pulsa / para enfocar"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
           </div>
@@ -414,7 +414,7 @@ export const DirectoryPage = () => {
                   className={[
                     "focus-ring rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                     isActive
-                      ? "border-scs-blue bg-scs-blue text-white shadow-sm"
+                      ? "border-scs-blue bg-scs-blue text-white shadow-xs"
                       : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                   ].join(" ")}
                 >
@@ -508,9 +508,9 @@ export const DirectoryPage = () => {
                   onClick={() => setSelectedRecordId(record.id)}
                   aria-pressed={isSelected}
                   className={[
-                    "w-full rounded-2xl p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
+                    "w-full rounded-2xl p-4 text-left transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
                     isSelected
-                      ? "bg-scs-mist shadow-sm ring-1 ring-scs-blue"
+                      ? "bg-scs-mist shadow-xs ring-1 ring-scs-blue"
                       : "hover:bg-slate-50"
                   ].join(" ")}
                 >
@@ -594,7 +594,7 @@ export const DirectoryPage = () => {
                       className={[
                           "focus-ring flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-semibold transition",
                           item === currentPage
-                            ? "bg-scs-blue text-white shadow-sm"
+                            ? "bg-scs-blue text-white shadow-xs"
                             : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                       ].join(" ")}
                     >

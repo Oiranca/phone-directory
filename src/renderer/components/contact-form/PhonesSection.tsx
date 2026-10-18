@@ -132,7 +132,7 @@ export const PhonesSection = ({
                 aria-required="true"
                 aria-invalid={!!fieldErrors[`contactMethods.phones.${index}.number`]}
                 aria-describedby={fieldErrors[`contactMethods.phones.${index}.number`] ? `phone-number-${phone.id}-error` : undefined}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
               {fieldErrors[`contactMethods.phones.${index}.number`] && (
                 <p id={`phone-number-${phone.id}-error`} role="alert" className="mt-2 text-sm text-red-600">
@@ -149,7 +149,7 @@ export const PhonesSection = ({
                 id={`phone-extension-${phone.id}`}
                 value={phone.extension ?? ""}
                 onChange={(event) => updatePhone(phone.id, { extension: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </div>
           </div>
@@ -172,7 +172,7 @@ export const PhonesSection = ({
                   id={`phone-label-${phone.id}`}
                   value={phone.label ?? ""}
                   onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
               <div>
@@ -190,7 +190,7 @@ export const PhonesSection = ({
                   id={`phone-notes-${phone.id}`}
                   value={phone.notes ?? ""}
                   onChange={(event) => updatePhone(phone.id, { notes: event.target.value })}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                 />
               </div>
             </div>

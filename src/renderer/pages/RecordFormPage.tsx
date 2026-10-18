@@ -220,7 +220,7 @@ export const RecordFormPage = () => {
                 value={formState.notes ?? ""}
                 onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
                 rows={6}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
               />
             </section>
           </div>
@@ -248,7 +248,7 @@ export const RecordFormPage = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="min-h-11 flex-1 whitespace-nowrap rounded-2xl bg-scs-blue px-2 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-60 sm:flex-none sm:px-5"
+            className="min-h-11 flex-1 whitespace-nowrap rounded-2xl bg-scs-blue px-2 py-3 text-sm font-semibold text-white shadow-xs disabled:opacity-60 sm:flex-none sm:px-5"
           >
             {isSubmitting ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear registro"}
           </button>

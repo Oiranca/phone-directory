@@ -154,7 +154,7 @@ export const MergeFieldsEditor = ({
           id="merge-override-displayName"
           value={draft.displayName}
           onChange={(event) => onChange({ ...draft, displayName: event.target.value })}
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
         />
         {discardRecord.displayName !== draft.displayName && (
           <button
@@ -207,7 +207,7 @@ export const MergeFieldsEditor = ({
                     value={phone.label ?? ""}
                     placeholder="Etiqueta"
                     onChange={(event) => updatePhone(phone.id, { label: event.target.value })}
-                    className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                    className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                   />
                   <label htmlFor={`merge-phone-number-${phone.id}`} className="sr-only">
                     Número teléfono {index + 1}
@@ -217,7 +217,7 @@ export const MergeFieldsEditor = ({
                     type="tel"
                     value={phone.number}
                     onChange={(event) => updatePhone(phone.id, { number: event.target.value })}
-                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
+                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:ring-2"
                   />
                   <button
                     type="button"

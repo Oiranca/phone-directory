@@ -70,7 +70,7 @@ export function StatePanel({ title, message, icon, action, titleAs = 'h2', title
       <TitleTag
         ref={titleRef as React.Ref<HTMLHeadingElement>}
         tabIndex={titleRef ? -1 : undefined}
-        className={`text-lg font-semibold text-scs-ink mb-2${titleRef ? ' focus:outline-none' : ''}`}
+        className={`text-lg font-semibold text-scs-ink mb-2${titleRef ? ' focus:outline-hidden' : ''}`}
       >
         {title}
       </TitleTag>
