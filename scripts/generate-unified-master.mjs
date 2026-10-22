@@ -15,6 +15,37 @@ const fold = (value) => clean(value).normalize("NFKD").replace(/\p{M}/gu, "").to
 const digits = (value) => clean(value).replace(/\D/g, "");
 const filled = (value) => clean(value).length > 0;
 const isPagerNumber = (value) => /^\d[\d\s.\-]*$/.test(value) && value.length <= 20;
+const locationColumnMap = {
+  building: ["Edificio", "Centro", "building"],
+  floor: ["Planta", "Nivel", "Piso", "floor"],
+  sector: ["Sector", "Ubicación", "sector"],
+  section: ["Sección", "section"],
+  room: ["room"],
+  text: ["locationText", "text"],
+  center: ["center"]
+};
+
+const buildLocationObject = (rawRecord) => {
+  const location = {};
+  for (const [standardKey, possibleColumns] of Object.entries(locationColumnMap)) {
+    for (const column of possibleColumns) {
+      const value = rawRecord?.[column];
+      if (value !== undefined && value !== null && clean(value)) {
+        location[standardKey] = clean(value);
+        break;
+      }
+    }
+  }
+  if (location.sector?.includes("/")) {
+    const parts = location.sector.split("/").map(clean).filter(Boolean);
+    if (parts[0]) location.building = parts[0];
+    if (parts[1]) location.sector = parts[1];
+    else delete location.sector;
+    if (parts.length > 2) location.text = [location.text, parts.slice(2).join(" / ")].filter(Boolean).join(" / ");
+  }
+  return Object.keys(location).length ? location : undefined;
+};
+
 export const departmentKeywords = new Set([
   'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco',
   'alergia', 'alergologia', 'anatomia', 'patologica', 'anestesia', 'reanimacion', 'cardiologia', 'cirugia', 'dermatologia', 'digestivo', 'endocrino', 'endocrinologia', 'ginecologia', 'obstetricia', 'tocologia', 'hematologia', 'hemoterapia', 'infecciosos', 'medicina', 'interna', 'intensiva', 'preventiva', 'microbiologia', 'parasitologia', 'nefrologia', 'neumologia', 'neurocirugia', 'neurologia', 'oftalmologia', 'oncologia', 'otorrino', 'otorrinolaringologia', 'pediatria', 'psiquiatria', 'radiologia', 'radiodiagnostico', 'rehabilitacion', 'reumatologia', 'traumatologia', 'ortopedica', 'urologia', 'vascular', 'angiologia', 'geriatria', 'maxilofacial', 'plastica', 'reparadora', 'toracica', 'paliativos', 'inmunologia', 'radiofisica', 'farmacogenetica',
@@ -71,12 +102,6 @@ const inferArea = (service) => {
 
 const tagsFrom = (value) => fold(value).split(/[^\p{L}\p{N}]+/u)
   .filter((word) => word.length > 1 && !tagStopwords.has(word));
-
-const splitLocation = (value) => {
-  const parts = clean(value).split("/").map(clean).filter(Boolean);
-  if (parts.length < 2) return { text: parts[0] || undefined };
-  return { building: parts[0], sector: parts[1], text: parts.slice(2).join(" / ") || undefined };
-};
 
 const enrichRecord = (record, review, identityConfirmed) => {
   const existingPerson = record.person?.firstName || record.person?.lastName;
@@ -246,6 +271,9 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     record.contactMethods.phones.length || record.beepers.length
   );
   for (const record of records) {
+    const location = buildLocationObject(record.location);
+    if (location) record.location = location;
+    else delete record.location;
     const sourcePhones = record.contactMethods.phones;
     record.contactMethods.phones = [];
     for (const entry of sourcePhones) addPhone(record, entry);
@@ -270,18 +298,21 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
   const jsonOnlyRecords = new Map();
   const identityConfirmedRecords = new Set();
   const mergeLocation = (record, incomingLocation) => {
-    record.location ??= {};
+    if (!incomingLocation) return;
+    const location = record.location ?? {};
     const conflicts = conflictedLocationFields.get(record.id) ?? new Set();
     for (const [field, incoming] of Object.entries(incomingLocation)) {
       if (!incoming || conflicts.has(field)) continue;
-      const current = record.location[field];
+      const current = location[field];
       if (current && fold(current) !== fold(incoming)) {
-        delete record.location[field];
+        delete location[field];
         conflicts.add(field);
       } else if (!current) {
-        record.location[field] = incoming;
+        location[field] = incoming;
       }
     }
+    if (Object.keys(location).length) record.location = location;
+    else delete record.location;
     conflictedLocationFields.set(record.id, conflicts);
   };
   for (const [index, row] of jsonRows.entries()) {
@@ -293,7 +324,7 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     const candidates = agendaRecords.filter((record) => extension && record.contactMethods.phones.some((entry) =>
       digits(entry.number) === digits(extension) || digits(entry.extension) === digits(extension)
     ));
-    const sourceLocation = { center: clean(row.Centro), floor: clean(row.Nivel), ...splitLocation(row["Ubicación"]) };
+    const sourceLocation = buildLocationObject(row);
     const identityMatches = candidates.filter((record) => {
       if (service && fold(record.organization.service) !== fold(service)) return false;
       const person = confirmedPersonLink(record);
@@ -326,11 +357,8 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       continue;
     }
     const record = blankContact(`cnt_master_json_${index + 1}`, `telefonos-json-${index + 1}`, title || service || `Teléfono ${index + 1}`, service, now);
-    record.location = {
-      center: clean(row.Centro) || undefined,
-      floor: clean(row.Nivel) || undefined,
-      ...splitLocation(row["Ubicación"])
-    };
+    const location = buildLocationObject(row);
+    if (location) record.location = location;
     record.source = { externalId: record.externalId, sheetSlug: "telefonos-json", sheetRow: String(index + 1) };
     addJsonPhones(record);
     records.push(record);

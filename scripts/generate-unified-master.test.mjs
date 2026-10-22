@@ -117,9 +117,10 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.equal(envelope.contacts.records.length, 12);
     assert.equal(envelope.contacts.records.some((record) => record.displayName === "No Phone"), false);
     const merged = envelope.contacts.records.find((record) => record.displayName === "Desk C");
-    assert.equal(merged.location.center, "Center C");
+    assert.equal(merged.location.building, "Center C");
+    assert.equal(merged.location.sector, "North block");
     assert.equal(merged.location.floor, undefined);
-    assert.equal(merged.location.text, "North block");
+    assert.equal(merged.location.center, undefined);
     assert.deepEqual(merged.contactMethods.phones.map((entry) => entry.number).sort(), ["55555", "928000001"]);
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "55555").isPrimary, true);
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "928000001").isPrimary, false);
@@ -131,7 +132,7 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Extension Only").contactMethods.phones.map((entry) => entry.number), ["88888"]);
     const deskI = envelope.contacts.records.filter((record) => record.displayName === "Desk I");
     assert.equal(deskI.length, 1);
-    assert.equal(deskI[0].location.center, "Center I");
+    assert.equal(deskI[0].location.building, "Center I");
     assert.equal(deskI[0].location.floor, undefined);
     const rosa = envelope.contacts.records.find((record) => record.displayName === "Rosa");
     assert.equal(rosa.person.firstName, "Rosa");
@@ -237,6 +238,46 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
       especialidades: 3,
       otros: 8
     });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it("maps ODS and JSON location columns without emitting empty location objects", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-location-map-"));
+  try {
+    const agendaPath = path.join(root, "agenda.xlsx");
+    const beeperPath = path.join(root, "buscas.xlsx");
+    const phonesPath = path.join(root, "telefonos.json");
+    const header = ["Nombre", "Categoría", "Servicio", "Número 1", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Número 2"];
+    writeWorkbook(agendaPath, [["Agenda", [header,
+      ["ODS Location", "", "ODS Service", "70001", "", "", "Edificio ODS", "Planta 1", "Sector ODS", "Sección ODS", "", ""]
+    ]]]);
+    writeWorkbook(beeperPath, [["Buscas Todos", [["Nombre", "Categoría", "Servicio", "Busca 1"], ["Prueba", "", "Prueba", "9001"]]]]);
+    await fs.writeFile(phonesPath, JSON.stringify([
+      { "Ext.": 70002, Servicio: "JSON Service", Titular: "JSON Location", Centro: "Centro JSON", Nivel: "Nivel 3", "Ubicación": "BLOQUE NORTE / SECTOR A / CONTROL" },
+      { "Ext.": 70003, Servicio: "JSON Alternate", Titular: "JSON Alternate Location", Edificio: "Edificio JSON", Piso: "Piso 2", Sector: "Sector JSON", "Sección": "Sección JSON" },
+      { "Ext.": 70004, Servicio: "Empty Service", Titular: "No Location" }
+    ]));
+
+    const { envelope } = await buildUnifiedMaster(agendaPath, beeperPath, phonesPath);
+    const ods = envelope.contacts.records.find((record) => record.displayName === "ODS Location");
+    assert.deepEqual(ods.location, {
+      building: "Edificio ODS", floor: "1", sector: "Sector ODS", section: "Sección ODS"
+    });
+
+    const json = envelope.contacts.records.find((record) => record.displayName === "JSON Location");
+    assert.deepEqual(json.location, {
+      building: "BLOQUE NORTE", floor: "Nivel 3", sector: "SECTOR A", text: "CONTROL"
+    });
+
+    const alternate = envelope.contacts.records.find((record) => record.displayName === "JSON Alternate Location");
+    assert.deepEqual(alternate.location, {
+      building: "Edificio JSON", floor: "Piso 2", sector: "Sector JSON", section: "Sección JSON"
+    });
+
+    const noLocation = envelope.contacts.records.find((record) => record.displayName === "No Location");
+    assert.equal(noLocation.location, undefined);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
