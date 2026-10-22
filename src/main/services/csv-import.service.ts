@@ -642,8 +642,8 @@ export const buildImportPreviewFromRows = async (
     });
 
     // Socials count as a valid contact method — a social-only row is accepted.
-    if (phones.length === 0 && emails.length === 0 && socials.length === 0 && Object.keys(location).length === 0) {
-      issues.push("Cada fila necesita al menos un teléfono, un correo, una red social o un dato de ubicación.");
+    if (phones.length === 0 && beepers.length === 0 && emails.length === 0 && socials.length === 0 && Object.keys(location).length === 0) {
+      issues.push("Cada fila necesita al menos un teléfono, una busca, un correo, una red social o un dato de ubicación.");
     }
 
     const rawStatus = maybe(row.status)?.toLowerCase();

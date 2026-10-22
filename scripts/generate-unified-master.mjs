@@ -15,6 +15,130 @@ const fold = (value) => clean(value).normalize("NFKD").replace(/\p{M}/gu, "").to
 const digits = (value) => clean(value).replace(/\D/g, "");
 const filled = (value) => clean(value).length > 0;
 const isPagerNumber = (value) => /^\d[\d\s.\-]*$/.test(value) && value.length <= 20;
+const locationColumnMap = {
+  building: ["Edificio", "Centro", "building"],
+  floor: ["Planta", "Nivel", "Piso", "floor"],
+  sector: ["Sector", "Ubicación", "sector"],
+  section: ["Sección", "section"],
+  room: ["room"],
+  text: ["locationText", "text"],
+  center: ["center"]
+};
+
+const buildLocationObject = (rawRecord) => {
+  const location = {};
+  for (const [standardKey, possibleColumns] of Object.entries(locationColumnMap)) {
+    for (const column of possibleColumns) {
+      const value = rawRecord?.[column];
+      if (value !== undefined && value !== null && clean(value)) {
+        location[standardKey] = clean(value);
+        break;
+      }
+    }
+  }
+  if (location.sector?.includes("/")) {
+    const parts = location.sector.split("/").map(clean).filter(Boolean);
+    if (parts[0]) location.building = parts[0];
+    if (parts[1]) location.sector = parts[1];
+    else delete location.sector;
+    if (parts.length > 2) location.text = [location.text, parts.slice(2).join(" / ")].filter(Boolean).join(" / ");
+  }
+  return Object.keys(location).length ? location : undefined;
+};
+
+export const departmentKeywords = new Set([
+  'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco',
+  'alergia', 'alergologia', 'anatomia', 'patologica', 'anestesia', 'reanimacion', 'cardiologia', 'cirugia', 'dermatologia', 'digestivo', 'endocrino', 'endocrinologia', 'ginecologia', 'obstetricia', 'tocologia', 'hematologia', 'hemoterapia', 'infecciosos', 'medicina', 'interna', 'intensiva', 'preventiva', 'microbiologia', 'parasitologia', 'nefrologia', 'neumologia', 'neurocirugia', 'neurologia', 'oftalmologia', 'oncologia', 'otorrino', 'otorrinolaringologia', 'pediatria', 'psiquiatria', 'radiologia', 'radiodiagnostico', 'rehabilitacion', 'reumatologia', 'traumatologia', 'ortopedica', 'urologia', 'vascular', 'angiologia', 'geriatria', 'maxilofacial', 'plastica', 'reparadora', 'toracica', 'paliativos', 'inmunologia', 'radiofisica', 'farmacogenetica',
+  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'paaf', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia',
+  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'sindicato', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'comite', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras'
+]);
+export const roleKeywords = new Set([
+  'doctor', 'doctora', 'dr', 'dra', 'facultativo', 'medico', 'especialista', 'residente', 'adjunto', 'mir', 'pir', 'eir', 'fea', 'cirujano', 'patologo',
+  'enfermero', 'enfermera', 'due', 'ats', 'matron', 'matrona', 'auxiliar', 'tcae',
+  'tecnico', 'tecnica', 'fisioterapeuta', 'psicologo', 'psicologa', 'dietista', 'nutricionista', 'foniatra', 'logopeda', 'perfusionista', 'farmaceutico', 'farmaceutica', 'fisico', 'biologo', 'optometrista',
+  'celador', 'celadora', 'jefe', 'jefa', 'supervisor', 'supervisora', 'secretario', 'secretaria', 'trabajador', 'trabajadora', 'gobernante', 'gobernanta', 'limpiador', 'limpiadora', 'informatico', 'capellan', 'electricista', 'fontanero', 'mecanico', 'conductor', 'chofer', 'ilustrador', 'fotografo', 'periodista', 'administrativo', 'administrativa', 'coordinador', 'coordinadora', 'director', 'directora', 'subdirector', 'subdirectora', 'pinche', 'peluquero', 'peluquera'
+]);
+export const supervisionKeywords = new Set(['jefe', 'jefa', 'supervisor', 'supervisora', 'director', 'directora', 'subdirector', 'subdirectora', 'coordinador', 'coordinadora']);
+const tagStopwords = new Set(["a", "al", "con", "de", "del", "el", "en", "la", "las", "los", "para", "por", "y"]);
+
+export const normalizeString = (value) => clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const wordsFrom = (value) => normalizeString(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+const containsKeyword = (words, keywords) => words.some((word) => keywords.has(word));
+const titlePrefix = /^(?:dr\.?|dra\.?|d\.?|dña\.?)\s+/i;
+const hasSharedPersonName = (value) => wordsFrom(clean(value).replace(titlePrefix, "")).some((word) => ["e", "o", "y", "u"].includes(word));
+
+export const inferRecordType = (displayName, role, service) => {
+  const name = clean(displayName);
+  const nameWords = wordsFrom(name.replace(titlePrefix, ""));
+  const roleWords = wordsFrom(role);
+  if (containsKeyword(nameWords, departmentKeywords)) return { type: titlePrefix.test(name) ? "other" : "department", confidence: "high" };
+  if (titlePrefix.test(name)) return { type: "person", confidence: "high" };
+  if (containsKeyword(nameWords.slice(0, 2), supervisionKeywords) || containsKeyword(roleWords, supervisionKeywords)) return { type: "supervision", confidence: "high" };
+  if (containsKeyword(nameWords.slice(0, 2), roleKeywords) || containsKeyword(roleWords, roleKeywords)) return { type: "person", confidence: "high" };
+  const looksLikeName = nameWords.length > 0 && nameWords.length <= 4 && !/\d/.test(name) && name !== name.toLocaleUpperCase("es");
+  if (looksLikeName && (!filled(service) || fold(name) !== fold(service))) return { type: "person", confidence: "high" };
+  return { type: "other", confidence: "low", flag: "Manual classification required" };
+};
+
+export const extractPersonName = (displayName) => {
+  const name = clean(displayName);
+  const stripped = name.replace(titlePrefix, "");
+  if (hasSharedPersonName(name)) return undefined;
+  const [firstName, ...lastName] = stripped.split(" ");
+  if (!firstName) return undefined;
+  if (stripped !== name && !lastName.length) return { lastName: firstName };
+  return { firstName, ...(lastName.length ? { lastName: lastName.join(" ") } : {}) };
+};
+
+const inferArea = (service) => {
+  const normalized = fold(service);
+  const words = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+  if (words.some((word) => /^(suministr|distribucion)/.test(word))) return "otros";
+  if (/(admision|secretari|citas|historia|archivo|informacion|factur|gestion|administracion|usuario|almacen|contratacion)/.test(normalized)) return "gestion-administracion";
+  if (/(enfermer|hospitaliz|planta|urgencia|quirofan|critico|reanimacion|cuidados|hemodin|transplant|trasplant)/.test(normalized) || words.some((word) => word === "umi" || word === "uci")) return "sanitaria-asistencial";
+  if (/(aferesis|alergia|dermatolog|endoscop|hematolog|radiolog|neurolog|oncolog|nefrolog|neumolog|especialidad|consulta)/.test(normalized)) return "especialidades";
+  return undefined;
+};
+
+const tagsFrom = (value) => fold(value).split(/[^\p{L}\p{N}]+/u)
+  .filter((word) => word.length > 1 && !tagStopwords.has(word));
+
+const enrichRecord = (record, review, identityConfirmed) => {
+  const existingPerson = record.person?.firstName || record.person?.lastName;
+  const confirmedPerson = confirmedPersonLink(record);
+  const inferred = inferRecordType(record.displayName, record.organization.role, record.organization.service);
+  const classification = inferred.confidence === "low" && (existingPerson || confirmedPerson || (identityConfirmed && inferred.type === "person"))
+    ? { type: "person", confidence: "high" }
+    : inferred;
+  const displayNameWithoutTitle = clean(record.displayName).replace(titlePrefix, "");
+  if (classification.type === "other" && displayNameWithoutTitle !== record.displayName && containsKeyword(wordsFrom(displayNameWithoutTitle), departmentKeywords)) {
+    record.displayName = displayNameWithoutTitle;
+  }
+  const sharedName = classification.type === "person" && hasSharedPersonName(record.displayName) && !existingPerson && !confirmedPerson;
+  record.type = classification.type;
+  if (classification.type === "person") {
+    const person = extractPersonName(record.displayName) ?? (confirmedPerson ? { firstName: confirmedPerson.firstName } : undefined);
+    record.person = {
+      ...record.person,
+      ...(record.person?.firstName || person?.firstName ? { firstName: record.person?.firstName ?? person?.firstName } : {}),
+      ...(record.person?.lastName || person?.lastName ? { lastName: record.person?.lastName ?? person?.lastName } : {})
+    };
+  }
+  if (sharedName) {
+    review.push({ kind: "shared-person-name", displayName: record.displayName, role: record.organization.role, service: record.organization.service, flag: "Shared name requires manual review" });
+  }
+  if (classification.confidence === "low" && !sharedName) review.push({ kind: "ambiguous-record-type", displayName: record.displayName, role: record.organization.role, service: record.organization.service, flag: classification.flag });
+  const inferredArea = inferArea(record.organization.service);
+  record.organization.area = inferredArea ?? record.organization.area ?? "otros";
+  const tags = new Map();
+  for (const tag of [...record.tags, ...tagsFrom(record.organization.service || record.displayName)]) {
+    if (filled(tag) && !tags.has(fold(tag))) tags.set(fold(tag), tag);
+  }
+  record.tags = [...tags.values()];
+  for (const entry of record.contactMethods.phones) {
+    if (entry.kind === "external" && /^[67]\d{8}$/.test(digits(entry.number))) delete entry.extension;
+  }
+};
 const confirmedPersonLinks = [
   { firstName: "Rosa", service: "Asesoría Jurídica", extension: "70907", title: "SECRETARÍA ASESORÍA JURÍDICA" }
 ];
@@ -143,10 +267,13 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     throw new Error("Phone source must be an array of objects.");
   }
 
-  const records = structuredClone(agenda.dataset.records).filter((record) =>
+  let records = structuredClone(agenda.dataset.records).filter((record) =>
     record.contactMethods.phones.length || record.beepers.length
   );
   for (const record of records) {
+    const location = buildLocationObject(record.location);
+    if (location) record.location = location;
+    else delete record.location;
     const sourcePhones = record.contactMethods.phones;
     record.contactMethods.phones = [];
     for (const entry of sourcePhones) addPhone(record, entry);
@@ -169,19 +296,23 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
   let separateSharedExtensionCount = 0;
   const conflictedLocationFields = new Map();
   const jsonOnlyRecords = new Map();
+  const identityConfirmedRecords = new Set();
   const mergeLocation = (record, incomingLocation) => {
-    record.location ??= {};
+    if (!incomingLocation) return;
+    const location = record.location ?? {};
     const conflicts = conflictedLocationFields.get(record.id) ?? new Set();
     for (const [field, incoming] of Object.entries(incomingLocation)) {
       if (!incoming || conflicts.has(field)) continue;
-      const current = record.location[field];
+      const current = location[field];
       if (current && fold(current) !== fold(incoming)) {
-        delete record.location[field];
+        delete location[field];
         conflicts.add(field);
       } else if (!current) {
-        record.location[field] = incoming;
+        location[field] = incoming;
       }
     }
+    if (Object.keys(location).length) record.location = location;
+    else delete record.location;
     conflictedLocationFields.set(record.id, conflicts);
   };
   for (const [index, row] of jsonRows.entries()) {
@@ -193,7 +324,7 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     const candidates = agendaRecords.filter((record) => extension && record.contactMethods.phones.some((entry) =>
       digits(entry.number) === digits(extension) || digits(entry.extension) === digits(extension)
     ));
-    const sourceLocation = { center: clean(row.Centro), floor: clean(row.Nivel), text: clean(row["Ubicación"]) };
+    const sourceLocation = buildLocationObject(row);
     const identityMatches = candidates.filter((record) => {
       if (service && fold(record.organization.service) !== fold(service)) return false;
       const person = confirmedPersonLink(record);
@@ -213,6 +344,7 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       matchedJson += 1;
       addJsonPhones(match);
       mergeLocation(match, sourceLocation);
+      if (title && fold(match.displayName) === fold(title)) identityConfirmedRecords.add(match.id);
       const person = confirmedPersonLink(match);
       if (person && fold(person.title) === fold(title)) match.organization.role ??= title;
       continue;
@@ -225,11 +357,8 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       continue;
     }
     const record = blankContact(`cnt_master_json_${index + 1}`, `telefonos-json-${index + 1}`, title || service || `Teléfono ${index + 1}`, service, now);
-    record.location = {
-      center: clean(row.Centro) || undefined,
-      floor: clean(row.Nivel) || undefined,
-      text: clean(row["Ubicación"]) || undefined
-    };
+    const location = buildLocationObject(row);
+    if (location) record.location = location;
     record.source = { externalId: record.externalId, sheetSlug: "telefonos-json", sheetRow: String(index + 1) };
     addJsonPhones(record);
     records.push(record);
@@ -293,6 +422,8 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     phones.splice(phones.indexOf(primary), 1);
     phones.unshift(primary);
   }
+
+  for (const record of records) enrichRecord(record, review, identityConfirmedRecords.has(record.id));
 
   const importedBeepers = new Map();
   for (const source of [...agenda.beepersParseResult.records, ...list.beepersParseResult.records]) {

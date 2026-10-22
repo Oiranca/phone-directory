@@ -207,7 +207,7 @@ describe("buildCsvImportPreview", () => {
     expect(preview.validRowCount).toBe(0);
     expect(preview.invalidRowCount).toBe(1);
     expect(preview.rowIssues[0]?.messages).toContain(
-      "Cada fila necesita al menos un teléfono, un correo, una red social o un dato de ubicación."
+      "Cada fila necesita al menos un teléfono, una busca, un correo, una red social o un dato de ubicación."
     );
   });
 
@@ -475,6 +475,30 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
 // row-normalization step, so they would have caught the regression.
 // ---------------------------------------------------------------------------
 describe("buildImportPreviewFromRows — beepers flow through to the ContactRecord", () => {
+  it("accepts beeper-only rows and keeps their existing contact fields", async () => {
+    const row = {
+      type: "department",
+      displayName: "Neurocirugía",
+      service: "Neurocirugía",
+      schedule: "L-V 08:00-14:00",
+      notes: "Horario de interconsulta",
+      beepers: JSON.stringify([{ number: "7157" }])
+    };
+
+    const { dataset, preview } = await buildImportPreviewFromRows([row], {
+      sourceFilePath: "/tmp/test.csv",
+      fileName: "test.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(preview.validRowCount).toBe(1);
+    expect(preview.invalidRowCount).toBe(0);
+    expect(dataset.records[0]!.contactMethods.phones).toEqual([]);
+    expect(dataset.records[0]!.beepers).toEqual([{ number: "7157" }]);
+    expect(dataset.records[0]!.organization.schedule).toBe("L-V 08:00-14:00");
+    expect(dataset.records[0]!.notes).toBe("Horario de interconsulta");
+  });
+
   it("parses the row's `beepers` JSON field into ContactRecord.beepers (end-to-end import path)", async () => {
     const row = {
       type: "service",

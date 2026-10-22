@@ -225,7 +225,7 @@ export const DirectoryPage = () => {
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
-        contacts?.records ?? [],
+        (contacts?.records ?? []).filter((record) => record.contactMethods.phones.length > 0 || record.beepers.length === 0),
         deferredQuery,
         { selectedType: "all", selectedArea: "all", selectedTags: [], showInactive: true }
       ),

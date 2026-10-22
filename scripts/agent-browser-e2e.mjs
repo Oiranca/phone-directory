@@ -67,6 +67,10 @@ const invalidCsvPath = path.join(workspace, "invalid.csv");
 const mixedCsvPath = path.join(workspace, "mixed.csv");
 const warningCsvPath = path.join(workspace, "warning.csv");
 const cancelCsvPath = path.join(workspace, "cancel.csv");
+const masterAgendaPath = path.join(workspace, "master-agenda.ods");
+const masterBeepersPath = path.join(workspace, "master-beepers.ods");
+const masterPhonesPath = path.join(workspace, "master-phones.json");
+const generatedMasterPath = path.join(workspace, "generated-master.json");
 const overwriteCsvPath = path.join(workspace, "overwrite.csv");
 const skipCsvPath = path.join(workspace, "skip.csv");
 const mergeCsvPath = path.join(workspace, "merge.csv");
@@ -173,6 +177,7 @@ try {
   await fs.mkdir(visualArtifactDirectory, { recursive: true });
   browserCommand("--version");
   execFileSync("pnpm", ["run", "build"], { cwd: repoRootDir, stdio: "inherit" });
+  const { buildUnifiedMaster } = await import("./generate-unified-master.mjs");
   const html = await fs.readFile(path.join(repoRootDir, "dist", "index.html"), "utf8");
   const assetRefs = [...html.matchAll(/\b(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1]).filter((ref) => ref && !ref.startsWith("data:") && !ref.startsWith("#"));
@@ -235,6 +240,27 @@ try {
     ...Array.from({ length: 40 }, (_, index) => [`Servicio Agenda ${index}`, `${20_000 + index}`, ""])
   ]), "Agenda");
   XLSX.writeFile(workbook, odsPath);
+  const masterAgenda = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(masterAgenda, XLSX.utils.aoa_to_sheet([
+    ["Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Número 3", "Número 4", "Número 5", "Número 6", "Número 7", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Busca 1"],
+    ["Contacto con ubicación", "", "Consulta E2E", "70001", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["Contacto ODS ubicación", "", "Cardiología E2E", "70002", "", "", "", "", "", "", "", "", "Edificio ODS", "Planta 1", "Sector ODS", "Sección ODS", "", ""],
+    ["Busca E2E", "Doctor/a", "Servicio E2E", "", "", "", "", "", "", "", "Horario E2E", "", "", "", "", "", "Nota E2E", "9001"]
+  ]), "Agenda");
+  XLSX.writeFile(masterAgenda, masterAgendaPath);
+  const masterBeepers = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(masterBeepers, XLSX.utils.aoa_to_sheet([
+    ["Nombre", "Categoría", "Servicio", "Busca 1"],
+    ["Busca E2E", "", "Servicio E2E", "9001"]
+  ]), "Buscas Todos");
+  XLSX.writeFile(masterBeepers, masterBeepersPath);
+  await fs.writeFile(masterPhonesPath, JSON.stringify([
+    { "Ext.": 70001, "Número": 928123456, Servicio: "Consulta E2E", Titular: "Contacto con ubicación", Centro: "Centro E2E", Nivel: "2", "Ubicación": "Bloque Norte / Sector A / Control" },
+    { "Ext.": 70003, Servicio: "Centro E2E", Titular: "Contacto Centro", Centro: "Centro Auxiliar", Nivel: "3" },
+    { "Ext.": 70004, Servicio: "Sin ubicación E2E", Titular: "Contacto sin ubicación" }
+  ]));
+  const { envelope: generatedMaster } = await buildUnifiedMaster(masterAgendaPath, masterBeepersPath, masterPhonesPath);
+  await fs.writeFile(generatedMasterPath, JSON.stringify(generatedMaster));
   await fs.writeFile(crossDocumentCsvPath, [
     "externalId,type,displayName,phone1Number,phone1Kind,status",
     "cross-doc-1,service,Servicio Cross Doc,12345,internal,active"
@@ -740,6 +766,74 @@ try {
   console.log("[agent-browser-e2e] Local backup and re-import passed");
   });
 
+  await runScenario("generated master import and locations", async () => {
+  const masterUserDataPath = path.join(workspace, "master-import-user-data");
+  const masterContactsPath = path.join(masterUserDataPath, "data", "contacts.json");
+  await launchElectron([generatedMasterPath], masterUserDataPath);
+  clickRole("link", "Configuración");
+  await waitFor("master import settings", () => hasText("Datos e importación"));
+  clickRole("button", "Importar");
+  await waitFor("generated master confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
+  const confirmationText = browserCommand("eval", 'document.querySelector("dialog[open]")?.innerText ?? ""');
+  if (!confirmationText.includes("generated-master.json") || !confirmationText.includes("5 contactos")) {
+    throw new Error(`Generated master import preview was unexpected: ${confirmationText}`);
+  }
+  clickRole("button", "Importar archivo");
+  await waitFor("generated master import completion", () => hasText("Importación completada."));
+
+  const imported = JSON.parse(await fs.readFile(masterContactsPath, "utf8"));
+  const compositeLocation = imported.records.find((record) => record.displayName === "Contacto con ubicación");
+  const odsLocation = imported.records.find((record) => record.displayName === "Contacto ODS ubicación");
+  const centerLocation = imported.records.find((record) => record.displayName === "Contacto Centro");
+  const emptyLocation = imported.records.find((record) => record.displayName === "Contacto sin ubicación");
+  const beeperContact = imported.records.find((record) => record.displayName === "Busca E2E");
+  if (imported.records.length !== 5 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || !beeperContact) {
+    throw new Error(`Generated master records were not imported: ${imported.records.length}`);
+  }
+  if (beeperContact.contactMethods.phones.length || beeperContact.beepers[0]?.number !== "9001" ||
+    beeperContact.organization.schedule !== "Horario E2E" || beeperContact.notes !== "Nota E2E") {
+    throw new Error(`Pager-only contact data was not preserved: ${JSON.stringify(beeperContact)}`);
+  }
+  const locationMatches = (actual, expected) => actual && Object.keys(actual).length === Object.keys(expected).length &&
+    Object.entries(expected).every(([key, value]) => actual[key] === value);
+  if (!locationMatches(compositeLocation.location, {
+    building: "Bloque Norte", floor: "2", sector: "Sector A", text: "Control"
+  }) || !locationMatches(odsLocation.location, {
+    building: "Edificio ODS", floor: "1", sector: "Sector ODS", section: "Sección ODS"
+  }) || !locationMatches(centerLocation.location, { building: "Centro Auxiliar", floor: "3" }) ||
+    Object.hasOwn(emptyLocation, "location")) {
+    throw new Error(`Imported master locations were wrong: ${JSON.stringify(imported.records.map(({ displayName, location }) => ({ displayName, location })))}`);
+  }
+
+  clickRole("link", "Directorio");
+  await waitFor("directory after master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Busca E2E");
+  await waitFor("beeper-only record absent from directory", () => hasText("Sin resultados"));
+  clickRole("link", "Buscas");
+  await waitFor("beeper catalog after master import", () => hasText("Registro de Buscas"));
+  browserCommand("fill", "#beeper-search", "Busca E2E");
+  await waitFor("beeper-only record present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E"));
+  browserCommand("fill", "#beeper-search", "Contacto con ubicación");
+  await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
+  clickRole("link", "Directorio");
+  await waitFor("directory restored after beeper check", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con ubicación");
+  await waitFor("generated master contact card", () => browserCommand("is", "visible", `[data-record-id="${compositeLocation.id}"]`) === "true");
+  browserCommand("click", `[data-record-id="${compositeLocation.id}"]`);
+  await waitFor("generated master contact selection", () => browserCommand("eval", `
+    document.querySelector('[data-record-id="${compositeLocation.id}"]')?.getAttribute("aria-pressed") === "true"
+  `) === "true");
+  const locationCard = browserCommand("eval", `(() => {
+    const label = [...document.querySelectorAll("p")].find(item => item.textContent.trim() === "Ubicación");
+    return label?.nextElementSibling?.textContent?.trim() ?? "";
+  })()`);
+  if (JSON.parse(locationCard) !== "Bloque Norte · Planta 2 · Control") {
+    throw new Error(`Generated master location card was wrong: ${locationCard}`);
+  }
+  browserCommand("screenshot", path.join(visualArtifactDirectory, "generated-master-location-import.png"));
+  console.log("[agent-browser-e2e] Generated master import separated beeper-only and phone-only rows; location card passed");
+  });
+
   await runScenario("phone privacy", async () => {
   const privacyUserDataPath = path.join(workspace, "privacy-user-data");
   const privacyContactsPath = path.join(privacyUserDataPath, "data", "contacts.json");
@@ -861,7 +955,7 @@ try {
   });
 
   if (failures.length) throw new AggregateError(failures, `${failures.length} E2E scenario(s) failed`);
-  console.log("[agent-browser-e2e] PASS: directory, import, conflict, persistence, privacy, and search flows");
+  console.log("[agent-browser-e2e] PASS: directory, master import, conflict, persistence, privacy, and search flows");
 } finally {
   await closeElectron();
   await stop(vite);
