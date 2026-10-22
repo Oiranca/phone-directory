@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import XLSX from "xlsx";
-import { it } from "vitest";
-import { buildUnifiedMaster } from "./generate-unified-master.mjs";
+import { it, vi } from "vitest";
+import { buildUnifiedMaster, extractPersonName, inferRecordType, normalizeString } from "./generate-unified-master.mjs";
 import { parseAndValidateJson } from "../dist-electron/main/services/json-data-reader.js";
 
 const writeWorkbook = (filePath, sheets) => {
@@ -12,6 +12,76 @@ const writeWorkbook = (filePath, sheets) => {
   for (const [name, rows] of sheets) XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), name);
   XLSX.writeFile(workbook, filePath);
 };
+
+it("classifies punctuated roles and extracts clean person names", () => {
+  assert.equal(normalizeString("  MÉDICO  "), "medico");
+  assert.deepEqual(inferRecordType("Endoscopia", "Enfermero/a", "Endoscopia"), { type: "department", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dra. Alergia", "Enfermero/a", "Alergia"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dr. Endoscopia", "", "Endoscopia"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dra. Serrano", "", "Endoscopia"), { type: "person", confidence: "high" });
+  assert.deepEqual(inferRecordType("María López", "Supervisora/a", "Endoscopia"), { type: "supervision", confidence: "high" });
+  assert.deepEqual(inferRecordType("Ana Valle", "", "Bomba Colostomía Estomas"), { type: "person", confidence: "high" });
+  assert.equal(inferRecordType("Javier", "", "Mantenimiento").type, "person");
+  assert.equal(inferRecordType("Lucia Valencia Sola", "", "Anestesia").type, "person");
+  assert.deepEqual(inferRecordType("Analíticas", "", "Analiticas"), { type: "other", confidence: "low", flag: "Manual classification required" });
+  assert.deepEqual(inferRecordType("Bomba Colostomía", "", "Bomba Colostomía"), { type: "other", confidence: "low", flag: "Manual classification required" });
+  assert.deepEqual(extractPersonName("Dr Hurtado"), { lastName: "Hurtado" });
+  assert.deepEqual(extractPersonName("Dra. Serrano"), { lastName: "Serrano" });
+  assert.deepEqual(extractPersonName("Dra. Ana García"), { firstName: "Ana", lastName: "García" });
+  assert.deepEqual(extractPersonName("Dña. Ana María García"), { firstName: "Ana", lastName: "María García" });
+  assert.equal(extractPersonName("Pilar e Isabel"), undefined);
+  assert.equal(extractPersonName("Joaquín o Samuel"), undefined);
+  assert.deepEqual(inferRecordType("Turno 24h", "", ""), { type: "other", confidence: "low", flag: "Manual classification required" });
+});
+
+it("reports ambiguous records without changing the master schema", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-ambiguity-"));
+  try {
+    const agendaPath = path.join(root, "agenda.xlsx");
+    const beeperPath = path.join(root, "buscas.xlsx");
+    const phonesPath = path.join(root, "telefonos.json");
+    const header = ["Nombre", "Categoría", "Servicio", "Número 1", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Número 2"];
+    writeWorkbook(agendaPath, [["Agenda", [header,
+      ["Dra. Serrano", "", "Endoscopia", "70001", "", "", "", "", "", "", "", ""],
+      ["Endoscopia", "Enfermero/a", "Endoscopia", "70002", "", "", "", "", "", "", "", ""],
+      ["Dr. Alergia", "", "Alergia", "70006", "", "", "", "", "", "", "", ""],
+      ["María López", "Supervisora/a", "Endoscopia", "70003", "", "", "", "", "", "", "", ""],
+      ["Pilar e Isabel", "Enfermero/a", "", "70005", "", "", "", "", "", "", "", ""],
+      ["Equipo Externo", "", "Equipo Externo", "70007", "", "", "", "", "", "", "", ""],
+      ["Ana Valle", "", "Bomba Colostomía Estomas", "70008", "", "", "", "", "", "", "", ""],
+      ["Turno 24h", "", "", "70004", "", "", "", "", "", "", "", ""]
+    ]]]);
+    writeWorkbook(beeperPath, [["Buscas Todos", [["Nombre", "Categoría", "Servicio", "Busca 1"], ["Prueba", "", "Prueba", "9001"]]]]);
+    await fs.writeFile(phonesPath, JSON.stringify([{ "Ext.": 70007, Servicio: "Equipo Externo", Titular: "Equipo Externo" }]));
+
+    const { envelope, report } = await buildUnifiedMaster(agendaPath, beeperPath, phonesPath);
+    assert.equal(parseAndValidateJson(JSON.stringify(envelope), "combined").kind, "combined");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Dra. Serrano").type, "person");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Endoscopia").type, "department");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Alergia").type, "other");
+    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Dr. Alergia"), false);
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "María López").type, "supervision");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Equipo Externo").type, "other");
+    assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Ana Valle").person, { firstName: "Ana", lastName: "Valle" });
+    const sharedName = envelope.contacts.records.find((record) => record.displayName === "Pilar e Isabel");
+    assert.equal(sharedName.type, "person");
+    assert.deepEqual(sharedName.person, {});
+    assert.deepEqual(report.review.find((item) => item.kind === "shared-person-name"), {
+      kind: "shared-person-name", displayName: "Pilar e Isabel", role: "Enfermero/a", service: undefined, flag: "Shared name requires manual review"
+    });
+    assert.equal(report.review.filter((item) => item.displayName === "Pilar e Isabel").length, 1);
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Turno 24h").type, "other");
+    assert.deepEqual(report.review.find((item) => item.kind === "ambiguous-record-type" && item.displayName === "Turno 24h"), {
+      kind: "ambiguous-record-type", displayName: "Turno 24h", role: undefined, service: undefined, flag: "Manual classification required"
+    });
+    assert.deepEqual(report.review.find((item) => item.kind === "ambiguous-record-type" && item.displayName === "Equipo Externo"), {
+      kind: "ambiguous-record-type", displayName: "Equipo Externo", role: undefined, service: "Equipo Externo", flag: "Manual classification required"
+    });
+    assert.equal(report.review.some((item) => item.kind === "ambiguous-record-type" && item.displayName === "Ana Valle"), false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 it("master fills a confirmed match and keeps a shared-extension match separate", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-"));
@@ -80,6 +150,128 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Pager E").beepers.map((entry) => entry.number), ["7001"]);
     assert.equal(envelope.beepers.importedRecords.length, 2);
   } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it("master enriches identities, locations, phone extensions, areas, and tags", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-enrichment-"));
+  try {
+    const agendaPath = path.join(root, "agenda.xlsx");
+    const beeperPath = path.join(root, "buscas.xlsx");
+    const phonesPath = path.join(root, "telefonos.json");
+    const header = ["Nombre", "Categoría", "Servicio", "Número 1", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Número 2"];
+    const row = (name, category, service, number) => [name, category, service, number, "", "", "", "", "", "", "", ""];
+    writeWorkbook(agendaPath, [["Agenda", [header,
+      row("Dra. Serrano", "Doctora/or", "Endoscopia", "70001"),
+      row("Ana Valle", "", "Bomba Colostomía Estomas", "70055"),
+      row("Javier", "", "Mantenimiento", "70002"),
+      row("Lucia Valencia Sola", "", "Anestesia", "70005"),
+      row("Ángel Aranda", "", "Comunicaciones", "70006"),
+      row("Alergia", "Enfermero/a", "Alergia", "70007"),
+      row("Endoscopia", "Enfermero/a", "Endoscopia", "70003"),
+      row("Secretaría Admisión", "Enfermero/a", "Admisión", "70004"),
+      row("Urgencias", "Enfermero/a", "Urgencias", "70008"),
+      row("Suministros", "Enfermero/a", "Suministros", "70009"),
+      row("Contrataciones Suministros", "Enfermero/a", "Contrataciones Suministros", "70010"),
+      row("Distribución Celadores", "Enfermero/a", "Distribución Celadores", "70011"),
+      row("Contratación Administrativa", "Enfermero/a", "Contratación Administrativa", "70012"),
+      row("Celador Quirófano", "Enfermero/a", "Celador Quirófano", "70013"),
+      row("Celador Hemodinámica", "Enfermero/a", "Celador Hemodinámica", "70014"),
+      row("Celador Transplante", "Enfermero/a", "Celador Transplante", "70015"),
+      row("Celador Trasplante", "Enfermero/a", "Celador Trasplante", "70016")
+    ]]]);
+    writeWorkbook(beeperPath, [["Buscas Todos", [
+      ["Nombre", "Categoría", "Servicio", "Busca 1"],
+      ["Prueba", "", "Prueba", "9001"]
+    ]]]);
+    await fs.writeFile(phonesPath, JSON.stringify([
+      { "Número": 618798671, "Ext.": 70055, Servicio: "Bomba Colostomía Estomas", Titular: "Ana Valle", "Ubicación": "BLOQUE NORTE / SECTOR A / CONTROL" }
+    ]));
+
+    const { envelope, report } = await buildUnifiedMaster(agendaPath, beeperPath, phonesPath);
+    assert.equal(parseAndValidateJson(JSON.stringify(envelope), "combined").kind, "combined");
+
+    const doctor = envelope.contacts.records.find((record) => record.displayName === "Dra. Serrano");
+    assert.equal(doctor.displayName, "Dra. Serrano");
+    assert.equal(doctor.type, "person");
+    assert.equal(doctor.person.lastName, "Serrano");
+
+    const ana = envelope.contacts.records.find((record) => record.displayName === "Ana Valle");
+    assert.equal(ana.type, "person");
+    assert.deepEqual(ana.person, { firstName: "Ana", lastName: "Valle" });
+    assert.deepEqual(ana.location, { building: "BLOQUE NORTE", sector: "SECTOR A", text: "CONTROL" });
+    assert.deepEqual(ana.tags, ["bomba", "colostomia", "estomas"]);
+    assert.equal(ana.contactMethods.phones.find((entry) => entry.number === "618798671").extension, undefined);
+    assert.equal(report.review.some((item) => item.kind === "ambiguous-record-type" && item.displayName === "Ana Valle"), false);
+
+    const javier = envelope.contacts.records.find((record) => record.displayName === "Javier");
+    assert.equal(javier.type, "person");
+    assert.deepEqual(javier.person, { firstName: "Javier" });
+
+    const lucia = envelope.contacts.records.find((record) => record.displayName === "Lucia Valencia Sola");
+    assert.equal(lucia.type, "person");
+    assert.deepEqual(lucia.person, { firstName: "Lucia", lastName: "Valencia Sola" });
+
+    const angel = envelope.contacts.records.find((record) => record.displayName === "Ángel Aranda");
+    assert.equal(angel.type, "person");
+    assert.deepEqual(angel.person, { firstName: "Ángel", lastName: "Aranda" });
+
+    const alergia = envelope.contacts.records.find((record) => record.displayName === "Alergia");
+    assert.equal(alergia.type, "department");
+    assert.equal(alergia.organization.role, "Enfermero/a");
+
+    const endoscopia = envelope.contacts.records.find((record) => record.displayName === "Endoscopia");
+    assert.equal(endoscopia.type, "department");
+    assert.equal(endoscopia.organization.role, "Enfermero/a");
+    assert.equal(endoscopia.organization.area, "especialidades");
+
+    const secretaria = envelope.contacts.records.find((record) => record.displayName === "Secretaría Admisión");
+    assert.equal(secretaria.type, "department");
+    assert.equal(secretaria.organization.role, "Enfermero/a");
+    assert.equal(secretaria.organization.area, "gestion-administracion");
+
+    assert.deepEqual(envelope.contacts.metadata.areaCounts, {
+      "sanitaria-asistencial": 5,
+      "gestion-administracion": 2,
+      especialidades: 3,
+      otros: 8
+    });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it("master enrichment preserves populated person fields", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-person-"));
+  try {
+    const agendaPath = path.join(root, "agenda.xlsx");
+    const beeperPath = path.join(root, "buscas.xlsx");
+    const phonesPath = path.join(root, "telefonos.json");
+    const header = ["Nombre", "Categoría", "Servicio", "Número 1", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Número 2"];
+    writeWorkbook(agendaPath, [["Agenda", [header, ["Ana Valle", "", "Bomba Colostomía Estomas", "70055", "", "", "", "", "", "", "", ""]]]]);
+    writeWorkbook(beeperPath, [["Buscas Todos", [["Nombre", "Categoría", "Servicio", "Busca 1"], ["Prueba", "", "Prueba", "9001"]]]]);
+    await fs.writeFile(phonesPath, "[]");
+
+    vi.resetModules();
+    vi.doMock("../dist-electron/main/services/spreadsheet-import.service.js", async (importOriginal) => {
+      const actual = await importOriginal();
+      return {
+        ...actual,
+        buildSpreadsheetImportPreview: async (...args) => {
+          const preview = await actual.buildSpreadsheetImportPreview(...args);
+          if (args[0] === agendaPath) preview.dataset.records[0].person = { firstName: "Ana María", lastName: "García" };
+          return preview;
+        }
+      };
+    });
+    const { buildUnifiedMaster: buildWithPerson } = await import("./generate-unified-master.mjs");
+    const { envelope } = await buildWithPerson(agendaPath, beeperPath, phonesPath);
+    const ana = envelope.contacts.records.find((record) => record.displayName === "Ana Valle");
+    assert.deepEqual(ana.person, { firstName: "Ana María", lastName: "García" });
+  } finally {
+    vi.doUnmock("../dist-electron/main/services/spreadsheet-import.service.js");
+    vi.resetModules();
     await fs.rm(root, { recursive: true, force: true });
   }
 });
