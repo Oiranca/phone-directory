@@ -267,7 +267,7 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     throw new Error("Phone source must be an array of objects.");
   }
 
-  const records = structuredClone(agenda.dataset.records).filter((record) =>
+  let records = structuredClone(agenda.dataset.records).filter((record) =>
     record.contactMethods.phones.length || record.beepers.length
   );
   for (const record of records) {

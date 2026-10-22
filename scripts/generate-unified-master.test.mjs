@@ -83,6 +83,42 @@ it("reports ambiguous records without changing the master schema", async () => {
   }
 });
 
+it("preserves beeper-only contact details while cataloging the pager separately", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-beeper-only-"));
+  try {
+    const agendaPath = path.join(root, "agenda.xlsx");
+    const beeperPath = path.join(root, "buscas.xlsx");
+    const phonesPath = path.join(root, "telefonos.json");
+    const header = ["Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Número 3", "Número 4", "Número 5", "Número 6", "Número 7", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Busca 1"];
+    writeWorkbook(agendaPath, [["Agenda", [header,
+      ["Sin teléfono ni busca", "", "Servicio", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["Neurocirugia – Planta", "Doctor/a", "Neurocirugia – Planta", "", "", "", "", "", "", "", "Horario E2E", "", "", "", "", "", "Nota E2E", "7157"],
+      ["Teléfono sin busca", "", "Servicio teléfono", "70010", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+    ]]]);
+    writeWorkbook(beeperPath, [["Buscas Todos", [
+      ["Nombre", "Categoría", "Servicio", "Busca 1"],
+      ["Neurocirugia – Planta", "Doctor/a", "Neurocirugia – Planta", "7157"]
+    ]]]);
+    await fs.writeFile(phonesPath, "[]");
+
+    const { envelope } = await buildUnifiedMaster(agendaPath, beeperPath, phonesPath);
+
+    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Sin teléfono ni busca"), false);
+    const beeperContact = envelope.contacts.records.find((record) => record.displayName === "Neurocirugia – Planta");
+    assert.deepEqual(beeperContact.contactMethods.phones, []);
+    assert.deepEqual(beeperContact.beepers, [{ number: "7157" }]);
+    assert.equal(beeperContact.organization.schedule, "Horario E2E");
+    assert.equal(beeperContact.notes, "Nota E2E");
+    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Teléfono sin busca"), true);
+    assert.equal(envelope.beepers.importedRecords.some((record) => record.name === "Teléfono sin busca"), false);
+    assert.equal(envelope.beepers.importedRecords.some((record) =>
+      record.deviceNumber === "7157" && record.department === "Neurocirugia – Planta"
+    ), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 it("master fills a confirmed match and keeps a shared-extension match separate", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-"));
   try {

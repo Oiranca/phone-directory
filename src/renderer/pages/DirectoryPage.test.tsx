@@ -109,6 +109,33 @@ describe("DirectoryPage", () => {
     expect(screen.queryByText(/Llamar /)).not.toBeInTheDocument();
   });
 
+  it("keeps pager-only records out of the phone directory", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records.push({
+      ...structuredClone(defaultContacts.records[0]),
+      id: "pager-only",
+      displayName: "Busca sin teléfono",
+      contactMethods: { phones: [], emails: [], socials: [] },
+      beepers: [{ number: "7157" }]
+    });
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Buscar contactos"), {
+      target: { value: "Busca sin teléfono" }
+    });
+
+    expect(await screen.findByText("Sin resultados")).toBeInTheDocument();
+  });
+
   it("does not show the source filename as a phone label", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[1]!.contactMethods.phones[0]!.label = "telefonos.json";
