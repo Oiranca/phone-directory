@@ -71,6 +71,9 @@ const masterAgendaPath = path.join(workspace, "master-agenda.ods");
 const masterBeepersPath = path.join(workspace, "master-beepers.ods");
 const masterPhonesPath = path.join(workspace, "master-phones.json");
 const generatedMasterPath = path.join(workspace, "generated-master.json");
+const externalMasterImportPath = process.env.E2E_MASTER_IMPORT_PATH
+  ? path.resolve(process.env.E2E_MASTER_IMPORT_PATH)
+  : undefined;
 const overwriteCsvPath = path.join(workspace, "overwrite.csv");
 const skipCsvPath = path.join(workspace, "skip.csv");
 const mergeCsvPath = path.join(workspace, "merge.csv");
@@ -175,6 +178,7 @@ const runScenario = async (name, check) => {
 
 try {
   await fs.mkdir(visualArtifactDirectory, { recursive: true });
+  if (externalMasterImportPath) await fs.access(externalMasterImportPath);
   browserCommand("--version");
   execFileSync("pnpm", ["run", "build"], { cwd: repoRootDir, stdio: "inherit" });
   const { buildUnifiedMaster } = await import("./generate-unified-master.mjs");
@@ -832,6 +836,47 @@ try {
   }
   browserCommand("screenshot", path.join(visualArtifactDirectory, "generated-master-location-import.png"));
   console.log("[agent-browser-e2e] Generated master import separated beeper-only and phone-only rows; location card passed");
+  });
+
+  if (externalMasterImportPath) await runScenario("provided main master import", async () => {
+    const source = JSON.parse(await fs.readFile(externalMasterImportPath, "utf8"));
+    const expectedRecords = source.contacts?.records;
+    if (!Array.isArray(expectedRecords)) throw new Error("Provided master file has no contacts.records array");
+    const searchableRecord = expectedRecords.find((record) => record.status === "active" &&
+      record.contactMethods?.phones?.some((phone) => phone.kind === "internal"));
+    if (!searchableRecord) throw new Error("Provided master file has no active contact with an internal phone");
+
+    const userDataPath = path.join(workspace, "provided-master-user-data");
+    const importedContactsPath = path.join(userDataPath, "data", "contacts.json");
+    await launchElectron([externalMasterImportPath], userDataPath);
+    clickRole("link", "Configuración");
+    await waitFor("provided master import settings", () => hasText("Datos e importación"));
+    clickRole("button", "Importar");
+    await waitFor("provided master confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
+    const confirmationText = browserCommand("eval", 'document.querySelector("dialog[open]")?.innerText ?? ""');
+    if (!confirmationText.includes(path.basename(externalMasterImportPath)) ||
+      !confirmationText.includes(`${expectedRecords.length} contactos`)) {
+      throw new Error(`Provided master import preview was unexpected: ${confirmationText}`);
+    }
+    clickRole("button", "Importar archivo");
+    await waitFor("provided master import completion", () => hasText("Importación completada."));
+
+    const imported = JSON.parse(await fs.readFile(importedContactsPath, "utf8"));
+    const importedRecord = imported.records.find((record) => record.id === searchableRecord.id);
+    if (imported.records.length !== expectedRecords.length || !importedRecord ||
+      importedRecord.displayName !== searchableRecord.displayName || importedRecord.type !== searchableRecord.type ||
+      importedRecord.contactMethods.phones[0]?.number !== searchableRecord.contactMethods.phones[0]?.number) {
+      throw new Error(`Provided master records were not imported faithfully: ${imported.records.length}`);
+    }
+
+    clickRole("link", "Directorio");
+    await waitFor("directory after provided master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
+    browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', searchableRecord.displayName);
+    await waitFor("provided master contact card", () => browserCommand("is", "visible", `[data-record-id="${searchableRecord.id}"]`) === "true");
+    console.log("[agent-browser-e2e] Main master import and directory search passed", {
+      records: imported.records.length,
+      displayName: searchableRecord.displayName
+    });
   });
 
   await runScenario("phone privacy", async () => {
