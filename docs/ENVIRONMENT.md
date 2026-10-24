@@ -130,3 +130,13 @@ E2E tests.
 - **Default:** unset
 - **Set by:** isolated agent-browser launch command — do not set in `.env`
 - **Example:** `E2E_SAVE_DIALOG_PATHS=["/path/to/output.csv"]`
+
+### E2E_MASTER_IMPORT_PATH
+
+Optional path to a combined master JSON file imported into the isolated E2E profile after the
+smoke fixtures. The import does not use the active application profile or database.
+
+- **Type:** absolute file path
+- **Default:** unset
+- **Set by:** isolated agent-browser launch command — do not set in `.env`
+- **Example:** `E2E_MASTER_IMPORT_PATH=/path/to/master.json`

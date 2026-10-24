@@ -4,6 +4,7 @@ import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
+import { isDeepStrictEqual } from "node:util";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -71,6 +72,9 @@ const masterAgendaPath = path.join(workspace, "master-agenda.ods");
 const masterBeepersPath = path.join(workspace, "master-beepers.ods");
 const masterPhonesPath = path.join(workspace, "master-phones.json");
 const generatedMasterPath = path.join(workspace, "generated-master.json");
+const externalMasterImportPath = process.env.E2E_MASTER_IMPORT_PATH
+  ? path.resolve(process.env.E2E_MASTER_IMPORT_PATH)
+  : undefined;
 const overwriteCsvPath = path.join(workspace, "overwrite.csv");
 const skipCsvPath = path.join(workspace, "skip.csv");
 const mergeCsvPath = path.join(workspace, "merge.csv");
@@ -175,6 +179,7 @@ const runScenario = async (name, check) => {
 
 try {
   await fs.mkdir(visualArtifactDirectory, { recursive: true });
+  if (externalMasterImportPath) await fs.access(externalMasterImportPath);
   browserCommand("--version");
   execFileSync("pnpm", ["run", "build"], { cwd: repoRootDir, stdio: "inherit" });
   const { buildUnifiedMaster } = await import("./generate-unified-master.mjs");
@@ -832,6 +837,58 @@ try {
   }
   browserCommand("screenshot", path.join(visualArtifactDirectory, "generated-master-location-import.png"));
   console.log("[agent-browser-e2e] Generated master import separated beeper-only and phone-only rows; location card passed");
+  });
+
+  if (externalMasterImportPath) await runScenario("provided main master import", async () => {
+    const source = JSON.parse(await fs.readFile(externalMasterImportPath, "utf8"));
+    const expectedRecords = source.contacts?.records;
+    if (!Array.isArray(expectedRecords)) throw new Error("Provided master file has no contacts.records array");
+    const expectedBeepers = source.beepers;
+    if (!Array.isArray(expectedBeepers?.records) || !Array.isArray(expectedBeepers?.importedRecords)) {
+      throw new Error("Provided master file has no beepers records arrays");
+    }
+    const searchableRecord = expectedRecords.find((record) => record.status === "active" &&
+      record.contactMethods?.phones?.some((phone) => phone.kind === "internal"));
+    if (!searchableRecord) throw new Error("Provided master file has no active contact with an internal phone");
+    const searchableBeeper = expectedBeepers.importedRecords[0];
+    if (!searchableBeeper) throw new Error("Provided master file has no imported beepers to verify");
+
+    const userDataPath = path.join(workspace, "provided-master-user-data");
+    const importedContactsPath = path.join(userDataPath, "data", "contacts.json");
+    const importedBeepersPath = path.join(userDataPath, "data", "beepers.json");
+    await launchElectron([externalMasterImportPath], userDataPath);
+    clickRole("link", "Configuración");
+    await waitFor("provided master import settings", () => hasText("Datos e importación"));
+    clickRole("button", "Importar");
+    await waitFor("provided master confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
+    const confirmationText = browserCommand("eval", 'document.querySelector("dialog[open]")?.innerText ?? ""');
+    const expectedBeeperCount = expectedBeepers.records.length + expectedBeepers.importedRecords.length;
+    if (!confirmationText.includes(path.basename(externalMasterImportPath)) ||
+      !confirmationText.includes(`${expectedRecords.length} contactos`) ||
+      !confirmationText.includes(`${expectedBeeperCount} buscas`)) {
+      throw new Error(`Provided master import preview was unexpected: ${confirmationText}`);
+    }
+    clickRole("button", "Importar archivo");
+    await waitFor("provided master import completion", () => hasText("Importación completada."));
+
+    const imported = JSON.parse(await fs.readFile(importedContactsPath, "utf8"));
+    const importedBeepers = JSON.parse(await fs.readFile(importedBeepersPath, "utf8"));
+    if (!isDeepStrictEqual(imported.records, expectedRecords) || !isDeepStrictEqual(importedBeepers, expectedBeepers)) {
+      throw new Error(`Provided master records were not imported faithfully: ${imported.records.length}`);
+    }
+
+    clickRole("link", "Directorio");
+    await waitFor("directory after provided master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
+    browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', searchableRecord.displayName);
+    await waitFor("provided master contact card", () => browserCommand("is", "visible", `[data-record-id="${searchableRecord.id}"]`) === "true");
+    clickRole("link", "Buscas");
+    await waitFor("beeper catalog after provided master import", () => hasText("Registro de Buscas"));
+    browserCommand("fill", "#beeper-search", searchableBeeper.deviceNumber);
+    await waitFor("provided master beeper result", () => hasText(searchableBeeper.deviceNumber));
+    console.log("[agent-browser-e2e] Main master import, directory, and beeper search passed", {
+      contacts: imported.records.length,
+      beepers: importedBeepers.records.length + importedBeepers.importedRecords.length
+    });
   });
 
   await runScenario("phone privacy", async () => {

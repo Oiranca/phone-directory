@@ -125,7 +125,8 @@ control. `metrics.json` records viewport, navigation, heading, border, and
 focus styles. The E2E test compares every entry against the checked-in Tailwind 4
 metrics. Compare screenshots with the checked-in Tailwind 3 and 4 captures
 under `docs/visual-baseline/`; see `docs/TAILWIND_VISUAL_BASELINE.md` for
-review steps. On macOS, follow `AGENTS.md` and launch this command through
+review steps. Set `E2E_MASTER_IMPORT_PATH` to run an additional isolated import
+and directory check against an existing master JSON file. On macOS, follow `AGENTS.md` and launch this command through
 `launchctl submit` instead of running it in the foreground.
 
 Run the packaged startup smoke on each target OS before release handoff:

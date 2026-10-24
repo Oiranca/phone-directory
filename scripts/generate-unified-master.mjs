@@ -47,37 +47,63 @@ const buildLocationObject = (rawRecord) => {
 };
 
 export const departmentKeywords = new Set([
-  'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco',
+  'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco', 'comedor', 'central', 'ascensor', 'ascensores', 'guagua', 'fax', 'registro', 'policia', 'juzgado', 'prision', 'clinica', 'instituto', 'bomba', 'caldera', 'camara', 'telefono', 'tv', 'televisores', 'monitor', 'monitores', 'taller', 'talleres', 'traslado', 'transporte', 'tarjeta', 'receta', 'aislados', 'analiticas', 'animalario', 'aparcamiento', 'avericum', 'capturas', 'crohn', 'despertar',
   'alergia', 'alergologia', 'anatomia', 'patologica', 'anestesia', 'reanimacion', 'cardiologia', 'cirugia', 'dermatologia', 'digestivo', 'endocrino', 'endocrinologia', 'ginecologia', 'obstetricia', 'tocologia', 'hematologia', 'hemoterapia', 'infecciosos', 'medicina', 'interna', 'intensiva', 'preventiva', 'microbiologia', 'parasitologia', 'nefrologia', 'neumologia', 'neurocirugia', 'neurologia', 'oftalmologia', 'oncologia', 'otorrino', 'otorrinolaringologia', 'pediatria', 'psiquiatria', 'radiologia', 'radiodiagnostico', 'rehabilitacion', 'reumatologia', 'traumatologia', 'ortopedica', 'urologia', 'vascular', 'angiologia', 'geriatria', 'maxilofacial', 'plastica', 'reparadora', 'toracica', 'paliativos', 'inmunologia', 'radiofisica', 'farmacogenetica',
-  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'paaf', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia',
-  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'sindicato', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'comite', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras'
+  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'citoscopia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'fribroscan', 'paaf', 'paff', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia', 'saf', 'cobas', 'sepca',
+  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'sindicato', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'comite', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras', 'gestion', 'coordinacion', 'informacion', 'citas'
 ]);
 export const roleKeywords = new Set([
   'doctor', 'doctora', 'dr', 'dra', 'facultativo', 'medico', 'especialista', 'residente', 'adjunto', 'mir', 'pir', 'eir', 'fea', 'cirujano', 'patologo',
   'enfermero', 'enfermera', 'due', 'ats', 'matron', 'matrona', 'auxiliar', 'tcae',
-  'tecnico', 'tecnica', 'fisioterapeuta', 'psicologo', 'psicologa', 'dietista', 'nutricionista', 'foniatra', 'logopeda', 'perfusionista', 'farmaceutico', 'farmaceutica', 'fisico', 'biologo', 'optometrista',
-  'celador', 'celadora', 'jefe', 'jefa', 'supervisor', 'supervisora', 'secretario', 'secretaria', 'trabajador', 'trabajadora', 'gobernante', 'gobernanta', 'limpiador', 'limpiadora', 'informatico', 'capellan', 'electricista', 'fontanero', 'mecanico', 'conductor', 'chofer', 'ilustrador', 'fotografo', 'periodista', 'administrativo', 'administrativa', 'coordinador', 'coordinadora', 'director', 'directora', 'subdirector', 'subdirectora', 'pinche', 'peluquero', 'peluquera'
+  'tecnico', 'tecnica', 'ingeniero', 'ingeniera', 'fisioterapeuta', 'psicologo', 'psicologa', 'dietista', 'nutricionista', 'foniatra', 'logopeda', 'perfusionista', 'farmaceutico', 'farmaceutica', 'fisico', 'biologo', 'optometrista',
+  'celador', 'celadora', 'jefe', 'jefa', 'supervisor', 'supervisora', 'secretario', 'secretaria', 'trabajador', 'trabajadora', 'gobernante', 'gobernanta', 'limpiador', 'limpiadora', 'informatico', 'capellan', 'electricista', 'fontanero', 'mecanico', 'conductor', 'chofer', 'ilustrador', 'fotografo', 'periodista', 'administrativo', 'administrativa', 'coordinador', 'coordinadora', 'director', 'directora', 'subdirector', 'subdirectora', 'pinche', 'peluquero', 'peluquera', 'calefactor', 'frigorista', 'carpintero', 'delineante', 'gestor', 'gestora', 'inspector', 'inspectora'
 ]);
 export const supervisionKeywords = new Set(['jefe', 'jefa', 'supervisor', 'supervisora', 'director', 'directora', 'subdirector', 'subdirectora', 'coordinador', 'coordinadora']);
 const tagStopwords = new Set(["a", "al", "con", "de", "del", "el", "en", "la", "las", "los", "para", "por", "y"]);
 
-export const normalizeString = (value) => clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+export const normalizeString = (value) => String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[(),.*–-]/g, " ").replace(/\s+/g, " ").trim();
 const wordsFrom = (value) => normalizeString(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const containsKeyword = (words, keywords) => words.some((word) => keywords.has(word));
-const titlePrefix = /^(?:dr\.?|dra\.?|d\.?|dña\.?)\s+/i;
-const hasSharedPersonName = (value) => wordsFrom(clean(value).replace(titlePrefix, "")).some((word) => ["e", "o", "y", "u"].includes(word));
+const titlePrefix = /^(?:dña\.?|dna\.?|doña|dona|don|dra\.?|dr\.?|d\.?)\s+/i;
+const hasSharedPersonName = (value) => wordsFrom(clean(value).replace(titlePrefix, "")).some((word) => ["e", "o", "y"].includes(word));
+const directPersonTitles = new Set(["dr", "dra", "d", "dña", "dna", "don", "doña", "dona"]);
 
 export const inferRecordType = (displayName, role, service) => {
-  const name = clean(displayName);
-  const nameWords = wordsFrom(name.replace(titlePrefix, ""));
-  const roleWords = wordsFrom(role);
-  if (containsKeyword(nameWords, departmentKeywords)) return { type: titlePrefix.test(name) ? "other" : "department", confidence: "high" };
-  if (titlePrefix.test(name)) return { type: "person", confidence: "high" };
-  if (containsKeyword(nameWords.slice(0, 2), supervisionKeywords) || containsKeyword(roleWords, supervisionKeywords)) return { type: "supervision", confidence: "high" };
-  if (containsKeyword(nameWords.slice(0, 2), roleKeywords) || containsKeyword(roleWords, roleKeywords)) return { type: "person", confidence: "high" };
-  const looksLikeName = nameWords.length > 0 && nameWords.length <= 4 && !/\d/.test(name) && name !== name.toLocaleUpperCase("es");
-  if (looksLikeName && (!filled(service) || fold(name) !== fold(service))) return { type: "person", confidence: "high" };
-  return { type: "other", confidence: "low", flag: "Manual classification required" };
+  const normRole = normalizeString(role);
+  const normName = normalizeString(displayName);
+  const normService = normalizeString(service);
+  const roleWords = wordsFrom(normRole);
+  const nameWords = wordsFrom(normName);
+  const serviceWords = wordsFrom(normService);
+
+  if (normName === normService && normName !== "") return { type: "other", confidence: "high" };
+  if (nameWords.slice(0, 2).some((word) => directPersonTitles.has(word))) return resolvePersonOrShared(normName);
+  if (!role && displayName === displayName?.toUpperCase() && /[A-Z]/.test(displayName ?? "")) {
+    return { type: "other", confidence: "high" };
+  }
+
+  const isPlausibleName = nameWords.length > 0 && nameWords.length <= 6 && !/\d/.test(displayName ?? "");
+  if (!role && !isPlausibleName) return { type: "other", confidence: "high" };
+  if (containsKeyword(roleWords, supervisionKeywords) || containsKeyword(nameWords.slice(0, 2), supervisionKeywords) || containsKeyword(serviceWords, supervisionKeywords)) {
+    return { type: "supervision", confidence: "high" };
+  }
+  if (containsKeyword(nameWords, departmentKeywords)) {
+    return { type: "other", confidence: "high" };
+  }
+  if (containsKeyword(roleWords, roleKeywords) || (!normRole && containsKeyword(nameWords.slice(0, 2), roleKeywords))) {
+    return resolvePersonOrShared(normName);
+  }
+  if (isPlausibleName && normName !== normService) return resolvePersonOrShared(normName);
+  if (containsKeyword(serviceWords, departmentKeywords)) return { type: "other", confidence: "high" };
+  return { type: "other", confidence: "low", flag: "Ambigüedad manual requerida" };
+};
+
+const resolvePersonOrShared = (normName) => {
+  const words = wordsFrom(normName);
+  if (words.includes("y") || words.includes("e") || words.includes("o")) {
+    return { type: "other", confidence: "high", flag: "shared-person-name" };
+  }
+  return { type: "person", confidence: "high" };
 };
 
 export const extractPersonName = (displayName) => {
@@ -86,6 +112,7 @@ export const extractPersonName = (displayName) => {
   if (hasSharedPersonName(name)) return undefined;
   const [firstName, ...lastName] = stripped.split(" ");
   if (!firstName) return undefined;
+  if (stripped !== name && !lastName.length && containsKeyword(wordsFrom(stripped), departmentKeywords)) return undefined;
   if (stripped !== name && !lastName.length) return { lastName: firstName };
   return { firstName, ...(lastName.length ? { lastName: lastName.join(" ") } : {}) };
 };
@@ -114,7 +141,13 @@ const enrichRecord = (record, review, identityConfirmed) => {
   if (classification.type === "other" && displayNameWithoutTitle !== record.displayName && containsKeyword(wordsFrom(displayNameWithoutTitle), departmentKeywords)) {
     record.displayName = displayNameWithoutTitle;
   }
-  const sharedName = classification.type === "person" && hasSharedPersonName(record.displayName) && !existingPerson && !confirmedPerson;
+  const sharedNameWords = wordsFrom(displayNameWithoutTitle);
+  const plausibleSharedName = sharedNameWords.length > 0 && sharedNameWords.length <= 6 && !/\d/.test(record.displayName);
+  const sharedName = plausibleSharedName && (inferred.flag === "shared-person-name" || (
+    hasSharedPersonName(record.displayName) &&
+    normalizeString(record.displayName) !== normalizeString(record.organization.service) &&
+    !containsKeyword(sharedNameWords, departmentKeywords)
+  )) && !existingPerson && !confirmedPerson;
   record.type = classification.type;
   if (classification.type === "person") {
     const person = extractPersonName(record.displayName) ?? (confirmedPerson ? { firstName: confirmedPerson.firstName } : undefined);
