@@ -93,8 +93,8 @@ export const inferRecordType = (displayName, role, service) => {
   if (containsKeyword(roleWords, roleKeywords) || (!normRole && containsKeyword(nameWords.slice(0, 2), roleKeywords))) {
     return resolvePersonOrShared(normName);
   }
-  if (containsKeyword(serviceWords, departmentKeywords)) return { type: "other", confidence: "high" };
   if (isPlausibleName && normName !== normService) return resolvePersonOrShared(normName);
+  if (containsKeyword(serviceWords, departmentKeywords)) return { type: "other", confidence: "high" };
   return { type: "other", confidence: "low", flag: "Ambigüedad manual requerida" };
 };
 
