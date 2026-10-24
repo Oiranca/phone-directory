@@ -64,7 +64,7 @@ const tagStopwords = new Set(["a", "al", "con", "de", "del", "el", "en", "la", "
 export const normalizeString = (value) => String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[(),.*–-]/g, " ").replace(/\s+/g, " ").trim();
 const wordsFrom = (value) => normalizeString(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const containsKeyword = (words, keywords) => words.some((word) => keywords.has(word));
-const titlePrefix = /^(?:dr\.?|dra\.?|d\.?|dña\.?|don|doña)\s+/i;
+const titlePrefix = /^(?:dña\.?|dna\.?|doña|dona|don|dra\.?|dr\.?|d\.?)\s+/i;
 const hasSharedPersonName = (value) => wordsFrom(clean(value).replace(titlePrefix, "")).some((word) => ["e", "o", "y"].includes(word));
 const directPersonTitles = new Set(["dr", "dra", "d", "dña", "dna", "don", "doña", "dona"]);
 
@@ -77,6 +77,7 @@ export const inferRecordType = (displayName, role, service) => {
   const serviceWords = wordsFrom(normService);
 
   if (normName === normService && normName !== "") return { type: "other", confidence: "high" };
+  if (nameWords.slice(0, 2).some((word) => directPersonTitles.has(word))) return resolvePersonOrShared(normName);
   if (!role && displayName === displayName?.toUpperCase() && /[A-Z]/.test(displayName ?? "")) {
     return { type: "other", confidence: "high" };
   }
@@ -86,17 +87,14 @@ export const inferRecordType = (displayName, role, service) => {
   if (containsKeyword(roleWords, supervisionKeywords) || containsKeyword(nameWords.slice(0, 2), supervisionKeywords) || containsKeyword(serviceWords, supervisionKeywords)) {
     return { type: "supervision", confidence: "high" };
   }
-  if (nameWords.slice(0, 2).some((word) => directPersonTitles.has(word))) return resolvePersonOrShared(normName);
-  const sharedNameCandidate = isPlausibleName && hasSharedPersonName(displayName);
-  if (sharedNameCandidate) return resolvePersonOrShared(normName);
   if (containsKeyword(nameWords, departmentKeywords)) {
     return { type: "other", confidence: "high" };
   }
   if (containsKeyword(roleWords, roleKeywords) || (!normRole && containsKeyword(nameWords.slice(0, 2), roleKeywords))) {
     return resolvePersonOrShared(normName);
   }
-  if (isPlausibleName && normName !== normService) return resolvePersonOrShared(normName);
   if (containsKeyword(serviceWords, departmentKeywords)) return { type: "other", confidence: "high" };
+  if (isPlausibleName && normName !== normService) return resolvePersonOrShared(normName);
   return { type: "other", confidence: "low", flag: "Ambigüedad manual requerida" };
 };
 
@@ -143,7 +141,13 @@ const enrichRecord = (record, review, identityConfirmed) => {
   if (classification.type === "other" && displayNameWithoutTitle !== record.displayName && containsKeyword(wordsFrom(displayNameWithoutTitle), departmentKeywords)) {
     record.displayName = displayNameWithoutTitle;
   }
-  const sharedName = (inferred.flag === "shared-person-name" || classification.type === "person" && hasSharedPersonName(record.displayName)) && !existingPerson && !confirmedPerson;
+  const sharedNameWords = wordsFrom(displayNameWithoutTitle);
+  const plausibleSharedName = sharedNameWords.length > 0 && sharedNameWords.length <= 6 && !/\d/.test(record.displayName);
+  const sharedName = plausibleSharedName && (inferred.flag === "shared-person-name" || (
+    hasSharedPersonName(record.displayName) &&
+    normalizeString(record.displayName) !== normalizeString(record.organization.service) &&
+    !containsKeyword(sharedNameWords, departmentKeywords)
+  )) && !existingPerson && !confirmedPerson;
   record.type = classification.type;
   if (classification.type === "person") {
     const person = extractPersonName(record.displayName) ?? (confirmedPerson ? { firstName: confirmedPerson.firstName } : undefined);
