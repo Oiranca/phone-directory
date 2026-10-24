@@ -787,10 +787,10 @@ try {
   await waitFor("generated master import completion", () => hasText("Importación completada."));
 
   const imported = JSON.parse(await fs.readFile(masterContactsPath, "utf8"));
-  const compositeLocation = imported.records.find((record) => record.displayName === "Contacto con ubicación");
-  const odsLocation = imported.records.find((record) => record.displayName === "Contacto ODS ubicación");
+  const compositeLocation = imported.records.find((record) => record.displayName === "Contacto con Ubicación");
+  const odsLocation = imported.records.find((record) => record.displayName === "Contacto ODS Ubicación");
   const centerLocation = imported.records.find((record) => record.displayName === "Contacto Centro");
-  const emptyLocation = imported.records.find((record) => record.displayName === "Contacto sin ubicación");
+  const emptyLocation = imported.records.find((record) => record.displayName === "Contacto Sin Ubicación");
   const beeperContact = imported.records.find((record) => record.displayName === "Busca E2E");
   if (imported.records.length !== 5 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || !beeperContact) {
     throw new Error(`Generated master records were not imported: ${imported.records.length}`);
@@ -818,11 +818,11 @@ try {
   await waitFor("beeper catalog after master import", () => hasText("Registro de Buscas"));
   browserCommand("fill", "#beeper-search", "Busca E2E");
   await waitFor("beeper-only record present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E"));
-  browserCommand("fill", "#beeper-search", "Contacto con ubicación");
+  browserCommand("fill", "#beeper-search", "Contacto con Ubicación");
   await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
   clickRole("link", "Directorio");
   await waitFor("directory restored after beeper check", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
-  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con ubicación");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con Ubicación");
   await waitFor("generated master contact card", () => browserCommand("is", "visible", `[data-record-id="${compositeLocation.id}"]`) === "true");
   browserCommand("click", `[data-record-id="${compositeLocation.id}"]`);
   await waitFor("generated master contact selection", () => browserCommand("eval", `

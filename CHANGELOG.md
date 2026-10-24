@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3] - 2026-10-24
+
+### Fixed
+
+- Classify hospital areas as `department` while keeping named contacts as people when their service is an area.
+- Keep medical titles in person names and title-case visible contact and service names without changing known acronyms.
+
 ## [0.1.2] - 2026-10-22
 
 ### Fixed
