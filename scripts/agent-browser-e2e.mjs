@@ -874,8 +874,7 @@ try {
     browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', searchableRecord.displayName);
     await waitFor("provided master contact card", () => browserCommand("is", "visible", `[data-record-id="${searchableRecord.id}"]`) === "true");
     console.log("[agent-browser-e2e] Main master import and directory search passed", {
-      records: imported.records.length,
-      displayName: searchableRecord.displayName
+      records: imported.records.length
     });
   });
 
