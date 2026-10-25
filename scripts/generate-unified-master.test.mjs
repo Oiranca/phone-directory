@@ -131,19 +131,28 @@ it("reports ambiguous records without changing the master schema", async () => {
       assert.equal(report.review.some((item) => item.displayName === displayName && item.kind === "shared-person-name"), false, displayName);
     }
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Ana Valle").person, { firstName: "Ana", lastName: "Valle" });
-    const sharedName = envelope.contacts.records.find((record) => record.displayName === "Pilar e Isabel");
-    assert.equal(sharedName.type, "other");
-    assert.deepEqual(sharedName.person, {});
-    assert.deepEqual(report.review.find((item) => item.kind === "shared-person-name"), {
-      kind: "shared-person-name", displayName: "Pilar e Isabel", role: "Enfermero/a", service: undefined, flag: "Shared name requires manual review"
-    });
-    assert.equal(report.review.filter((item) => item.displayName === "Pilar e Isabel").length, 1);
-    assert.equal(report.review.find((item) => item.displayName === "Pilar e Isabel").kind, "shared-person-name");
-    const sharedNameWithDepartmentService = envelope.contacts.records.find((record) => record.displayName === "Joaquín o Samuel");
-    assert.equal(sharedNameWithDepartmentService.type, "other");
-    assert.deepEqual(report.review.find((item) => item.displayName === "Joaquín o Samuel"), {
-      kind: "shared-person-name", displayName: "Joaquín o Samuel", role: undefined, service: "SEPCA", flag: "Shared name requires manual review"
-    });
+    const pilar = envelope.contacts.records.find((record) => record.displayName === "Pilar");
+    const isabel = envelope.contacts.records.find((record) => record.displayName === "Isabel");
+    assert.equal(pilar.type, "person");
+    assert.equal(isabel.type, "person");
+    assert.deepEqual(pilar.person, { firstName: "Pilar" });
+    assert.deepEqual(isabel.person, { firstName: "Isabel" });
+    assert.notEqual(pilar.externalId, isabel.externalId);
+    assert.notEqual(pilar.contactMethods.phones[0].id, isabel.contactMethods.phones[0].id);
+    assert.deepEqual(isabel.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })),
+      pilar.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })));
+    assert.equal(report.review.some((item) => item.displayName === "Pilar e Isabel"), false);
+    const joaquin = envelope.contacts.records.find((record) => record.displayName === "Joaquín");
+    const samuel = envelope.contacts.records.find((record) => record.displayName === "Samuel");
+    assert.equal(joaquin.type, "person");
+    assert.equal(samuel.type, "person");
+    assert.deepEqual(joaquin.person, { firstName: "Joaquín" });
+    assert.deepEqual(samuel.person, { firstName: "Samuel" });
+    assert.notEqual(joaquin.externalId, samuel.externalId);
+    assert.notEqual(joaquin.contactMethods.phones[0].id, samuel.contactMethods.phones[0].id);
+    assert.deepEqual(samuel.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })),
+      joaquin.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })));
+    assert.equal(report.review.some((item) => item.displayName === "Joaquín o Samuel"), false);
     assert.equal(report.review.some((item) => item.displayName === "Nombre temporal o pendiente de confirmar por personal externo"), false);
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Turno 24h").type, "other");
     assert.deepEqual(report.review.find((item) => item.kind === "ambiguous-record-type" && item.displayName === "Turno 24h"), {

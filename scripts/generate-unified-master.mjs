@@ -193,6 +193,11 @@ const enrichRecord = (record, review, identityConfirmed) => {
 const confirmedPersonLinks = [
   { firstName: "Rosa", service: "Asesoría Jurídica", extension: "70907", title: "SECRETARÍA ASESORÍA JURÍDICA" }
 ];
+// shortcut: split only confirmed source pairs; new pairs remain in review until confirmed.
+const confirmedSharedPeople = new Map([
+  ["pilar e isabel", ["Pilar", "Isabel"]],
+  ["joaquin o samuel", ["Joaquín", "Samuel"]]
+]);
 const confirmedPersonLink = (record) => confirmedPersonLinks.find((person) =>
   fold(record.displayName) === fold(person.firstName) &&
   fold(record.organization.service) === fold(person.service) &&
@@ -473,6 +478,27 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     phones.splice(phones.indexOf(primary), 1);
     phones.unshift(primary);
   }
+
+  records = records.flatMap((record) => {
+    const people = confirmedSharedPeople.get(normalizeString(record.displayName));
+    if (!people) return [record];
+    return people.map((firstName, index) => {
+      const personRecord = index === 0 ? record : structuredClone(record);
+      if (index > 0) {
+        const personSuffix = `-shared-person-${index + 1}`;
+        personRecord.id = `${record.id}${personSuffix}`;
+        if (record.externalId) personRecord.externalId = `${record.externalId}${personSuffix}`;
+        if (personRecord.source) personRecord.source.externalId = personRecord.externalId;
+        for (const entries of [...Object.values(personRecord.contactMethods), personRecord.customFields ?? []]) {
+          for (const entry of entries) if (entry.id) entry.id = `${entry.id}${personSuffix}`;
+        }
+      }
+      personRecord.displayName = firstName;
+      personRecord.type = "person";
+      personRecord.person = { firstName };
+      return personRecord;
+    });
+  });
 
   for (const record of records) enrichRecord(record, review, identityConfirmedRecords.has(record.id));
 
