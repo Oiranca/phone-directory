@@ -5,6 +5,7 @@
 ### Fixed
 
 - Classify hospital areas as `department`, union organizations as `other`, and named contacts as people when their service is an area.
+- Exclude department and supervision labels from shared-person-name review flags.
 - Keep medical titles in person names and title-case visible contact and service names without changing known acronyms.
 
 ## [0.1.2] - 2026-10-22

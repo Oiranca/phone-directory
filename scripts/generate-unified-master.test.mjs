@@ -36,9 +36,12 @@ it("classifies punctuated roles and extracts clean person names", () => {
   assert.equal(inferRecordType("Lucia Valencia Sola", "", "Anestesia").type, "person");
   assert.deepEqual(inferRecordType("Analíticas", "", "Analiticas"), { type: "department", confidence: "high" });
   assert.deepEqual(inferRecordType("Bomba Colostomía", "", "Bomba Colostomía"), { type: "department", confidence: "high" });
-  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf"]) {
+  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf", "coprocultivo", "coprocultivos", "parasitos", "infecciones", "viricas", "respiratorias", "urocultivo", "urocultivos", "muestras", "genitales", "adicciones", "sm"]) {
     assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "department", keyword);
   }
+  assert.equal(inferRecordType("Coprocultivos y Parásitos", "", "Microbiología y Parasitología").type, "department");
+  assert.equal(inferRecordType("Director General SM y Adicciones", "", "Psiquiatría").type, "supervision");
+  assert.equal(inferRecordType("DIRECTOR GENERAL SM Y ADICCIONES", "", "Psiquiatría").type, "department");
   for (const keyword of unionKeywords) {
     assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "other", keyword);
   }
@@ -102,6 +105,10 @@ it("reports ambiguous records without changing the master schema", async () => {
       ["Nombre temporal o pendiente de confirmar por personal externo", "", "Servicio sin clasificar", "70011", "", "", "", "", "", "", "", ""],
       ["Equipo Externo", "", "Equipo Externo", "70007", "", "", "", "", "", "", "", ""],
       ["UGT y CCOO", "", "Representación laboral", "70012", "", "", "", "", "", "", "", ""],
+      ["COPROCULTIVOS Y PARÁSITOS", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70013", "", "", "", "", "", "", "", ""],
+      ["COPROCULTIVOS E INFECCIONES VÍRICAS NO RESPIRATORIAS", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70014", "", "", "", "", "", "", "", ""],
+      ["UROCULTIVOS Y MUESTRAS GENITALES", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70015", "", "", "", "", "", "", "", ""],
+      ["DIRECTOR GENERAL SM Y ADICCIONES", "", "PSIQUIATRÍA", "70016", "", "", "", "", "", "", "", ""],
       ["Ana Valle", "", "Bomba Colostomía Estomas", "70008", "", "", "", "", "", "", "", ""],
       ["Turno 24h", "Rol sin catalogar", "", "70004", "", "", "", "", "", "", "", ""]
     ]]]);
@@ -120,6 +127,9 @@ it("reports ambiguous records without changing the master schema", async () => {
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Equipo Externo").type, "department");
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "UGT y CCOO").type, "other");
     assert.equal(report.review.some((item) => item.displayName === "UGT y CCOO"), false);
+    for (const displayName of ["Coprocultivos y Parásitos", "Coprocultivos e Infecciones Víricas No Respiratorias", "Urocultivos y Muestras Genitales", "Director General SM y Adicciones"]) {
+      assert.equal(report.review.some((item) => item.displayName === displayName && item.kind === "shared-person-name"), false, displayName);
+    }
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Ana Valle").person, { firstName: "Ana", lastName: "Valle" });
     const sharedName = envelope.contacts.records.find((record) => record.displayName === "Pilar e Isabel");
     assert.equal(sharedName.type, "other");
