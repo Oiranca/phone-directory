@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import XLSX from "xlsx";
 import { it, vi } from "vitest";
-import { buildUnifiedMaster, extractPersonName, inferRecordType, normalizeString } from "./generate-unified-master.mjs";
+import { buildUnifiedMaster, extractPersonName, inferRecordType, normalizeString, toTitleCase, unionKeywords } from "./generate-unified-master.mjs";
 import { parseAndValidateJson } from "../dist-electron/main/services/json-data-reader.js";
 
 const writeWorkbook = (filePath, sheets) => {
@@ -16,7 +16,7 @@ const writeWorkbook = (filePath, sheets) => {
 it("classifies punctuated roles and extracts clean person names", () => {
   assert.equal(normalizeString("  MÉDICO  "), "medico");
   assert.equal(normalizeString("Biopsias (Eco)"), "biopsias eco");
-  assert.deepEqual(inferRecordType("Endoscopia", "Enfermero/a", "Servicio Endoscopia"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Endoscopia", "Enfermero/a", "Servicio Endoscopia"), { type: "department", confidence: "high" });
   assert.deepEqual(inferRecordType("Dra. Alergia", "Enfermero/a", "Alergia"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("Dr. Endoscopia", "", "Endoscopia"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("Dra. Serrano", "", "Endoscopia"), { type: "person", confidence: "high" });
@@ -26,36 +26,44 @@ it("classifies punctuated roles and extracts clean person names", () => {
   assert.deepEqual(inferRecordType("Don José Pérez", "", "Medicina"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("Doña Ana Pérez", "", "Medicina"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("María López", "Supervisora/a", "Endoscopia"), { type: "supervision", confidence: "high" });
-  assert.deepEqual(inferRecordType("MARTA", "", "Otro servicio"), { type: "other", confidence: "high" });
-  assert.deepEqual(inferRecordType("TURNO 24H", "", "Otro servicio"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("MARTA", "", "Otro servicio"), { type: "department", confidence: "high" });
+  assert.deepEqual(inferRecordType("TURNO 24H", "", "Otro servicio"), { type: "department", confidence: "high" });
   assert.deepEqual(inferRecordType("María López", "Rol sin catalogar", "Endoscopia"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("María López", "Rol sin catalogar", "Servicio sin clasificar"), { type: "person", confidence: "high" });
   assert.deepEqual(inferRecordType("Ana Valle", "", "Bomba Colostomía Estomas"), { type: "person", confidence: "high" });
   assert.equal(inferRecordType("Pedro", "", "Mantenimiento").type, "person");
   assert.equal(inferRecordType("Javier", "", "Mantenimiento").type, "person");
   assert.equal(inferRecordType("Lucia Valencia Sola", "", "Anestesia").type, "person");
-  assert.deepEqual(inferRecordType("Analíticas", "", "Analiticas"), { type: "other", confidence: "high" });
-  assert.deepEqual(inferRecordType("Bomba Colostomía", "", "Bomba Colostomía"), { type: "other", confidence: "high" });
-  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf", "cobas", "sepca"]) {
+  assert.deepEqual(inferRecordType("Analíticas", "", "Analiticas"), { type: "department", confidence: "high" });
+  assert.deepEqual(inferRecordType("Bomba Colostomía", "", "Bomba Colostomía"), { type: "department", confidence: "high" });
+  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf", "coprocultivo", "coprocultivos", "parasitos", "infecciones", "viricas", "respiratorias", "urocultivo", "urocultivos", "muestras", "genitales", "adicciones", "sm"]) {
+    assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "department", keyword);
+  }
+  assert.equal(inferRecordType("Coprocultivos y Parásitos", "", "Microbiología y Parasitología").type, "department");
+  assert.equal(inferRecordType("Director General SM y Adicciones", "", "Psiquiatría").type, "supervision");
+  assert.equal(inferRecordType("DIRECTOR GENERAL SM Y ADICCIONES", "", "Psiquiatría").type, "department");
+  for (const keyword of unionKeywords) {
     assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "other", keyword);
   }
+  assert.deepEqual(inferRecordType("UGT y CCOO", "", "Representación laboral"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dr. SATSE", "", "Representación laboral"), { type: "person", confidence: "high" });
   for (const role of ["calefactor", "frigorista", "carpintero", "mecanico", "delineante", "gestor", "gestora", "inspector", "inspectora"]) {
     assert.equal(inferRecordType("Personal", role, "Otro servicio").type, "person", role);
   }
   for (const role of ["ingeniero", "ingeniera", "Ingeniero/a", "Ingeniera/o"]) {
     assert.equal(inferRecordType("Paloma", role, "Ingeniera").type, "person", role);
   }
-  assert.deepEqual(inferRecordType("Saf", "", "Otro servicio"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Saf", "", "Otro servicio"), { type: "department", confidence: "high" });
   assert.deepEqual(inferRecordType("Orlando", "Comunicaciones", "Jefe/a Comunicaciones"), { type: "supervision", confidence: "high" });
   assert.deepEqual(inferRecordType("Alexis, Francis, Javier y Cayetano", "", "Comunicaciones"), { type: "other", confidence: "high", flag: "shared-person-name" });
   assert.deepEqual(inferRecordType("Pilar e Isabel", "Enfermero/a", "COBAS"), { type: "other", confidence: "high", flag: "shared-person-name" });
   assert.deepEqual(inferRecordType("Joaquín o Samuel", "", "SEPCA"), { type: "other", confidence: "high", flag: "shared-person-name" });
-  assert.deepEqual(inferRecordType("Hemostasia y Coagulación", "Doctor/a", "Hemostasia y Coagulación"), { type: "other", confidence: "high" });
-  assert.deepEqual(inferRecordType("Dra. Ana García", "", "Dra. Ana García"), { type: "other", confidence: "high" });
-  assert.deepEqual(extractPersonName("Dr Hurtado"), { lastName: "Hurtado" });
-  assert.equal(extractPersonName("Dr. Endoscopia"), undefined);
-  assert.deepEqual(extractPersonName("Dra. Serrano"), { lastName: "Serrano" });
-  assert.deepEqual(extractPersonName("Dra. Ana García"), { firstName: "Ana", lastName: "García" });
+  assert.deepEqual(inferRecordType("Hemostasia y Coagulación", "Doctor/a", "Hemostasia y Coagulación"), { type: "department", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dra. Ana García", "", "Dra. Ana García"), { type: "department", confidence: "high" });
+  assert.deepEqual(extractPersonName("Dr Hurtado"), { firstName: "Dr", lastName: "Hurtado" });
+  assert.deepEqual(extractPersonName("Dr. Endoscopia"), { firstName: "Dr.", lastName: "Endoscopia" });
+  assert.deepEqual(extractPersonName("Dra. Serrano"), { firstName: "Dra.", lastName: "Serrano" });
+  assert.deepEqual(extractPersonName("Dra. Ana García"), { firstName: "Dra.", lastName: "Ana García" });
   assert.deepEqual(extractPersonName("Dña. Ana María García"), { firstName: "Ana", lastName: "María García" });
   assert.deepEqual(extractPersonName("Don José Pérez"), { firstName: "José", lastName: "Pérez" });
   assert.deepEqual(extractPersonName("Doña Ana Pérez"), { firstName: "Ana", lastName: "Pérez" });
@@ -64,6 +72,19 @@ it("classifies punctuated roles and extracts clean person names", () => {
   assert.equal(extractPersonName("Pilar e Isabel"), undefined);
   assert.equal(extractPersonName("Joaquín o Samuel"), undefined);
   assert.deepEqual(inferRecordType("Turno 24h", "Rol sin catalogar", ""), { type: "other", confidence: "low", flag: "Ambigüedad manual requerida" });
+  assert.equal(toTitleCase("Alojamiento (Cruz Roja)"), "Alojamiento (Cruz Roja)");
+  assert.equal(toTitleCase("CMA MIR TV XXIII ENDOSCOPIA AFÉRESIS"), "CMA MIR TV XXIII Endoscopia Aféresis");
+  assert.equal(toTitleCase("Pilar e Isabel"), "Pilar e Isabel");
+  assert.equal(toTitleCase("PILAR E ISABEL"), "Pilar e Isabel");
+  assert.equal(toTitleCase("JOSE PEREZ"), "Jose Perez");
+  assert.equal(toTitleCase("QX16 CHUIMI SATSE SALA TRATAMIENTO"), "QX16 CHUIMI SATSE Sala Tratamiento");
+  assert.equal(toTitleCase("Hospital DE DÍA"), "Hospital de Día");
+  assert.equal(toTitleCase("Unidad DE Atención AL Usuario"), "Unidad de Atención al Usuario");
+  assert.equal(toTitleCase("JEFE/A"), "Jefe/a");
+  assert.equal(toTitleCase("neurocirugía / uci"), "Neurocirugía / UCI");
+  assert.equal(toTitleCase("ENDOSCOPIA"), "Endoscopia");
+  assert.equal(toTitleCase("Busca E2E"), "Busca E2E");
+  assert.equal(toTitleCase("UGT Y CCOO"), "UGT y CCOO");
 });
 
 it("reports ambiguous records without changing the master schema", async () => {
@@ -83,6 +104,11 @@ it("reports ambiguous records without changing the master schema", async () => {
       ["Joaquín o Samuel", "", "SEPCA", "70010", "", "", "", "", "", "", "", ""],
       ["Nombre temporal o pendiente de confirmar por personal externo", "", "Servicio sin clasificar", "70011", "", "", "", "", "", "", "", ""],
       ["Equipo Externo", "", "Equipo Externo", "70007", "", "", "", "", "", "", "", ""],
+      ["UGT y CCOO", "", "Representación laboral", "70012", "", "", "", "", "", "", "", ""],
+      ["COPROCULTIVOS Y PARÁSITOS", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70013", "", "", "", "", "", "", "", ""],
+      ["COPROCULTIVOS E INFECCIONES VÍRICAS NO RESPIRATORIAS", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70014", "", "", "", "", "", "", "", ""],
+      ["UROCULTIVOS Y MUESTRAS GENITALES", "", "MICROBIOLOGÍA Y PARASITOLOGÍA", "70015", "", "", "", "", "", "", "", ""],
+      ["DIRECTOR GENERAL SM Y ADICCIONES", "", "PSIQUIATRÍA", "70016", "", "", "", "", "", "", "", ""],
       ["Ana Valle", "", "Bomba Colostomía Estomas", "70008", "", "", "", "", "", "", "", ""],
       ["Turno 24h", "Rol sin catalogar", "", "70004", "", "", "", "", "", "", "", ""]
     ]]]);
@@ -94,25 +120,39 @@ it("reports ambiguous records without changing the master schema", async () => {
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Dra. Serrano").type, "person");
     const doctorArea = envelope.contacts.records.find((record) => record.displayName === "Dr. Endoscopia");
     assert.equal(doctorArea.type, "person");
-    assert.deepEqual(doctorArea.person, {});
-    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Endoscopia").type, "other");
+    assert.deepEqual(doctorArea.person, { firstName: "Dr.", lastName: "Endoscopia" });
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Endoscopia").type, "department");
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Dr. Alergia").type, "person");
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "María López").type, "supervision");
-    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Equipo Externo").type, "other");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "Equipo Externo").type, "department");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "UGT y CCOO").type, "other");
+    assert.equal(report.review.some((item) => item.displayName === "UGT y CCOO"), false);
+    for (const displayName of ["Coprocultivos y Parásitos", "Coprocultivos e Infecciones Víricas No Respiratorias", "Urocultivos y Muestras Genitales", "Director General SM y Adicciones"]) {
+      assert.equal(report.review.some((item) => item.displayName === displayName && item.kind === "shared-person-name"), false, displayName);
+    }
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Ana Valle").person, { firstName: "Ana", lastName: "Valle" });
-    const sharedName = envelope.contacts.records.find((record) => record.displayName === "Pilar e Isabel");
-    assert.equal(sharedName.type, "other");
-    assert.deepEqual(sharedName.person, {});
-    assert.deepEqual(report.review.find((item) => item.kind === "shared-person-name"), {
-      kind: "shared-person-name", displayName: "Pilar e Isabel", role: "Enfermero/a", service: undefined, flag: "Shared name requires manual review"
-    });
-    assert.equal(report.review.filter((item) => item.displayName === "Pilar e Isabel").length, 1);
-    assert.equal(report.review.find((item) => item.displayName === "Pilar e Isabel").kind, "shared-person-name");
-    const sharedNameWithDepartmentService = envelope.contacts.records.find((record) => record.displayName === "Joaquín o Samuel");
-    assert.equal(sharedNameWithDepartmentService.type, "other");
-    assert.deepEqual(report.review.find((item) => item.displayName === "Joaquín o Samuel"), {
-      kind: "shared-person-name", displayName: "Joaquín o Samuel", role: undefined, service: "SEPCA", flag: "Shared name requires manual review"
-    });
+    const pilar = envelope.contacts.records.find((record) => record.displayName === "Pilar");
+    const isabel = envelope.contacts.records.find((record) => record.displayName === "Isabel");
+    assert.equal(pilar.type, "person");
+    assert.equal(isabel.type, "person");
+    assert.deepEqual(pilar.person, { firstName: "Pilar" });
+    assert.deepEqual(isabel.person, { firstName: "Isabel" });
+    assert.notEqual(pilar.externalId, isabel.externalId);
+    assert.notEqual(pilar.contactMethods.phones[0].id, isabel.contactMethods.phones[0].id);
+    assert.deepEqual(isabel.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })),
+      pilar.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })));
+    assert.equal(report.review.some((item) => item.displayName === "Pilar e Isabel"), false);
+    const joaquin = envelope.contacts.records.find((record) => record.displayName === "Joaquín");
+    const samuel = envelope.contacts.records.find((record) => record.displayName === "Samuel");
+    assert.equal(joaquin.type, "person");
+    assert.equal(samuel.type, "person");
+    assert.deepEqual(joaquin.person, { firstName: "Joaquín" });
+    assert.deepEqual(samuel.person, { firstName: "Samuel" });
+    assert.notEqual(joaquin.externalId, samuel.externalId);
+    assert.notEqual(joaquin.contactMethods.phones[0].id, samuel.contactMethods.phones[0].id);
+    assert.deepEqual(samuel.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })),
+      joaquin.contactMethods.phones.map(({ number, extension, kind }) => ({ number, extension, kind })));
+    assert.equal(report.review.some((item) => item.displayName === "Joaquín o Samuel"), false);
     assert.equal(report.review.some((item) => item.displayName === "Nombre temporal o pendiente de confirmar por personal externo"), false);
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Turno 24h").type, "other");
     assert.deepEqual(report.review.find((item) => item.kind === "ambiguous-record-type" && item.displayName === "Turno 24h"), {
@@ -151,7 +191,7 @@ it("preserves beeper-only contact details while cataloging the pager separately"
     assert.deepEqual(beeperContact.beepers, [{ number: "7157" }]);
     assert.equal(beeperContact.organization.schedule, "Horario E2E");
     assert.equal(beeperContact.notes, "Nota E2E");
-    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Teléfono sin busca"), true);
+    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Teléfono Sin Busca"), true);
     assert.equal(envelope.beepers.importedRecords.some((record) => record.name === "Teléfono sin busca"), false);
     assert.equal(envelope.beepers.importedRecords.some((record) =>
       record.deviceNumber === "7157" && record.department === "Neurocirugia – Planta"
@@ -203,9 +243,9 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "55555").isPrimary, true);
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "928000001").isPrimary, false);
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "928000001").label, undefined);
-    assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk A").length, 1);
+    assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk a").length, 1);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk D").length, 1);
-    assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk E" || record.displayName === "Subunit").length, 2);
+    assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk e" || record.displayName === "Subunit").length, 2);
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Subunit").contactMethods.phones.map((entry) => entry.number), ["77777", "928000003"]);
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Extension Only").contactMethods.phones.map((entry) => entry.number), ["88888"]);
     const deskI = envelope.contacts.records.filter((record) => record.displayName === "Desk I");
@@ -226,7 +266,7 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.deepEqual(beeperContact.beepers.map((entry) => entry.number), ["7001"]);
     assert.deepEqual(beeperContact.contactMethods.phones.map((entry) => entry.number).sort(), ["66666", "699000001"]);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Pager D").length, 1);
-    assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Pager E").beepers.map((entry) => entry.number), ["7001"]);
+    assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Pager e").beepers.map((entry) => entry.number), ["7001"]);
     assert.equal(envelope.beepers.importedRecords.length, 2);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
@@ -248,7 +288,7 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
       row("Lucia Valencia Sola", "", "Anestesia", "70005"),
       row("Ángel Aranda", "", "Comunicaciones", "70006"),
       row("Alergia", "Enfermero/a", "Alergia", "70007"),
-      row("Endoscopia", "Enfermero/a", "Endoscopia", "70003"),
+      row("ENDOSCOPIA", "Enfermero/a", "ENDOSCOPIA", "70003"),
       row("Secretaría Admisión", "Enfermero/a", "Admisión", "70004"),
       row("Urgencias", "Enfermero/a", "Urgencias", "70008"),
       row("Suministros", "Enfermero/a", "Suministros", "70009"),
@@ -274,6 +314,7 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
     const doctor = envelope.contacts.records.find((record) => record.displayName === "Dra. Serrano");
     assert.equal(doctor.displayName, "Dra. Serrano");
     assert.equal(doctor.type, "person");
+    assert.equal(doctor.person.firstName, "Dra.");
     assert.equal(doctor.person.lastName, "Serrano");
 
     const ana = envelope.contacts.records.find((record) => record.displayName === "Ana Valle");
@@ -297,16 +338,17 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
     assert.deepEqual(angel.person, { firstName: "Ángel", lastName: "Aranda" });
 
     const alergia = envelope.contacts.records.find((record) => record.displayName === "Alergia");
-    assert.equal(alergia.type, "other");
+    assert.equal(alergia.type, "department");
     assert.equal(alergia.organization.role, "Enfermero/a");
 
     const endoscopia = envelope.contacts.records.find((record) => record.displayName === "Endoscopia");
-    assert.equal(endoscopia.type, "other");
+    assert.equal(endoscopia.type, "department");
     assert.equal(endoscopia.organization.role, "Enfermero/a");
+    assert.equal(endoscopia.organization.service, "Endoscopia");
     assert.equal(endoscopia.organization.area, "especialidades");
 
     const secretaria = envelope.contacts.records.find((record) => record.displayName === "Secretaría Admisión");
-    assert.equal(secretaria.type, "other");
+    assert.equal(secretaria.type, "department");
     assert.equal(secretaria.organization.role, "Enfermero/a");
     assert.equal(secretaria.organization.area, "gestion-administracion");
 
@@ -316,6 +358,8 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
       especialidades: 3,
       otros: 8
     });
+    assert.ok(envelope.contacts.metadata.typeCounts.department > 0);
+    assert.equal(Object.values(envelope.contacts.metadata.typeCounts).reduce((total, count) => total + count, 0), envelope.contacts.records.length);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

@@ -250,6 +250,7 @@ try {
     ["Nombre", "Categoría", "Servicio", "Número 1", "Número 2", "Número 3", "Número 4", "Número 5", "Número 6", "Número 7", "Horario", "Confidencial", "Edificio", "Planta", "Sector", "Sección", "Comentarios", "Busca 1"],
     ["Contacto con ubicación", "", "Consulta E2E", "70001", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
     ["Contacto ODS ubicación", "", "Cardiología E2E", "70002", "", "", "", "", "", "", "", "", "Edificio ODS", "Planta 1", "Sector ODS", "Sección ODS", "", ""],
+    ["Pilar e Isabel", "", "Sindicatos E2E", "70005", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
     ["Busca E2E", "Doctor/a", "Servicio E2E", "", "", "", "", "", "", "", "Horario E2E", "", "", "", "", "", "Nota E2E", "9001"]
   ]), "Agenda");
   XLSX.writeFile(masterAgenda, masterAgendaPath);
@@ -780,20 +781,26 @@ try {
   clickRole("button", "Importar");
   await waitFor("generated master confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
   const confirmationText = browserCommand("eval", 'document.querySelector("dialog[open]")?.innerText ?? ""');
-  if (!confirmationText.includes("generated-master.json") || !confirmationText.includes("5 contactos")) {
+  if (!confirmationText.includes("generated-master.json") || !confirmationText.includes("7 contactos")) {
     throw new Error(`Generated master import preview was unexpected: ${confirmationText}`);
   }
   clickRole("button", "Importar archivo");
   await waitFor("generated master import completion", () => hasText("Importación completada."));
 
   const imported = JSON.parse(await fs.readFile(masterContactsPath, "utf8"));
-  const compositeLocation = imported.records.find((record) => record.displayName === "Contacto con ubicación");
-  const odsLocation = imported.records.find((record) => record.displayName === "Contacto ODS ubicación");
+  const compositeLocation = imported.records.find((record) => record.displayName === "Contacto con Ubicación");
+  const odsLocation = imported.records.find((record) => record.displayName === "Contacto ODS Ubicación");
   const centerLocation = imported.records.find((record) => record.displayName === "Contacto Centro");
-  const emptyLocation = imported.records.find((record) => record.displayName === "Contacto sin ubicación");
+  const emptyLocation = imported.records.find((record) => record.displayName === "Contacto Sin Ubicación");
   const beeperContact = imported.records.find((record) => record.displayName === "Busca E2E");
-  if (imported.records.length !== 5 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || !beeperContact) {
+  const pilar = imported.records.find((record) => record.displayName === "Pilar");
+  const isabel = imported.records.find((record) => record.displayName === "Isabel");
+  if (imported.records.length !== 7 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || !beeperContact || !pilar || !isabel) {
     throw new Error(`Generated master records were not imported: ${imported.records.length}`);
+  }
+  if (pilar.type !== "person" || isabel.type !== "person" || pilar.externalId === isabel.externalId ||
+    pilar.contactMethods.phones[0]?.number !== "70005" || isabel.contactMethods.phones[0]?.number !== "70005") {
+    throw new Error(`Shared extension contacts were not imported separately: ${JSON.stringify([pilar, isabel])}`);
   }
   if (beeperContact.contactMethods.phones.length || beeperContact.beepers[0]?.number !== "9001" ||
     beeperContact.organization.schedule !== "Horario E2E" || beeperContact.notes !== "Nota E2E") {
@@ -812,17 +819,21 @@ try {
 
   clickRole("link", "Directorio");
   await waitFor("directory after master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Pilar");
+  await waitFor("first shared-extension person in directory", () => browserCommand("is", "visible", `[data-record-id="${pilar.id}"]`) === "true");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Isabel");
+  await waitFor("second shared-extension person in directory", () => browserCommand("is", "visible", `[data-record-id="${isabel.id}"]`) === "true");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Busca E2E");
   await waitFor("beeper-only record absent from directory", () => hasText("Sin resultados"));
   clickRole("link", "Buscas");
   await waitFor("beeper catalog after master import", () => hasText("Registro de Buscas"));
   browserCommand("fill", "#beeper-search", "Busca E2E");
   await waitFor("beeper-only record present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E"));
-  browserCommand("fill", "#beeper-search", "Contacto con ubicación");
+  browserCommand("fill", "#beeper-search", "Contacto con Ubicación");
   await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
   clickRole("link", "Directorio");
   await waitFor("directory restored after beeper check", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
-  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con ubicación");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con Ubicación");
   await waitFor("generated master contact card", () => browserCommand("is", "visible", `[data-record-id="${compositeLocation.id}"]`) === "true");
   browserCommand("click", `[data-record-id="${compositeLocation.id}"]`);
   await waitFor("generated master contact selection", () => browserCommand("eval", `
@@ -836,7 +847,7 @@ try {
     throw new Error(`Generated master location card was wrong: ${locationCard}`);
   }
   browserCommand("screenshot", path.join(visualArtifactDirectory, "generated-master-location-import.png"));
-  console.log("[agent-browser-e2e] Generated master import separated beeper-only and phone-only rows; location card passed");
+  console.log("[agent-browser-e2e] Generated master import split shared-extension people, separated beeper-only and phone-only rows, and rendered locations");
   });
 
   if (externalMasterImportPath) await runScenario("provided main master import", async () => {

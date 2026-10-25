@@ -47,11 +47,12 @@ const buildLocationObject = (rawRecord) => {
 };
 
 export const departmentKeywords = new Set([
-  'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco', 'comedor', 'central', 'ascensor', 'ascensores', 'guagua', 'fax', 'registro', 'policia', 'juzgado', 'prision', 'clinica', 'instituto', 'bomba', 'caldera', 'camara', 'telefono', 'tv', 'televisores', 'monitor', 'monitores', 'taller', 'talleres', 'traslado', 'transporte', 'tarjeta', 'receta', 'aislados', 'analiticas', 'animalario', 'aparcamiento', 'avericum', 'capturas', 'crohn', 'despertar',
+  'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco', 'comedor', 'central', 'ascensor', 'ascensores', 'guagua', 'fax', 'registro', 'policia', 'juzgado', 'prision', 'clinica', 'instituto', 'bomba', 'caldera', 'camara', 'telefono', 'tv', 'televisores', 'monitor', 'monitores', 'taller', 'talleres', 'traslado', 'transporte', 'tarjeta', 'receta', 'aislados', 'analiticas', 'animalario', 'aparcamiento', 'avericum', 'capturas', 'crohn', 'despertar', 'coprocultivo', 'coprocultivos', 'parasitos', 'infecciones', 'viricas', 'respiratorias', 'urocultivo', 'urocultivos', 'muestras', 'genitales', 'adicciones', 'sm',
   'alergia', 'alergologia', 'anatomia', 'patologica', 'anestesia', 'reanimacion', 'cardiologia', 'cirugia', 'dermatologia', 'digestivo', 'endocrino', 'endocrinologia', 'ginecologia', 'obstetricia', 'tocologia', 'hematologia', 'hemoterapia', 'infecciosos', 'medicina', 'interna', 'intensiva', 'preventiva', 'microbiologia', 'parasitologia', 'nefrologia', 'neumologia', 'neurocirugia', 'neurologia', 'oftalmologia', 'oncologia', 'otorrino', 'otorrinolaringologia', 'pediatria', 'psiquiatria', 'radiologia', 'radiodiagnostico', 'rehabilitacion', 'reumatologia', 'traumatologia', 'ortopedica', 'urologia', 'vascular', 'angiologia', 'geriatria', 'maxilofacial', 'plastica', 'reparadora', 'toracica', 'paliativos', 'inmunologia', 'radiofisica', 'farmacogenetica',
-  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'citoscopia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'fribroscan', 'paaf', 'paff', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia', 'saf', 'cobas', 'sepca',
-  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'sindicato', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'comite', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras', 'gestion', 'coordinacion', 'informacion', 'citas'
+  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'citoscopia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'fribroscan', 'paaf', 'paff', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia', 'saf', 'aferesis',
+  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras', 'gestion', 'coordinacion', 'informacion', 'citas'
 ]);
+export const unionKeywords = new Set(['sindicato', 'comite', 'junta', 'delegados', 'seccion', 'sindical', 'ccoo', 'ugt', 'csif', 'uso', 'cgt', 'cnt', 'satse', 'cemstatse', 'cesm', 'cems', 'sae', 'usae', 'amyts', 'sime', 'sicepa', 'sepca', 'cobas', 'asaca', 'intersindical', 'scfif', 'cig', 'ela', 'lab', 'csit']);
 export const roleKeywords = new Set([
   'doctor', 'doctora', 'dr', 'dra', 'facultativo', 'medico', 'especialista', 'residente', 'adjunto', 'mir', 'pir', 'eir', 'fea', 'cirujano', 'patologo',
   'enfermero', 'enfermera', 'due', 'ats', 'matron', 'matrona', 'auxiliar', 'tcae',
@@ -59,12 +60,27 @@ export const roleKeywords = new Set([
   'celador', 'celadora', 'jefe', 'jefa', 'supervisor', 'supervisora', 'secretario', 'secretaria', 'trabajador', 'trabajadora', 'gobernante', 'gobernanta', 'limpiador', 'limpiadora', 'informatico', 'capellan', 'electricista', 'fontanero', 'mecanico', 'conductor', 'chofer', 'ilustrador', 'fotografo', 'periodista', 'administrativo', 'administrativa', 'coordinador', 'coordinadora', 'director', 'directora', 'subdirector', 'subdirectora', 'pinche', 'peluquero', 'peluquera', 'calefactor', 'frigorista', 'carpintero', 'delineante', 'gestor', 'gestora', 'inspector', 'inspectora'
 ]);
 export const supervisionKeywords = new Set(['jefe', 'jefa', 'supervisor', 'supervisora', 'director', 'directora', 'subdirector', 'subdirectora', 'coordinador', 'coordinadora']);
-const tagStopwords = new Set(["a", "al", "con", "de", "del", "el", "en", "la", "las", "los", "para", "por", "y"]);
+const tagStopwords = new Set(["a", "al", "con", "de", "del", "e", "el", "en", "la", "las", "los", "o", "para", "por", "y"]);
+const visualAcronyms = new Set(["amyts", "ccoo", "ccee", "cems", "cemstatse", "cgt", "chuimi", "cig", "cma", "cobas", "csif", "csit", "cnt", "cpre", "e2e", "ecmo", "ela", "json", "lab", "mir", "ods", "paaf", "qx16", "rea", "rrhh", "sae", "saf", "satse", "scfif", "sepca", "sicepa", "sime", "sm", "tac", "tv", "uci", "ugt", "umi", "uso", "urpa", "usae"]);
 
 export const normalizeString = (value) => String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[(),.*–-]/g, " ").replace(/\s+/g, " ").trim();
+export const toTitleCase = (value) => {
+  let wordIndex = 0;
+  return clean(value).replace(/\p{L}+(?:\p{N}+\p{L}*)?|\p{N}+\p{L}*/gu, (word) => {
+    const normalized = normalizeString(word);
+    const isUppercase = word === word.toLocaleUpperCase("es-ES") && word !== word.toLocaleLowerCase("es-ES");
+    const isRomanNumeral = isUppercase && /^[IVXLCDM]+$/u.test(word);
+    const isFirstWord = wordIndex++ === 0;
+    if (visualAcronyms.has(normalized) || isRomanNumeral) return word.toLocaleUpperCase("es-ES");
+    if (/^\p{N}/u.test(word)) return word.toLocaleLowerCase("es-ES");
+    if (!isFirstWord && tagStopwords.has(normalized)) return normalized;
+    return `${word.slice(0, 1).toLocaleUpperCase("es-ES")}${word.slice(1).toLocaleLowerCase("es-ES")}`;
+  });
+};
 const wordsFrom = (value) => normalizeString(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const containsKeyword = (words, keywords) => words.some((word) => keywords.has(word));
 const titlePrefix = /^(?:dña\.?|dna\.?|doña|dona|don|dra\.?|dr\.?|d\.?)\s+/i;
+const civilTitlePrefix = /^(?:dña\.?|dna\.?|doña|dona|don|d\.?)\s+/i;
 const hasSharedPersonName = (value) => wordsFrom(clean(value).replace(titlePrefix, "")).some((word) => ["e", "o", "y"].includes(word));
 const directPersonTitles = new Set(["dr", "dra", "d", "dña", "dna", "don", "doña", "dona"]);
 
@@ -76,10 +92,11 @@ export const inferRecordType = (displayName, role, service) => {
   const nameWords = wordsFrom(normName);
   const serviceWords = wordsFrom(normService);
 
-  if (normName === normService && normName !== "") return { type: "other", confidence: "high" };
+  if (normName === normService && normName !== "") return { type: "department", confidence: "high" };
   if (nameWords.slice(0, 2).some((word) => directPersonTitles.has(word))) return resolvePersonOrShared(normName);
+  if (containsKeyword(nameWords, unionKeywords)) return { type: "other", confidence: "high" };
   if (!role && displayName === displayName?.toUpperCase() && /[A-Z]/.test(displayName ?? "")) {
-    return { type: "other", confidence: "high" };
+    return { type: "department", confidence: "high" };
   }
 
   const isPlausibleName = nameWords.length > 0 && nameWords.length <= 6 && !/\d/.test(displayName ?? "");
@@ -87,14 +104,12 @@ export const inferRecordType = (displayName, role, service) => {
   if (containsKeyword(roleWords, supervisionKeywords) || containsKeyword(nameWords.slice(0, 2), supervisionKeywords) || containsKeyword(serviceWords, supervisionKeywords)) {
     return { type: "supervision", confidence: "high" };
   }
-  if (containsKeyword(nameWords, departmentKeywords)) {
-    return { type: "other", confidence: "high" };
-  }
+  if (containsKeyword(nameWords, departmentKeywords)) return { type: "department", confidence: "high" };
   if (containsKeyword(roleWords, roleKeywords) || (!normRole && containsKeyword(nameWords.slice(0, 2), roleKeywords))) {
     return resolvePersonOrShared(normName);
   }
   if (isPlausibleName && normName !== normService) return resolvePersonOrShared(normName);
-  if (containsKeyword(serviceWords, departmentKeywords)) return { type: "other", confidence: "high" };
+  if (containsKeyword(serviceWords, departmentKeywords)) return { type: "department", confidence: "high" };
   return { type: "other", confidence: "low", flag: "Ambigüedad manual requerida" };
 };
 
@@ -108,7 +123,7 @@ const resolvePersonOrShared = (normName) => {
 
 export const extractPersonName = (displayName) => {
   const name = clean(displayName);
-  const stripped = name.replace(titlePrefix, "");
+  const stripped = name.replace(civilTitlePrefix, "");
   if (hasSharedPersonName(name)) return undefined;
   const [firstName, ...lastName] = stripped.split(" ");
   if (!firstName) return undefined;
@@ -143,10 +158,11 @@ const enrichRecord = (record, review, identityConfirmed) => {
   }
   const sharedNameWords = wordsFrom(displayNameWithoutTitle);
   const plausibleSharedName = sharedNameWords.length > 0 && sharedNameWords.length <= 6 && !/\d/.test(record.displayName);
-  const sharedName = plausibleSharedName && (inferred.flag === "shared-person-name" || (
+  const sharedName = plausibleSharedName && classification.type !== "department" && classification.type !== "supervision" && (inferred.flag === "shared-person-name" || (
     hasSharedPersonName(record.displayName) &&
     normalizeString(record.displayName) !== normalizeString(record.organization.service) &&
-    !containsKeyword(sharedNameWords, departmentKeywords)
+    !containsKeyword(sharedNameWords, departmentKeywords) &&
+    !containsKeyword(sharedNameWords, unionKeywords)
   )) && !existingPerson && !confirmedPerson;
   record.type = classification.type;
   if (classification.type === "person") {
@@ -171,10 +187,17 @@ const enrichRecord = (record, review, identityConfirmed) => {
   for (const entry of record.contactMethods.phones) {
     if (entry.kind === "external" && /^[67]\d{8}$/.test(digits(entry.number))) delete entry.extension;
   }
+  record.displayName = toTitleCase(record.displayName);
+  if (record.organization.service) record.organization.service = toTitleCase(record.organization.service);
 };
 const confirmedPersonLinks = [
   { firstName: "Rosa", service: "Asesoría Jurídica", extension: "70907", title: "SECRETARÍA ASESORÍA JURÍDICA" }
 ];
+// shortcut: split only confirmed source pairs; new pairs remain in review until confirmed.
+const confirmedSharedPeople = new Map([
+  ["pilar e isabel", ["Pilar", "Isabel"]],
+  ["joaquin o samuel", ["Joaquín", "Samuel"]]
+]);
 const confirmedPersonLink = (record) => confirmedPersonLinks.find((person) =>
   fold(record.displayName) === fold(person.firstName) &&
   fold(record.organization.service) === fold(person.service) &&
@@ -455,6 +478,27 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     phones.splice(phones.indexOf(primary), 1);
     phones.unshift(primary);
   }
+
+  records = records.flatMap((record) => {
+    const people = confirmedSharedPeople.get(normalizeString(record.displayName));
+    if (!people) return [record];
+    return people.map((firstName, index) => {
+      const personRecord = index === 0 ? record : structuredClone(record);
+      if (index > 0) {
+        const personSuffix = `-shared-person-${index + 1}`;
+        personRecord.id = `${record.id}${personSuffix}`;
+        if (record.externalId) personRecord.externalId = `${record.externalId}${personSuffix}`;
+        if (personRecord.source) personRecord.source.externalId = personRecord.externalId;
+        for (const entries of [...Object.values(personRecord.contactMethods), personRecord.customFields ?? []]) {
+          for (const entry of entries) if (entry.id) entry.id = `${entry.id}${personSuffix}`;
+        }
+      }
+      personRecord.displayName = firstName;
+      personRecord.type = "person";
+      personRecord.person = { firstName };
+      return personRecord;
+    });
+  });
 
   for (const record of records) enrichRecord(record, review, identityConfirmedRecords.has(record.id));
 
