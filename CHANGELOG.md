@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Classify hospital areas as `department` while keeping named contacts as people when their service is an area.
+- Classify hospital areas as `department`, union organizations as `other`, and named contacts as people when their service is an area.
 - Keep medical titles in person names and title-case visible contact and service names without changing known acronyms.
 
 ## [0.1.2] - 2026-10-22

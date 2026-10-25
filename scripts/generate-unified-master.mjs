@@ -49,9 +49,10 @@ const buildLocationObject = (rawRecord) => {
 export const departmentKeywords = new Set([
   'unidad', 'consulta', 'quirofano', 'hospital', 'sala', 'almacen', 'admision', 'mostrador', 'urgencias', 'archivo', 'planta', 'habitacion', 'pasillo', 'bloque', 'sector', 'ccee', 'uci', 'umi', 'rea', 'urpa', 'centro', 'consultorio', 'laboratorio', 'despacho', 'recepcion', 'control', 'office', 'puerta', 'box', 'anexo', 'area', 'tanatorio', 'capilla', 'cafeteria', 'parking', 'helipuerto', 'cibercentro', 'auditorio', 'aula', 'biblioteca', 'banco', 'comedor', 'central', 'ascensor', 'ascensores', 'guagua', 'fax', 'registro', 'policia', 'juzgado', 'prision', 'clinica', 'instituto', 'bomba', 'caldera', 'camara', 'telefono', 'tv', 'televisores', 'monitor', 'monitores', 'taller', 'talleres', 'traslado', 'transporte', 'tarjeta', 'receta', 'aislados', 'analiticas', 'animalario', 'aparcamiento', 'avericum', 'capturas', 'crohn', 'despertar',
   'alergia', 'alergologia', 'anatomia', 'patologica', 'anestesia', 'reanimacion', 'cardiologia', 'cirugia', 'dermatologia', 'digestivo', 'endocrino', 'endocrinologia', 'ginecologia', 'obstetricia', 'tocologia', 'hematologia', 'hemoterapia', 'infecciosos', 'medicina', 'interna', 'intensiva', 'preventiva', 'microbiologia', 'parasitologia', 'nefrologia', 'neumologia', 'neurocirugia', 'neurologia', 'oftalmologia', 'oncologia', 'otorrino', 'otorrinolaringologia', 'pediatria', 'psiquiatria', 'radiologia', 'radiodiagnostico', 'rehabilitacion', 'reumatologia', 'traumatologia', 'ortopedica', 'urologia', 'vascular', 'angiologia', 'geriatria', 'maxilofacial', 'plastica', 'reparadora', 'toracica', 'paliativos', 'inmunologia', 'radiofisica', 'farmacogenetica',
-  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'citoscopia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'fribroscan', 'paaf', 'paff', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia', 'saf', 'cobas', 'sepca', 'aferesis',
-  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'sindicato', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'comite', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras', 'gestion', 'coordinacion', 'informacion', 'citas'
+  'ecografia', 'tac', 'scaner', 'resonancia', 'espirometria', 'holter', 'ergometria', 'endoscopia', 'colonoscopia', 'broncoscopia', 'mamografia', 'densitometria', 'biopsia', 'analitica', 'extraccion', 'extracciones', 'electro', 'electrocardiograma', 'electromiograma', 'ecmo', 'marcapasos', 'litotricia', 'audiometria', 'citologia', 'citoscopia', 'radioterapia', 'braquiterapia', 'fototerapia', 'ozonoterapia', 'quimioterapia', 'dialisis', 'puncion', 'cpre', 'fibroscan', 'fribroscan', 'paaf', 'paff', 'serologia', 'cultivo', 'antibiograma', 'urocultivo', 'coprocultivo', 'transfusion', 'sangria', 'defecografia', 'dacriocistografia', 'renograma', 'polisomnografia', 'hemodinamica', 'electrofisiologia', 'saf', 'aferesis',
+  'direccion', 'subdireccion', 'gerencia', 'secretaria', 'mantenimiento', 'hosteleria', 'lenceria', 'cocina', 'limpieza', 'recursos', 'humanos', 'rrhh', 'informatica', 'drago', 'prevencion', 'farmacia', 'suministros', 'facturacion', 'calidad', 'docencia', 'investigacion', 'telecomunicaciones', 'electromedicina', 'roperia', 'seguridad', 'asociacion', 'voluntariado', 'costura', 'lavanderia', 'esterilizacion', 'dietetica', 'estadistica', 'reprografia', 'logistica', 'nominas', 'compras', 'gestion', 'coordinacion', 'informacion', 'citas'
 ]);
+export const unionKeywords = new Set(['sindicato', 'comite', 'junta', 'delegados', 'seccion', 'sindical', 'ccoo', 'ugt', 'csif', 'uso', 'cgt', 'cnt', 'satse', 'cemstatse', 'cesm', 'cems', 'sae', 'usae', 'amyts', 'sime', 'sicepa', 'sepca', 'cobas', 'asaca', 'intersindical', 'scfif', 'cig', 'ela', 'lab', 'csit']);
 export const roleKeywords = new Set([
   'doctor', 'doctora', 'dr', 'dra', 'facultativo', 'medico', 'especialista', 'residente', 'adjunto', 'mir', 'pir', 'eir', 'fea', 'cirujano', 'patologo',
   'enfermero', 'enfermera', 'due', 'ats', 'matron', 'matrona', 'auxiliar', 'tcae',
@@ -60,7 +61,7 @@ export const roleKeywords = new Set([
 ]);
 export const supervisionKeywords = new Set(['jefe', 'jefa', 'supervisor', 'supervisora', 'director', 'directora', 'subdirector', 'subdirectora', 'coordinador', 'coordinadora']);
 const tagStopwords = new Set(["a", "al", "con", "de", "del", "e", "el", "en", "la", "las", "los", "o", "para", "por", "y"]);
-const visualAcronyms = new Set(["ccee", "chuimi", "cma", "cobas", "cpre", "e2e", "ecmo", "json", "mir", "ods", "paaf", "qx16", "rea", "rrhh", "saf", "satse", "sepca", "tac", "tv", "uci", "umi", "urpa"]);
+const visualAcronyms = new Set(["amyts", "ccoo", "ccee", "cems", "cemstatse", "cgt", "chuimi", "cig", "cma", "cobas", "csif", "csit", "cnt", "cpre", "e2e", "ecmo", "ela", "json", "lab", "mir", "ods", "paaf", "qx16", "rea", "rrhh", "sae", "saf", "satse", "scfif", "sepca", "sicepa", "sime", "tac", "tv", "uci", "ugt", "umi", "uso", "urpa", "usae"]);
 
 export const normalizeString = (value) => String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[(),.*–-]/g, " ").replace(/\s+/g, " ").trim();
 export const toTitleCase = (value) => {
@@ -93,6 +94,7 @@ export const inferRecordType = (displayName, role, service) => {
 
   if (normName === normService && normName !== "") return { type: "department", confidence: "high" };
   if (nameWords.slice(0, 2).some((word) => directPersonTitles.has(word))) return resolvePersonOrShared(normName);
+  if (containsKeyword(nameWords, unionKeywords)) return { type: "other", confidence: "high" };
   if (!role && displayName === displayName?.toUpperCase() && /[A-Z]/.test(displayName ?? "")) {
     return { type: "department", confidence: "high" };
   }
@@ -159,7 +161,8 @@ const enrichRecord = (record, review, identityConfirmed) => {
   const sharedName = plausibleSharedName && (inferred.flag === "shared-person-name" || (
     hasSharedPersonName(record.displayName) &&
     normalizeString(record.displayName) !== normalizeString(record.organization.service) &&
-    !containsKeyword(sharedNameWords, departmentKeywords)
+    !containsKeyword(sharedNameWords, departmentKeywords) &&
+    !containsKeyword(sharedNameWords, unionKeywords)
   )) && !existingPerson && !confirmedPerson;
   record.type = classification.type;
   if (classification.type === "person") {

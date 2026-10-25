@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import XLSX from "xlsx";
 import { it, vi } from "vitest";
-import { buildUnifiedMaster, extractPersonName, inferRecordType, normalizeString, toTitleCase } from "./generate-unified-master.mjs";
+import { buildUnifiedMaster, extractPersonName, inferRecordType, normalizeString, toTitleCase, unionKeywords } from "./generate-unified-master.mjs";
 import { parseAndValidateJson } from "../dist-electron/main/services/json-data-reader.js";
 
 const writeWorkbook = (filePath, sheets) => {
@@ -36,9 +36,14 @@ it("classifies punctuated roles and extracts clean person names", () => {
   assert.equal(inferRecordType("Lucia Valencia Sola", "", "Anestesia").type, "person");
   assert.deepEqual(inferRecordType("Analíticas", "", "Analiticas"), { type: "department", confidence: "high" });
   assert.deepEqual(inferRecordType("Bomba Colostomía", "", "Bomba Colostomía"), { type: "department", confidence: "high" });
-  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf", "cobas", "sepca"]) {
+  for (const keyword of ["comedor", "central", "ascensor", "ascensores", "guagua", "fax", "gestion", "coordinacion", "registro", "policia", "juzgado", "prision", "clinica", "instituto", "bomba", "caldera", "camara", "telefono", "tv", "televisores", "monitor", "monitores", "taller", "talleres", "informacion", "citas", "traslado", "transporte", "tarjeta", "receta", "aislados", "analiticas", "animalario", "aparcamiento", "avericum", "capturas", "crohn", "despertar", "citoscopia", "fribroscan", "paff", "saf"]) {
     assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "department", keyword);
   }
+  for (const keyword of unionKeywords) {
+    assert.equal(inferRecordType(keyword, "", "Otro servicio").type, "other", keyword);
+  }
+  assert.deepEqual(inferRecordType("UGT y CCOO", "", "Representación laboral"), { type: "other", confidence: "high" });
+  assert.deepEqual(inferRecordType("Dr. SATSE", "", "Representación laboral"), { type: "person", confidence: "high" });
   for (const role of ["calefactor", "frigorista", "carpintero", "mecanico", "delineante", "gestor", "gestora", "inspector", "inspectora"]) {
     assert.equal(inferRecordType("Personal", role, "Otro servicio").type, "person", role);
   }
@@ -76,6 +81,7 @@ it("classifies punctuated roles and extracts clean person names", () => {
   assert.equal(toTitleCase("neurocirugía / uci"), "Neurocirugía / UCI");
   assert.equal(toTitleCase("ENDOSCOPIA"), "Endoscopia");
   assert.equal(toTitleCase("Busca E2E"), "Busca E2E");
+  assert.equal(toTitleCase("UGT Y CCOO"), "UGT y CCOO");
 });
 
 it("reports ambiguous records without changing the master schema", async () => {
@@ -95,6 +101,7 @@ it("reports ambiguous records without changing the master schema", async () => {
       ["Joaquín o Samuel", "", "SEPCA", "70010", "", "", "", "", "", "", "", ""],
       ["Nombre temporal o pendiente de confirmar por personal externo", "", "Servicio sin clasificar", "70011", "", "", "", "", "", "", "", ""],
       ["Equipo Externo", "", "Equipo Externo", "70007", "", "", "", "", "", "", "", ""],
+      ["UGT y CCOO", "", "Representación laboral", "70012", "", "", "", "", "", "", "", ""],
       ["Ana Valle", "", "Bomba Colostomía Estomas", "70008", "", "", "", "", "", "", "", ""],
       ["Turno 24h", "Rol sin catalogar", "", "70004", "", "", "", "", "", "", "", ""]
     ]]]);
@@ -111,6 +118,8 @@ it("reports ambiguous records without changing the master schema", async () => {
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Dr. Alergia").type, "person");
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "María López").type, "supervision");
     assert.equal(envelope.contacts.records.find((record) => record.displayName === "Equipo Externo").type, "department");
+    assert.equal(envelope.contacts.records.find((record) => record.displayName === "UGT y CCOO").type, "other");
+    assert.equal(report.review.some((item) => item.displayName === "UGT y CCOO"), false);
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Ana Valle").person, { firstName: "Ana", lastName: "Valle" });
     const sharedName = envelope.contacts.records.find((record) => record.displayName === "Pilar e Isabel");
     assert.equal(sharedName.type, "other");
