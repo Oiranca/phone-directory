@@ -93,7 +93,7 @@ describe("router — lazy route smoke test", () => {
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
   });
 
-  it("resolves the lazy deduplicate route and renders DeduplicatePage content", async () => {
+  it("redirects the legacy deduplicate route without running the finder", async () => {
     render(
       <ToastProvider>
         <RouterProvider router={router} />
@@ -106,8 +106,9 @@ describe("router — lazy route smoke test", () => {
       await router.navigate("/deduplicate");
     });
 
-    expect(await screen.findByText("No se encontraron duplicados")).toBeInTheDocument();
-    expect(window.hospitalDirectory.detectDuplicates).toHaveBeenCalled();
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(screen.queryByText("No se encontraron duplicados")).not.toBeInTheDocument();
+    expect(window.hospitalDirectory.detectDuplicates).not.toHaveBeenCalled();
   });
 
   it("resolves the lazy contact form route and renders RecordFormPage content", async () => {

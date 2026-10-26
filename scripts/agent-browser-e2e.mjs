@@ -75,6 +75,15 @@ const generatedMasterPath = path.join(workspace, "generated-master.json");
 const externalMasterImportPath = process.env.E2E_MASTER_IMPORT_PATH
   ? path.resolve(process.env.E2E_MASTER_IMPORT_PATH)
   : undefined;
+const externalMasterImportUserDataPath = process.env.E2E_MASTER_IMPORT_USER_DATA_PATH
+  ? path.resolve(process.env.E2E_MASTER_IMPORT_USER_DATA_PATH)
+  : undefined;
+if (externalMasterImportUserDataPath && !externalMasterImportPath) {
+  throw new Error("E2E_MASTER_IMPORT_USER_DATA_PATH requires E2E_MASTER_IMPORT_PATH");
+}
+if (externalMasterImportUserDataPath && process.env.E2E_ALLOW_PERSISTENT_MASTER_IMPORT !== "1") {
+  throw new Error("Persistent master imports require E2E_ALLOW_PERSISTENT_MASTER_IMPORT=1");
+}
 const overwriteCsvPath = path.join(workspace, "overwrite.csv");
 const skipCsvPath = path.join(workspace, "skip.csv");
 const mergeCsvPath = path.join(workspace, "merge.csv");
@@ -251,19 +260,26 @@ try {
     ["Contacto con ubicación", "", "Consulta E2E", "70001", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
     ["Contacto ODS ubicación", "", "Cardiología E2E", "70002", "", "", "", "", "", "", "", "", "Edificio ODS", "Planta 1", "Sector ODS", "Sección ODS", "", ""],
     ["Pilar e Isabel", "", "Sindicatos E2E", "70005", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-    ["Busca E2E", "Doctor/a", "Servicio E2E", "", "", "", "", "", "", "", "Horario E2E", "", "", "", "", "", "Nota E2E", "9001"]
+    ["Busca E2E", "Doctor/a", "Servicio E2E", "", "", "", "", "", "", "", "Horario E2E", "", "", "", "", "", "Nota E2E", "9001"],
+    ["Contacto con Busca y Teléfono", "", "Servicio Extensión E2E", "70030", "", "", "", "", "", "", "", "", "", "", "", "", "", "9002"],
+    ["Mantenimiento - Taller Comunicaciones", "Enfermero/a", "Mantenimiento", "70010", "70011", "", "", "", "", "", "", "", "HUGCDN", "Planta 2", "BLOQUE CENTRAL", "", "", ""],
+    ["Mantenimiento - Taller Comunicaciones", "Enfermero/a", "Mantenimiento", "70010", "70012", "", "", "", "", "", "", "", "HUGCDN", "Planta 2", "BLOQUE CENTRAL", "", "", ""],
+    ["Contacto Ubicación Contradictoria", "", "Contacto Ubicación Contradictoria", "70020", "", "", "", "", "", "", "", "", "BLOQUE NORTE", "Planta 1", "SECTOR A", "", "", ""],
+    ["Contacto Ubicación Contradictoria", "", "Contacto Ubicación Contradictoria", "70021", "", "", "", "", "", "", "", "", "BLOQUE NORTE", "Planta 2", "SECTOR A", "", "", ""]
   ]), "Agenda");
   XLSX.writeFile(masterAgenda, masterAgendaPath);
   const masterBeepers = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(masterBeepers, XLSX.utils.aoa_to_sheet([
     ["Nombre", "Categoría", "Servicio", "Busca 1"],
-    ["Busca E2E", "", "Servicio E2E", "9001"]
+    ["Busca E2E", "", "Servicio E2E", "9001"],
+    ["Contacto con Busca y Teléfono", "", "Servicio Extensión E2E", "9002"]
   ]), "Buscas Todos");
   XLSX.writeFile(masterBeepers, masterBeepersPath);
   await fs.writeFile(masterPhonesPath, JSON.stringify([
     { "Ext.": 70001, "Número": 928123456, Servicio: "Consulta E2E", Titular: "Contacto con ubicación", Centro: "Centro E2E", Nivel: "2", "Ubicación": "Bloque Norte / Sector A / Control" },
     { "Ext.": 70003, Servicio: "Centro E2E", Titular: "Contacto Centro", Centro: "Centro Auxiliar", Nivel: "3" },
-    { "Ext.": 70004, Servicio: "Sin ubicación E2E", Titular: "Contacto sin ubicación" }
+    { "Ext.": 70004, Servicio: "Sin ubicación E2E", Titular: "Contacto sin ubicación" },
+    { "Ext.": 70030, "Número": 928123456, Servicio: "Servicio Extensión E2E", Titular: "Contacto con Busca y Teléfono" }
   ]));
   const { envelope: generatedMaster } = await buildUnifiedMaster(masterAgendaPath, masterBeepersPath, masterPhonesPath);
   await fs.writeFile(generatedMasterPath, JSON.stringify(generatedMaster));
@@ -343,7 +359,7 @@ try {
         const railStyle = getComputedStyle(rail);
         return {
           route: ${JSON.stringify(page.name)}, viewport: { width: innerWidth, height: innerHeight },
-          documentWidth: document.documentElement.scrollWidth,
+          documentWidth: Math.max(document.documentElement.scrollWidth, innerWidth),
           navigation: { width: rail.getBoundingClientRect().width, position: railStyle.position },
           heading: { fontFamily: headingStyle.fontFamily, fontSize: headingStyle.fontSize, fontWeight: headingStyle.fontWeight, lineHeight: headingStyle.lineHeight },
           border: { selector: ${JSON.stringify(page.border)}, width: borderStyle.borderTopWidth, color: borderStyle.borderTopColor, radius: borderStyle.borderTopLeftRadius },
@@ -382,15 +398,17 @@ try {
   const retentionInput = "#settings-autobackup-retention";
   if (browserCommand("eval", `(() => {
     const input = document.querySelector(${JSON.stringify(retentionInput)});
-    const automatic = document.querySelector("#settings-autobackup-enabled");
-    return Boolean(input && !input.disabled && automatic && !automatic.checked);
-  })()`) !== "true") throw new Error("Retention must be editable while automatic backup is disabled");
-  browserCommand("fill", retentionInput, "7");
+    return Boolean(input && !input.disabled);
+  })()`) !== "true") throw new Error("Backup retention must remain editable");
+  browserCommand("fill", retentionInput, "4");
   clickRole("button", "Guardar configuración");
   await waitFor("retention saved", () => hasText("Configuración guardada."));
-  const savedRetention = JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
-  if (savedRetention !== 7) throw new Error(`Retention was not persisted: ${savedRetention}`);
-  console.log("[agent-browser-e2e] Disabled-auto retention saves and persists");
+  const savedRetention = () => JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
+  await waitFor("retention 4 persisted", () => savedRetention() === 4);
+  browserCommand("fill", retentionInput, "5");
+  clickRole("button", "Guardar configuración");
+  await waitFor("maximum retention saved", () => savedRetention() === 5);
+  console.log("[agent-browser-e2e] Backup retention saves and enforces the five-copy limit");
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
   await waitFor("advanced path controls", () => browserCommand("eval", `(() => {
     const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
@@ -426,23 +444,23 @@ try {
     browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-failure.png"));
     throw new Error(`Settings reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
   }
-  const duplicateSearchReflowMetrics = () => JSON.parse(browserCommand("eval", `(() => {
-    const action = [...document.querySelectorAll('a')].find(item => item.textContent.trim() === "Buscar duplicados");
-    const actionRect = action?.getBoundingClientRect();
-    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, actionRight: actionRect?.right ?? null };
+  const hiddenDuplicateSearchMetrics = () => JSON.parse(browserCommand("eval", `(() => {
+    const duplicateSearchVisible = [...document.querySelectorAll('a, button')]
+      .some(item => item.textContent.trim() === "Buscar duplicados");
+    return { innerWidth, scrollWidth: document.documentElement.scrollWidth, duplicateSearchVisible };
   })()`));
   for (const width of [640, 768]) {
     browserCommand("set", "viewport", String(width), "844");
     try {
-      await waitFor(`${width}px duplicate search reflow`, () => {
-        const metrics = duplicateSearchReflowMetrics();
+      await waitFor(`${width}px settings reflow without duplicate search`, () => {
+        const metrics = hiddenDuplicateSearchMetrics();
         return metrics.innerWidth === width && metrics.scrollWidth <= metrics.innerWidth + 1 &&
-          metrics.actionRight !== null && metrics.actionRight <= metrics.innerWidth + 1;
+          !metrics.duplicateSearchVisible;
       });
     } catch (error) {
-      const failureMetrics = duplicateSearchReflowMetrics();
-      browserCommand("screenshot", path.join(visualArtifactDirectory, `settings-${width}-200-duplicate-search-failure.png`));
-      throw new Error(`Settings duplicate-search reflow failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
+      const failureMetrics = hiddenDuplicateSearchMetrics();
+      browserCommand("screenshot", path.join(visualArtifactDirectory, `settings-${width}-200-reflow-failure.png`));
+      throw new Error(`Settings reflow or hidden duplicate-search action failed: ${JSON.stringify(failureMetrics)}`, { cause: error });
     }
   }
   browserCommand("set", "viewport", "320", "844");
@@ -450,7 +468,7 @@ try {
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada"))?.scrollIntoView()`);
   browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200.png"));
   await waitFor("initial settings toast dismissal", () => !hasText("Configuración guardada."));
-  browserCommand("fill", retentionInput, "8");
+  browserCommand("fill", retentionInput, "4");
   clickRole("button", "Guardar configuración");
   await waitFor("retention resaved", () => hasText("Configuración guardada."));
   const toastOverlap = JSON.parse(browserCommand("eval", `(() => {
@@ -781,7 +799,7 @@ try {
   clickRole("button", "Importar");
   await waitFor("generated master confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
   const confirmationText = browserCommand("eval", 'document.querySelector("dialog[open]")?.innerText ?? ""');
-  if (!confirmationText.includes("generated-master.json") || !confirmationText.includes("7 contactos")) {
+  if (!confirmationText.includes("generated-master.json") || !confirmationText.includes("10 contactos")) {
     throw new Error(`Generated master import preview was unexpected: ${confirmationText}`);
   }
   clickRole("button", "Importar archivo");
@@ -795,16 +813,34 @@ try {
   const beeperContact = imported.records.find((record) => record.displayName === "Busca E2E");
   const pilar = imported.records.find((record) => record.displayName === "Pilar");
   const isabel = imported.records.find((record) => record.displayName === "Isabel");
-  if (imported.records.length !== 7 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || !beeperContact || !pilar || !isabel) {
+  const mergedWorkshop = imported.records.find((record) => record.displayName === "Mantenimiento - Taller Comunicaciones");
+  const locationVariants = imported.records.filter((record) => record.displayName === "Contacto Ubicación Contradictoria");
+  const phoneAndBeeper = imported.records.find((record) => record.displayName === "Contacto con Busca y Teléfono");
+  if (imported.records.length !== 10 || !compositeLocation || !odsLocation || !centerLocation || !emptyLocation || beeperContact || !pilar || !isabel || !mergedWorkshop || locationVariants.length !== 2 || !phoneAndBeeper) {
     throw new Error(`Generated master records were not imported: ${imported.records.length}`);
   }
   if (pilar.type !== "person" || isabel.type !== "person" || pilar.externalId === isabel.externalId ||
     pilar.contactMethods.phones[0]?.number !== "70005" || isabel.contactMethods.phones[0]?.number !== "70005") {
     throw new Error(`Shared extension contacts were not imported separately: ${JSON.stringify([pilar, isabel])}`);
   }
-  if (beeperContact.contactMethods.phones.length || beeperContact.beepers[0]?.number !== "9001" ||
-    beeperContact.organization.schedule !== "Horario E2E" || beeperContact.notes !== "Nota E2E") {
-    throw new Error(`Pager-only contact data was not preserved: ${JSON.stringify(beeperContact)}`);
+  const mergedPhoneNumbers = mergedWorkshop.contactMethods.phones.map((phone) => phone.number);
+  if (mergedPhoneNumbers.join(",") !== "70010,70011,70012" ||
+    mergedWorkshop.contactMethods.phones.map((phone) => phone.label).join(",") !== "Número 1,Número 2,Número 3" ||
+    mergedWorkshop.mergedSourceIds?.length !== 2) {
+    throw new Error(`Duplicate contact methods or source IDs were not consolidated: ${JSON.stringify(mergedWorkshop)}`);
+  }
+  if (locationVariants.map((record) => record.location?.floor).sort().join(",") !== "1,2" ||
+    locationVariants.some((record) => record.location?.building !== "BLOQUE NORTE" || record.location?.sector !== "SECTOR A" || record.contactMethods.phones.length !== 1)) {
+    throw new Error(`Different locations were merged instead of preserved separately: ${JSON.stringify(locationVariants)}`);
+  }
+  if (phoneAndBeeper.contactMethods.phones.length !== 1 || phoneAndBeeper.beepers[0]?.number !== "9002" ||
+    phoneAndBeeper.contactMethods.phones[0]?.number !== "70030" ||
+    phoneAndBeeper.contactMethods.phones[0]?.externalNumbers?.[0]?.number !== "928123456") {
+    throw new Error(`Extension priority or phone-plus-beeper routing failed: ${JSON.stringify(phoneAndBeeper)}`);
+  }
+  const importedBeeperOnly = generatedMaster.beepers.importedRecords.find((record) => record.deviceNumber === "9001");
+  if (!importedBeeperOnly?.schedule?.includes("Horario E2E") || !importedBeeperOnly.notes?.includes("Nota E2E")) {
+    throw new Error(`Pager-only schedule/notes did not reach Buscas: ${JSON.stringify(importedBeeperOnly)}`);
   }
   const locationMatches = (actual, expected) => actual && Object.keys(actual).length === Object.keys(expected).length &&
     Object.entries(expected).every(([key, value]) => actual[key] === value);
@@ -823,12 +859,23 @@ try {
   await waitFor("first shared-extension person in directory", () => browserCommand("is", "visible", `[data-record-id="${pilar.id}"]`) === "true");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Isabel");
   await waitFor("second shared-extension person in directory", () => browserCommand("is", "visible", `[data-record-id="${isabel.id}"]`) === "true");
-  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Busca E2E");
-  await waitFor("beeper-only record absent from directory", () => hasText("Sin resultados"));
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "9001");
+  await waitFor("beeper-only record absent from directory", () =>
+    browserCommand("eval", `(() => {
+      const input = document.querySelector('input[placeholder="Buscar contacto o servicio"]');
+      const resultCount = document.querySelector('main [role="status"]')?.textContent?.trim();
+      return input?.value === "9001" && resultCount === "0 resultados";
+    })()`) === "true");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Mantenimiento - Taller Comunicaciones");
+  await waitFor("merged contact appears once in directory", () => browserCommand("eval", `document.querySelectorAll('[data-record-id="${mergedWorkshop.id}"]').length`) === "1");
+  browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con Busca y Teléfono");
+  await waitFor("contact with phone and pager remains in directory", () => browserCommand("is", "visible", `[data-record-id="${phoneAndBeeper.id}"]`) === "true");
   clickRole("link", "Buscas");
   await waitFor("beeper catalog after master import", () => hasText("Registro de Buscas"));
   browserCommand("fill", "#beeper-search", "Busca E2E");
-  await waitFor("beeper-only record present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E"));
+  await waitFor("beeper-only details present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E") && hasText("Horario E2E") && hasText("Nota E2E"));
+  browserCommand("fill", "#beeper-search", "9002");
+  await waitFor("phone-plus-beeper contact remains in beeper catalog", () => hasText("9002") && hasText("Contacto con Busca y Teléfono"));
   browserCommand("fill", "#beeper-search", "Contacto con Ubicación");
   await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
   clickRole("link", "Directorio");
@@ -864,7 +911,7 @@ try {
     const searchableBeeper = expectedBeepers.importedRecords[0];
     if (!searchableBeeper) throw new Error("Provided master file has no imported beepers to verify");
 
-    const userDataPath = path.join(workspace, "provided-master-user-data");
+    const userDataPath = externalMasterImportUserDataPath ?? path.join(workspace, "provided-master-user-data");
     const importedContactsPath = path.join(userDataPath, "data", "contacts.json");
     const importedBeepersPath = path.join(userDataPath, "data", "beepers.json");
     await launchElectron([externalMasterImportPath], userDataPath);
@@ -884,8 +931,19 @@ try {
 
     const imported = JSON.parse(await fs.readFile(importedContactsPath, "utf8"));
     const importedBeepers = JSON.parse(await fs.readFile(importedBeepersPath, "utf8"));
-    if (!isDeepStrictEqual(imported.records, expectedRecords) || !isDeepStrictEqual(importedBeepers, expectedBeepers)) {
-      throw new Error(`Provided master records were not imported faithfully: ${imported.records.length}`);
+    const expectedRecordsWithSequentialPhoneLabels = expectedRecords.map((record) => ({
+      ...record,
+      contactMethods: {
+        ...record.contactMethods,
+        phones: record.contactMethods.phones.map((phone, index) => ({
+          ...phone,
+          label: `Número ${index + 1}`
+        }))
+      }
+    }));
+    if (!isDeepStrictEqual(imported.records, expectedRecordsWithSequentialPhoneLabels) ||
+      !isDeepStrictEqual(importedBeepers, expectedBeepers)) {
+      throw new Error(`Provided master records changed beyond sequential phone labels: ${imported.records.length}`);
     }
 
     clickRole("link", "Directorio");
@@ -912,7 +970,7 @@ try {
     id: "cnt_chip_1", externalId: "chip-removal-1", type: "service", displayName: "Consulta Confidencial ",
     organization: { department: "Consultas", service: "Consulta Reservada", area: "sanitaria-asistencial" },
     contactMethods: { phones: [{ id: "ph_chip_1", label: "Directo", number: "80099", kind: "internal",
-      isPrimary: true, confidential: true, noPatientSharing: true }], emails: [], socials: [] },
+      isPrimary: true, confidential: true, noPatientSharing: false }], emails: [], socials: [] },
     aliases: [], tags: [], status: "active",
     source: { externalId: "chip-removal-1", sheetSlug: "chip-removal", sheetRow: "1" },
     audit: { createdAt: "2026-04-13T00:00:00Z", updatedAt: "2026-04-13T00:00:00Z",
@@ -932,12 +990,12 @@ try {
     const header = [...document.querySelectorAll('h4')].find(item => item.textContent.includes('Consulta Confidencial'))?.parentElement?.innerText || '';
     return { card, phone, header };
   })()`));
-  if (!privacy.card.includes("Ver teléfono en detalle") || !privacy.card.includes("Confidencial") ||
-    !privacy.card.includes("No facilitar a pacientes") || privacy.card.includes("80099") ||
+  if (!privacy.card.includes("80099") || !privacy.card.includes("Confidencial") ||
+    privacy.card.includes("No facilitar a pacientes") ||
     privacy.card.includes("Contacto restringido") || !privacy.phone.includes("80099") ||
-    !privacy.phone.includes("Confidencial") || !privacy.phone.includes("No facilitar a pacientes") ||
+    !privacy.phone.includes("Confidencial") || privacy.phone.includes("No facilitar a pacientes") ||
     privacy.phone.includes("No pacientes") || !privacy.header.includes("Confidencial") ||
-    !privacy.header.includes("No facilitar a pacientes") || privacy.header.includes("No pacientes")) {
+    privacy.header.includes("No facilitar a pacientes") || privacy.header.includes("No pacientes")) {
     throw new Error(`Phone privacy labels failed: ${JSON.stringify(privacy)}`);
   }
   browserCommand("click", 'a[aria-label^="Editar: Consulta Confidencial"]');

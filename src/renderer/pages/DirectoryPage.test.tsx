@@ -357,11 +357,84 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
     // The subtitle now combines the name and role/category with " · " —
     // record[0]'s displayName ("Admisión General") is not a duplicate of its
     // service ("Información"), so both segments render.
     expect(within(list).getByText("Admisión General · Jefe/a de Servicio")).toBeInTheDocument();
+  });
+
+  it("shows a confidential primary phone number on the directory card with its badge", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+    contacts.records[0]!.contactMethods.phones[0]!.noPatientSharing = false;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("70005")).toBeInTheDocument();
+    expect(within(row).getByText("Confidencial")).toBeInTheDocument();
+  });
+
+  it("shows the confidential primary phone on the card when a public secondary number exists", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones = [
+      { id: "ph-confidential", label: "Número 1", number: "70005", kind: "internal", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph-public", label: "Número 2", number: "70006", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(await within(row).findByText("70005")).toBeInTheDocument();
+    expect(within(row).queryByText("70006")).not.toBeInTheDocument();
+    expect(within(row).getByText("Confidencial")).toBeInTheDocument();
+  });
+
+  it("shows a non-confidential primary phone number on the directory card", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = false;
+    contacts.records[0]!.contactMethods.phones[0]!.noPatientSharing = false;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("70005")).toBeInTheDocument();
+    expect(within(row).queryByText("Confidencial")).not.toBeInTheDocument();
   });
 
   it("does not render a role line in the list card when organization.role is absent", async () => {
@@ -466,8 +539,11 @@ describe("DirectoryPage", () => {
   });
 
   it("shows the name in the list card subtitle when it genuinely differs from organization.service", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.type = "person";
+
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
+      contacts,
       settings: {
         editorName: "",
         dataFilePath: "/tmp/data/contacts.json",
@@ -489,6 +565,34 @@ describe("DirectoryPage", () => {
     const heading = within(list).getByRole("heading", { name: /admisión general/i });
     const card = heading.closest("button");
     expect(within(card as HTMLElement).getByText("Admisión General")).toBeInTheDocument();
+  });
+
+  it("does not repeat a department display name in the list card subtitle", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.type = "department";
+    contacts.records[0]!.displayName = "Taller Comunicaciones";
+    contacts.records[0]!.organization.service = "Mantenimiento";
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const heading = within(list).getByRole("heading", { name: /taller comunicaciones/i });
+    const card = heading.closest("button");
+    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
+
+    expect(heading).toHaveTextContent("Mantenimiento - Taller Comunicaciones");
+    expect(subtitle).toHaveTextContent("");
   });
 
   it("shows organization.role in the detail view when present", async () => {
@@ -1104,6 +1208,7 @@ describe("DirectoryPage", () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.location = { building: "Hospital General" };
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+    contacts.records[0]!.contactMethods.phones[0]!.extension = "55102";
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts,
@@ -1123,7 +1228,9 @@ describe("DirectoryPage", () => {
     expect(within(row).queryByText(contacts.records[0]!.contactMethods.phones[0]!.number)).not.toBeInTheDocument();
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
-    expect(within(detail).getByRole("button", { name: /Copiar contacto principal/ })).toBeInTheDocument();
+    expect(within(detail).queryByText("Extensión 55102")).not.toBeInTheDocument();
+    expect(contacts.records[0]!.contactMethods.phones[0]!.extension).toBe("55102");
+    expect(within(detail).queryByRole("button", { name: /Copiar contacto principal/ })).not.toBeInTheDocument();
     expect(within(detail).getByRole("link", { name: `Editar: ${contacts.records[0]!.displayName}` })).toBeInTheDocument();
   });
 
@@ -1635,7 +1742,8 @@ describe("DirectoryPage", () => {
     const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
     expect(editLink.querySelector("svg")).toBeInTheDocument();
-    expect(editLink).toHaveTextContent("Editar registro");
+    expect(editLink).toHaveTextContent("");
+    expect(editLink.previousElementSibling).toHaveRole("heading", { level: 4 });
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {

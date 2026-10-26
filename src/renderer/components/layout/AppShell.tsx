@@ -48,9 +48,7 @@ const shortcutRoutes: Record<string, string> = {
   Digit3: "/settings",
   Numpad3: "/settings",
   Digit4: "/beeper",
-  Numpad4: "/beeper",
-  Digit5: "/deduplicate",
-  Numpad5: "/deduplicate"
+  Numpad4: "/beeper"
 };
 
 const isTextEntryElement = (target: EventTarget | null) => {

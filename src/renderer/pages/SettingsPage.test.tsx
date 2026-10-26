@@ -167,7 +167,7 @@ describe("SettingsPage", () => {
       target: { value: "1.5" }
     });
     expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
     expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
@@ -176,13 +176,13 @@ describe("SettingsPage", () => {
       target: { value: "999" }
     });
     expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
     expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
-      target: { value: "100" }
+      target: { value: "5" }
     });
     fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
       target: { value: "launch" }
@@ -201,7 +201,7 @@ describe("SettingsPage", () => {
             trigger: "launch",
             intervalHours: 1,
             editCountThreshold: 10,
-            retentionCount: 100
+            retentionCount: 5
           }
         }
       });
@@ -215,17 +215,17 @@ describe("SettingsPage", () => {
 
     const retentionInput = screen.getByLabelText("Copias de seguridad que se conservan");
     expect(retentionInput).toBeEnabled();
-    expect(screen.getByText("De 1 a 100 por tipo: contactos, buscas, configuración y automáticas.")).toBeInTheDocument();
+    expect(screen.getByText("De 1 a 5 copias por tipo: contactos, buscas, configuración y automáticas.")).toBeInTheDocument();
 
     fireEvent.change(retentionInput, { target: { value: "0" } });
     expect(retentionInput).toHaveAttribute("aria-invalid", "true");
     expect(retentionInput).toHaveAttribute("aria-describedby", "settings-autobackup-retention-hint settings-autobackup-retention-error");
-    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
     expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
 
-    fireEvent.change(retentionInput, { target: { value: "7" } });
+    fireEvent.change(retentionInput, { target: { value: "4" } });
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
@@ -241,7 +241,7 @@ describe("SettingsPage", () => {
             trigger: "launch",
             intervalHours: 2,
             editCountThreshold: 10,
-            retentionCount: 7
+            retentionCount: 4
           }
         }
       });
@@ -579,10 +579,11 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("heading", { name: "Qué cambia al guardar" })).not.toBeInTheDocument();
   });
 
-  it("offers duplicate search as a dedicated settings section", async () => {
+  it("does not expose duplicate search in settings", async () => {
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Buscar duplicados" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Buscar duplicados" })).toHaveAttribute("href", "/deduplicate");
+    expect(await screen.findByRole("heading", { name: "Configuración" })).toBeInTheDocument();
+    expect(screen.queryByText("Buscar duplicados")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Buscar duplicados" })).not.toBeInTheDocument();
   });
 });

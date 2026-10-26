@@ -59,6 +59,9 @@ export const importedBeeperRecordSchema = z.object({
   // Service the beeper belongs to, distinct from `department` when the sheet
   // distinguishes the two (e.g. a department with multiple services).
   service: z.string().trim().max(255).optional(),
+  // Retained when pager-only contacts are routed out of the directory records.
+  schedule: z.string().trim().max(1000).optional(),
+  notes: z.string().trim().max(4000).optional(),
   sourceSheet: z.string().trim().min(1).max(255),
   sourceRow: z.number().int().nonnegative(),
   sourceFingerprint: z.string().regex(/^[0-9a-f]{64}$/).optional(),

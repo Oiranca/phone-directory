@@ -180,12 +180,6 @@ const EditIcon = () => (
   </svg>
 );
 
-const CopyIcon = () => (
-  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7.5V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 20 6v7.5a2.25 2.25 0 0 1-2.25 2.25H16M6.25 8h7.5A2.25 2.25 0 0 1 16 10.25v7.5A2.25 2.25 0 0 1 13.75 20h-7.5A2.25 2.25 0 0 1 4 17.75v-7.5A2.25 2.25 0 0 1 6.25 8Z" />
-  </svg>
-);
-
 // Card and detail flags describe every phone, including non-preferred ones.
 const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
   const flags: PrivacyFlag[] = [];
@@ -213,7 +207,6 @@ export const DirectoryPage = () => {
     ensureBootstrapLoaded
   } = useAppStore();
   const [currentPage, setCurrentPage] = useState(1);
-  const [copiedRecordId, setCopiedRecordId] = useState<string | null>(null);
 
   useEffect(() => {
     void ensureBootstrapLoaded();
@@ -349,19 +342,6 @@ export const DirectoryPage = () => {
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordPrivacyFlags = selectedRecord ? getPhoneInlinePrivacyFlags(selectedRecord.contactMethods.phones) : [];
   const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
-  const primarySelectedPhone = selectedRecord ? getPreferredResultPhone(selectedRecord) : undefined;
-
-  const copyPrimaryPhone = async () => {
-    if (!selectedRecord || !primarySelectedPhone) return;
-    try {
-      if (!navigator.clipboard) return;
-      await navigator.clipboard.writeText(primarySelectedPhone.number);
-      setCopiedRecordId(selectedRecord.id);
-    } catch {
-      // Clipboard permission can be unavailable in locked-down workstations.
-    }
-  };
-
   return (
     <section
       aria-labelledby="directory-page-title"
@@ -486,7 +466,7 @@ export const DirectoryPage = () => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
-            const showPhoneOnCard = Boolean(primaryPhone && !primaryPhone.confidential && !primaryPhone.noPatientSharing);
+            const showPhoneOnCard = Boolean(primaryPhone && !primaryPhone.noPatientSharing);
             const listContext = [record.organization.department, buildLocationTitleFallback(record.location)]
               .filter((value, contextIndex, values) => Boolean(value?.trim()) && values.indexOf(value) === contextIndex)
               .join(" · ");
@@ -496,7 +476,8 @@ export const DirectoryPage = () => {
             // value) and their role/job title (ODS "Categoría"), joined with
             // " · " when both are present. Degrades gracefully to nothing when
             // neither is set.
-            const nameLine = isDuplicateOfDisplayName(record.organization.service, record.displayName)
+            const nameLine = record.type === "department" ||
+              isDuplicateOfDisplayName(record.organization.service, record.displayName)
               ? null
               : record.displayName;
             const categoryLine = record.organization.role || null;
@@ -653,9 +634,19 @@ export const DirectoryPage = () => {
                       )}
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
-                      <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
-                      </h4>
+                      <div className="mt-4 flex items-start gap-2">
+                        <h4 className="min-w-0 max-w-4xl flex-1 text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
+                          {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
+                        </h4>
+                        <Link
+                          to={`/contacts/${selectedRecord.id}/edit`}
+                          reloadDocument
+                          aria-label={`Editar: ${selectedRecord.displayName}`}
+                          className="focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist"
+                        >
+                          <EditIcon />
+                        </Link>
+                      </div>
                       {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
                       {selectedRecord.organization.role ? (
@@ -730,7 +721,6 @@ export const DirectoryPage = () => {
                             <div className="min-w-0">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{getVisiblePhoneLabel(phone.label) ?? "Teléfono"}</p>
                             <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
-                            {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
                             {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
                           </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
@@ -852,27 +842,6 @@ export const DirectoryPage = () => {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
-                  {primarySelectedPhone && (
-                    <button
-                      type="button"
-                      onClick={() => void copyPrimaryPhone()}
-                      className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      <CopyIcon />
-                      {copiedRecordId === selectedRecord.id ? "Copiado" : "Copiar contacto principal"}
-                    </button>
-                  )}
-                  <Link
-                    to={`/contacts/${selectedRecord.id}/edit`}
-                    reloadDocument
-                    aria-label={`Editar: ${selectedRecord.displayName}`}
-                    className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl bg-scs-blue px-4 text-sm font-semibold text-white hover:bg-scs-blueDark"
-                  >
-                    <EditIcon />
-                    Editar registro
-                  </Link>
-                </div>
               </div>
             ) : (
               <div className="flex h-64 flex-col items-center justify-center text-center">

@@ -216,11 +216,16 @@ const phone = (number, kind, label, extension, id) => ({
 });
 
 const addPhone = (record, candidate) => {
-  const existing = record.contactMethods.phones.find((entry) => digits(entry.number) === digits(candidate.number));
+  const existing = record.contactMethods.phones.find((entry) =>
+    digits(entry.number) === digits(candidate.number) && digits(entry.extension) === digits(candidate.extension)
+  );
   if (existing) {
-    if (!existing.extension && candidate.extension) existing.extension = candidate.extension;
     existing.confidential ||= candidate.confidential;
     existing.noPatientSharing ||= candidate.noPatientSharing;
+    if (candidate.externalNumbers?.length) {
+      existing.externalNumbers ??= [];
+      appendUnique(existing.externalNumbers, candidate.externalNumbers, (entry) => `${digits(entry.number)}|${entry.confidential}|${entry.noPatientSharing}`);
+    }
     if (candidate.isPrimary) {
       for (const entry of record.contactMethods.phones) entry.isPrimary = entry === existing;
     }
@@ -309,6 +314,213 @@ const mergeBeeperRows = (rows, review) => {
 const matchUnique = (records, predicate) => {
   const matches = records.filter(predicate);
   return matches.length === 1 ? matches[0] : undefined;
+};
+
+const normalizedLocationKey = (location) => Object.fromEntries(
+  Object.entries(location ?? {}).sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => [key, normalizeString(value)])
+);
+
+const recordIdentityKey = (record) => JSON.stringify({
+  type: normalizeString(record.type),
+  displayName: normalizeString(record.displayName),
+  service: normalizeString(record.organization.service),
+  role: normalizeString(record.organization.role),
+  location: normalizedLocationKey(record.location)
+});
+
+const appendUnique = (target, incoming, key = (value) => normalizeString(JSON.stringify(value))) => {
+  for (const value of incoming) {
+    const valueKey = key(value);
+    const existing = target.find((candidate) => key(candidate) === valueKey);
+    if (!existing) {
+      const copy = structuredClone(value);
+      if (copy && typeof copy === "object" && copy.id && target.some((candidate) => candidate?.id === copy.id)) {
+        const baseId = copy.id;
+        let suffix = 2;
+        while (target.some((candidate) => candidate?.id === `${baseId}-merged-${suffix}`)) suffix += 1;
+        copy.id = `${baseId}-merged-${suffix}`;
+      }
+      target.push(copy);
+      continue;
+    }
+    if (typeof existing !== "object" || typeof value !== "object") continue;
+    for (const field of ["isPrimary", "confidential", "noPatientSharing"]) existing[field] ||= value[field];
+    if (existing.notes || value.notes) {
+      existing.notes = [...new Map([existing.notes, value.notes].filter(Boolean).map((note) => [normalizeString(note), note])).values()].join(" | ");
+    }
+  }
+};
+
+const addCustomField = (record, key, value) => {
+  if (!filled(value)) return;
+  record.customFields ??= [];
+  const existing = record.customFields.find((field) => normalizeString(field.key) === normalizeString(key));
+  if (existing) {
+    const values = existing.value.split(" / ");
+    if (!values.some((candidate) => normalizeString(candidate) === normalizeString(value))) {
+      existing.value = [...values, value].join(" / ");
+    }
+  } else {
+    const usedIds = new Set(record.customFields.map((field) => field.id));
+    let index = record.customFields.length + 1;
+    while (usedIds.has(`cf_${index}`)) index += 1;
+    record.customFields.push({ id: `cf_${index}`, key, value });
+  }
+};
+
+const mergeDuplicateRecords = (records, review) => {
+  const groups = new Map();
+  for (const record of records) {
+    const key = recordIdentityKey(record);
+    const group = groups.get(key) ?? [];
+    group.push(record);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()].map((group) => {
+    const [first, ...duplicates] = group;
+    const merged = structuredClone(first);
+    if (duplicates.length) {
+      merged.mergedSourceIds = [...new Set(group.flatMap((record) => record.mergedSourceIds?.length ? record.mergedSourceIds : [record.id]))];
+    }
+    const phoneEntries = [];
+    const addMergedPhone = (entry) => {
+      const key = `${digits(entry.number)}|${digits(entry.extension)}`;
+      const existing = phoneEntries.find((candidate) => `${digits(candidate.number)}|${digits(candidate.extension)}` === key);
+      if (!existing) {
+        phoneEntries.push(structuredClone(entry));
+        return;
+      }
+      existing.isPrimary ||= entry.isPrimary;
+      existing.confidential ||= entry.confidential;
+      existing.noPatientSharing ||= entry.noPatientSharing;
+      if (entry.kind === "internal") existing.kind = "internal";
+      if (entry.externalNumbers?.length) {
+        existing.externalNumbers ??= [];
+        appendUnique(existing.externalNumbers, entry.externalNumbers, (number) => `${digits(number.number)}|${number.confidential}|${number.noPatientSharing}`);
+      }
+      existing.notes = [existing.notes, entry.notes].filter((value, index, values) => value && values.findIndex((item) => normalizeString(item) === normalizeString(value)) === index).join(" | ") || undefined;
+    };
+    for (const entry of first.contactMethods.phones) addMergedPhone(entry);
+    for (const record of duplicates) {
+      for (const entry of record.contactMethods.phones) addMergedPhone(entry);
+      appendUnique(merged.contactMethods.emails, record.contactMethods.emails, (entry) => `${normalizeString(entry.address)}|${normalizeString(entry.label)}`);
+      appendUnique(merged.contactMethods.socials, record.contactMethods.socials, (entry) => `${entry.platform}|${normalizeString(entry.handle)}|${normalizeString(entry.url)}|${normalizeString(entry.label)}`);
+      appendUnique(merged.beepers, record.beepers, (entry) => normalizeString(entry.number));
+      appendUnique(merged.aliases, record.aliases, normalizeString);
+      appendUnique(merged.tags, record.tags, normalizeString);
+      if (record.customFields?.length) {
+        merged.customFields ??= [];
+        appendUnique(merged.customFields, record.customFields, (entry) => `${normalizeString(entry.key)}|${normalizeString(entry.value)}`);
+      }
+      const noteValues = [merged.notes, record.notes].filter(Boolean);
+      merged.notes = [...new Map(noteValues.map((value) => [normalizeString(value), value])).values()].join(" | ") || undefined;
+      for (const field of ["department", "area", "specialty", "schedule"]) {
+        const current = merged.organization[field];
+        const incoming = record.organization[field];
+        if (!current) merged.organization[field] = incoming;
+        else if (incoming && normalizeString(current) !== normalizeString(incoming)) {
+          addCustomField(merged, `Dato alternativo: ${field}`, incoming);
+          review.push({ kind: "merged-field-conflict", field, values: [current, incoming], sourceIds: [first.id, record.id] });
+        }
+      }
+      for (const [field, incoming] of Object.entries(record.person ?? {})) {
+        const current = merged.person?.[field];
+        if (!current) {
+          merged.person ??= {};
+          merged.person[field] = incoming;
+        } else if (incoming && normalizeString(current) !== normalizeString(incoming)) {
+          addCustomField(merged, `Dato alternativo: person.${field}`, incoming);
+          review.push({ kind: "merged-field-conflict", field: `person.${field}`, values: [current, incoming], sourceIds: [first.id, record.id] });
+        }
+      }
+    }
+
+    const seenIds = new Set();
+    for (const [index, entry] of phoneEntries.entries()) {
+      if (seenIds.has(entry.id)) entry.id = `${entry.id}-merged-${index + 1}`;
+      seenIds.add(entry.id);
+    }
+
+    const internalByNumber = new Map(phoneEntries.filter((entry) => entry.kind === "internal")
+      .map((entry) => [digits(entry.number), entry]));
+    const retainedPhones = [];
+    for (const entry of phoneEntries) {
+      const internal = entry.kind === "external" && entry.extension
+        ? internalByNumber.get(digits(entry.extension))
+        : undefined;
+      if (!internal || internal === entry) {
+        retainedPhones.push(entry);
+        continue;
+      }
+      internal.externalNumbers ??= [];
+      appendUnique(internal.externalNumbers, [{
+        number: entry.number,
+        confidential: entry.confidential,
+        noPatientSharing: entry.noPatientSharing
+      }], (number) => `${digits(number.number)}|${number.confidential}|${number.noPatientSharing}`);
+      internal.isPrimary ||= entry.isPrimary;
+      internal.notes = [internal.notes, entry.notes].filter(Boolean).join(" | ") || undefined;
+    }
+    let primaryAssigned = false;
+    merged.contactMethods.phones = retainedPhones.map((entry, index) => {
+      entry.label = `Número ${index + 1}`;
+      entry.isPrimary = Boolean(entry.isPrimary && !primaryAssigned);
+      primaryAssigned ||= entry.isPrimary;
+      return entry;
+    });
+    return merged;
+  });
+};
+
+const appendDistinctText = (current, incoming, separator) => [...new Map(
+  [current, incoming].filter(Boolean).flatMap((value) => value.split(separator)).map((value) => [normalizeString(value), value.trim()])
+).values()].join(separator);
+
+const routePagerOnlyRecords = (records, importedBeepers) => {
+  const keptRecords = [];
+  let routedCount = 0;
+  for (const record of records) {
+    if (record.contactMethods.phones.length || !record.beepers.length) {
+      keptRecords.push(record);
+      continue;
+    }
+    routedCount += 1;
+    const service = record.organization.service || record.displayName;
+    for (const pager of record.beepers) {
+      const code = digits(pager.number);
+      const matches = importedBeepers.filter((entry) => {
+        if (digits(entry.deviceNumber) !== code) return false;
+        const entryService = entry.service || entry.department;
+        if (entry.name) {
+          return normalizeString(entry.name) === normalizeString(record.displayName) &&
+            (!entryService || normalizeString(entryService) === normalizeString(service));
+        }
+        return normalizeString(entryService) === normalizeString(service);
+      });
+      const targets = matches.length ? matches : [undefined];
+      for (const target of targets) {
+        if (target) {
+          if (record.organization.schedule) target.schedule = appendDistinctText(target.schedule, record.organization.schedule, " / ");
+          if (record.notes) target.notes = appendDistinctText(target.notes, record.notes, " | ");
+        } else {
+          importedBeepers.push({
+            deviceNumber: pager.number,
+            department: service,
+            name: record.displayName,
+            category: record.organization.role,
+            service,
+            sourceSheet: record.source?.sheetSlug || "Master import",
+            sourceRow: Number(record.source?.sheetRow) > 0 ? Number(record.source.sheetRow) : 0,
+            schedule: record.organization.schedule,
+            notes: record.notes
+          });
+        }
+      }
+    }
+  }
+  return { records: keptRecords, routedCount };
 };
 
 export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => {
@@ -406,7 +618,13 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       continue;
     }
     if (candidates.length) separateSharedExtensionCount += 1;
-    const jsonKey = [title, service, extension, fullNumber].map(fold).join("|");
+    const jsonKey = JSON.stringify({
+      title: fold(title),
+      service: fold(service),
+      extension: digits(extension),
+      fullNumber: digits(fullNumber),
+      location: normalizedLocationKey(sourceLocation)
+    });
     const prior = jsonOnlyRecords.get(jsonKey);
     if (prior) {
       mergeLocation(prior, sourceLocation);
@@ -522,7 +740,11 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
       for (const field of ["name", "category", "service"]) if (!current[field]) current[field] = source[field];
     }
   }
-  const beeperRecords = [...importedBeepers.values()].flat().map((row, index) => ({ ...row, id: `ibsc_${(index + 1).toString(16).padStart(8, "0")}` }));
+  let beeperRecords = [...importedBeepers.values()].flat();
+  records = mergeDuplicateRecords(records, review);
+  const routedBeepers = routePagerOnlyRecords(records, beeperRecords);
+  records = routedBeepers.records;
+  beeperRecords = beeperRecords.map((row, index) => ({ ...row, id: `ibsc_${(index + 1).toString(16).padStart(8, "0")}` }));
   const typeCounts = Object.fromEntries(RECORD_TYPES.map((type) => [type, records.filter((record) => record.type === type).length]));
   const areaCounts = Object.fromEntries(AREAS.map((area) => [area, records.filter((record) => record.organization.area === area).length]));
   const envelope = combinedDataEnvelopeSchema.parse({
@@ -552,6 +774,7 @@ export const buildUnifiedMaster = async (agendaPath, beeperPath, phonesPath) => 
     beeperSourceRows: allBeeperRows.length,
     beeperContacts: beeperRows.length,
     beeperContactsMatched: matchedBeeperContacts,
+    pagerOnlyRecordsRouted: routedBeepers.routedCount,
     contacts: records.length,
     catalogBeepers: beeperRecords.length,
     reviewItems: review.length

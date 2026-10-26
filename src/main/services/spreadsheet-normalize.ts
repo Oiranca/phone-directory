@@ -47,6 +47,8 @@ export type SerializedPhoneEntry = {
   isPrimary: boolean;
   confidential: boolean;
   noPatientSharing: boolean;
+  extension?: string;
+  externalNumbers?: Array<{ number: string; confidential: boolean; noPatientSharing: boolean }>;
   notes?: string;
 };
 
@@ -63,7 +65,17 @@ export const isSerializedPhoneEntry = (value: unknown): value is SerializedPhone
   typeof (value as Record<string, unknown>).kind === "string" &&
   typeof (value as Record<string, unknown>).isPrimary === "boolean" &&
   typeof (value as Record<string, unknown>).confidential === "boolean" &&
-  typeof (value as Record<string, unknown>).noPatientSharing === "boolean";
+  typeof (value as Record<string, unknown>).noPatientSharing === "boolean" &&
+  ((value as Record<string, unknown>).extension === undefined || typeof (value as Record<string, unknown>).extension === "string") &&
+  ((value as Record<string, unknown>).externalNumbers === undefined || (
+    Array.isArray((value as Record<string, unknown>).externalNumbers) &&
+    ((value as Record<string, unknown>).externalNumbers as unknown[]).every((entry) =>
+      typeof entry === "object" && entry !== null &&
+      typeof (entry as Record<string, unknown>).number === "string" &&
+      typeof (entry as Record<string, unknown>).confidential === "boolean" &&
+      typeof (entry as Record<string, unknown>).noPatientSharing === "boolean"
+    )
+  ));
 
 /**
  * A serialized beeper (pager) entry stored as JSON in

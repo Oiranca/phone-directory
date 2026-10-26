@@ -1,5 +1,77 @@
 # Changelog
 
+## [0.1.14] - 2026-10-26
+
+### Fixed
+
+- Preserve extensions, linked external numbers, and notes during import deduplication.
+- Show confidential primary numbers on directory cards and number phone labels sequentially.
+- Restore automatic backup controls and scheduling while limiting retained copies to five.
+- Import the current master file through the app's replacement and beeper-routing flow.
+
+## [0.1.13] - 2026-10-26
+
+### Fixed
+
+- Keep exact descriptive matches together while preserving records with different locations.
+- Preserve merged source IDs, external numbers, schedules, and notes during master import.
+- Route pager-only records to the beeper catalog and keep phone-plus-pager records in both views.
+- Keep phone labels sequential after deduplication and improve multiword directory search.
+
+## [0.1.12] - 2026-10-26
+
+### Changed
+
+- Deduplicate imported phone methods by normalized number and extension.
+
+## [0.1.11] - 2026-10-26
+
+### Changed
+
+- Disable scheduled automatic backups and hide their controls while preserving manual and safety backups.
+
+## [0.1.10] - 2026-10-26
+
+### Changed
+
+- Hide duplicate search and redirect its legacy route without running the finder.
+
+## [0.1.9] - 2026-10-26
+
+### Fixed
+
+- Show confidential primary phone numbers on directory cards while preserving patient-sharing restrictions.
+
+## [0.1.8] - 2026-10-26
+
+### Changed
+
+- Keep navigation labels visible and remove the collapse control.
+
+## [0.1.7] - 2026-10-26
+
+### Changed
+
+- Remove the primary-contact copy action and use an icon-only edit link beside the detail title.
+
+## [0.1.6] - 2026-10-26
+
+### Changed
+
+- Place “Nuevo registro” with “Configuración” at the bottom of the navigation rail.
+
+## [0.1.5] - 2026-10-26
+
+### Fixed
+
+- Avoid repeating department labels as person-name subtitles in directory cards.
+
+## [0.1.4] - 2026-10-26
+
+### Fixed
+
+- Hide phone extensions from the detail view while preserving imported extension data.
+
 ## [0.1.3] - 2026-10-24
 
 ### Fixed

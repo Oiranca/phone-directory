@@ -1,3 +1,6 @@
+import type { PhoneContact } from "../types/contact.js";
+import { normalizePhoneForDedup } from "./matching.js";
+
 /**
  * Ensures exactly one entry in the array has `isPrimary: true`.
  *
@@ -89,4 +92,64 @@ export const reconcilePrimaryEntries = <T extends { isPrimary: boolean }>(entrie
   return entries.map((entry, index) =>
     entry.isPrimary && index !== keepIndex ? { ...entry, isPrimary: false } : entry
   );
+};
+
+/**
+ * Collapse duplicate phone methods by normalized number and extension.
+ * Distinct extensions remain distinct methods; duplicate privacy flags and
+ * primary markers are combined so normalization cannot weaken restrictions.
+ */
+export const dedupePhoneMethods = (phones: PhoneContact[]): PhoneContact[] => {
+  const deduped: PhoneContact[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const phone of phones) {
+    const normalizedNumber = normalizePhoneForDedup(phone.number);
+    if (!normalizedNumber) {
+      deduped.push(phone);
+      continue;
+    }
+
+    const key = `${normalizedNumber}|${normalizePhoneForDedup(phone.extension ?? "")}`;
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, deduped.length);
+      deduped.push(phone);
+      continue;
+    }
+
+    const existing = deduped[existingIndex]!;
+    const externalNumbers = new Map<string, NonNullable<PhoneContact["externalNumbers"]>[number]>();
+    for (const externalNumber of [...(existing.externalNumbers ?? []), ...(phone.externalNumbers ?? [])]) {
+      const normalizedExternal = normalizePhoneForDedup(externalNumber.number);
+      const key = normalizedExternal || externalNumber.number.trim().toLocaleLowerCase("es");
+      const prior = externalNumbers.get(key);
+      externalNumbers.set(key, prior ? {
+        ...prior,
+        confidential: prior.confidential || externalNumber.confidential,
+        noPatientSharing: prior.noPatientSharing || externalNumber.noPatientSharing
+      } : externalNumber);
+    }
+    const notes = [...new Map(
+      [existing.notes, phone.notes].filter((note): note is string => Boolean(note?.trim()))
+        .map((note) => [note.trim().toLocaleLowerCase("es"), note.trim()])
+    ).values()];
+    deduped[existingIndex] = {
+      ...existing,
+      label: existing.label || phone.label,
+      extension: existing.extension || phone.extension,
+      isPrimary: existing.isPrimary || phone.isPrimary,
+      confidential: existing.confidential || phone.confidential,
+      noPatientSharing: existing.noPatientSharing || phone.noPatientSharing,
+      notes: notes.join(" | ") || undefined,
+      externalNumbers: externalNumbers.size ? [...externalNumbers.values()] : undefined
+    };
+  }
+
+  return deduped;
+};
+
+/** Uses a unique, sequential label for every phone method on a contact. */
+export const normalizeDuplicatePhoneLabels = <T extends { label?: string }>(phones: T[]): T[] => {
+  return phones.map((phone, index) => ({ ...phone, label: `Número ${index + 1}` }));
 };

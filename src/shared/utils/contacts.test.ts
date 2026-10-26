@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLocationFloor, formatLocationRoom, normalizePrimaryEntries, reconcilePrimaryEntries } from "./contacts";
+import { dedupePhoneMethods, formatLocationFloor, formatLocationRoom, normalizeDuplicatePhoneLabels, normalizePrimaryEntries, reconcilePrimaryEntries } from "./contacts";
 
 type Entry = { id: string; isPrimary: boolean };
 
@@ -87,6 +87,80 @@ describe("reconcilePrimaryEntries (never invents a primary)", () => {
     reconcilePrimaryEntries(entries);
 
     expect(entries).toEqual(snapshot);
+  });
+});
+
+describe("dedupePhoneMethods", () => {
+  it("deduplicates normalized number and extension while preserving distinct extensions", () => {
+    const phones = [
+      { id: "ph-1", label: "Corporativo 1", number: "928-700-000", extension: "70-055", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph-2", label: "Corporativo 1", number: "928700000", extension: "70055", kind: "corporativo", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph-3", label: "Corporativo 1", number: "928700000", extension: "70056", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+
+    const result = dedupePhoneMethods(phones);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      id: "ph-1",
+      label: "Corporativo 1",
+      number: "928-700-000",
+      extension: "70-055",
+      isPrimary: true,
+      confidential: true
+    });
+    expect(result[1]?.extension).toBe("70056");
+  });
+
+  it("preserves external numbers and distinct notes when duplicate methods merge", () => {
+    const phones = [
+      {
+        id: "ph-1", number: "928700000", extension: "70055", kind: "corporativo",
+        isPrimary: false, confidential: false, noPatientSharing: false,
+        externalNumbers: [{ number: "928123456", confidential: false, noPatientSharing: false }],
+        notes: "Centralita"
+      },
+      {
+        id: "ph-2", number: "928-700-000", extension: "70-055", kind: "corporativo",
+        isPrimary: false, confidential: false, noPatientSharing: false,
+        externalNumbers: [
+          { number: "928123456", confidential: true, noPatientSharing: false },
+          { number: "928654321", confidential: false, noPatientSharing: true }
+        ],
+        notes: "Horario de tarde"
+      }
+    ];
+
+    const result = dedupePhoneMethods(phones);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.externalNumbers).toEqual([
+      { number: "928123456", confidential: true, noPatientSharing: false },
+      { number: "928654321", confidential: false, noPatientSharing: true }
+    ]);
+    expect(result[0]?.notes).toBe("Centralita | Horario de tarde");
+  });
+});
+
+describe("normalizeDuplicatePhoneLabels", () => {
+  it("replaces repeated source labels with sequential number labels", () => {
+    const phones = [
+      { id: "ph-1", label: "Corporativo 1", number: "928700000", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph-2", label: "Corporativo 1", number: "928700000", extension: "70055", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+
+    expect(normalizeDuplicatePhoneLabels(phones).map((phone) => phone.label)).toEqual(["Número 1", "Número 2"]);
+  });
+
+  it("repairs gaps and replaces source-specific labels with sequential numbers", () => {
+    const generated = [
+      { id: "ph-1", label: "Número 1", number: "70001", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph-2", label: "Número 3", number: "70002", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+    const custom = [{ ...generated[0]!, label: "Admisión" }];
+
+    expect(normalizeDuplicatePhoneLabels(generated).map((phone) => phone.label)).toEqual(["Número 1", "Número 2"]);
+    expect(normalizeDuplicatePhoneLabels(custom).map((phone) => phone.label)).toEqual(["Número 1"]);
   });
 });
 

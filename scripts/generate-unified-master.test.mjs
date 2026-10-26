@@ -165,7 +165,7 @@ it("reports ambiguous records without changing the master schema", async () => {
   }
 });
 
-it("preserves beeper-only contact details while cataloging the pager separately", async () => {
+it("routes beeper-only contact details to the beeper catalog without duplicating the directory", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hospiagenda-master-beeper-only-"));
   try {
     const agendaPath = path.join(root, "agenda.xlsx");
@@ -186,11 +186,10 @@ it("preserves beeper-only contact details while cataloging the pager separately"
     const { envelope } = await buildUnifiedMaster(agendaPath, beeperPath, phonesPath);
 
     assert.equal(envelope.contacts.records.some((record) => record.displayName === "Sin teléfono ni busca"), false);
-    const beeperContact = envelope.contacts.records.find((record) => record.displayName === "Neurocirugia – Planta");
-    assert.deepEqual(beeperContact.contactMethods.phones, []);
-    assert.deepEqual(beeperContact.beepers, [{ number: "7157" }]);
-    assert.equal(beeperContact.organization.schedule, "Horario E2E");
-    assert.equal(beeperContact.notes, "Nota E2E");
+    assert.equal(envelope.contacts.records.some((record) => record.displayName === "Neurocirugia – Planta"), false);
+    const importedBeeper = envelope.beepers.importedRecords.find((record) => record.deviceNumber === "7157");
+    assert.equal(importedBeeper?.schedule, "Horario E2E");
+    assert.equal(importedBeeper?.notes, "Nota E2E");
     assert.equal(envelope.contacts.records.some((record) => record.displayName === "Teléfono Sin Busca"), true);
     assert.equal(envelope.beepers.importedRecords.some((record) => record.name === "Teléfono sin busca"), false);
     assert.equal(envelope.beepers.importedRecords.some((record) =>
@@ -232,36 +231,36 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.equal(report.summary.jsonMatched, 3);
     assert.equal(report.summary.separateSharedExtensionCount, 2);
     assert.equal(report.summary.agendaRowsSkipped, 1);
-    assert.equal(envelope.contacts.records.length, 12);
+    assert.equal(envelope.contacts.records.length, 13);
     assert.equal(envelope.contacts.records.some((record) => record.displayName === "No Phone"), false);
     const merged = envelope.contacts.records.find((record) => record.displayName === "Desk C");
     assert.equal(merged.location.building, "Center C");
     assert.equal(merged.location.sector, "North block");
     assert.equal(merged.location.floor, undefined);
     assert.equal(merged.location.center, undefined);
-    assert.deepEqual(merged.contactMethods.phones.map((entry) => entry.number).sort(), ["55555", "928000001"]);
+    assert.deepEqual(merged.contactMethods.phones.map((entry) => entry.number), ["55555"]);
     assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "55555").isPrimary, true);
-    assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "928000001").isPrimary, false);
-    assert.equal(merged.contactMethods.phones.find((entry) => entry.number === "928000001").label, undefined);
+    assert.deepEqual(merged.contactMethods.phones[0].externalNumbers.map((entry) => entry.number), ["928000001"]);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk a").length, 1);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk D").length, 1);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Desk e" || record.displayName === "Subunit").length, 2);
-    assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Subunit").contactMethods.phones.map((entry) => entry.number), ["77777", "928000003"]);
+    const subunit = envelope.contacts.records.find((record) => record.displayName === "Subunit");
+    assert.deepEqual(subunit.contactMethods.phones.map((entry) => entry.number), ["77777"]);
+    assert.deepEqual(subunit.contactMethods.phones[0].externalNumbers.map((entry) => entry.number), ["928000003"]);
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Extension Only").contactMethods.phones.map((entry) => entry.number), ["88888"]);
     const deskI = envelope.contacts.records.filter((record) => record.displayName === "Desk I");
-    assert.equal(deskI.length, 1);
-    assert.equal(deskI[0].location.building, "Center I");
-    assert.equal(deskI[0].location.floor, undefined);
+    assert.equal(deskI.length, 2);
+    assert.deepEqual(deskI.map((record) => record.location.floor).sort(), ["2", "3"]);
+    assert.ok(deskI.every((record) => record.location.building === "Center I"));
     const rosa = envelope.contacts.records.find((record) => record.displayName === "Rosa");
     assert.equal(rosa.person.firstName, "Rosa");
     assert.equal(rosa.organization.role, "SECRETARÍA ASESORÍA JURÍDICA");
-    assert.deepEqual(rosa.contactMethods.phones.map((entry) => entry.number), ["70907", "928450155"]);
+    assert.deepEqual(rosa.contactMethods.phones.map((entry) => entry.number), ["70907"]);
+    assert.deepEqual(rosa.contactMethods.phones[0].externalNumbers.map((entry) => entry.number), ["928450155"]);
     const deskH = envelope.contacts.records.find((record) => record.displayName === "Desk H");
     assert.equal(deskH.contactMethods.phones.find((entry) => entry.number === "90000").isPrimary, true);
-    assert.equal(deskH.contactMethods.phones.find((entry) => entry.number === "928009000").isPrimary, false);
     assert.equal(deskH.contactMethods.phones[0].number, "90000");
-    assert.equal(deskH.contactMethods.phones[1].kind, "external");
-    assert.equal(deskH.contactMethods.phones[1].extension, "90000");
+    assert.deepEqual(deskH.contactMethods.phones[0].externalNumbers.map((entry) => entry.number), ["928009000"]);
     const beeperContact = envelope.contacts.records.find((record) => record.displayName === "Pager D");
     assert.deepEqual(beeperContact.beepers.map((entry) => entry.number), ["7001"]);
     assert.deepEqual(beeperContact.contactMethods.phones.map((entry) => entry.number).sort(), ["66666", "699000001"]);
@@ -356,7 +355,7 @@ it("master enriches identities, locations, phone extensions, areas, and tags", a
       "sanitaria-asistencial": 5,
       "gestion-administracion": 2,
       especialidades: 3,
-      otros: 8
+      otros: 7
     });
     assert.ok(envelope.contacts.metadata.typeCounts.department > 0);
     assert.equal(Object.values(envelope.contacts.metadata.typeCounts).reduce((total, count) => total + count, 0), envelope.contacts.records.length);

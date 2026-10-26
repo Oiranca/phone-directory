@@ -164,6 +164,20 @@ describe("serialization parity — derived types round-trip identically", () => 
     expect(parsed.ui.autoBackup.trigger).toBe("editCount");
   });
 
+  it("caps legacy backup retention settings at five without rejecting the settings file", () => {
+    const fixture: AppSettings = {
+      editorName: "Test",
+      dataFilePath: "/data/contacts.json",
+      backupDirectoryPath: "/data/backups",
+      ui: {
+        showInactiveByDefault: false,
+        autoBackup: { enabled: true, trigger: "launch", intervalHours: 2, editCountThreshold: 10, retentionCount: 50 }
+      }
+    };
+
+    expect(appSettingsSchema.parse(fixture).ui.autoBackup.retentionCount).toBe(5);
+  });
+
   it("AuditLogEntry round-trips through auditLogEntrySchema", () => {
     const fixture: AuditLogEntry = {
       timestamp: "2026-04-13T00:00:00Z",

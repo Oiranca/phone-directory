@@ -294,6 +294,17 @@ describe("searchRecords", () => {
     expect(result[0]?.displayName).toBe("Admisión General");
   });
 
+  it("uses exact multi-token matches without building a fuzzy index", () => {
+    const exactRecords = buildLargeSearchFixture(8).map((record, index) => ({
+      ...record,
+      displayName: index < 3 ? `Equipo Central ${index}` : `Equipo Norte ${index}`
+    }));
+
+    expect(searchRecords(exactRecords, "equipo central", defaultFilters).map((record) => record.id))
+      .toEqual(exactRecords.slice(0, 3).map((record) => record.id));
+    expect(_getFuseCacheEntry(exactRecords)).toBeUndefined();
+  });
+
   it("keeps partial numeric lookup for short queries", () => {
     const result = searchRecords(records, "0000", defaultFilters);
 
@@ -409,6 +420,16 @@ describe("getPreferredResultPhone", () => {
     ];
     const preferred = getPreferredResultPhone(record);
     expect(preferred?.number).toBe("33333");
+  });
+
+  it("keeps a confidential primary phone visible ahead of a public secondary phone", () => {
+    const record = structuredClone(records[0]) as ContactRecord;
+    record.contactMethods.phones = [
+      { id: "ph1", number: "11111", kind: "internal", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph2", number: "22222", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+
+    expect(getPreferredResultPhone(record)?.number).toBe("11111");
   });
 
   it("falls back to the primary phone when all phones have sharing restrictions", () => {

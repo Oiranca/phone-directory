@@ -129,6 +129,12 @@ review steps. Set `E2E_MASTER_IMPORT_PATH` to run an additional isolated import
 and directory check against an existing master JSON file. On macOS, follow `AGENTS.md` and launch this command through
 `launchctl submit` instead of running it in the foreground.
 
+For an intentional import into an existing app profile, also set
+`E2E_MASTER_IMPORT_USER_DATA_PATH` to its Electron user-data directory and
+`E2E_ALLOW_PERSISTENT_MASTER_IMPORT=1`. This replaces that profile's contacts
+and beepers; make a restorable copy first. The default remains a disposable
+temporary profile.
+
 Run the packaged startup smoke on each target OS before release handoff:
 
 ```bash

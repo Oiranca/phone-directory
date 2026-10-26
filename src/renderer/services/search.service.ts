@@ -139,6 +139,18 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     return applyFilters(records, filters);
   }
 
+  const normalizedSearchQuery = normalizeSearchQuery(normalizedQuery);
+  const queryTokens = normalizedSearchQuery.split(" ").filter(Boolean);
+  if (queryTokens.length > 1) {
+    const exactTokenMatches = applyFilters(
+      records.filter((record) => hasFlexibleTokenMatch(record, queryTokens)),
+      filters
+    );
+    if (exactTokenMatches.length > 0) {
+      return exactTokenMatches;
+    }
+  }
+
   const cachedFuse = fuseCache.get(records);
   const fuse = cachedFuse ?? new Fuse(records, fuseOptions);
 
@@ -146,7 +158,6 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
     fuseCache.set(records, fuse);
   }
 
-  const normalizedSearchQuery = normalizeSearchQuery(normalizedQuery);
   const usesShortTextBoundaryMatching = isShortTextQuery(normalizedSearchQuery);
   let searchFuse = fuse;
 
@@ -173,8 +184,8 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
 };
 
 export const getPreferredResultPhone = (record: ContactRecord) =>
-  record.contactMethods.phones.find((phone) => !phone.confidential && !phone.noPatientSharing) ??
-  record.contactMethods.phones.find((phone) => !phone.confidential) ??
+  record.contactMethods.phones.find((phone) => phone.isPrimary && !phone.noPatientSharing) ??
+  record.contactMethods.phones.find((phone) => !phone.noPatientSharing) ??
   record.contactMethods.phones.find((phone) => phone.isPrimary) ??
   record.contactMethods.phones[0];
 
