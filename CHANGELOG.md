@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.11] - 2026-10-26
+
+### Changed
+
+- Disable scheduled automatic backups and hide their controls while preserving manual and safety backups.
+
 ## [0.1.10] - 2026-10-26
 
 ### Changed

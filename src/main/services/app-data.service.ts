@@ -156,9 +156,16 @@ export class AppDataService {
     });
   }
 
-  async startAutoBackup() {
+  async disableAutomaticBackups() {
     const settings = await this.readSettings(true);
-    this.configureAutoBackup(settings.ui.autoBackup);
+    const autoBackup = { ...settings.ui.autoBackup, enabled: false };
+    if (settings.ui.autoBackup.enabled) {
+      await writeJsonFile(getSettingsFilePath(), {
+        ...settings,
+        ui: { ...settings.ui, autoBackup }
+      });
+    }
+    this.configureAutoBackup(autoBackup);
   }
 
   /**
@@ -221,7 +228,10 @@ export class AppDataService {
       editorName: parsed.editorName,
       dataFilePath: path.normalize(normalizedDataFilePath),
       backupDirectoryPath: path.normalize(normalizedBackupDirectoryPath),
-      ui: parsed.ui
+      ui: {
+        ...parsed.ui,
+        autoBackup: { ...parsed.ui.autoBackup, enabled: false }
+      }
     });
 
     await this.validateEditableSettings(nextSettings, currentSettings);
@@ -245,12 +255,7 @@ export class AppDataService {
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
-    this.configureAutoBackup(nextSettings.ui.autoBackup, {
-      forceResetEditCount: (
-        !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) ||
-        !this.pathsMatch(nextSettings.backupDirectoryPath, currentSettings.backupDirectoryPath)
-      )
-    });
+    this.configureAutoBackup(nextSettings.ui.autoBackup);
     return nextSettings;
   }
 
@@ -1712,43 +1717,13 @@ export class AppDataService {
     }
   }
 
-  private configureAutoBackup(
-    settings: AutoBackupSettings,
-    options: { forceResetEditCount?: boolean } = {}
-  ) {
-    const shouldResetEditCount = (
-      options.forceResetEditCount ||
-      !settings.enabled ||
-      settings.trigger !== "editCount" ||
-      !this.autoBackupSettings.enabled ||
-      this.autoBackupSettings.trigger !== "editCount" ||
-      this.autoBackupSettings.editCountThreshold !== settings.editCountThreshold
-    );
-
-    this.autoBackupSettings = settings;
-    if (shouldResetEditCount) {
-      this.autoBackupEditCount = 0;
-    }
-
+  private configureAutoBackup(settings: AutoBackupSettings) {
     if (this.autoBackupTimer) {
       clearInterval(this.autoBackupTimer);
       this.autoBackupTimer = null;
     }
-
-    if (!settings.enabled) {
-      return;
-    }
-
-    if (settings.trigger === "launch") {
-      this.runAutoBackupInBackground();
-      return;
-    }
-
-    if (settings.trigger === "intervalHours") {
-      this.autoBackupTimer = setInterval(() => {
-        this.runAutoBackupInBackground();
-      }, settings.intervalHours * 60 * 60 * 1000);
-    }
+    this.autoBackupSettings = { ...settings, enabled: false };
+    this.autoBackupEditCount = 0;
   }
 
   private noteAutoBackupEligibleEdit() {
