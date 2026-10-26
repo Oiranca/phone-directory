@@ -683,6 +683,14 @@ export const buildImportPreviewFromRows = async (
       const record = contactRecordSchema.parse({
         id: `cnt_csv_${String(records.length + 1).padStart(4, "0")}`,
         externalId: maybe(row.externalId),
+        mergedSourceIds: (() => {
+          try {
+            const parsed = JSON.parse(row.mergedSourceIds ?? "[]") as unknown;
+            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : undefined;
+          } catch {
+            return undefined;
+          }
+        })(),
         type,
         displayName,
         person: compactObject({

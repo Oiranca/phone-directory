@@ -294,6 +294,17 @@ describe("searchRecords", () => {
     expect(result[0]?.displayName).toBe("Admisión General");
   });
 
+  it("uses exact multi-token matches without building a fuzzy index", () => {
+    const exactRecords = buildLargeSearchFixture(8).map((record, index) => ({
+      ...record,
+      displayName: index < 3 ? `Equipo Central ${index}` : `Equipo Norte ${index}`
+    }));
+
+    expect(searchRecords(exactRecords, "equipo central", defaultFilters).map((record) => record.id))
+      .toEqual(exactRecords.slice(0, 3).map((record) => record.id));
+    expect(_getFuseCacheEntry(exactRecords)).toBeUndefined();
+  });
+
   it("keeps partial numeric lookup for short queries", () => {
     const result = searchRecords(records, "0000", defaultFilters);
 

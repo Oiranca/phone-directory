@@ -22,6 +22,12 @@ export const phoneContactSchema = z.object({
     .transform(normalizePhoneForStorage)
     .pipe(z.string().min(1, "El teléfono es obligatorio.")),
   extension: z.string().optional(),
+  // Full external numbers linked to this extension without creating duplicate UI entries.
+  externalNumbers: z.array(z.object({
+    number: z.string(),
+    confidential: z.boolean(),
+    noPatientSharing: z.boolean()
+  })).max(MAX_NESTED_COLLECTION_ITEMS).optional(),
   kind: z.string(),
   isPrimary: z.boolean(),
   // Advisory presentation marker only — not an enforced access control; records and flagged values
@@ -122,6 +128,8 @@ export const beeperEntrySchema = z.object({
 const contactRecordSchemaBase = z.object({
   id: z.string(),
   externalId: z.string().optional(),
+  // IDs of source records consolidated into this contact during master generation.
+  mergedSourceIds: z.array(z.string()).max(MAX_NESTED_COLLECTION_ITEMS).optional(),
   type: z.enum(RECORD_TYPES),
   displayName: z.string().min(1),
   person: z.object({

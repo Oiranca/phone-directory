@@ -78,7 +78,13 @@ const retainAvailableImportedBeeperDetails = (
   name: normalizeVisibleBeeperCell(current.name ?? "") ? current.name : incoming.name,
   holderType: normalizeVisibleBeeperCell(current.holderType ?? "") ? current.holderType : incoming.holderType,
   department: normalizeVisibleBeeperCell(current.department) ? current.department : incoming.department,
-  category: normalizeVisibleBeeperCell(current.category ?? "") ? current.category : incoming.category
+  category: normalizeVisibleBeeperCell(current.category ?? "") ? current.category : incoming.category,
+  schedule: [current.schedule, incoming.schedule].filter((value, index, values) =>
+    value && values.findIndex((candidate) => normalizeVisibleBeeperCell(candidate ?? "") === normalizeVisibleBeeperCell(value)) === index
+  ).join(" / ") || undefined,
+  notes: [current.notes, incoming.notes].filter((value, index, values) =>
+    value && values.findIndex((candidate) => normalizeVisibleBeeperCell(candidate ?? "") === normalizeVisibleBeeperCell(value)) === index
+  ).join(" | ") || undefined
 });
 
 export const BeepersPage = () => {
@@ -152,7 +158,9 @@ export const BeepersPage = () => {
         (r.name ?? "").toLowerCase().includes(q) ||
         (r.category ?? "").toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q) ||
-        r.sourceSheet.toLowerCase().includes(q)
+        r.sourceSheet.toLowerCase().includes(q) ||
+        (r.schedule ?? "").toLowerCase().includes(q) ||
+        (r.notes ?? "").toLowerCase().includes(q)
     );
   }, [importedRecords, deferredQuery]);
 
@@ -609,7 +617,11 @@ export const BeepersPage = () => {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{record.category ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
-                    <td className="px-4 py-3 text-slate-700">{record.name ?? record.holderType ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <span>{record.name ?? record.holderType ?? "—"}</span>
+                      {record.schedule && <span className="mt-1 block text-xs text-slate-500">Horario: {record.schedule}</span>}
+                      {record.notes && <span className="mt-1 block text-xs text-slate-500">Notas: {record.notes}</span>}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"

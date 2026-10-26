@@ -94,7 +94,7 @@ const RailNavLink = ({ item }: { item: RailNavItem }) => {
 export const NavRail = () => {
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-50 flex h-[72px] w-full bg-scs-ink px-2 py-2 sm:sticky sm:inset-auto sm:top-0 sm:h-screen sm:w-[192px] sm:shrink-0 sm:flex-col sm:items-stretch sm:overflow-hidden sm:px-[10px] sm:py-[14px]"
+      className="fixed inset-x-0 bottom-0 z-50 flex h-[72px] w-screen bg-scs-ink px-2 py-2 sm:sticky sm:inset-auto sm:top-0 sm:h-screen sm:w-[192px] sm:shrink-0 sm:flex-col sm:items-stretch sm:overflow-hidden sm:px-[10px] sm:py-[14px]"
       style={{ gap: "6px" }}
     >
       <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-scs-blue text-[11px] font-bold text-white sm:flex">

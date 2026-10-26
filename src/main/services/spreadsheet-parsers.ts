@@ -1399,6 +1399,17 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     }));
 
     const base = { ...group[0]! };
+    const mergedSourceIds = [...new Set(group.flatMap((record) => {
+      try {
+        const priorIds = JSON.parse(record.mergedSourceIds ?? "[]") as unknown;
+        return Array.isArray(priorIds) ? priorIds.filter((id): id is string => typeof id === "string") : [];
+      } catch {
+        return [];
+      }
+    }).concat(group.map((record) => record.externalId).filter(Boolean)))];
+    if (mergedSourceIds.length > 1) {
+      base.mergedSourceIds = JSON.stringify(mergedSourceIds);
+    }
     base.phones = JSON.stringify(reassertedPhones);
 
     if (reassertedPhones.length === 0) {

@@ -1087,6 +1087,7 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
     expect(merged.map((p) => p.number)).toContain("11111");
     expect(merged.map((p) => p.number)).toContain("22222");
+    expect(JSON.parse(result[0]!.mergedSourceIds!)).toEqual(["a-001", "b-001"]);
   });
 
   it("does NOT merge two tabular-Agenda-book-sheet records (area blank) with the same normalized displayName but different department", () => {

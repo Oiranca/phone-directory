@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.13] - 2026-10-26
+
+### Fixed
+
+- Keep exact descriptive matches together while preserving records with different locations.
+- Preserve merged source IDs, external numbers, schedules, and notes during master import.
+- Route pager-only records to the beeper catalog and keep phone-plus-pager records in both views.
+- Keep phone labels sequential after deduplication and improve multiword directory search.
+
 ## [0.1.12] - 2026-10-26
 
 ### Changed
