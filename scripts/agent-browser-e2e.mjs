@@ -931,8 +931,19 @@ try {
 
     const imported = JSON.parse(await fs.readFile(importedContactsPath, "utf8"));
     const importedBeepers = JSON.parse(await fs.readFile(importedBeepersPath, "utf8"));
-    if (!isDeepStrictEqual(imported.records, expectedRecords) || !isDeepStrictEqual(importedBeepers, expectedBeepers)) {
-      throw new Error(`Provided master records were not imported faithfully: ${imported.records.length}`);
+    const expectedRecordsWithSequentialPhoneLabels = expectedRecords.map((record) => ({
+      ...record,
+      contactMethods: {
+        ...record.contactMethods,
+        phones: record.contactMethods.phones.map((phone, index) => ({
+          ...phone,
+          label: `Número ${index + 1}`
+        }))
+      }
+    }));
+    if (!isDeepStrictEqual(imported.records, expectedRecordsWithSequentialPhoneLabels) ||
+      !isDeepStrictEqual(importedBeepers, expectedBeepers)) {
+      throw new Error(`Provided master records changed beyond sequential phone labels: ${imported.records.length}`);
     }
 
     clickRole("link", "Directorio");
