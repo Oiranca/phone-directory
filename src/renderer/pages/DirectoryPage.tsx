@@ -496,7 +496,8 @@ export const DirectoryPage = () => {
             // value) and their role/job title (ODS "Categoría"), joined with
             // " · " when both are present. Degrades gracefully to nothing when
             // neither is set.
-            const nameLine = isDuplicateOfDisplayName(record.organization.service, record.displayName)
+            const nameLine = record.type === "department" ||
+              isDuplicateOfDisplayName(record.organization.service, record.displayName)
               ? null
               : record.displayName;
             const categoryLine = record.organization.role || null;

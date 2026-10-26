@@ -466,8 +466,11 @@ describe("DirectoryPage", () => {
   });
 
   it("shows the name in the list card subtitle when it genuinely differs from organization.service", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.type = "person";
+
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
+      contacts,
       settings: {
         editorName: "",
         dataFilePath: "/tmp/data/contacts.json",
@@ -489,6 +492,34 @@ describe("DirectoryPage", () => {
     const heading = within(list).getByRole("heading", { name: /admisión general/i });
     const card = heading.closest("button");
     expect(within(card as HTMLElement).getByText("Admisión General")).toBeInTheDocument();
+  });
+
+  it("does not repeat a department display name in the list card subtitle", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.type = "department";
+    contacts.records[0]!.displayName = "Taller Comunicaciones";
+    contacts.records[0]!.organization.service = "Mantenimiento";
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const heading = within(list).getByRole("heading", { name: /taller comunicaciones/i });
+    const card = heading.closest("button");
+    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
+
+    expect(heading).toHaveTextContent("Mantenimiento - Taller Comunicaciones");
+    expect(subtitle).toHaveTextContent("");
   });
 
   it("shows organization.role in the detail view when present", async () => {

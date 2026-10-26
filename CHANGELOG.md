@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5] - 2026-10-26
+
+### Fixed
+
+- Avoid repeating department labels as person-name subtitles in directory cards.
+
 ## [0.1.4] - 2026-10-26
 
 ### Fixed
