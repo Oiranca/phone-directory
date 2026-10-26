@@ -54,7 +54,7 @@ import {
 } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
-import { formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
+import { dedupePhoneMethods, formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizeDisplayName, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 import {
   yieldDuringImportPreview,
@@ -104,6 +104,18 @@ const mergeCustomFields = (
 
   return merged;
 };
+
+const deduplicateDatasetPhoneMethods = (dataset: DirectoryDataset): DirectoryDataset =>
+  directoryDatasetSchema.parse({
+    ...dataset,
+    records: dataset.records.map((record) => ({
+      ...record,
+      contactMethods: {
+        ...record.contactMethods,
+        phones: dedupePhoneMethods(record.contactMethods.phones)
+      }
+    }))
+  });
 
 const stripAbsoluteLocalPath = (value: string): string => {
   if (path.win32.isAbsolute(value)) return path.win32.basename(value);
@@ -463,12 +475,13 @@ export class AppDataService {
     importedContacts: DirectoryDataset,
     sourceFilePath: string
   ): Promise<ImportContactsResultInternal> {
+    const normalizedContacts = deduplicateDatasetPhoneMethods(importedContacts);
     return this.enqueueWrite(async () => {
     const backupPath = await this.createBackupInner();
     const settings = await this.readSettings(true);
     const now = new Date().toISOString();
 
-    await this.writeDatasetToPath(settings.dataFilePath, importedContacts);
+    await this.writeDatasetToPath(settings.dataFilePath, normalizedContacts);
     // Audit: non-blocking — a failed audit write does NOT roll back the contact mutation.
     // importSource is the basename only (no absolute path). No PII in the entry.
     // "dataset-replace" (not "bulk-import") because this is a wholesale JSON replacement,
@@ -477,18 +490,18 @@ export class AppDataService {
       timestamp: now,
       editor: this.getEditorName(settings),
       action: "dataset-replace",
-      recordsAffected: importedContacts.records.length,
+      recordsAffected: normalizedContacts.records.length,
       importSource: path.basename(sourceFilePath)
     });
 
     const updatedSettings = await this.recordLastImportedAt(settings, now);
 
     return {
-      contacts: importedContacts,
+      contacts: normalizedContacts,
       settings: this.toEditableSettings(updatedSettings),
       backupPath,
       importedFilePath: sourceFilePath,
-      recordCount: importedContacts.records.length
+      recordCount: normalizedContacts.records.length
     };
     });
   }
@@ -648,6 +661,7 @@ export class AppDataService {
     return this.enqueueWrite(async () => {
       const settings = await this.readSettings(true);
       const now = new Date().toISOString();
+      const contacts = deduplicateDatasetPhoneMethods(envelope.contacts);
       const transaction = await beepersService.importDatasetWithPeerTransaction(
         envelope.beepers,
         {
@@ -656,7 +670,7 @@ export class AppDataService {
         },
         {
           createBackup: () => this.createBackupInner(),
-          replaceDataset: () => this.writeDatasetToPath(settings.dataFilePath, envelope.contacts)
+          replaceDataset: () => this.writeDatasetToPath(settings.dataFilePath, contacts)
         }
       );
 
@@ -664,19 +678,19 @@ export class AppDataService {
         timestamp: now,
         editor: this.getEditorName(settings),
         action: "dataset-replace",
-        recordsAffected: envelope.contacts.records.length,
+        recordsAffected: contacts.records.length,
         importSource: path.basename(sourceFilePath)
       });
 
       const updatedSettings = await this.recordLastImportedAt(settings, now);
 
       return {
-        contacts: envelope.contacts,
+        contacts,
         settings: this.toEditableSettings(updatedSettings),
         backupPath: transaction.peerBackup,
         beeperBackupPath: transaction.backupPath,
         importedFilePath: sourceFilePath,
-        recordCount: envelope.contacts.records.length,
+        recordCount: contacts.records.length,
         beeperRecordCount: transaction.recordCount,
         importedBeeperRecordCount: transaction.importedRecordCount
       };
@@ -2163,12 +2177,17 @@ export class AppDataService {
     editorName: string
   ): ContactRecord {
     const hasEmail = new Set(currentRecord.contactMethods.emails.map((email) => email.address.trim().toLowerCase()));
+    const phoneMethodKey = (phone: ContactRecord["contactMethods"]["phones"][number]) => {
+      const number = normalizePhoneForDedup(phone.number);
+      return number ? `${number}|${normalizePhoneForDedup(phone.extension ?? "")}` : "";
+    };
     const socialMergeKey = (s: { platform: string; handle?: string; url?: string }): string =>
       `${s.platform}|${(s.handle ?? "").trim().toLowerCase()}|${(s.url ?? "").trim().toLowerCase()}`;
     const hasSocialKey = new Set(currentRecord.contactMethods.socials.map(socialMergeKey));
 
-    // Index imported phones by normalized number so phones that
-    // already exist on the current record can have their PRIVACY MARKERS
+    const importedPhones = dedupePhoneMethods(importedRecord.contactMethods.phones);
+    // Index imported phones by normalized number and extension so existing
+    // methods can have their PRIVACY MARKERS
     // (confidential / noPatientSharing) refreshed from the freshly re-imported
     // source row, instead of silently keeping whatever stale value the current
     // record happened to have. Before this fix, re-importing the same source
@@ -2180,16 +2199,16 @@ export class AppDataService {
     // flag forever, no matter how many times the (now-correct) source file was
     // re-imported. The source ODS/CSV row is the authoritative statement of
     // whether a number is confidential, so it must win on every re-import.
-    const importedPhoneByKey = new Map<string, (typeof importedRecord.contactMethods.phones)[number]>();
-    for (const phone of importedRecord.contactMethods.phones) {
-      const key = normalizePhoneForDedup(phone.number);
+    const importedPhoneByKey = new Map<string, (typeof importedPhones)[number]>();
+    for (const phone of importedPhones) {
+      const key = phoneMethodKey(phone);
       if (key && !importedPhoneByKey.has(key)) {
         importedPhoneByKey.set(key, phone);
       }
     }
 
-    const refreshedCurrentPhones = currentRecord.contactMethods.phones.map((phone) => {
-      const key = normalizePhoneForDedup(phone.number);
+    const refreshedCurrentPhones = dedupePhoneMethods(currentRecord.contactMethods.phones).map((phone) => {
+      const key = phoneMethodKey(phone);
       const importedMatch = key ? importedPhoneByKey.get(key) : undefined;
 
       if (!importedMatch) {
@@ -2203,11 +2222,11 @@ export class AppDataService {
       };
     });
 
-    const hasPhone = new Set(refreshedCurrentPhones.map((phone) => normalizePhoneForDedup(phone.number)));
+    const hasPhone = new Set(refreshedCurrentPhones.map(phoneMethodKey));
     const nextPhones = [
       ...refreshedCurrentPhones,
-      ...importedRecord.contactMethods.phones.filter((phone) => {
-        const key = normalizePhoneForDedup(phone.number);
+      ...importedPhones.filter((phone) => {
+        const key = phoneMethodKey(phone);
         return key && !hasPhone.has(key);
       })
     ];

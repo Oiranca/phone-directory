@@ -1,3 +1,6 @@
+import type { PhoneContact } from "../types/contact.js";
+import { normalizePhoneForDedup } from "./matching.js";
+
 /**
  * Ensures exactly one entry in the array has `isPrimary: true`.
  *
@@ -89,4 +92,43 @@ export const reconcilePrimaryEntries = <T extends { isPrimary: boolean }>(entrie
   return entries.map((entry, index) =>
     entry.isPrimary && index !== keepIndex ? { ...entry, isPrimary: false } : entry
   );
+};
+
+/**
+ * Collapse duplicate phone methods by normalized number and extension.
+ * Distinct extensions remain distinct methods; duplicate privacy flags and
+ * primary markers are combined so normalization cannot weaken restrictions.
+ */
+export const dedupePhoneMethods = (phones: PhoneContact[]): PhoneContact[] => {
+  const deduped: PhoneContact[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const phone of phones) {
+    const normalizedNumber = normalizePhoneForDedup(phone.number);
+    if (!normalizedNumber) {
+      deduped.push(phone);
+      continue;
+    }
+
+    const key = `${normalizedNumber}|${normalizePhoneForDedup(phone.extension ?? "")}`;
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, deduped.length);
+      deduped.push(phone);
+      continue;
+    }
+
+    const existing = deduped[existingIndex]!;
+    deduped[existingIndex] = {
+      ...existing,
+      label: existing.label || phone.label,
+      extension: existing.extension || phone.extension,
+      isPrimary: existing.isPrimary || phone.isPrimary,
+      confidential: existing.confidential || phone.confidential,
+      noPatientSharing: existing.noPatientSharing || phone.noPatientSharing,
+      notes: existing.notes || phone.notes
+    };
+  }
+
+  return deduped;
 };

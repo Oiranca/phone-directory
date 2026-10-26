@@ -1933,6 +1933,33 @@ describe("AppDataService", () => {
     expect(persisted.records[0]?.contactMethods.phones[0]?.number).toBe("44556");
   });
 
+  it("deduplicates repeated JSON phone methods and keeps distinct extensions", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+
+    const imported = structuredClone(defaultContacts);
+    const record = imported.records[0]!;
+    record.contactMethods.phones = [
+      { id: "ph_json_1", label: "Corporativo 1", number: "928700000", extension: "70055", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph_json_2", label: "Corporativo 1", number: "928-700-000", extension: "70-055", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph_json_3", label: "Corporativo 1", number: "928700000", extension: "70056", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+    imported.records = [record];
+    imported.metadata.recordCount = 1;
+
+    const sourcePath = path.join(testRoot, "incoming", "duplicate-json-phones.json");
+    await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+    await fs.writeFile(sourcePath, JSON.stringify(imported), "utf-8");
+
+    const result = await service.importDataset(sourcePath);
+    const phoneMethods = result.contacts.records[0]!.contactMethods.phones;
+
+    expect(phoneMethods).toHaveLength(2);
+    expect(phoneMethods.map((phone) => phone.extension)).toEqual(["70055", "70056"]);
+    expect(phoneMethods.map((phone) => phone.label)).toEqual(["Corporativo 1", "Corporativo 1"]);
+  });
+
   // Last-import watermark shown in the app header.
   it("records lastImportedAt on the returned and persisted settings after a JSON dataset import", async () => {
     const { AppDataService } = await import("./app-data.service.js");
@@ -2594,6 +2621,53 @@ describe("AppDataService", () => {
     expect(updated.contactMethods.phones.some((phone) => phone.number === "67890")).toBe(true);
     expect(updated.contactMethods.emails.some((email) => email.address === "nuevo@example.com")).toBe(true);
     expect(updated.tags).toContain("nuevo");
+  });
+
+  it("deduplicates repeated imported phone methods while preserving distinct extension variants", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+
+    const service = new AppDataService();
+    await service.ensureInitialFiles();
+    await service.saveSettings(buildEditableSettings());
+
+    const baselinePath = path.join(testRoot, "incoming", "phone-method-baseline.csv");
+    await fs.mkdir(path.dirname(baselinePath), { recursive: true });
+    await fs.writeFile(
+      baselinePath,
+      [
+        "externalId,type,displayName,department,phone1Number,status",
+        "repeat-phone-1,service,Taller Comunicaciones,Mantenimiento,11111,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+    await service.importCsvDataset(baselinePath);
+
+    const sourcePath = path.join(testRoot, "incoming", "phone-method-duplicates.csv");
+    await fs.writeFile(
+      sourcePath,
+      [
+        "externalId,type,displayName,department,phone1Label,phone1Number,phone1Extension,status",
+        "repeat-phone-1,service,Taller Comunicaciones,Mantenimiento,Corporativo 1,928700000,70055,active",
+        "repeat-phone-1,service,Taller Comunicaciones,Mantenimiento,Corporativo 1,928 700 000,70-055,active",
+        "repeat-phone-1,service,Taller Comunicaciones,Mantenimiento,Corporativo 1,928700000,70056,active"
+      ].join("\n") + "\n",
+      "utf-8"
+    );
+
+    const preview = await service.previewCsvImport(sourcePath);
+    const result = await service.importCsvDataset(sourcePath, preview.conflictedRecords.map((conflict) => ({
+      recordIndex: conflict.recordIndex,
+      policy: "merge-fields" as const
+    })));
+    const updated = result.contacts.records.find((record) => record.externalId === "repeat-phone-1")!;
+    const importedPhones = updated.contactMethods.phones.filter((phone) => phone.label === "Corporativo 1");
+
+    expect(importedPhones).toHaveLength(2);
+    expect(importedPhones.map((phone) => [phone.number.replace(/\D/g, ""), phone.extension])).toEqual([
+      ["928700000", "70055"],
+      ["928700000", "70056"]
+    ]);
+    expect(importedPhones.map((phone) => phone.label)).toEqual(["Corporativo 1", "Corporativo 1"]);
   });
 
   // Regression (PR #152 review): the "unchanged" short-circuit in

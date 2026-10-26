@@ -18,6 +18,7 @@ import type {
   SocialContact,
   SocialPlatform
 } from "../../shared/types/contact.js";
+import { dedupePhoneMethods } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
 /**
@@ -280,7 +281,7 @@ const buildPhones = (
       // Reconciles the rare case where more than one entry was explicitly
       // marked primary (e.g. after a cross-sheet merge); otherwise a no-op.
       return ensureSinglePrimary(
-        phones,
+        dedupePhoneMethods(phones),
         "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
         warnings,
         rowNumber,
@@ -327,7 +328,7 @@ const buildPhones = (
   }
 
   return ensureSinglePrimary(
-    phones,
+    dedupePhoneMethods(phones),
     "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
     warnings,
     rowNumber,

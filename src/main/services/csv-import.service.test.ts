@@ -427,6 +427,44 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
     expect(dataset.records[0]?.contactMethods.phones[0]?.number).toBe("+34928700000");
   });
 
+  it("deduplicates a phone method by normalized number and extension", async () => {
+    const { dataset } = await buildImportPreviewFromRows([{
+      type: "service",
+      displayName: "Taller comunicaciones",
+      phone1Label: "Corporativo 1",
+      phone1Number: "928-700-000",
+      phone1Extension: "70-055",
+      phone2Label: "Corporativo 1",
+      phone2Number: "928700000",
+      phone2Extension: "70055"
+    }], {
+      sourceFilePath: "/tmp/duplicate-phone-method.csv",
+      fileName: "duplicate-phone-method.csv",
+      editorName: "TestEditor"
+    });
+
+    const phones = dataset.records[0]!.contactMethods.phones;
+    expect(phones).toHaveLength(1);
+    expect(phones[0]).toMatchObject({ label: "Corporativo 1", number: "928700000", extension: "70-055" });
+  });
+
+  it("keeps different extensions for the same phone number", async () => {
+    const { dataset } = await buildImportPreviewFromRows([{
+      type: "service",
+      displayName: "Taller comunicaciones",
+      phone1Number: "928700000",
+      phone1Extension: "70055",
+      phone2Number: "928-700-000",
+      phone2Extension: "70056"
+    }], {
+      sourceFilePath: "/tmp/phone-extension-variants.csv",
+      fileName: "phone-extension-variants.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records[0]!.contactMethods.phones.map((phone) => phone.extension)).toEqual(["70055", "70056"]);
+  });
+
   it("does not force phone1 to be primary on the flat CSV column path when phone1IsPrimary is absent", async () => {
     const filePath = await writeIsPrimaryTestFile(
       "no-isprimary-column.csv",

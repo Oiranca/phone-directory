@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.12] - 2026-10-26
+
+### Changed
+
+- Deduplicate imported phone methods by normalized number and extension.
+
 ## [0.1.11] - 2026-10-26
 
 ### Changed

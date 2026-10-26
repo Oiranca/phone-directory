@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLocationFloor, formatLocationRoom, normalizePrimaryEntries, reconcilePrimaryEntries } from "./contacts";
+import { dedupePhoneMethods, formatLocationFloor, formatLocationRoom, normalizePrimaryEntries, reconcilePrimaryEntries } from "./contacts";
 
 type Entry = { id: string; isPrimary: boolean };
 
@@ -87,6 +87,29 @@ describe("reconcilePrimaryEntries (never invents a primary)", () => {
     reconcilePrimaryEntries(entries);
 
     expect(entries).toEqual(snapshot);
+  });
+});
+
+describe("dedupePhoneMethods", () => {
+  it("deduplicates normalized number and extension while preserving distinct extensions", () => {
+    const phones = [
+      { id: "ph-1", label: "Corporativo 1", number: "928-700-000", extension: "70-055", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false },
+      { id: "ph-2", label: "Corporativo 1", number: "928700000", extension: "70055", kind: "corporativo", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph-3", label: "Corporativo 1", number: "928700000", extension: "70056", kind: "corporativo", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+
+    const result = dedupePhoneMethods(phones);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      id: "ph-1",
+      label: "Corporativo 1",
+      number: "928-700-000",
+      extension: "70-055",
+      isPrimary: true,
+      confidential: true
+    });
+    expect(result[1]?.extension).toBe("70056");
   });
 });
 
