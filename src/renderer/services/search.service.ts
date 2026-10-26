@@ -184,8 +184,8 @@ export const searchRecords = (records: ContactRecord[], query: string, filters: 
 };
 
 export const getPreferredResultPhone = (record: ContactRecord) =>
-  record.contactMethods.phones.find((phone) => !phone.confidential && !phone.noPatientSharing) ??
-  record.contactMethods.phones.find((phone) => !phone.confidential) ??
+  record.contactMethods.phones.find((phone) => phone.isPrimary && !phone.noPatientSharing) ??
+  record.contactMethods.phones.find((phone) => !phone.noPatientSharing) ??
   record.contactMethods.phones.find((phone) => phone.isPrimary) ??
   record.contactMethods.phones[0];
 

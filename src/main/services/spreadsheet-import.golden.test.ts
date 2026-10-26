@@ -1090,6 +1090,19 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     expect(JSON.parse(result[0]!.mergedSourceIds!)).toEqual(["a-001", "b-001"]);
   });
 
+  it("keeps the same phone number as separate methods when extensions differ", () => {
+    const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "928700000", label: "Número 1", extension: "70055" })]);
+    const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "928700000", label: "Número 1", extension: "70056" })]);
+    const r1 = makeRow({ externalId: "a-001", displayName: "Taller", phones: phones1 });
+    const r2 = makeRow({ externalId: "b-001", displayName: "Taller", phones: phones2 });
+
+    const result = mergeRecordsByDisplayName([r1, r2]);
+
+    expect(result).toHaveLength(1);
+    const merged = JSON.parse(result[0]!.phones!) as SerializedPhoneEntry[];
+    expect(merged.map((phone) => phone.extension)).toEqual(["70055", "70056"]);
+  });
+
   it("does NOT merge two tabular-Agenda-book-sheet records (area blank) with the same normalized displayName but different department", () => {
     const phones1 = JSON.stringify([makeBlankPhoneEntry({ number: "11111", label: "SheetA" })]);
     const phones2 = JSON.stringify([makeBlankPhoneEntry({ number: "22222", label: "SheetB" })]);

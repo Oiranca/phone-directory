@@ -422,6 +422,16 @@ describe("getPreferredResultPhone", () => {
     expect(preferred?.number).toBe("33333");
   });
 
+  it("keeps a confidential primary phone visible ahead of a public secondary phone", () => {
+    const record = structuredClone(records[0]) as ContactRecord;
+    record.contactMethods.phones = [
+      { id: "ph1", number: "11111", kind: "internal", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph2", number: "22222", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+
+    expect(getPreferredResultPhone(record)?.number).toBe("11111");
+  });
+
   it("falls back to the primary phone when all phones have sharing restrictions", () => {
     const record = structuredClone(records[0]) as ContactRecord;
     record.contactMethods.phones = [

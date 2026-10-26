@@ -119,6 +119,21 @@ export const dedupePhoneMethods = (phones: PhoneContact[]): PhoneContact[] => {
     }
 
     const existing = deduped[existingIndex]!;
+    const externalNumbers = new Map<string, NonNullable<PhoneContact["externalNumbers"]>[number]>();
+    for (const externalNumber of [...(existing.externalNumbers ?? []), ...(phone.externalNumbers ?? [])]) {
+      const normalizedExternal = normalizePhoneForDedup(externalNumber.number);
+      const key = normalizedExternal || externalNumber.number.trim().toLocaleLowerCase("es");
+      const prior = externalNumbers.get(key);
+      externalNumbers.set(key, prior ? {
+        ...prior,
+        confidential: prior.confidential || externalNumber.confidential,
+        noPatientSharing: prior.noPatientSharing || externalNumber.noPatientSharing
+      } : externalNumber);
+    }
+    const notes = [...new Map(
+      [existing.notes, phone.notes].filter((note): note is string => Boolean(note?.trim()))
+        .map((note) => [note.trim().toLocaleLowerCase("es"), note.trim()])
+    ).values()];
     deduped[existingIndex] = {
       ...existing,
       label: existing.label || phone.label,
@@ -126,9 +141,15 @@ export const dedupePhoneMethods = (phones: PhoneContact[]): PhoneContact[] => {
       isPrimary: existing.isPrimary || phone.isPrimary,
       confidential: existing.confidential || phone.confidential,
       noPatientSharing: existing.noPatientSharing || phone.noPatientSharing,
-      notes: existing.notes || phone.notes
+      notes: notes.join(" | ") || undefined,
+      externalNumbers: externalNumbers.size ? [...externalNumbers.values()] : undefined
     };
   }
 
   return deduped;
+};
+
+/** Uses a unique, sequential label for every phone method on a contact. */
+export const normalizeDuplicatePhoneLabels = <T extends { label?: string }>(phones: T[]): T[] => {
+  return phones.map((phone, index) => ({ ...phone, label: `Número ${index + 1}` }));
 };

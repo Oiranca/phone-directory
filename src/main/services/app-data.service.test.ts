@@ -841,7 +841,7 @@ describe("AppDataService", () => {
     expect(after.contacts.records.some((record) => record.id === recordId)).toBe(true);
   });
 
-  it("preserves existing automatic backups without creating or rotating them", async () => {
+  it("creates and rotates launch auto-backups when enabled", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -863,20 +863,18 @@ describe("AppDataService", () => {
       })
     );
 
-    await service.disableAutomaticBackups();
+    await service.startAutoBackup();
     await service.dispose();
 
     const files = (await fs.readdir(path.join(testRoot, "backups")))
       .filter((file) => file.startsWith("auto-backup-"))
       .sort();
 
-    expect(files).toEqual([
-      "auto-backup-2026-01-01T00-00-00-000Z.json",
-      "auto-backup-2026-01-02T00-00-00-000Z.json"
-    ]);
+    expect(files).toHaveLength(2);
+    expect(files.at(-1)).toMatch(/^auto-backup-/);
   });
 
-  it("does not create an auto-backup after the configured edit threshold", async () => {
+  it("creates an auto-backup after the configured edit threshold", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -931,10 +929,10 @@ describe("AppDataService", () => {
     await service.dispose();
 
     const files = await fs.readdir(path.join(testRoot, "backups"));
-    expect(files.some((file) => file.startsWith("auto-backup-"))).toBe(false);
+    expect(files.some((file) => file.startsWith("auto-backup-"))).toBe(true);
   });
 
-  it("does not attempt an edit-threshold auto-backup", async () => {
+  it("retries the edit-threshold auto-backup after a failed attempt", async () => {
     const { AppDataService } = await import("./app-data.service.js");
     const autoBackupFailures: string[] = [];
 
@@ -958,6 +956,15 @@ describe("AppDataService", () => {
         }
       })
     );
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let contactsReadCount = 0;
+    vi.spyOn(fs, "readFile").mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === "string" && path.basename(filePath) === "contacts.json" && ++contactsReadCount === 2) {
+        throw Object.assign(new Error("copy failed"), { code: "EACCES", path: filePath });
+      }
+      return actualFs.readFile(filePath, ...args);
+    });
+
     await service.createRecord({
       beepers: [],
       type: "person",
@@ -991,7 +998,7 @@ describe("AppDataService", () => {
     });
 
     await service.dispose();
-    expect(autoBackupFailures).toHaveLength(0);
+    expect(autoBackupFailures).toHaveLength(1);
 
     await service.createRecord({
       beepers: [],
@@ -1026,11 +1033,10 @@ describe("AppDataService", () => {
     });
 
     await service.dispose();
-    expect(autoBackupFailures).toHaveLength(0);
-    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+    expect(autoBackupFailures).toHaveLength(1);
   });
 
-  it("does not create edit-threshold backups after saving unrelated settings", async () => {
+  it("preserves edit-threshold progress when saving unrelated settings", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1133,10 +1139,10 @@ describe("AppDataService", () => {
     await service.dispose();
 
     const files = await fs.readdir(path.join(testRoot, "backups"));
-    expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+    expect(files.filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
   });
 
-  it("does not create edit-threshold backups when backup targets change", async () => {
+  it("resets edit-threshold progress when backup targets change", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1275,10 +1281,10 @@ describe("AppDataService", () => {
 
     await service.dispose();
 
-    expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+    expect((await fs.readdir(nextBackupDirectory)).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
   });
 
-  it("does not create edit-threshold backups when the data file changes", async () => {
+  it("resets edit-threshold progress when the data file changes", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     const service = new AppDataService();
@@ -1418,7 +1424,7 @@ describe("AppDataService", () => {
 
     await service.dispose();
 
-    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
+    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(1);
   });
 
   it("ignores client supplied ids when creating a new record", async () => {
@@ -1957,7 +1963,7 @@ describe("AppDataService", () => {
 
     expect(phoneMethods).toHaveLength(2);
     expect(phoneMethods.map((phone) => phone.extension)).toEqual(["70055", "70056"]);
-    expect(phoneMethods.map((phone) => phone.label)).toEqual(["Corporativo 1", "Corporativo 1"]);
+    expect(phoneMethods.map((phone) => phone.label)).toEqual(["Número 1", "Número 2"]);
   });
 
   // Last-import watermark shown in the app header.
@@ -2660,14 +2666,14 @@ describe("AppDataService", () => {
       policy: "merge-fields" as const
     })));
     const updated = result.contacts.records.find((record) => record.externalId === "repeat-phone-1")!;
-    const importedPhones = updated.contactMethods.phones.filter((phone) => phone.label === "Corporativo 1");
+    const importedPhones = updated.contactMethods.phones.filter((phone) => ["70055", "70056"].includes(phone.extension ?? ""));
 
     expect(importedPhones).toHaveLength(2);
     expect(importedPhones.map((phone) => [phone.number.replace(/\D/g, ""), phone.extension])).toEqual([
       ["928700000", "70055"],
       ["928700000", "70056"]
     ]);
-    expect(importedPhones.map((phone) => phone.label)).toEqual(["Corporativo 1", "Corporativo 1"]);
+    expect(importedPhones.map((phone) => phone.label)).toEqual(["Número 2", "Número 3"]);
   });
 
   // Regression (PR #152 review): the "unchanged" short-circuit in
@@ -5068,7 +5074,7 @@ describe("AppDataService", () => {
   });
 
   // ---------------------------------------------------------------------------
-  it("does not create launch backups and persists automatic backups as disabled", async () => {
+  it("launch auto-backup produces a valid backup file", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     let autoBackupFailureMessage: string | undefined;
@@ -5091,46 +5097,22 @@ describe("AppDataService", () => {
       })
     );
 
-    await service.disableAutomaticBackups();
+    await service.startAutoBackup();
 
     const backupDir = path.join(testRoot, "backups");
-    const bootstrap = await service.getBootstrapData();
     await service.dispose();
 
     expect(autoBackupFailureMessage).toBeUndefined();
 
     const files = await fs.readdir(backupDir);
     const autoBackupFiles = files.filter((f) => f.startsWith("auto-backup-") && f.endsWith(".json"));
-    expect(autoBackupFiles).toHaveLength(0);
-    expect("recovery" in bootstrap ? undefined : bootstrap.settings.ui.autoBackup.enabled).toBe(false);
+    expect(autoBackupFiles).toHaveLength(1);
+
+    const content = await fs.readFile(path.join(backupDir, autoBackupFiles[0]!), "utf-8");
+    expect(() => JSON.parse(content)).not.toThrow();
   });
 
-  it("does not schedule interval backups", async () => {
-    const { AppDataService } = await import("./app-data.service.js");
-
-    const service = new AppDataService();
-    await service.ensureInitialFiles();
-    await service.saveSettings(
-      buildEditableSettings({
-        ui: {
-          showInactiveByDefault: false,
-          autoBackup: {
-            enabled: true,
-            trigger: "intervalHours",
-            intervalHours: 1,
-            editCountThreshold: 10,
-            retentionCount: 5
-          }
-        }
-      })
-    );
-
-    expect((service as unknown as { autoBackupTimer: NodeJS.Timeout | null }).autoBackupTimer).toBeNull();
-    expect((await fs.readdir(path.join(testRoot, "backups"))).filter((file) => file.startsWith("auto-backup-"))).toHaveLength(0);
-    await service.dispose();
-  });
-
-  it("manual backup still completes when launch auto-backup is disabled", async () => {
+  it("manual backup completes after launch auto-backup", async () => {
     const { AppDataService } = await import("./app-data.service.js");
 
     let autoBackupFailureMessage: string | undefined;
@@ -5153,7 +5135,7 @@ describe("AppDataService", () => {
       })
     );
 
-    await service.disableAutomaticBackups();
+    await service.startAutoBackup();
     const manualBackupPath = await service.createBackup();
 
     const backupDir = path.join(testRoot, "backups");
@@ -5164,7 +5146,7 @@ describe("AppDataService", () => {
     const files = await fs.readdir(backupDir);
     const autoFiles = files.filter((f) => f.startsWith("auto-backup-"));
     const manualFiles = files.filter((f) => f.startsWith("contacts-"));
-    expect(autoFiles).toHaveLength(0);
+    expect(autoFiles).toHaveLength(1);
     expect(manualFiles).toHaveLength(1);
   });
 

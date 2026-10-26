@@ -151,36 +151,55 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
   });
 
-  it("hides automatic backup controls and disables a previously enabled setting on save", async () => {
-    const legacySettings = structuredClone(editableSettings);
-    legacySettings.ui.autoBackup.enabled = true;
-    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
-      contacts: defaultContacts,
-      settings: legacySettings
-    });
-
+  it("requires a valid retention value before saving automatic backup settings", async () => {
     renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Activar copia de seguridad automática")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Cuándo crear la copia de seguridad automática")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Horas entre copias de seguridad automáticas")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Ediciones entre copias de seguridad automáticas")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Nombre del editor"), { target: { value: "Samuel actualizado" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Activar copia de seguridad automática" }));
+    fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
+      target: { value: "intervalHours" }
+    });
+    fireEvent.change(screen.getByLabelText("Horas entre copias de seguridad automáticas"), {
+      target: { value: "1.5" }
+    });
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
+      target: { value: "1.5" }
+    });
+    expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
+      target: { value: "999" }
+    });
+    expect(screen.getByLabelText("Copias de seguridad que se conservan")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
+    expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+    expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Copias de seguridad que se conservan"), {
+      target: { value: "5" }
+    });
+    fireEvent.change(screen.getByLabelText("Cuándo crear la copia de seguridad automática"), {
+      target: { value: "launch" }
+    });
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
     await waitFor(() => {
       expect(window.hospitalDirectory.saveSettings).toHaveBeenCalledWith({
-        editorName: "Samuel actualizado",
+        editorName: "Samuel",
         dataFilePath: "/tmp/data/contacts.json",
         backupDirectoryPath: "/tmp/backups",
         ui: {
           showInactiveByDefault: false,
           autoBackup: {
-            enabled: false,
+            enabled: true,
             trigger: "launch",
-            intervalHours: 2,
+            intervalHours: 1,
             editCountThreshold: 10,
             retentionCount: 5
           }
@@ -189,24 +208,24 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("validates and saves the shared backup retention limit", async () => {
+  it("requires then saves the retention limit when automatic backups are disabled", async () => {
     renderPage();
 
     expect(await screen.findByText("Configuración básica")).toBeInTheDocument();
 
     const retentionInput = screen.getByLabelText("Copias de seguridad que se conservan");
     expect(retentionInput).toBeEnabled();
-    expect(screen.getByText("De 1 a 100 copias de seguridad por tipo de datos.")).toBeInTheDocument();
+    expect(screen.getByText("De 1 a 5 copias por tipo: contactos, buscas, configuración y automáticas.")).toBeInTheDocument();
 
     fireEvent.change(retentionInput, { target: { value: "0" } });
     expect(retentionInput).toHaveAttribute("aria-invalid", "true");
-    expect(retentionInput).toHaveAttribute("aria-describedby", "settings-backup-retention-hint settings-backup-retention-error");
-    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 100.");
+    expect(retentionInput).toHaveAttribute("aria-describedby", "settings-autobackup-retention-hint settings-autobackup-retention-error");
+    expect(screen.getByRole("alert")).toHaveTextContent("Indica un número entero entre 1 y 5.");
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
     expect(window.hospitalDirectory.saveSettings).not.toHaveBeenCalled();
 
-    fireEvent.change(retentionInput, { target: { value: "7" } });
+    fireEvent.change(retentionInput, { target: { value: "4" } });
     expect(screen.getByRole("button", { name: "Guardar configuración" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
 
@@ -222,7 +241,7 @@ describe("SettingsPage", () => {
             trigger: "launch",
             intervalHours: 2,
             editCountThreshold: 10,
-            retentionCount: 7
+            retentionCount: 4
           }
         }
       });

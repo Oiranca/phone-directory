@@ -1322,32 +1322,16 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       continue;
     }
 
-    const combinedPhones: Array<{
-      number: string;
-      label: string;
-      kind: string;
-      isPrimary: boolean;
-      confidential: boolean;
-      noPatientSharing: boolean;
-      notes?: string;
-    }> = [];
-    // Maps a normalized digit string to its index in combinedPhones,
-    // so that when the SAME number appears more than once in the group being
+    const combinedPhones: SerializedPhoneEntry[] = [];
+    // Maps normalized number and extension to its index in combinedPhones,
+    // so that when the SAME method appears more than once in the group being
     // merged, we can OR its confidential/noPatientSharing flags into the
     // already-kept entry instead of silently discarding a later (or earlier)
     // duplicate's flags. A confidential duplicate must always win.
     const seenNormalized = new Map<string, number>();
 
     for (const groupRecord of group) {
-      let entries: Array<{
-        number: string;
-        label: string;
-        kind: string;
-        isPrimary: boolean;
-        confidential: boolean;
-        noPatientSharing: boolean;
-        notes?: string;
-      }> = [];
+      let entries: SerializedPhoneEntry[] = [];
 
       try {
         const parsed = JSON.parse(groupRecord.phones ?? "[]");
@@ -1359,9 +1343,10 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
       }
 
       for (const entry of entries) {
-        const normalized = normalizeNumberForDedup(entry.number);
+        const normalizedNumber = normalizeNumberForDedup(entry.number);
+        const normalized = `${normalizedNumber}|${normalizeNumberForDedup(entry.extension ?? "")}`;
 
-        if (!normalized) {
+        if (!normalizedNumber) {
           continue;
         }
 
@@ -1381,7 +1366,13 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
         combinedPhones[existingIndex] = {
           ...existing,
           confidential: existing.confidential || entry.confidential,
-          noPatientSharing: existing.noPatientSharing || entry.noPatientSharing
+          noPatientSharing: existing.noPatientSharing || entry.noPatientSharing,
+          isPrimary: existing.isPrimary || entry.isPrimary,
+          externalNumbers: [...(existing.externalNumbers ?? []), ...(entry.externalNumbers ?? [])],
+          notes: [...new Map(
+            [existing.notes, entry.notes].filter((note): note is string => Boolean(note?.trim()))
+              .map((note) => [normalizeDisplayNameForMerge(note), note.trim()])
+          ).values()].join(" | ") || undefined
         };
       }
     }
@@ -1438,6 +1429,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
 
     base.phone1Label = first ? "Principal" : "";
     base.phone1Number = first?.number ?? "";
+    base.phone1Extension = first?.extension ?? "";
     base.phone1Kind = first?.kind ?? "";
     // Reflect the phone's actual isPrimary value
     // instead of assuming "true" whenever a first phone exists — keeps this
@@ -1448,6 +1440,7 @@ export const mergeRecordsByDisplayName = (records: NormalizedImportRow[]): Norma
     base.phone1Notes = first?.notes ?? "";
     base.phone2Label = second ? "Secundario" : "";
     base.phone2Number = second?.number ?? "";
+    base.phone2Extension = second?.extension ?? "";
     base.phone2Kind = second?.kind ?? "";
     base.phone2IsPrimary = "false";
     base.phone2Confidential = second?.confidential ? "true" : "false";

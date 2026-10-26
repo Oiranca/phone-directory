@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.14] - 2026-10-26
+
+### Fixed
+
+- Preserve extensions, linked external numbers, and notes during import deduplication.
+- Show confidential primary numbers on directory cards and number phone labels sequentially.
+- Restore automatic backup controls and scheduling while limiting retained copies to five.
+- Import the current master file through the app's replacement and beeper-routing flow.
+
 ## [0.1.13] - 2026-10-26
 
 ### Fixed

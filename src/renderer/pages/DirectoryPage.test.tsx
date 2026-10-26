@@ -357,7 +357,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
     // The subtitle now combines the name and role/category with " · " —
     // record[0]'s displayName ("Admisión General") is not a duplicate of its
     // service ("Información"), so both segments render.
@@ -385,6 +385,31 @@ describe("DirectoryPage", () => {
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const row = within(list).getByRole("button", { name: /admisión general/i });
     expect(within(row).getByText("70005")).toBeInTheDocument();
+    expect(within(row).getByText("Confidencial")).toBeInTheDocument();
+  });
+
+  it("shows the confidential primary phone on the card when a public secondary number exists", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones = [
+      { id: "ph-confidential", label: "Número 1", number: "70005", kind: "internal", isPrimary: true, confidential: true, noPatientSharing: false },
+      { id: "ph-public", label: "Número 2", number: "70006", kind: "internal", isPrimary: false, confidential: false, noPatientSharing: false }
+    ];
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(await within(row).findByText("70005")).toBeInTheDocument();
+    expect(within(row).queryByText("70006")).not.toBeInTheDocument();
     expect(within(row).getByText("Confidencial")).toBeInTheDocument();
   });
 

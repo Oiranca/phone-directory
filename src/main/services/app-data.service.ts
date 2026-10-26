@@ -54,7 +54,7 @@ import {
 } from "../utils/fs-json.js";
 import { getContactsFilePath, getManagedBackupDirectory, getManagedDataDirectory, getSettingsFilePath } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink, formatPathForError } from "../utils/path-safety.js";
-import { dedupePhoneMethods, formatLocationFloor, formatLocationRoom, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
+import { dedupePhoneMethods, formatLocationFloor, formatLocationRoom, normalizeDuplicatePhoneLabels, reconcilePrimaryEntries } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts, normalizeDisplayName, normalizePhoneForDedup, normalizePhoneForMergeDedup } from "../../shared/utils/matching.js";
 import {
   yieldDuringImportPreview,
@@ -112,7 +112,7 @@ const deduplicateDatasetPhoneMethods = (dataset: DirectoryDataset): DirectoryDat
       ...record,
       contactMethods: {
         ...record.contactMethods,
-        phones: dedupePhoneMethods(record.contactMethods.phones)
+        phones: normalizeDuplicatePhoneLabels(dedupePhoneMethods(record.contactMethods.phones))
       }
     }))
   });
@@ -168,16 +168,9 @@ export class AppDataService {
     });
   }
 
-  async disableAutomaticBackups() {
+  async startAutoBackup() {
     const settings = await this.readSettings(true);
-    const autoBackup = { ...settings.ui.autoBackup, enabled: false };
-    if (settings.ui.autoBackup.enabled) {
-      await writeJsonFile(getSettingsFilePath(), {
-        ...settings,
-        ui: { ...settings.ui, autoBackup }
-      });
-    }
-    this.configureAutoBackup(autoBackup);
+    this.configureAutoBackup(settings.ui.autoBackup);
   }
 
   /**
@@ -240,10 +233,7 @@ export class AppDataService {
       editorName: parsed.editorName,
       dataFilePath: path.normalize(normalizedDataFilePath),
       backupDirectoryPath: path.normalize(normalizedBackupDirectoryPath),
-      ui: {
-        ...parsed.ui,
-        autoBackup: { ...parsed.ui.autoBackup, enabled: false }
-      }
+      ui: parsed.ui
     });
 
     await this.validateEditableSettings(nextSettings, currentSettings);
@@ -267,7 +257,12 @@ export class AppDataService {
     }
 
     await writeJsonFile(getSettingsFilePath(), nextSettings);
-    this.configureAutoBackup(nextSettings.ui.autoBackup);
+    this.configureAutoBackup(nextSettings.ui.autoBackup, {
+      forceResetEditCount: (
+        !this.pathsMatch(nextSettings.dataFilePath, currentSettings.dataFilePath) ||
+        !this.pathsMatch(nextSettings.backupDirectoryPath, currentSettings.backupDirectoryPath)
+      )
+    });
     return nextSettings;
   }
 
@@ -1234,7 +1229,7 @@ export class AppDataService {
       // Merge contact methods with deduplication
       contactMethods: {
         // Never invent a primary when merging duplicates.
-        phones: reconcilePrimaryEntries([...keepRecord.contactMethods.phones, ...extraPhones]),
+        phones: reconcilePrimaryEntries(normalizeDuplicatePhoneLabels([...keepRecord.contactMethods.phones, ...extraPhones])),
         emails: reconcilePrimaryEntries([...keepRecord.contactMethods.emails, ...extraEmails]),
         socials: reconcilePrimaryEntries([...keepRecord.contactMethods.socials, ...extraSocials])
       },
@@ -1731,13 +1726,43 @@ export class AppDataService {
     }
   }
 
-  private configureAutoBackup(settings: AutoBackupSettings) {
+  private configureAutoBackup(
+    settings: AutoBackupSettings,
+    options: { forceResetEditCount?: boolean } = {}
+  ) {
+    const shouldResetEditCount = (
+      options.forceResetEditCount ||
+      !settings.enabled ||
+      settings.trigger !== "editCount" ||
+      !this.autoBackupSettings.enabled ||
+      this.autoBackupSettings.trigger !== "editCount" ||
+      this.autoBackupSettings.editCountThreshold !== settings.editCountThreshold
+    );
+
+    this.autoBackupSettings = settings;
+    if (shouldResetEditCount) {
+      this.autoBackupEditCount = 0;
+    }
+
     if (this.autoBackupTimer) {
       clearInterval(this.autoBackupTimer);
       this.autoBackupTimer = null;
     }
-    this.autoBackupSettings = { ...settings, enabled: false };
-    this.autoBackupEditCount = 0;
+
+    if (!settings.enabled) {
+      return;
+    }
+
+    if (settings.trigger === "launch") {
+      this.runAutoBackupInBackground();
+      return;
+    }
+
+    if (settings.trigger === "intervalHours") {
+      this.autoBackupTimer = setInterval(() => {
+        this.runAutoBackupInBackground();
+      }, settings.intervalHours * 60 * 60 * 1000);
+    }
   }
 
   private noteAutoBackupEligibleEdit() {
@@ -2279,7 +2304,7 @@ export class AppDataService {
         // "Principal" bug for any record touched by a merge-fields conflict
         // resolution. Only reconcile a genuine conflict (more than one
         // explicitly marked) via the shared, non-inventing reconciler.
-        phones: reconcilePrimaryEntries(nextPhones),
+        phones: reconcilePrimaryEntries(normalizeDuplicatePhoneLabels(nextPhones)),
         emails: reconcilePrimaryEntries(nextEmails),
         socials: reconcilePrimaryEntries(nextSocials)
       },

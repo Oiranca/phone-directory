@@ -140,3 +140,24 @@ smoke fixtures. The import does not use the active application profile or databa
 - **Default:** unset
 - **Set by:** isolated agent-browser launch command — do not set in `.env`
 - **Example:** `E2E_MASTER_IMPORT_PATH=/path/to/master.json`
+
+### E2E_MASTER_IMPORT_USER_DATA_PATH
+
+Optional Electron user-data directory for the provided-master import scenario. Setting this
+replaces contacts and beepers in that profile; use only after making a restorable backup and
+with `E2E_ALLOW_PERSISTENT_MASTER_IMPORT=1`.
+
+- **Type:** absolute directory path
+- **Default:** unset (uses a disposable temporary profile)
+- **Set by:** explicit agent-browser import command — do not set in `.env`
+- **Example:** `E2E_MASTER_IMPORT_USER_DATA_PATH=/path/to/app-data`
+
+### E2E_ALLOW_PERSISTENT_MASTER_IMPORT
+
+Explicit opt-in required before the provided-master E2E scenario can write to a persistent
+Electron profile. Requires `E2E_MASTER_IMPORT_USER_DATA_PATH` and `E2E_MASTER_IMPORT_PATH`.
+
+- **Type:** boolean flag — only `1` enables persistent import
+- **Default:** unset
+- **Set by:** explicit agent-browser import command — do not set in `.env`
+- **Example:** `E2E_ALLOW_PERSISTENT_MASTER_IMPORT=1`

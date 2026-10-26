@@ -246,7 +246,9 @@ export const appSettingsSchema = z.object({
       trigger: z.enum(["launch", "intervalHours", "editCount"]),
       intervalHours: z.number().int().min(1).max(168),
       editCountThreshold: z.number().int().min(1).max(1000),
-      retentionCount: z.number().int().min(1).max(100)
+      // Clamp historical user settings to the new five-copy limit instead of
+      // rejecting an otherwise valid settings file during upgrade.
+      retentionCount: z.number().int().min(1).max(100).transform((value) => Math.min(value, 5))
     }).default(autoBackupDefaults)
   }),
   // Timestamp of the last time the dataset was replaced/merged from an

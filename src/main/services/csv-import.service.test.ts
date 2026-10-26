@@ -411,6 +411,33 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
     expect(phones.every((p) => p.isPrimary === false)).toBe(true);
   });
 
+  it("preserves extensions and linked external numbers in phones JSON", async () => {
+    const { dataset } = await buildImportPreviewFromRows([{
+      type: "service",
+      displayName: "Taller Comunicaciones",
+      phones: JSON.stringify([
+        {
+          number: "928700000", extension: "70055", label: "Número 1", kind: "internal",
+          isPrimary: false, confidential: false, noPatientSharing: false,
+          externalNumbers: [{ number: "928123456", confidential: true, noPatientSharing: false }]
+        },
+        {
+          number: "928700000", extension: "70056", label: "Número 2", kind: "internal",
+          isPrimary: false, confidential: false, noPatientSharing: false
+        }
+      ])
+    }], {
+      sourceFilePath: "/tmp/master-phones.csv",
+      fileName: "master-phones.csv",
+      editorName: "TestEditor"
+    });
+
+    expect(dataset.records[0]!.contactMethods.phones.map((phone) => phone.extension)).toEqual(["70055", "70056"]);
+    expect(dataset.records[0]!.contactMethods.phones[0]!.externalNumbers).toEqual([
+      { number: "928123456", confidential: true, noPatientSharing: false }
+    ]);
+  });
+
   it("normalizes separators in Agenda and spreadsheet phone entries", async () => {
     const { dataset } = await buildImportPreviewFromRows([{
       type: "service",
@@ -445,7 +472,7 @@ describe("buildImportPreviewFromRows — isPrimary is never auto-assigned", () =
 
     const phones = dataset.records[0]!.contactMethods.phones;
     expect(phones).toHaveLength(1);
-    expect(phones[0]).toMatchObject({ label: "Corporativo 1", number: "928700000", extension: "70-055" });
+    expect(phones[0]).toMatchObject({ label: "Número 1", number: "928700000", extension: "70-055" });
   });
 
   it("keeps different extensions for the same phone number", async () => {

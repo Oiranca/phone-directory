@@ -75,6 +75,15 @@ const generatedMasterPath = path.join(workspace, "generated-master.json");
 const externalMasterImportPath = process.env.E2E_MASTER_IMPORT_PATH
   ? path.resolve(process.env.E2E_MASTER_IMPORT_PATH)
   : undefined;
+const externalMasterImportUserDataPath = process.env.E2E_MASTER_IMPORT_USER_DATA_PATH
+  ? path.resolve(process.env.E2E_MASTER_IMPORT_USER_DATA_PATH)
+  : undefined;
+if (externalMasterImportUserDataPath && !externalMasterImportPath) {
+  throw new Error("E2E_MASTER_IMPORT_USER_DATA_PATH requires E2E_MASTER_IMPORT_PATH");
+}
+if (externalMasterImportUserDataPath && process.env.E2E_ALLOW_PERSISTENT_MASTER_IMPORT !== "1") {
+  throw new Error("Persistent master imports require E2E_ALLOW_PERSISTENT_MASTER_IMPORT=1");
+}
 const overwriteCsvPath = path.join(workspace, "overwrite.csv");
 const skipCsvPath = path.join(workspace, "skip.csv");
 const mergeCsvPath = path.join(workspace, "merge.csv");
@@ -386,17 +395,20 @@ try {
     await navigateWithinBudget("Configuración", "Configuración")
   ];
   console.log("[agent-browser-e2e] Section navigation stayed under 3 seconds", navigationDurations);
-  const retentionInput = "#settings-backup-retention";
+  const retentionInput = "#settings-autobackup-retention";
   if (browserCommand("eval", `(() => {
     const input = document.querySelector(${JSON.stringify(retentionInput)});
     return Boolean(input && !input.disabled);
   })()`) !== "true") throw new Error("Backup retention must remain editable");
-  browserCommand("fill", retentionInput, "7");
+  browserCommand("fill", retentionInput, "4");
   clickRole("button", "Guardar configuración");
   await waitFor("retention saved", () => hasText("Configuración guardada."));
-  const savedRetention = JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
-  if (savedRetention !== 7) throw new Error(`Retention was not persisted: ${savedRetention}`);
-  console.log("[agent-browser-e2e] Backup retention saves and persists");
+  const savedRetention = () => JSON.parse(browserCommand("eval", "(async () => (await window.hospitalDirectory.getBootstrapData()).settings.ui.autoBackup.retentionCount)()"));
+  await waitFor("retention 4 persisted", () => savedRetention() === 4);
+  browserCommand("fill", retentionInput, "5");
+  clickRole("button", "Guardar configuración");
+  await waitFor("maximum retention saved", () => savedRetention() === 5);
+  console.log("[agent-browser-e2e] Backup retention saves and enforces the five-copy limit");
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Avanzado"))?.click()`);
   await waitFor("advanced path controls", () => browserCommand("eval", `(() => {
     const details = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent.trim() === "Avanzado");
@@ -456,7 +468,7 @@ try {
   browserCommand("eval", `([...document.querySelectorAll("summary")].find(item => item.textContent.trim() === "Recuperación avanzada"))?.scrollIntoView()`);
   browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200.png"));
   await waitFor("initial settings toast dismissal", () => !hasText("Configuración guardada."));
-  browserCommand("fill", retentionInput, "8");
+  browserCommand("fill", retentionInput, "4");
   clickRole("button", "Guardar configuración");
   await waitFor("retention resaved", () => hasText("Configuración guardada."));
   const toastOverlap = JSON.parse(browserCommand("eval", `(() => {
@@ -899,7 +911,7 @@ try {
     const searchableBeeper = expectedBeepers.importedRecords[0];
     if (!searchableBeeper) throw new Error("Provided master file has no imported beepers to verify");
 
-    const userDataPath = path.join(workspace, "provided-master-user-data");
+    const userDataPath = externalMasterImportUserDataPath ?? path.join(workspace, "provided-master-user-data");
     const importedContactsPath = path.join(userDataPath, "data", "contacts.json");
     const importedBeepersPath = path.join(userDataPath, "data", "beepers.json");
     await launchElectron([externalMasterImportPath], userDataPath);

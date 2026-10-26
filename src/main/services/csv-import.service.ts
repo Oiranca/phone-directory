@@ -18,7 +18,7 @@ import type {
   SocialContact,
   SocialPlatform
 } from "../../shared/types/contact.js";
-import { dedupePhoneMethods } from "../../shared/utils/contacts.js";
+import { dedupePhoneMethods, normalizeDuplicatePhoneLabels } from "../../shared/utils/contacts.js";
 import { computeMetadataCounts } from "../../shared/utils/matching.js";
 
 /**
@@ -267,6 +267,8 @@ const buildPhones = (
           id: `ph_${rowNumber}_${index + 1}`,
           label: entry.label || undefined,
           number: entry.number,
+          extension: entry.extension || undefined,
+          externalNumbers: entry.externalNumbers,
           kind: SUPPORTED_PHONE_KINDS.has(entry.kind) ? entry.kind : "internal",
           // Respect whatever the normalizer computed instead of
           // forcing the first phone to be "Principal" — the spreadsheet
@@ -281,7 +283,7 @@ const buildPhones = (
       // Reconciles the rare case where more than one entry was explicitly
       // marked primary (e.g. after a cross-sheet merge); otherwise a no-op.
       return ensureSinglePrimary(
-        dedupePhoneMethods(phones),
+        normalizeDuplicatePhoneLabels(dedupePhoneMethods(phones)),
         "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
         warnings,
         rowNumber,
@@ -328,7 +330,7 @@ const buildPhones = (
   }
 
   return ensureSinglePrimary(
-    dedupePhoneMethods(phones),
+    normalizeDuplicatePhoneLabels(dedupePhoneMethods(phones)),
     "Se marcaron varios teléfonos como principales. Solo el primero se conservará como principal.",
     warnings,
     rowNumber,

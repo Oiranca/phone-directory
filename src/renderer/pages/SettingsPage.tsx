@@ -6,6 +6,16 @@ import { DataManagementSection } from "../components/settings/DataManagementSect
 import { useAppStore } from "../store/useAppStore";
 import { toCompactToastMessage } from "../utils/toastMessage";
 
+const clampInteger = (value: string, minimum: number, maximum: number) => {
+  const parsed = Math.trunc(Number(value));
+
+  if (!Number.isFinite(parsed)) {
+    return minimum;
+  }
+
+  return Math.min(maximum, Math.max(minimum, parsed));
+};
+
 export const SettingsPage = () => {
   const { settings, setSettings, ensureBootstrapLoaded } = useAppStore();
   const { pushToast } = useToast();
@@ -17,7 +27,11 @@ export const SettingsPage = () => {
     dataFilePath: string;
     backupDirectoryPath: string;
   }>(null);
-  const [backupRetentionCount, setBackupRetentionCount] = useState("5");
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [autoBackupTrigger, setAutoBackupTrigger] = useState<"launch" | "intervalHours" | "editCount">("launch");
+  const [autoBackupIntervalHours, setAutoBackupIntervalHours] = useState("2");
+  const [autoBackupEditCountThreshold, setAutoBackupEditCountThreshold] = useState("10");
+  const [autoBackupRetentionCount, setAutoBackupRetentionCount] = useState("5");
   const [isBrowsingDataFile, setIsBrowsingDataFile] = useState(false);
   const [isBrowsingBackupDir, setIsBrowsingBackupDir] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -37,7 +51,11 @@ export const SettingsPage = () => {
     setHasEditorDraft(false);
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
-    setBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
+    setAutoBackupEnabled(settings.ui.autoBackup.enabled);
+    setAutoBackupTrigger(settings.ui.autoBackup.trigger);
+    setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
+    setAutoBackupEditCountThreshold(String(settings.ui.autoBackup.editCountThreshold));
+    setAutoBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
     setSaveError("");
   }, [settings]);
 
@@ -72,15 +90,19 @@ export const SettingsPage = () => {
     return <LoadingStatus message="Cargando configuración…" className="rounded-3xl bg-white p-6 shadow-panel" busy />;
   }
 
-  const retentionCount = Number(backupRetentionCount);
-  const retentionError = Number.isInteger(retentionCount) && retentionCount >= 1 && retentionCount <= 100
+  const retentionCount = Number(autoBackupRetentionCount);
+  const retentionError = Number.isInteger(retentionCount) && retentionCount >= 1 && retentionCount <= 5
     ? ""
-    : "Indica un número entero entre 1 y 100.";
+    : "Indica un número entero entre 1 y 5.";
   const isDirty =
     (hasEditorDraft && editorName !== settings.editorName) ||
     dataFilePath !== settings.dataFilePath ||
     backupDirectoryPath !== settings.backupDirectoryPath ||
-    backupRetentionCount !== String(settings.ui.autoBackup.retentionCount);
+    autoBackupEnabled !== settings.ui.autoBackup.enabled ||
+    autoBackupTrigger !== settings.ui.autoBackup.trigger ||
+    autoBackupIntervalHours !== String(settings.ui.autoBackup.intervalHours) ||
+    autoBackupEditCountThreshold !== String(settings.ui.autoBackup.editCountThreshold) ||
+    autoBackupRetentionCount !== String(settings.ui.autoBackup.retentionCount);
 
   const handleEditorNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEditorName(event.target.value);
@@ -98,12 +120,21 @@ export const SettingsPage = () => {
     setSaveError("");
   };
 
+  const handleAutoBackupEnabledChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setAutoBackupEnabled(event.target.checked);
+    setSaveError("");
+  };
+
   const handleReset = () => {
     setEditorName(settings.editorName);
     setHasEditorDraft(false);
     setDataFilePath(settings.dataFilePath);
     setBackupDirectoryPath(settings.backupDirectoryPath);
-    setBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
+    setAutoBackupEnabled(settings.ui.autoBackup.enabled);
+    setAutoBackupTrigger(settings.ui.autoBackup.trigger);
+    setAutoBackupIntervalHours(String(settings.ui.autoBackup.intervalHours));
+    setAutoBackupEditCountThreshold(String(settings.ui.autoBackup.editCountThreshold));
+    setAutoBackupRetentionCount(String(settings.ui.autoBackup.retentionCount));
     setSaveError("");
   };
 
@@ -178,8 +209,10 @@ export const SettingsPage = () => {
     setSaveError("");
 
     const normalizedAutoBackupSettings = {
-      ...settings.ui.autoBackup,
-      enabled: false,
+      enabled: autoBackupEnabled,
+      trigger: autoBackupTrigger,
+      intervalHours: clampInteger(autoBackupIntervalHours, 1, 168),
+      editCountThreshold: clampInteger(autoBackupEditCountThreshold, 1, 1000),
       retentionCount
     };
 
@@ -248,29 +281,109 @@ export const SettingsPage = () => {
               </p>
             </div>
 
-            <div>
-              <label htmlFor="settings-backup-retention" className="block text-sm font-semibold text-slate-700">Copias de seguridad que se conservan</label>
-              <input
-                id="settings-backup-retention"
-                type="number"
-                min={1}
-                max={100}
-                step={1}
-                value={backupRetentionCount}
-                onChange={(event) => {
-                  setBackupRetentionCount(event.target.value);
-                  setSaveError("");
-                }}
-                aria-describedby={retentionError
-                  ? "settings-backup-retention-hint settings-backup-retention-error"
-                  : "settings-backup-retention-hint"}
-                aria-invalid={Boolean(retentionError)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
-              />
-              <p id="settings-backup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
-                De 1 a 100 copias de seguridad por tipo de datos.
-              </p>
-              {retentionError ? <p id="settings-backup-retention-error" role="alert" className="mt-1 text-base text-rose-700 sm:text-sm">{retentionError}</p> : null}
+            {/* "Copia de seguridad automática" compacted into a single tight
+                row-group — the toggle, schedule and retention all share one row on
+                wider screens instead of being spread across separate stacked blocks. */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <input
+                  id="settings-autobackup-enabled"
+                  type="checkbox"
+                  checked={autoBackupEnabled}
+                  onChange={handleAutoBackupEnabledChange}
+                  aria-describedby="settings-autobackup-enabled-desc"
+                  className="mt-1 h-4 w-4 rounded-sm border-slate-300 text-scs-blue focus-visible:ring-scs-blue"
+                />
+                <div className="min-w-0">
+                  <label htmlFor="settings-autobackup-enabled" className="block text-sm font-semibold text-slate-700">Activar copia de seguridad automática</label>
+                  <p id="settings-autobackup-enabled-desc" className="mt-1 text-sm text-slate-600">
+                    Crea copias automáticas en segundo plano para reducir el riesgo entre copias de seguridad manuales.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="settings-autobackup-trigger" className="block text-xs font-semibold text-slate-700">Cuándo crear la copia de seguridad automática</label>
+                  <select
+                    id="settings-autobackup-trigger"
+                    value={autoBackupTrigger}
+                    onChange={(event) => {
+                      setAutoBackupTrigger(event.target.value as "launch" | "intervalHours" | "editCount");
+                      setSaveError("");
+                    }}
+                    disabled={!autoBackupEnabled}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20 disabled:opacity-60"
+                  >
+                    <option value="launch">Al abrir la app</option>
+                    <option value="intervalHours">Cada N horas</option>
+                    <option value="editCount">Cada N ediciones</option>
+                  </select>
+                </div>
+
+                {autoBackupEnabled && autoBackupTrigger === "intervalHours" ? (
+                  <div>
+                    <label htmlFor="settings-autobackup-interval-hours" className="block text-xs font-semibold text-slate-700">Horas entre copias de seguridad automáticas</label>
+                    <input
+                      id="settings-autobackup-interval-hours"
+                      type="number"
+                      min={1}
+                      max={168}
+                      step={1}
+                      value={autoBackupIntervalHours}
+                      onChange={(event) => {
+                        setAutoBackupIntervalHours(event.target.value);
+                        setSaveError("");
+                      }}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                  </div>
+                ) : null}
+
+                {autoBackupEnabled && autoBackupTrigger === "editCount" ? (
+                  <div>
+                    <label htmlFor="settings-autobackup-edit-count" className="block text-xs font-semibold text-slate-700">Ediciones entre copias de seguridad automáticas</label>
+                    <input
+                      id="settings-autobackup-edit-count"
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      value={autoBackupEditCountThreshold}
+                      onChange={(event) => {
+                        setAutoBackupEditCountThreshold(event.target.value);
+                        setSaveError("");
+                      }}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                    />
+                  </div>
+                ) : null}
+
+                <div>
+                  <label htmlFor="settings-autobackup-retention" className="block text-xs font-semibold text-slate-700">Copias de seguridad que se conservan</label>
+                  <input
+                    id="settings-autobackup-retention"
+                    type="number"
+                    min={1}
+                    max={5}
+                    step={1}
+                    value={autoBackupRetentionCount}
+                    onChange={(event) => {
+                      setAutoBackupRetentionCount(event.target.value);
+                      setSaveError("");
+                    }}
+                    aria-describedby={retentionError
+                      ? "settings-autobackup-retention-hint settings-autobackup-retention-error"
+                      : "settings-autobackup-retention-hint"}
+                    aria-invalid={Boolean(retentionError)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-hidden transition focus-visible:border-scs-blue focus-visible:ring-2 focus-visible:ring-scs-blue/20"
+                  />
+                  <p id="settings-autobackup-retention-hint" className="mt-1 text-base text-slate-600 sm:text-sm">
+                    De 1 a 5 copias por tipo: contactos, buscas, configuración y automáticas.
+                  </p>
+                  {retentionError ? <p id="settings-autobackup-retention-error" role="alert" className="mt-1 text-base text-rose-700 sm:text-sm">{retentionError}</p> : null}
+                </div>
+              </div>
             </div>
 
             {/* The raw data-file/backup-folder path fields are technical
