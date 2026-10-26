@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.9] - 2026-10-26
+
+### Fixed
+
+- Show confidential primary phone numbers on directory cards while preserving patient-sharing restrictions.
+
 ## [0.1.8] - 2026-10-26
 
 ### Changed

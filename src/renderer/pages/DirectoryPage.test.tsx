@@ -364,6 +364,54 @@ describe("DirectoryPage", () => {
     expect(within(list).getByText("Admisión General · Jefe/a de Servicio")).toBeInTheDocument();
   });
 
+  it("shows a confidential primary phone number on the directory card with its badge", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+    contacts.records[0]!.contactMethods.phones[0]!.noPatientSharing = false;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("70005")).toBeInTheDocument();
+    expect(within(row).getByText("Confidencial")).toBeInTheDocument();
+  });
+
+  it("shows a non-confidential primary phone number on the directory card", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.confidential = false;
+    contacts.records[0]!.contactMethods.phones[0]!.noPatientSharing = false;
+
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("70005")).toBeInTheDocument();
+    expect(within(row).queryByText("Confidencial")).not.toBeInTheDocument();
+  });
+
   it("does not render a role line in the list card when organization.role is absent", async () => {
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts: defaultContacts,

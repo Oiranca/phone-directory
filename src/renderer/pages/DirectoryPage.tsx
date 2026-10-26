@@ -466,7 +466,7 @@ export const DirectoryPage = () => {
             const primaryPhone = getPreferredResultPhone(record);
             const isSelected = record.id === selectedRecord?.id;
             const privacyFlags = getPhoneInlinePrivacyFlags(record.contactMethods.phones);
-            const showPhoneOnCard = Boolean(primaryPhone && !primaryPhone.confidential && !primaryPhone.noPatientSharing);
+            const showPhoneOnCard = Boolean(primaryPhone && !primaryPhone.noPatientSharing);
             const listContext = [record.organization.department, buildLocationTitleFallback(record.location)]
               .filter((value, contextIndex, values) => Boolean(value?.trim()) && values.indexOf(value) === contextIndex)
               .join(" · ");
