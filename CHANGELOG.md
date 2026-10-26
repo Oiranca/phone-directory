@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] - 2026-10-26
+
+### Changed
+
+- Remove the primary-contact copy action and use an icon-only edit link beside the detail title.
+
 ## [0.1.6] - 2026-10-26
 
 ### Changed

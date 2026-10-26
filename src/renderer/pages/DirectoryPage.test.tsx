@@ -1157,7 +1157,7 @@ describe("DirectoryPage", () => {
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).queryByText("Extensión 55102")).not.toBeInTheDocument();
     expect(contacts.records[0]!.contactMethods.phones[0]!.extension).toBe("55102");
-    expect(within(detail).getByRole("button", { name: /Copiar contacto principal/ })).toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: /Copiar contacto principal/ })).not.toBeInTheDocument();
     expect(within(detail).getByRole("link", { name: `Editar: ${contacts.records[0]!.displayName}` })).toBeInTheDocument();
   });
 
@@ -1669,7 +1669,8 @@ describe("DirectoryPage", () => {
     const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
     expect(editLink.querySelector("svg")).toBeInTheDocument();
-    expect(editLink).toHaveTextContent("Editar registro");
+    expect(editLink).toHaveTextContent("");
+    expect(editLink.previousElementSibling).toHaveRole("heading", { level: 4 });
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
