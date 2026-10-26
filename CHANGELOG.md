@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] - 2026-10-26
+
+### Fixed
+
+- Hide phone extensions from the detail view while preserving imported extension data.
+
 ## [0.1.3] - 2026-10-24
 
 ### Fixed

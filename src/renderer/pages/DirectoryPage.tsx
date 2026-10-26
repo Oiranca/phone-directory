@@ -730,7 +730,6 @@ export const DirectoryPage = () => {
                             <div className="min-w-0">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{getVisiblePhoneLabel(phone.label) ?? "Teléfono"}</p>
                             <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
-                            {phone.extension && <p className="mt-2 text-sm font-medium text-slate-600">Extensión {phone.extension}</p>}
                             {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
                           </div>
                             <div className="flex flex-wrap gap-2 shrink-0">

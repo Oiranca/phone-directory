@@ -1104,6 +1104,7 @@ describe("DirectoryPage", () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.location = { building: "Hospital General" };
     contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+    contacts.records[0]!.contactMethods.phones[0]!.extension = "55102";
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts,
@@ -1123,6 +1124,8 @@ describe("DirectoryPage", () => {
     expect(within(row).queryByText(contacts.records[0]!.contactMethods.phones[0]!.number)).not.toBeInTheDocument();
 
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).queryByText("Extensión 55102")).not.toBeInTheDocument();
+    expect(contacts.records[0]!.contactMethods.phones[0]!.extension).toBe("55102");
     expect(within(detail).getByRole("button", { name: /Copiar contacto principal/ })).toBeInTheDocument();
     expect(within(detail).getByRole("link", { name: `Editar: ${contacts.records[0]!.displayName}` })).toBeInTheDocument();
   });
