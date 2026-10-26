@@ -69,19 +69,17 @@ interface RailNavItem {
 // Visual order in the rail (top-to-bottom). Kept separate from the Alt+N
 // keyboard shortcut mapping in AppShell, which is documented in
 // docs/KEYBOARD_SHORTCUTS.md and must not change just because the rail's
-// visual grouping (Configuración pinned to the bottom) differs from it.
+// visual grouping (Nuevo registro and Configuración pinned to the bottom)
+// differs from it.
 const primaryNavItems: RailNavItem[] = [
   { to: "/", label: "Directorio", title: "Directorio — Alt+1", icon: <DirectoryIcon /> },
-  { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> },
-  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> }
+  { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> }
 ];
 
-const settingsNavItem: RailNavItem = {
-  to: "/settings",
-  label: "Configuración",
-  title: "Configuración — Alt+3",
-  icon: <SettingsIcon />
-};
+const bottomNavItems: RailNavItem[] = [
+  { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
+  { to: "/settings", label: "Configuración", title: "Configuración — Alt+3", icon: <SettingsIcon /> }
+];
 
 const baseItemClasses =
   "focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[10px] px-1 text-center text-[10px] font-semibold leading-tight transition-colors sm:flex-none sm:flex-row sm:text-left sm:text-[13px]";
@@ -155,7 +153,9 @@ export const NavRail = () => {
           <RailNavLink key={item.to} item={item} collapsed={collapsed} />
         ))}
         <div aria-hidden="true" className="hidden sm:flex-1" />
-        <RailNavLink item={settingsNavItem} collapsed={collapsed} />
+        {bottomNavItems.map((item) => (
+          <RailNavLink key={item.to} item={item} collapsed={collapsed} />
+        ))}
       </nav>
 
       <button

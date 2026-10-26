@@ -20,16 +20,20 @@ afterEach(() => {
 });
 
 describe("NavRail — items", () => {
-  it("renders four nav items with Buscas immediately below Directorio", () => {
+  it("keeps primary links first and groups Nuevo registro with Configuración at the bottom", () => {
     renderRail();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
       "Directorio",
       "Buscas",
       "Nuevo registro",
       "Configuración"
     ]);
+    expect(nav.children[2]).toHaveAttribute("aria-hidden", "true");
+    expect(nav.children[3]).toBe(links[2]);
+    expect(nav.children[4]).toBe(links[3]);
     expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
   });
 

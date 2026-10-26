@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.6] - 2026-10-26
+
+### Changed
+
+- Place “Nuevo registro” with “Configuración” at the bottom of the navigation rail.
+
 ## [0.1.5] - 2026-10-26
 
 ### Fixed
