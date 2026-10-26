@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.8] - 2026-10-26
+
+### Changed
+
+- Keep navigation labels visible and remove the collapse control.
+
 ## [0.1.7] - 2026-10-26
 
 ### Changed

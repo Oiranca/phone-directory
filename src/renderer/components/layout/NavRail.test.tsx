@@ -84,45 +84,17 @@ describe("NavRail — active route highlighting", () => {
   });
 });
 
-describe("NavRail — collapse/expand toggle", () => {
-  it("shows destination labels by default when no preference is stored", () => {
+describe("NavRail — visible labels", () => {
+  it("keeps every destination label visible even when a collapsed preference was stored", () => {
+    localStorage.setItem("nav-rail-collapsed:v1", "true");
     renderRail();
-    const toggle = screen.getByRole("button", { name: "Ocultar títulos" });
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toHaveTextContent("Nuevo registro");
-  });
-
-  it("collapses to 60px and flips the toggle label/aria-pressed when clicked", () => {
-    renderRail();
-    const toggle = screen.getByRole("button", { name: "Ocultar títulos" });
-
-    fireEvent.click(toggle);
-
-    const collapsedToggle = screen.getByRole("button", { name: "Mostrar títulos" });
-    expect(collapsedToggle).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("expands again on a second click", () => {
-    renderRail();
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar títulos" }));
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar títulos" }));
-
-    expect(screen.getByRole("button", { name: "Ocultar títulos" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("persists the collapsed preference to localStorage across remounts", () => {
-    const { unmount } = renderRail();
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar títulos" }));
-    expect(localStorage.getItem("nav-rail-collapsed:v1")).toBe("true");
-    unmount();
-
-    renderRail();
-    expect(screen.getByRole("button", { name: "Mostrar títulos" })).toBeInTheDocument();
-  });
-
-  it("falls back to expanded when a corrupt value is stored", () => {
-    localStorage.setItem("nav-rail-collapsed:v1", "not-a-boolean");
-    renderRail();
-    expect(screen.getByRole("button", { name: "Ocultar títulos" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Directorio",
+      "Buscas",
+      "Nuevo registro",
+      "Configuración"
+    ]);
+    expect(screen.queryByRole("button", { name: /títulos/i })).not.toBeInTheDocument();
   });
 });
