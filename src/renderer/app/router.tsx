@@ -5,8 +5,7 @@ import { NotFoundPage } from "../pages/NotFoundPage";
 import { withLazyRouteBoundary } from "../components/feedback/LazyRouteBoundary";
 
 // Code-splitting: previously every route (including
-// SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel, and
-// DeduplicatePage, which pulls in MergeLossPreview) was a static import, so
+// SettingsPage, which pulls in the ~1000-line CsvImportPreviewPanel) was a static import, so
 // all route pages shipped in the initial bundle regardless of whether the
 // operator ever visited them. DirectoryPage stays static since it is the
 // index route and first screen. Every other user-facing page loads on demand.
@@ -56,9 +55,7 @@ export const router = createHashRouter([
       },
       {
         path: "deduplicate",
-        element: withSuspense(() =>
-          import("../pages/DeduplicatePage").then((mod) => ({ default: mod.DeduplicatePage }))
-        )
+        element: <Navigate to="/" replace />
       },
       {
         path: "*",

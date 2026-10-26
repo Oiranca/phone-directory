@@ -579,10 +579,11 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("heading", { name: "Qué cambia al guardar" })).not.toBeInTheDocument();
   });
 
-  it("offers duplicate search as a dedicated settings section", async () => {
+  it("does not expose duplicate search in settings", async () => {
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Buscar duplicados" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Buscar duplicados" })).toHaveAttribute("href", "/deduplicate");
+    expect(await screen.findByRole("heading", { name: "Configuración" })).toBeInTheDocument();
+    expect(screen.queryByText("Buscar duplicados")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Buscar duplicados" })).not.toBeInTheDocument();
   });
 });

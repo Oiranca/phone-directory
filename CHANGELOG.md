@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.10] - 2026-10-26
+
+### Changed
+
+- Hide duplicate search and redirect its legacy route without running the finder.
+
 ## [0.1.9] - 2026-10-26
 
 ### Fixed

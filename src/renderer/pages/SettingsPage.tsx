@@ -1,5 +1,4 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { Link } from "react-router";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
 import { StatusBanner } from "../components/feedback/StatusBanner";
 import { useToast } from "../components/feedback/ToastRegion";
@@ -494,25 +493,6 @@ export const SettingsPage = () => {
               Descartar cambios
             </button>
           </div>
-        </div>
-      </section>
-
-      <section aria-labelledby="duplicate-search-title" className="rounded-3xl bg-white p-6 shadow-panel">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 id="duplicate-search-title" className="text-xl font-semibold text-scs-blueDark">
-              Buscar duplicados
-            </h3>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600">
-              Revisa contactos coincidentes y decide cuáles deben fusionarse.
-            </p>
-          </div>
-          <Link
-            to="/deduplicate"
-            className="focus-ring inline-flex min-h-11 shrink-0 items-center justify-center rounded-2xl bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
-          >
-            Buscar duplicados
-          </Link>
         </div>
       </section>
 
