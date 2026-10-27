@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.16] - 2026-10-27
+
+### Fixed
+
+- Place the directory record edit action at the upper-right of the parent card.
+
 ## [0.1.15] - 2026-10-27
 
 ### Fixed

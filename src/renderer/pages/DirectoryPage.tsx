@@ -609,7 +609,19 @@ export const DirectoryPage = () => {
             style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
             className="overflow-y-auto rounded-3xl bg-white p-6 shadow-panel sm:p-8"
           >
-            <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
+              {selectedRecord && (
+                <Link
+                  to={`/contacts/${selectedRecord.id}/edit`}
+                  reloadDocument
+                  aria-label={`Editar: ${selectedRecord.displayName}`}
+                  className="focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist"
+                >
+                  <EditIcon />
+                </Link>
+              )}
+            </div>
             {selectedRecord ? (
               <div className="space-y-6">
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
@@ -634,19 +646,9 @@ export const DirectoryPage = () => {
                       )}
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
-                      <div className="mt-4 flex items-start gap-2">
-                        <Link
-                          to={`/contacts/${selectedRecord.id}/edit`}
-                          reloadDocument
-                          aria-label={`Editar: ${selectedRecord.displayName}`}
-                          className="focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full text-scs-blue transition hover:bg-scs-mist"
-                        >
-                          <EditIcon />
-                        </Link>
-                        <h4 className="min-w-0 max-w-4xl flex-1 text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                          {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
-                        </h4>
-                      </div>
+                      <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
+                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
+                      </h4>
                       {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
                       {selectedRecord.organization.role ? (
