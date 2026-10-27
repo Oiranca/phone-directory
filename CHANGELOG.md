@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.15] - 2026-10-27
+
+### Fixed
+
+- Place the directory record edit action at the upper-left of its title card.
+
 ## [0.1.14] - 2026-10-26
 
 ### Fixed

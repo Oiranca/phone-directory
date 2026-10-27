@@ -1743,7 +1743,7 @@ describe("DirectoryPage", () => {
     expect(editLink).toHaveAttribute("href", `/contacts/${firstRecord.id}/edit`);
     expect(editLink.querySelector("svg")).toBeInTheDocument();
     expect(editLink).toHaveTextContent("");
-    expect(editLink.previousElementSibling).toHaveRole("heading", { level: 4 });
+    expect(editLink.nextElementSibling).toHaveRole("heading", { level: 4 });
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {

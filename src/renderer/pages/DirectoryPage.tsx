@@ -635,9 +635,6 @@ export const DirectoryPage = () => {
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
                       <div className="mt-4 flex items-start gap-2">
-                        <h4 className="min-w-0 max-w-4xl flex-1 text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                          {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
-                        </h4>
                         <Link
                           to={`/contacts/${selectedRecord.id}/edit`}
                           reloadDocument
@@ -646,6 +643,9 @@ export const DirectoryPage = () => {
                         >
                           <EditIcon />
                         </Link>
+                        <h4 className="min-w-0 max-w-4xl flex-1 text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
+                          {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
+                        </h4>
                       </div>
                       {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
