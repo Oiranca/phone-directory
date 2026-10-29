@@ -32,7 +32,13 @@ describe("registerBeepersIpc", () => {
     update: vi.fn(),
     remove: vi.fn(),
     listImported: vi.fn().mockResolvedValue([]),
-    updateImported: vi.fn()
+    updateImported: vi.fn(),
+    listTeams: vi.fn().mockResolvedValue([]),
+    listTeamMemberships: vi.fn().mockResolvedValue([]),
+    addTeam: vi.fn(),
+    updateTeam: vi.fn(),
+    removeTeam: vi.fn(),
+    setTeamMembers: vi.fn()
   };
   const appDataServiceMock = {
     getBeeperBackupOptions: vi.fn().mockResolvedValue({ backupDirectoryPath: "/tmp/backups", retentionCount: 5 })
@@ -60,11 +66,17 @@ describe("registerBeepersIpc", () => {
       const registeredChannels = Array.from(handlers.keys()).sort();
       expect(registeredChannels).toEqual([
         "beepers:add",
+        "beepers:add-team",
         "beepers:delete",
+        "beepers:delete-team",
         "beepers:list",
         "beepers:list-imported",
+        "beepers:list-team-memberships",
+        "beepers:list-teams",
+        "beepers:set-team-members",
         "beepers:update",
-        "beepers:update-imported"
+        "beepers:update-imported",
+        "beepers:update-team"
       ]);
     });
 
@@ -348,6 +360,38 @@ describe("registerBeepersIpc", () => {
       await invoke("beepers:update-imported", "ibsc_aabbccdd", payload);
 
       expect(serviceMock.updateImported).toHaveBeenCalledWith("ibsc_aabbccdd", payload);
+    });
+  });
+
+  describe("team channels", () => {
+    const team = { name: "Equipo UCI", displayId: "9001" };
+
+    it("lists teams and memberships", async () => {
+      await invoke("beepers:list-teams");
+      await invoke("beepers:list-team-memberships");
+      expect(serviceMock.listTeams).toHaveBeenCalledOnce();
+      expect(serviceMock.listTeamMemberships).toHaveBeenCalledOnce();
+    });
+
+    it("validates and forwards team mutations", async () => {
+      await invoke("beepers:add-team", team);
+      await invoke("beepers:update-team", "team_1", team);
+      await invoke("beepers:delete-team", "team_1");
+      await invoke("beepers:set-team-members", "team_1", ["bsc_abc12345"]);
+      expect(serviceMock.addTeam).toHaveBeenCalledWith(team);
+      expect(serviceMock.updateTeam).toHaveBeenCalledWith("team_1", team);
+      expect(serviceMock.removeTeam).toHaveBeenCalledWith("team_1");
+      expect(serviceMock.setTeamMembers).toHaveBeenCalledWith("team_1", ["bsc_abc12345"]);
+    });
+
+    it("rejects invalid team IDs and member lists", async () => {
+      await expect(invoke("beepers:update-team", "", team)).rejects.toThrow("ID de equipo inválido.");
+      await expect(invoke("beepers:set-team-members", "x".repeat(256), [])).rejects.toThrow("ID de equipo inválido.");
+      await expect(invoke("beepers:set-team-members", `${" ".repeat(256)}team_1`, [])).rejects.toThrow("ID de equipo inválido.");
+      await expect(invoke("beepers:set-team-members", "team_1", ["", 3])).rejects.toThrow("Los miembros del equipo no son válidos.");
+      await expect(invoke("beepers:set-team-members", "team_1", ["x".repeat(256)])).rejects.toThrow("Los miembros del equipo no son válidos.");
+      await expect(invoke("beepers:set-team-members", "team_1", [`${" ".repeat(256)}bsc_abc12345`])).rejects.toThrow("Los miembros del equipo no son válidos.");
+      await expect(invoke("beepers:set-team-members", "team_1", Array.from({ length: 10_001 }, () => "bsc_abc12345"))).rejects.toThrow("Los miembros del equipo no son válidos.");
     });
   });
 });

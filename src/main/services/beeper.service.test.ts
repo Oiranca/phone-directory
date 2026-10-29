@@ -372,6 +372,111 @@ describe("BeepersService", () => {
   });
 });
 
+describe("BeepersService — teams", () => {
+  let testRoot: string;
+
+  beforeEach(async () => {
+    testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "beeper-team-service-test-"));
+    getPathMock.mockImplementation(() => testRoot);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(testRoot, { recursive: true, force: true });
+    getPathMock.mockReset();
+  });
+
+  it("persists teams and supports one Busca in multiple teams", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const beeper = await service.add({ deviceNumber: "B-700", assignedTo: "Ana", department: "UCI", role: "Enfermera", shift: "mañana" });
+    const first = await service.addTeam({ name: "UCI", displayId: "9001" });
+    const second = await service.addTeam({ name: "Guardia", displayId: "9002" });
+    await service.updateTeam(first.id, { name: "UCI Adultos", displayId: "9001" });
+    await service.setTeamMembers(first.id, [beeper.id]);
+    await service.setTeamMembers(second.id, [beeper.id]);
+
+    const reloaded = new BeepersService();
+    expect(await reloaded.listTeams()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: first.id, name: "UCI Adultos" }),
+      expect.objectContaining({ id: second.id })
+    ]));
+    expect(await reloaded.listTeamMemberships()).toEqual(expect.arrayContaining([
+      { teamId: first.id, beeperId: beeper.id },
+      { teamId: second.id, beeperId: beeper.id }
+    ]));
+  });
+
+  it("rejects normalized duplicate team display IDs on create and update", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const first = await service.addTeam({ name: "UCI", displayId: "9001" });
+    const second = await service.addTeam({ name: "Guardia", displayId: "9002" });
+    await expect(service.addTeam({ name: "Duplicado", displayId: " 9001 " })).rejects.toThrow("ya está registrado");
+    await expect(service.updateTeam(second.id, { name: "Guardia", displayId: "9001" })).rejects.toThrow("ya está registrado");
+    expect(first.displayId).toBe("9001");
+  });
+
+  it("rejects oversized whitespace team and member IDs", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const team = await service.addTeam({ name: "UCI", displayId: "9001" });
+
+    await expect(service.setTeamMembers(`${" ".repeat(256)}${team.id}`, [])).rejects.toThrow("Los miembros del equipo no son válidos.");
+    await expect(service.setTeamMembers(team.id, [`${" ".repeat(256)}${team.id}`])).rejects.toThrow("Los miembros del equipo no son válidos.");
+  });
+
+  it("removes memberships when a Busca or team is deleted", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const beeper = await service.add({ deviceNumber: "B-701", assignedTo: "Luis", department: "UCI", role: "Médico", shift: "tarde" });
+    const team = await service.addTeam({ name: "UCI", displayId: "9001" });
+    await service.setTeamMembers(team.id, [beeper.id]);
+    await service.removeTeam(team.id);
+    expect(await service.listTeamMemberships()).toEqual([]);
+
+    const replacementTeam = await service.addTeam({ name: "UCI Guardia", displayId: "9002" });
+    await service.setTeamMembers(replacementTeam.id, [beeper.id]);
+    await service.remove(beeper.id, { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 1 });
+    expect(await service.listTeamMemberships()).toEqual([]);
+    expect(await service.listTeams()).toEqual([replacementTeam]);
+  });
+
+  it("prunes replaced ODS IDs while retaining manual and surviving imported memberships", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const manual = await service.add({ deviceNumber: "B-702", assignedTo: "Marta", department: "UCI", role: "Auxiliar", shift: "noche" });
+    await service.importFromOds({
+      records: [
+        { deviceNumber: "7001", department: "UCI", holderType: "Principal", sourceSheet: "S", sourceRow: 1 },
+        { deviceNumber: "7002", department: "UCI", holderType: "Residente", sourceSheet: "S", sourceRow: 2 }
+      ],
+      parsedCellCount: 2,
+      skippedRowCount: 0
+    });
+    const originalImported = await service.listImported();
+    const surviving = originalImported.find((record) => record.deviceNumber === "7001");
+    const removed = originalImported.find((record) => record.deviceNumber === "7002");
+    if (!surviving || !removed) {
+      throw new Error("ODS test fixture did not create both imported records.");
+    }
+    const team = await service.addTeam({ name: "UCI", displayId: "9001" });
+    await service.setTeamMembers(team.id, [manual.id, surviving.id, removed.id]);
+    await service.importFromOds({
+      records: [
+        { deviceNumber: "7001", department: "UCI", holderType: "Principal", sourceSheet: "S", sourceRow: 1 },
+        { deviceNumber: "7003", department: "UCI", holderType: "Adjunto", sourceSheet: "S", sourceRow: 3 }
+      ],
+      parsedCellCount: 2,
+      skippedRowCount: 0
+    });
+    expect(await service.listTeamMemberships()).toEqual([
+      { teamId: team.id, beeperId: manual.id },
+      { teamId: team.id, beeperId: surviving.id }
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // importFromOds + listImported
 // ---------------------------------------------------------------------------

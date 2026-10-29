@@ -30,7 +30,7 @@ import type {
   ResetContactsResult,
   SaveContactResult
 } from "../types/contact.js";
-import type { BeeperRecord, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../schemas/beeper.schema.js";
+import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../schemas/beeper.schema.js";
 import type { MergeContactsOverrides } from "../schemas/merge-contacts.schema.js";
 import type { DuplicateDetectionResult } from "../types/duplicate.js";
 
@@ -85,6 +85,14 @@ export interface HospitalDirectoryApi {
   // Beepers — ODS-imported
   listImportedBeepers: () => Promise<ImportedBeeperRecord[]>;
   updateImportedBeeper: (id: string, record: EditableImportedBeeperRecord) => Promise<ImportedBeeperRecord>;
+
+  // Beepers — teams and many-to-many memberships
+  listBeeperTeams: () => Promise<BeeperTeam[]>;
+  listBeeperTeamMemberships: () => Promise<BeeperTeamMembership[]>;
+  addBeeperTeam: (team: EditableBeeperTeam) => Promise<BeeperTeam>;
+  updateBeeperTeam: (id: string, team: EditableBeeperTeam) => Promise<BeeperTeam>;
+  deleteBeeperTeam: (id: string) => Promise<void>;
+  setBeeperTeamMembers: (teamId: string, beeperIds: string[]) => Promise<BeeperTeamMembership[]>;
 
   // Duplicate detection & merge
   detectDuplicates: () => Promise<DuplicateDetectionResult>;

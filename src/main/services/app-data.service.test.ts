@@ -6122,4 +6122,30 @@ describe("AppDataService", () => {
     await expect(service.getSpreadsheetImportCurrentBeeperCount()).resolves.toBe(3);
   });
 
+  it("imports a previewed iMessage export as active Busca records and separate teams", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const importDataset = vi.fn().mockResolvedValue({ manualCount: 0, importedCount: 1 });
+    const service = new AppDataService({ beepersService: { importDataset } as never });
+    await service.ensureInitialFiles();
+    const parsed = {
+      kind: "imessage-beepers" as const,
+      data: {
+        datos: {
+          usuarios: [
+            { id: "active", displayId: "7001", department: "Rayos", textEnabled: true },
+            { id: "inactive", displayId: "7002", department: "UCI", textEnabled: false }
+          ],
+          equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }]
+        }
+      }
+    };
+
+    await expect(service.importPreviewedJson(parsed, path.join(testRoot, "import.json"))).resolves.toMatchObject({ kind: "beepers-import" });
+    expect(importDataset).toHaveBeenCalledWith(expect.objectContaining({
+      importedRecords: [expect.objectContaining({ sourceId: "active", deviceNumber: "7001" })],
+      teams: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
+      teamMemberships: []
+    }), expect.any(Object));
+  });
+
 });

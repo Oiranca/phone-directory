@@ -73,7 +73,7 @@ describe("schema-aware JSON import", () => {
     expect(beepersBackupName).toBeDefined();
     expect(
       JSON.parse(await fs.readFile(path.join(profileRoot, "backups", beepersBackupName!), "utf8"))
-    ).toEqual({ version: "1.0.0", records: [], importedRecords: [] });
+    ).toEqual({ version: "1.0.0", records: [], importedRecords: [], teams: [], teamMemberships: [] });
     expect(settingsBackupName).toBeDefined();
     expect(
       JSON.parse(await fs.readFile(path.join(profileRoot, "backups", settingsBackupName!), "utf8"))
@@ -134,7 +134,7 @@ describe("schema-aware JSON import", () => {
     expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")))
       .toMatchObject({ records: [{ displayName: "Agenda combinada" }] });
     expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "beepers.json"), "utf8")))
-      .toEqual(importedBeepers);
+      .toEqual({ ...importedBeepers, teams: [], teamMemberships: [] });
     const backupNames = await fs.readdir(path.join(profileRoot, "backups"));
     expect(backupNames.some((name) => name.startsWith("contacts-"))).toBe(true);
     expect(backupNames.some((name) => name.startsWith("beepers-before-import-"))).toBe(true);

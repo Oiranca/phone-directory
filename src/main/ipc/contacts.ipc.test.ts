@@ -969,6 +969,24 @@ describe("contacts:pick-and-import-dataset — JSON preview confirmation", () =>
     expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
   });
 
+  it("previews active iMessage Buscas and teams, then forwards confirmation", async () => {
+    const parsed = {
+      kind: "imessage-beepers",
+      data: { datos: { usuarios: [{ textEnabled: true }, { textEnabled: false }, { textEnabled: true }], equipos: [{}, {}] } }
+    };
+    serviceMock.previewJsonFile.mockResolvedValueOnce(parsed);
+    serviceMock.importPreviewedJson.mockResolvedValueOnce({ kind: "beepers-import", manualCount: 0, importedCount: 2 });
+    const sender = makeWebContentsSender(96);
+
+    const previewHandler = handlers.get("contacts:pick-and-import-dataset");
+    const confirmHandler = handlers.get("contacts:confirm-json-import");
+    if (!previewHandler || !confirmHandler) throw new Error("JSON import handlers are not registered.");
+    const preview = await previewHandler({ sender }) as { preview: { importToken: string; importedBeeperRecordCount: number; teamCount: number } };
+    expect(preview.preview).toMatchObject({ importedBeeperRecordCount: 2, teamCount: 2 });
+    await confirmHandler({ sender }, preview.preview.importToken);
+    expect(serviceMock.importPreviewedJson).toHaveBeenCalledWith(parsed, expect.stringContaining("hospiagenda-import-"));
+  });
+
   it("opens one native dialog restricted to supported file types", async () => {
     showOpenDialogMock.mockResolvedValueOnce({ canceled: true, filePaths: [] });
 

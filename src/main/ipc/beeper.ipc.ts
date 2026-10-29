@@ -1,9 +1,10 @@
 import type { IpcMain } from "electron";
 import { ZodError } from "zod";
-import { editableBeeperRecordSchema, editableImportedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
+import { editableBeeperRecordSchema, editableBeeperTeamSchema, editableImportedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
 import type { BeepersService } from "../services/beeper.service.js";
 import type { AppDataService } from "../services/app-data.service.js";
 import { BEEPERS_CHANNELS } from "../../shared/ipc/channels.js";
+import { MAX_DATASET_RECORDS } from "../../shared/constants/json-limits.js";
 
 const FILESYSTEM_ERROR_CODES = new Set([
   "EACCES", "EBUSY", "EEXIST", "EIO", "EISDIR", "ELOOP", "EMFILE", "ENAMETOOLONG", "ENFILE",
@@ -96,6 +97,64 @@ export const registerBeepersIpc = (
       return await service.updateImported(id, parsed);
     } catch (err) {
       throw toRendererError(err, BEEPERS_CHANNELS.updateImported);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.listTeams, async () => {
+    try {
+      return await service.listTeams();
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.listTeams);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.listMemberships, async () => {
+    try {
+      return await service.listTeamMemberships();
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.listMemberships);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.addTeam, async (_event, rawPayload: unknown) => {
+    try {
+      return await service.addTeam(editableBeeperTeamSchema.parse(rawPayload));
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.addTeam);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.updateTeam, async (_event, id: unknown, rawPayload: unknown) => {
+    if (typeof id !== "string" || id.length > 255 || !id.trim()) throw new Error("ID de equipo inválido.");
+    try {
+      return await service.updateTeam(id, editableBeeperTeamSchema.parse(rawPayload));
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.updateTeam);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.removeTeam, async (_event, id: unknown) => {
+    if (typeof id !== "string" || id.length > 255 || !id.trim()) throw new Error("ID de equipo inválido.");
+    try {
+      return await service.removeTeam(id);
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.removeTeam);
+    }
+  });
+
+  handle(BEEPERS_CHANNELS.setTeamMembers, async (_event, teamId: unknown, rawBeeperIds: unknown) => {
+    if (typeof teamId !== "string" || teamId.length > 255 || !teamId.trim()) throw new Error("ID de equipo inválido.");
+    if (
+      !Array.isArray(rawBeeperIds) ||
+      rawBeeperIds.length > MAX_DATASET_RECORDS ||
+      rawBeeperIds.some((id) => typeof id !== "string" || id.length > 255 || !id.trim())
+    ) {
+      throw new Error("Los miembros del equipo no son válidos.");
+    }
+    try {
+      return await service.setTeamMembers(teamId, rawBeeperIds);
+    } catch (err) {
+      throw toRendererError(err, BEEPERS_CHANNELS.setTeamMembers);
     }
   });
 

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { appSettingsSchema, directoryDatasetSchema } from "../../shared/schemas/contact.js";
-import { beepersDatasetSchema } from "../../shared/schemas/beeper.schema.js";
+import { beepersDatasetSchema, iMessageBeeperExportSchema } from "../../shared/schemas/beeper.schema.js";
 import { combinedDataEnvelopeSchema } from "../../shared/schemas/combined-data.schema.js";
 import {
   MAX_JSON_DEPTH,
@@ -14,7 +14,7 @@ import {
   MAX_JSON_TOTAL_FIELDS
 } from "../../shared/constants/json-limits.js";
 
-export type JsonDataKind = "contacts" | "beepers" | "settings" | "combined" | "auto";
+export type JsonDataKind = "contacts" | "beepers" | "imessage-beepers" | "settings" | "combined" | "auto";
 export type ParsedJsonData = { kind: Exclude<JsonDataKind, "auto">; data: unknown };
 export type JsonDataErrorCode =
   | "too-large"
@@ -76,6 +76,7 @@ const assertBoundedStructure = (root: unknown): void => {
 const schemas = {
   contacts: directoryDatasetSchema,
   beepers: beepersDatasetSchema,
+  "imessage-beepers": iMessageBeeperExportSchema,
   settings: appSettingsSchema,
   combined: combinedDataEnvelopeSchema
 } as const;
@@ -90,7 +91,7 @@ export const parseAndValidateJson = (contents: string, requestedKind: JsonDataKi
 
   assertBoundedStructure(raw);
   const kinds = requestedKind === "auto"
-    ? (["combined", "contacts", "beepers", "settings"] as const)
+    ? (["combined", "contacts", "beepers", "imessage-beepers", "settings"] as const)
     : [requestedKind];
 
   for (const kind of kinds) {

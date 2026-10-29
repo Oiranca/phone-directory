@@ -52,6 +52,12 @@ const ROUTES: Record<InvokeMethod, { channel: string; args?: unknown[] }> = {
   deleteBeeper: { channel: BEEPERS_CHANNELS.remove, args: ["beeper-1"] },
   listImportedBeepers: { channel: BEEPERS_CHANNELS.listImported },
   updateImportedBeeper: { channel: BEEPERS_CHANNELS.updateImported, args: ["imported-1", {}] },
+  listBeeperTeams: { channel: BEEPERS_CHANNELS.listTeams },
+  listBeeperTeamMemberships: { channel: BEEPERS_CHANNELS.listMemberships },
+  addBeeperTeam: { channel: BEEPERS_CHANNELS.addTeam, args: [{}] },
+  updateBeeperTeam: { channel: BEEPERS_CHANNELS.updateTeam, args: ["team-1", {}] },
+  deleteBeeperTeam: { channel: BEEPERS_CHANNELS.removeTeam, args: ["team-1"] },
+  setBeeperTeamMembers: { channel: BEEPERS_CHANNELS.setTeamMembers, args: ["team-1", ["beeper-1"]] },
   detectDuplicates: { channel: CONTACTS_CHANNELS.detectDuplicates },
   mergeContacts: { channel: CONTACTS_CHANNELS.mergeDuplicates, args: [{ keepId: "a", discardId: "b" }] }
 };

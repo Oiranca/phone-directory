@@ -60,6 +60,19 @@ describe("bounded JSON data reader", () => {
     expect(parseAndValidateJson(JSON.stringify(dataset), "contacts").kind).toBe("contacts");
   });
 
+  it("auto-detects a valid iMessage Busca export", () => {
+    const exportData = {
+      datos: {
+        usuarios: [{ id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true }],
+        equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }]
+      }
+    };
+
+    const result = parseAndValidateJson(JSON.stringify(exportData), "auto");
+    expect(result.kind).toBe("imessage-beepers");
+    expect(result.data).toEqual(exportData);
+  });
+
   it("terminates the worker when processing is cancelled", async () => {
     const filePath = path.join(testRoot, "contacts.json");
     await fs.writeFile(filePath, JSON.stringify(defaultContacts));

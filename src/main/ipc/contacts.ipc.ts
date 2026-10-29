@@ -638,6 +638,11 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
         const data = parsed.data as { records: unknown[]; importedRecords: unknown[] };
         return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: data.records.length, importedBeeperRecordCount: data.importedRecords.length, currentBeeperRecordCount: currentCounts.beepers } } as const;
       }
+      if (parsed.kind === "imessage-beepers") {
+        const data = parsed.data as { datos: { usuarios: Array<{ textEnabled: boolean }>; equipos: unknown[] } };
+        const importedBeeperRecordCount = data.datos.usuarios.filter((user) => user.textEnabled).length;
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: 0, importedBeeperRecordCount, teamCount: data.datos.equipos.length, currentBeeperRecordCount: currentCounts.beepers } } as const;
+      }
       return { kind: "json-preview", preview: { importToken, fileName, detectedType: "settings" } } as const;
     }
 

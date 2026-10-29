@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { BeeperRecord, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
+import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -42,6 +42,14 @@ const emptyForm = (): EditableBeeperRecord => ({
   shift: "mañana",
   group: ""
 });
+
+const emptyTeamForm = (): EditableBeeperTeam => ({ name: "", displayId: "" });
+
+const validateTeamField = (value: string, label: string): string => {
+  if (!value.trim()) return `El ${label} es obligatorio.`;
+  if (value.trim().length > 255) return `El ${label} no puede superar 255 caracteres.`;
+  return "";
+};
 
 const normalizeVisibleBeeperCell = (value: string): string =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
@@ -91,6 +99,9 @@ export const BeepersPage = () => {
   const { pushToast } = useToast();
   const [records, setRecords] = useState<BeeperRecord[]>([]);
   const [importedRecords, setImportedRecords] = useState<ImportedBeeperRecord[]>([]);
+  const [teams, setTeams] = useState<BeeperTeam[]>([]);
+  const [memberships, setMemberships] = useState<BeeperTeamMembership[]>([]);
+  const [membershipsLoaded, setMembershipsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
@@ -103,6 +114,16 @@ export const BeepersPage = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; deviceNumber: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [teamForm, setTeamForm] = useState<EditableBeeperTeam>(emptyTeamForm());
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [isSavingTeam, setIsSavingTeam] = useState(false);
+  const [isSavingMembers, setIsSavingMembers] = useState(false);
+  const [teamError, setTeamError] = useState("");
+  const [memberError, setMemberError] = useState("");
+  const [teamNameError, setTeamNameError] = useState("");
+  const [teamDisplayIdError, setTeamDisplayIdError] = useState("");
+  const [teamDeleteConfirm, setTeamDeleteConfirm] = useState<BeeperTeam | null>(null);
 
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -113,13 +134,22 @@ export const BeepersPage = () => {
     try {
       setIsLoading(true);
       setLoadError(false);
-      const [primary, imported] = await Promise.allSettled([
+      setMembershipsLoaded(false);
+      const [primary, imported, listedTeams, listedMemberships] = await Promise.allSettled([
         window.hospitalDirectory.listBeepers(),
-        window.hospitalDirectory.listImportedBeepers()
+        window.hospitalDirectory.listImportedBeepers(),
+        window.hospitalDirectory.listBeeperTeams(),
+        window.hospitalDirectory.listBeeperTeamMemberships()
       ]);
       if (primary.status === "rejected") throw primary.reason;
+      if (listedTeams.status === "rejected" || listedMemberships.status === "rejected") {
+        throw new Error("No se pudieron cargar los equipos.");
+      }
       setRecords(primary.value);
       setImportedRecords(imported.status === "fulfilled" ? imported.value : []);
+      setTeams(listedTeams.value);
+      setMemberships(listedMemberships.value);
+      setMembershipsLoaded(true);
     } catch {
       setLoadError(true);
     } finally {
@@ -164,11 +194,27 @@ export const BeepersPage = () => {
     );
   }, [importedRecords, deferredQuery]);
 
+  const selectedTeamMemberIds = useMemo(() => new Set(
+    selectedTeamId
+      ? memberships.filter((membership) => membership.teamId === selectedTeamId).map((membership) => membership.beeperId)
+      : []
+  ), [memberships, selectedTeamId]);
+
+  const teamFilteredRecords = useMemo(
+    () => selectedTeamId ? filteredRecords.filter((record) => selectedTeamMemberIds.has(record.id)) : filteredRecords,
+    [filteredRecords, selectedTeamId, selectedTeamMemberIds]
+  );
+
+  const teamFilteredImportedRecords = useMemo(
+    () => selectedTeamId ? filteredImportedRecords.filter((record) => selectedTeamMemberIds.has(record.id)) : filteredImportedRecords,
+    [filteredImportedRecords, selectedTeamId, selectedTeamMemberIds]
+  );
+
   const visibleImportedRecords = useMemo(() => {
-    const visibleKeys = new Set(filteredRecords.map(manualBeeperDisplayKey));
+    const visibleKeys = new Set(teamFilteredRecords.map(manualBeeperDisplayKey));
     const importedRecordsByDevice = new Map<string, ImportedBeeperRecord[]>();
 
-    for (const record of filteredImportedRecords) {
+    for (const record of teamFilteredImportedRecords) {
       const deviceNumber = normalizeVisibleBeeperCell(record.deviceNumber);
       const candidates = importedRecordsByDevice.get(deviceNumber);
 
@@ -191,16 +237,16 @@ export const BeepersPage = () => {
       visibleKeys.add(key);
       return true;
     });
-  }, [filteredImportedRecords, filteredRecords]);
+  }, [teamFilteredImportedRecords, teamFilteredRecords]);
 
-  const totalResults = filteredRecords.length + visibleImportedRecords.length;
+  const totalResults = teamFilteredRecords.length + visibleImportedRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalResults / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
   const pageEnd = pageStart + RESULTS_PER_PAGE;
-  const currentPageRecords = filteredRecords.slice(pageStart, pageEnd);
+  const currentPageRecords = teamFilteredRecords.slice(pageStart, pageEnd);
   const currentPageImportedRecords = visibleImportedRecords.slice(
-    Math.max(0, pageStart - filteredRecords.length),
-    Math.max(0, pageEnd - filteredRecords.length)
+    Math.max(0, pageStart - teamFilteredRecords.length),
+    Math.max(0, pageEnd - teamFilteredRecords.length)
   );
 
   useEffect(() => {
@@ -327,6 +373,82 @@ export const BeepersPage = () => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
+  const selectTeam = (team: BeeperTeam | null) => {
+    setSelectedTeamId(team?.id ?? null);
+    setEditingTeamId(team?.id ?? null);
+    setTeamForm(team ? { name: team.name, displayId: team.displayId } : emptyTeamForm());
+    setTeamError("");
+    setTeamDisplayIdError("");
+    setMemberError("");
+    setTeamNameError("");
+  };
+
+  const saveTeam = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isSavingTeam) return;
+    setTeamError("");
+    const nameError = validateTeamField(teamForm.name, "nombre del equipo");
+    const displayIdError = validateTeamField(teamForm.displayId, "número del equipo");
+    setTeamNameError(nameError);
+    setTeamDisplayIdError(displayIdError);
+    if (nameError || displayIdError) return;
+
+    setIsSavingTeam(true);
+    try {
+      if (editingTeamId) {
+        const updated = await window.hospitalDirectory.updateBeeperTeam(editingTeamId, teamForm);
+        setTeams((current) => current.map((team) => team.id === updated.id ? updated : team));
+      } else {
+        const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
+        setTeams((current) => [...current, created]);
+        setSelectedTeamId(created.id);
+        setEditingTeamId(created.id);
+      }
+      pushToast({ type: "success", message: "Equipo guardado." });
+    } catch (err) {
+      const message = toCompactToastMessage(err, "No se pudo guardar el equipo.");
+      if (/número de equipo|ya está registrado/i.test(message)) setTeamDisplayIdError(message);
+      else setTeamError(message);
+    } finally {
+      setIsSavingTeam(false);
+    }
+  };
+
+  const setTeamMember = async (beeperId: string, include: boolean) => {
+    if (!selectedTeamId || !membershipsLoaded || isSavingMembers) return;
+    setIsSavingMembers(true);
+    setMemberError("");
+    const nextMemberIds = new Set(selectedTeamMemberIds);
+    if (include) nextMemberIds.add(beeperId);
+    else nextMemberIds.delete(beeperId);
+    try {
+      const updated = await window.hospitalDirectory.setBeeperTeamMembers(selectedTeamId, Array.from(nextMemberIds));
+      setMemberships((current) => [...current.filter((membership) => membership.teamId !== selectedTeamId), ...updated]);
+    } catch (err) {
+      setMemberError(toCompactToastMessage(err, "No se pudieron actualizar los miembros."));
+    } finally {
+      setIsSavingMembers(false);
+    }
+  };
+
+  const deleteTeam = async () => {
+    if (!teamDeleteConfirm || isSavingTeam) return;
+    setIsSavingTeam(true);
+    try {
+      await window.hospitalDirectory.deleteBeeperTeam(teamDeleteConfirm.id);
+      setTeams((current) => current.filter((team) => team.id !== teamDeleteConfirm.id));
+      setMemberships((current) => current.filter((membership) => membership.teamId !== teamDeleteConfirm.id));
+      selectTeam(null);
+      setTeamDeleteConfirm(null);
+      pushToast({ type: "success", message: "Equipo eliminado." });
+    } catch (err) {
+      setTeamError(toCompactToastMessage(err, "No se pudo eliminar el equipo."));
+      setTeamDeleteConfirm(null);
+    } finally {
+      setIsSavingTeam(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingStatus message="Cargando buscas…" busy />;
   }
@@ -342,7 +464,7 @@ export const BeepersPage = () => {
         <StatePanel
           role="alert"
           title="Error al cargar"
-          message="No se pudieron cargar los registros de buscas."
+          message="No se pudieron cargar las buscas o los equipos."
           action={
             <button
               type="button"
@@ -401,6 +523,93 @@ export const BeepersPage = () => {
           </p>
         </div>
       </div>
+
+      <section aria-labelledby="beeper-teams-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 id="beeper-teams-title" className="text-lg font-semibold text-scs-blueDark">Equipos</h3>
+              <p className="mt-1 text-sm text-slate-600">Filtra las buscas por equipo y administra sus miembros.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => selectTeam(null)}
+              disabled={isSavingTeam}
+              className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
+            >
+              Nuevo equipo
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="Filtro de equipos">
+            <button
+              type="button"
+              aria-pressed={selectedTeamId === null}
+              onClick={() => selectTeam(null)}
+              className="focus-ring min-w-0 max-w-full break-words rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition [overflow-wrap:anywhere] aria-pressed:border-scs-blue aria-pressed:bg-scs-mist aria-pressed:text-scs-blueDark aria-pressed:ring-2 aria-pressed:ring-scs-blue"
+            >
+              Todas las buscas
+            </button>
+            {teams.map((team) => (
+              <button
+                key={team.id}
+                type="button"
+                aria-pressed={selectedTeamId === team.id}
+                onClick={() => selectTeam(team)}
+                className="focus-ring min-w-0 max-w-full break-words rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition [overflow-wrap:anywhere] aria-pressed:border-scs-blue aria-pressed:bg-scs-mist aria-pressed:text-scs-blueDark aria-pressed:ring-2 aria-pressed:ring-scs-blue"
+              >
+                {team.name} · {team.displayId}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={(event) => void saveTeam(event)} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label={editingTeamId ? "Editar equipo" : "Nuevo equipo"}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="team-name" className="mb-2 block text-sm font-medium text-slate-700">Nombre del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
+              <input id="team-name" required maxLength={255} aria-invalid={teamNameError ? true : undefined} aria-describedby={teamNameError ? "team-name-error" : undefined} value={teamForm.name} onChange={(event) => { setTeamNameError(""); setTeamForm((current) => ({ ...current, name: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2" />
+              {teamNameError && <p id="team-name-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamNameError}</p>}
+            </div>
+            <div>
+              <label htmlFor="team-display-id" className="mb-2 block text-sm font-medium text-slate-700">Número del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
+              <input id="team-display-id" required maxLength={255} aria-invalid={teamDisplayIdError ? true : undefined} aria-describedby={teamDisplayIdError ? "team-display-id-error" : undefined} value={teamForm.displayId} onChange={(event) => { setTeamDisplayIdError(""); setTeamForm((current) => ({ ...current, displayId: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2" />
+              {teamDisplayIdError && <p id="team-display-id-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamDisplayIdError}</p>}
+            </div>
+          </div>
+          {teamError && <StatusBanner type="error" message={teamError} />}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="submit" disabled={isSavingTeam} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60">
+              {isSavingTeam ? "Guardando…" : "Guardar equipo"}
+            </button>
+            {editingTeamId && (
+              <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">
+                Eliminar equipo
+              </button>
+            )}
+          </div>
+        </form>
+
+        {selectedTeamId && (
+          <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50">
+            <summary className="focus-ring cursor-pointer break-words rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blueDark">Miembros del equipo</summary>
+            <fieldset className="grid gap-2 border-t border-slate-200 p-4 sm:grid-cols-2" aria-busy={isSavingMembers}>
+              <legend className="sr-only">Buscas incluidas en el equipo</legend>
+              {!membershipsLoaded && <p role="alert" className="sm:col-span-2 text-sm font-medium text-red-700">No se pudieron cargar los miembros del equipo.</p>}
+              {memberError && <p role="alert" className="sm:col-span-2 text-sm font-medium text-red-700">{memberError}</p>}
+              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 sm:col-span-2 text-sm text-slate-600">{isSavingMembers ? "Actualizando miembros…" : ""}</p>
+              {records.length === 0 && importedRecords.length === 0 && (
+                <p className="sm:col-span-2 text-sm text-slate-600">No hay buscas registradas para asignar a este equipo.</p>
+              )}
+              {[...records, ...importedRecords].map((record) => (
+                <label key={record.id} className="flex min-w-0 max-w-full items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+                  <input type="checkbox" checked={selectedTeamMemberIds.has(record.id)} disabled={!membershipsLoaded || isSavingMembers} onChange={(event) => void setTeamMember(record.id, event.target.checked)} className="focus-ring size-5 shrink-0 rounded border-slate-400 text-scs-blue focus:ring-scs-blue disabled:cursor-not-allowed" />
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {"assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "Sin titular"}</span>
+                </label>
+              ))}
+            </fieldset>
+          </details>
+        )}
+      </section>
 
       {/* Create / Edit Form */}
       {showForm && (
@@ -535,17 +744,19 @@ export const BeepersPage = () => {
       )}
 
       {/* Empty state */}
-      {filteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
+      {teamFilteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
         <StatePanel
-          title={query ? "Sin resultados" : "Sin registros"}
-          message={query
+          title={query.trim() ? "Sin resultados" : selectedTeamId ? "Equipo sin buscas" : "Sin registros"}
+          message={query.trim()
             ? "No hay buscas que coincidan con la búsqueda."
-            : "No hay buscas registradas. Crea el primer registro."}
+            : selectedTeamId
+              ? "Este equipo no tiene buscas. Añádelas en Miembros del equipo."
+              : "No hay buscas registradas. Crea el primer registro."}
         />
       )}
 
       {/* Records table */}
-      {(filteredRecords.length > 0 || visibleImportedRecords.length > 0) && (
+      {(teamFilteredRecords.length > 0 || visibleImportedRecords.length > 0) && (
         <div className="rounded-3xl bg-white shadow-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -681,6 +892,18 @@ export const BeepersPage = () => {
         isDestructive
         confirmDisabled={isDeleting}
         cancelDisabled={isDeleting}
+      />
+      <ConfirmDialog
+        isOpen={teamDeleteConfirm !== null}
+        title="Confirmar eliminación del equipo"
+        message={`¿Quieres eliminar el equipo "${teamDeleteConfirm?.name ?? ""}"? Las buscas seguirán disponibles de forma individual.`}
+        confirmLabel={isSavingTeam ? "Eliminando…" : "Eliminar equipo"}
+        cancelLabel="Cancelar"
+        onConfirm={() => void deleteTeam()}
+        onCancel={() => setTeamDeleteConfirm(null)}
+        isDestructive
+        confirmDisabled={isSavingTeam}
+        cancelDisabled={isSavingTeam}
       />
     </section>
   );

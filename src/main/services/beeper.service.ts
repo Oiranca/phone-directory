@@ -1,13 +1,14 @@
 import fs from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableImportedBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
-import type { BeeperRecord, BeepersDataset, EditableBeeperRecord, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
+import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableBeeperTeamSchema, editableImportedBeeperRecordSchema, importedBeeperRecordSchema } from "../../shared/schemas/beeper.schema.js";
+import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, BeepersDataset, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema.js";
 import { ensurePrivateDirectory, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
+import { MAX_DATASET_RECORDS } from "../../shared/constants/json-limits.js";
 import { readJsonData } from "./json-data-reader.js";
 
 const BEEPERS_VERSION = "1.0.0";
@@ -15,7 +16,9 @@ const BEEPERS_VERSION = "1.0.0";
 const emptyDataset = (): BeepersDataset => ({
   version: BEEPERS_VERSION,
   records: [],
-  importedRecords: []
+  importedRecords: [],
+  teams: [],
+  teamMemberships: []
 });
 
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
@@ -72,6 +75,7 @@ const assertUniqueDeviceNumber = (records: BeeperRecord[], deviceNumber: string,
 
 const createEntityId = () => `bsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
 const createImportedEntityId = () => `ibsc_${globalThis.crypto.randomUUID().slice(0, 8)}`;
+const createTeamEntityId = () => `team_${globalThis.crypto.randomUUID()}`;
 
 const createUniqueId = (records: BeeperRecord[]): string => {
   const maxAttempts = 1000;
@@ -182,6 +186,16 @@ export class BeepersService {
   async list(): Promise<BeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.records;
+  }
+
+  async listTeams(): Promise<BeeperTeam[]> {
+    const dataset = await this.readDataset();
+    return dataset.teams;
+  }
+
+  async listTeamMemberships(): Promise<BeeperTeamMembership[]> {
+    const dataset = await this.readDataset();
+    return dataset.teamMemberships;
   }
 
   private async createBackup(
@@ -383,7 +397,11 @@ export class BeepersService {
       }
       await this.createBackup(dataset, options.backupDirectoryPath, "beepers-before-delete");
       const nextRecords = dataset.records.filter((r) => r.id !== id);
-      const nextDataset = beepersDatasetSchema.parse({ ...dataset, records: nextRecords });
+      const nextDataset = beepersDatasetSchema.parse({
+        ...dataset,
+        records: nextRecords,
+        teamMemberships: dataset.teamMemberships.filter((membership) => membership.beeperId !== id)
+      });
       await this.writeDataset(nextDataset);
       try {
         await this.pruneBackups(options.backupDirectoryPath, options.retentionCount, "beepers-before-delete");
@@ -397,6 +415,74 @@ export class BeepersService {
   async listImported(): Promise<ImportedBeeperRecord[]> {
     const dataset = await this.readDataset();
     return dataset.importedRecords ?? [];
+  }
+
+  async addTeam(payload: EditableBeeperTeam): Promise<BeeperTeam> {
+    return this.enqueueWrite(async () => {
+      const parsed = editableBeeperTeamSchema.parse(payload);
+      const dataset = await this.readDataset();
+      if (dataset.teams.some((team) => normalizeDeviceNumber(team.displayId) === normalizeDeviceNumber(parsed.displayId))) {
+        throw new Error(`El número de equipo "${parsed.displayId}" ya está registrado.`);
+      }
+      const team = { ...parsed, id: createTeamEntityId() };
+      const nextDataset = beepersDatasetSchema.parse({ ...dataset, teams: [...dataset.teams, team] });
+      await this.writeDataset(nextDataset);
+      return team;
+    });
+  }
+
+  async updateTeam(id: string, payload: EditableBeeperTeam): Promise<BeeperTeam> {
+    return this.enqueueWrite(async () => {
+      const parsed = editableBeeperTeamSchema.parse(payload);
+      const dataset = await this.readDataset();
+      const current = dataset.teams.find((team) => team.id === id);
+      if (!current) throw new Error("No se encontró el equipo solicitado.");
+      if (dataset.teams.some((team) => team.id !== id && normalizeDeviceNumber(team.displayId) === normalizeDeviceNumber(parsed.displayId))) {
+        throw new Error(`El número de equipo "${parsed.displayId}" ya está registrado.`);
+      }
+      const team = { ...parsed, id: current.id };
+      const nextDataset = beepersDatasetSchema.parse({
+        ...dataset,
+        teams: dataset.teams.map((candidate) => candidate.id === id ? team : candidate)
+      });
+      await this.writeDataset(nextDataset);
+      return team;
+    });
+  }
+
+  async removeTeam(id: string): Promise<void> {
+    return this.enqueueWrite(async () => {
+      const dataset = await this.readDataset();
+      if (!dataset.teams.some((team) => team.id === id)) throw new Error("No se encontró el equipo solicitado.");
+      const nextDataset = beepersDatasetSchema.parse({
+        ...dataset,
+        teams: dataset.teams.filter((team) => team.id !== id),
+        teamMemberships: dataset.teamMemberships.filter((membership) => membership.teamId !== id)
+      });
+      await this.writeDataset(nextDataset);
+    });
+  }
+
+  async setTeamMembers(teamId: string, beeperIds: string[]): Promise<BeeperTeamMembership[]> {
+    return this.enqueueWrite(async () => {
+      if (teamId.length > 255 || beeperIds.length > MAX_DATASET_RECORDS || beeperIds.some((id) => id.length > 255)) {
+        throw new Error("Los miembros del equipo no son válidos.");
+      }
+      const dataset = await this.readDataset();
+      if (!dataset.teams.some((team) => team.id === teamId)) throw new Error("No se encontró el equipo solicitado.");
+      const availableBeeperIds = new Set([...dataset.records, ...dataset.importedRecords].map((record) => record.id));
+      const memberIds = new Set(beeperIds);
+      for (const beeperId of memberIds) {
+        if (!availableBeeperIds.has(beeperId)) throw new Error("No se encontró la busca solicitada.");
+      }
+      const memberships = Array.from(memberIds, (beeperId) => ({ teamId, beeperId }));
+      const nextDataset = beepersDatasetSchema.parse({
+        ...dataset,
+        teamMemberships: [...dataset.teamMemberships.filter((membership) => membership.teamId !== teamId), ...memberships]
+      });
+      await this.writeDataset(nextDataset);
+      return memberships;
+    });
   }
 
   async updateImported(id: string, payload: EditableImportedBeeperRecord): Promise<ImportedBeeperRecord> {
@@ -504,9 +590,11 @@ export class BeepersService {
         return importedBeeperRecordSchema.parse({ ...raw, id, sourceFingerprint });
       });
 
+      const availableBeeperIds = new Set([...dataset.records, ...importedRecords].map((record) => record.id));
       const nextDataset = beepersDatasetSchema.parse({
         ...dataset,
-        importedRecords
+        importedRecords,
+        teamMemberships: dataset.teamMemberships.filter((membership) => availableBeeperIds.has(membership.beeperId))
       });
 
       await this.writeDataset(nextDataset);

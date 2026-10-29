@@ -442,6 +442,32 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(await screen.findByText("Importación completada.")).toBeInTheDocument();
   });
 
+  it("shows the team count in an iMessage beepers import confirmation", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "json-preview",
+      preview: { importToken: "imessage-json", fileName: "imessage.json", detectedType: "beepers", recordCount: 0, importedBeeperRecordCount: 231, teamCount: 7, currentBeeperRecordCount: 4 }
+    });
+
+    renderPage();
+    await screen.findByText("Datos e importación");
+    await openImportPicker();
+
+    expect(await screen.findByText(/231 buscas y 7 equipos/)).toBeInTheDocument();
+  });
+
+  it("shows zero teams when the iMessage import contains none", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "json-preview",
+      preview: { importToken: "imessage-no-teams", fileName: "imessage.json", detectedType: "beepers", recordCount: 0, importedBeeperRecordCount: 231, teamCount: 0, currentBeeperRecordCount: 4 }
+    });
+
+    renderPage();
+    await screen.findByText("Datos e importación");
+    await openImportPicker();
+
+    expect(await screen.findByText(/231 buscas y 0 equipos/)).toBeInTheDocument();
+  });
+
   it("imports settings while keeping the current contacts loaded", async () => {
     const importedSettings = {
       ...editableSettings,
