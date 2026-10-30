@@ -4,6 +4,7 @@ import path from "node:path";
 import { ZodError } from "zod";
 import { appSettingsSchema, contactRecordSchema, directoryDatasetSchema, editableAppSettingsSchema, editableContactRecordSchema } from "../../shared/schemas/contact.js";
 import { beepersDatasetSchema } from "../../shared/schemas/beeper.schema.js";
+import type { IMessageBeeperExport } from "../../shared/schemas/beeper.schema.js";
 import {
   COMBINED_DATA_FORMAT,
   COMBINED_DATA_VERSION,
@@ -13,6 +14,7 @@ import type { MergeContactsOverrides } from "../../shared/schemas/merge-contacts
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
 import { defaultSettings } from "../../shared/fixtures/defaultSettings.js";
 import { buildSpreadsheetImportPreview } from "./spreadsheet-import.service.js";
+import { convertIMessageBeeperExport } from "./imessage-beeper-import.js";
 import type { BeepersService } from "./beeper.service.js";
 import { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import { buildExistingRecordMatchIndexes, buildStableMergeKeys } from "./import-match-indexes.js";
@@ -602,6 +604,21 @@ export class AppDataService {
         backupDirectoryPath: settings.backupDirectoryPath,
         retentionCount: settings.ui.autoBackup.retentionCount
       });
+      return { kind: "beepers-import", ...counts };
+    }
+
+    if (parsed.kind === "imessage-beepers") {
+      if (!this.options.beepersService) {
+        throw new Error("El servicio de buscas no está disponible.");
+      }
+
+      const settings = await this.readSettings(true);
+      const counts = await this.options.beepersService.importDataset(
+        convertIMessageBeeperExport(parsed.data as IMessageBeeperExport), {
+          backupDirectoryPath: settings.backupDirectoryPath,
+          retentionCount: settings.ui.autoBackup.retentionCount
+        }
+      );
       return { kind: "beepers-import", ...counts };
     }
 

@@ -631,12 +631,17 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
         return { kind: "json-preview", preview: { importToken, fileName, detectedType: "contacts", recordCount: data.records.length, currentRecordCount: currentCounts.contacts } } as const;
       }
       if (parsed.kind === "combined") {
-        const data = parsed.data as { contacts: { records: unknown[] }; beepers: { records: unknown[]; importedRecords: unknown[] } };
-        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "combined", recordCount: data.contacts.records.length, beeperRecordCount: data.beepers.records.length, importedBeeperRecordCount: data.beepers.importedRecords.length, currentRecordCount: currentCounts.contacts, currentBeeperRecordCount: currentCounts.beepers } } as const;
+        const data = parsed.data as { contacts: { records: unknown[] }; beepers: { records: unknown[]; importedRecords: unknown[]; teams?: unknown[] } };
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "combined", recordCount: data.contacts.records.length, beeperRecordCount: data.beepers.records.length, importedBeeperRecordCount: data.beepers.importedRecords.length, teamCount: data.beepers.teams?.length ?? 0, currentRecordCount: currentCounts.contacts, currentBeeperRecordCount: currentCounts.beepers } } as const;
       }
       if (parsed.kind === "beepers") {
-        const data = parsed.data as { records: unknown[]; importedRecords: unknown[] };
-        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: data.records.length, importedBeeperRecordCount: data.importedRecords.length, currentBeeperRecordCount: currentCounts.beepers } } as const;
+        const data = parsed.data as { records: unknown[]; importedRecords: unknown[]; teams?: unknown[] };
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: data.records.length, importedBeeperRecordCount: data.importedRecords.length, teamCount: data.teams?.length ?? 0, currentBeeperRecordCount: currentCounts.beepers } } as const;
+      }
+      if (parsed.kind === "imessage-beepers") {
+        const data = parsed.data as { datos: { usuarios: Array<{ textEnabled: boolean }>; equipos: unknown[] } };
+        const importedBeeperRecordCount = data.datos.usuarios.filter((user) => user.textEnabled).length;
+        return { kind: "json-preview", preview: { importToken, fileName, detectedType: "beepers", recordCount: 0, importedBeeperRecordCount, teamCount: data.datos.equipos.length, currentBeeperRecordCount: currentCounts.beepers } } as const;
       }
       return { kind: "json-preview", preview: { importToken, fileName, detectedType: "settings" } } as const;
     }

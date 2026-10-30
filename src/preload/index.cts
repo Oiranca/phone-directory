@@ -58,7 +58,13 @@ const BEEPERS_CHANNELS = {
   update:       "beepers:update",
   remove:       "beepers:delete",
   listImported: "beepers:list-imported",
-  updateImported: "beepers:update-imported"
+  updateImported: "beepers:update-imported",
+  listTeams:     "beepers:list-teams",
+  listMemberships: "beepers:list-team-memberships",
+  addTeam:       "beepers:add-team",
+  updateTeam:    "beepers:update-team",
+  removeTeam:    "beepers:delete-team",
+  setTeamMembers: "beepers:set-team-members"
 } as const satisfies typeof _CanonicalBeepers;
 
 const PUSH_CHANNELS = {
@@ -111,6 +117,18 @@ const api: HospitalDirectoryApi = {
   listImportedBeepers: () => ipcRenderer.invoke(BEEPERS_CHANNELS.listImported) as ReturnType<HospitalDirectoryApi["listImportedBeepers"]>,
   updateImportedBeeper: (id, record) =>
     ipcRenderer.invoke(BEEPERS_CHANNELS.updateImported, id, record) as ReturnType<HospitalDirectoryApi["updateImportedBeeper"]>,
+  listBeeperTeams: () =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.listTeams) as ReturnType<HospitalDirectoryApi["listBeeperTeams"]>,
+  listBeeperTeamMemberships: () =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.listMemberships) as ReturnType<HospitalDirectoryApi["listBeeperTeamMemberships"]>,
+  addBeeperTeam: (team) =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.addTeam, team) as ReturnType<HospitalDirectoryApi["addBeeperTeam"]>,
+  updateBeeperTeam: (id, team) =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.updateTeam, id, team) as ReturnType<HospitalDirectoryApi["updateBeeperTeam"]>,
+  deleteBeeperTeam: (id) =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.removeTeam, id) as ReturnType<HospitalDirectoryApi["deleteBeeperTeam"]>,
+  setBeeperTeamMembers: (teamId, beeperIds) =>
+    ipcRenderer.invoke(BEEPERS_CHANNELS.setTeamMembers, teamId, beeperIds) as ReturnType<HospitalDirectoryApi["setBeeperTeamMembers"]>,
   detectDuplicates: () =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.detectDuplicates) as ReturnType<HospitalDirectoryApi["detectDuplicates"]>,
   mergeContacts: (req) =>

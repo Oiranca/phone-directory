@@ -212,6 +212,8 @@ describe("beepersDatasetSchema", () => {
   it("BUG-3: coerces missing importedRecords to [] (undefined → default)", () => {
     const result = beepersDatasetSchema.parse({ version: "1.0.0", records: [] });
     expect(result.importedRecords).toEqual([]);
+    expect(result.teams).toEqual([]);
+    expect(result.teamMemberships).toEqual([]);
   });
 
   it("BUG-3: preserves existing importedRecords when present", () => {
@@ -237,5 +239,52 @@ describe("beepersDatasetSchema", () => {
       version: "1.0.0",
       records: Array.from({ length: 10_001 }, () => validRecord)
     })).toThrow();
+  });
+
+  it("accepts memberships for existing teams and beepers", () => {
+    const result = beepersDatasetSchema.parse({
+      version: "1.0.0",
+      records: [validRecord],
+      teams: [{ id: "team_uci", name: "UCI", displayId: "9001" }],
+      teamMemberships: [{ teamId: "team_uci", beeperId: validRecord.id }]
+    });
+    expect(result.teamMemberships).toEqual([{ teamId: "team_uci", beeperId: validRecord.id }]);
+  });
+
+  it("rejects dangling or duplicate team memberships", () => {
+    const dataset = {
+      version: "1.0.0" as const,
+      records: [validRecord],
+      teams: [{ id: "team_uci", name: "UCI", displayId: "9001" }]
+    };
+    expect(() => beepersDatasetSchema.parse({
+      ...dataset,
+      teamMemberships: [{ teamId: "missing", beeperId: validRecord.id }]
+    })).toThrow("Team memberships must reference existing teams and beepers.");
+    expect(() => beepersDatasetSchema.parse({
+      ...dataset,
+      teamMemberships: [
+        { teamId: "team_uci", beeperId: validRecord.id },
+        { teamId: "team_uci", beeperId: validRecord.id }
+      ]
+    })).toThrow("Team memberships must be unique.");
+  });
+
+  it("rejects duplicate team IDs and display IDs", () => {
+    const dataset = { version: "1.0.0", records: [], importedRecords: [] };
+    expect(() => beepersDatasetSchema.parse({
+      ...dataset,
+      teams: [{ id: "team_1", name: "UCI", displayId: "9001" }, { id: "team_1", name: "Guardia", displayId: "9002" }]
+    })).toThrow("Team IDs must be unique.");
+    expect(() => beepersDatasetSchema.parse({
+      ...dataset,
+      teams: [{ id: "team_1", name: "UCI", displayId: "9001" }, { id: "team_2", name: "Guardia", displayId: "9001" }]
+    })).toThrow("Team display IDs must be unique.");
+
+    expect(() => beepersDatasetSchema.parse({
+      version: "1.0.0",
+      records: [],
+      teams: [{ id: "team_1", name: "UCI", displayId: "UCI-A" }, { id: "team_2", name: "Guardia", displayId: "uci-a" }]
+    })).toThrow("Team display IDs must be unique.");
   });
 });

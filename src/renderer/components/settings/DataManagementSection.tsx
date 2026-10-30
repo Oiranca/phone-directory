@@ -474,9 +474,9 @@ export const DataManagementSection = () => {
       const summary = preview.detectedType === "contacts"
         ? `${preview.recordCount} contactos`
         : preview.detectedType === "combined"
-          ? `${preview.recordCount} contactos y ${preview.beeperRecordCount + preview.importedBeeperRecordCount} buscas`
+          ? `${preview.recordCount} contactos y ${preview.beeperRecordCount + preview.importedBeeperRecordCount} buscas y ${preview.teamCount} ${preview.teamCount === 1 ? "equipo" : "equipos"}`
           : preview.detectedType === "beepers"
-            ? `${preview.recordCount + preview.importedBeeperRecordCount} buscas`
+            ? `${preview.recordCount + preview.importedBeeperRecordCount} buscas y ${preview.teamCount} ${preview.teamCount === 1 ? "equipo" : "equipos"}`
             : "preferencias";
       const replacement = preview.detectedType === "contacts"
         ? preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`
