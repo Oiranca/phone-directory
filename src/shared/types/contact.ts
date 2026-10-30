@@ -275,8 +275,8 @@ export type JsonFileImportResult =
 /** Summary shown before a JSON payload is allowed to replace local data. */
 export type JsonImportPreview =
   | { importToken: string; fileName: string; detectedType: "contacts"; recordCount: number; currentRecordCount: number | null }
-  | { importToken: string; fileName: string; detectedType: "combined"; recordCount: number; beeperRecordCount: number; importedBeeperRecordCount: number; currentRecordCount: number | null; currentBeeperRecordCount: number | null }
-  | { importToken: string; fileName: string; detectedType: "beepers"; recordCount: number; importedBeeperRecordCount: number; teamCount?: number; currentBeeperRecordCount: number | null }
+  | { importToken: string; fileName: string; detectedType: "combined"; recordCount: number; beeperRecordCount: number; importedBeeperRecordCount: number; teamCount: number; currentRecordCount: number | null; currentBeeperRecordCount: number | null }
+  | { importToken: string; fileName: string; detectedType: "beepers"; recordCount: number; importedBeeperRecordCount: number; teamCount: number; currentBeeperRecordCount: number | null }
   | { importToken: string; fileName: string; detectedType: "settings" };
 
 /**

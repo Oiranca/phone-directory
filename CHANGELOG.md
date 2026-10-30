@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0] - 2026-10-30
+
+### Added
+
+- Add separate Busca teams with multiple memberships and team filters.
+
+### Fixed
+
+- Show team counts across supported JSON import previews.
+- Back up team memberships before deleting a team.
+- Reset pagination when changing the team filter.
+
 ## [0.1.16] - 2026-10-27
 
 ### Fixed

@@ -631,6 +631,33 @@ describe("BeepersPage", () => {
     });
   });
 
+  it("resets to the first page when the team filter changes", async () => {
+    const records = makeRecords(21);
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue(records),
+      listBeeperTeams: vi.fn().mockResolvedValue([
+        { id: "team_alpha", name: "Alfa", displayId: "9001" },
+        { id: "team_beta", name: "Beta", displayId: "9002" }
+      ]),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([
+        ...records.slice(0, 11).map((record) => ({ teamId: "team_alpha", beeperId: record.id })),
+        ...records.slice(10).map((record) => ({ teamId: "team_beta", beeperId: record.id }))
+      ])
+    });
+    renderPage();
+
+    await screen.findByText("B-001");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(await screen.findByText("B-011")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Alfa · 9001/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
+      expect(screen.getAllByText("B-001").some((item) => item.closest("table"))).toBe(true);
+    });
+  });
+
   it("clamps the current page after deleting its last row", async () => {
     setupWindowApi({
       listBeepers: vi.fn().mockResolvedValue(makeRecords(11)),

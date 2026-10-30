@@ -450,16 +450,23 @@ export class BeepersService {
     });
   }
 
-  async removeTeam(id: string): Promise<void> {
+  async removeTeam(id: string, options: { backupDirectoryPath: string; retentionCount: number }): Promise<void> {
     return this.enqueueWrite(async () => {
       const dataset = await this.readDataset();
       if (!dataset.teams.some((team) => team.id === id)) throw new Error("No se encontró el equipo solicitado.");
+      await this.createBackup(dataset, options.backupDirectoryPath, "beepers-before-delete");
       const nextDataset = beepersDatasetSchema.parse({
         ...dataset,
         teams: dataset.teams.filter((team) => team.id !== id),
         teamMemberships: dataset.teamMemberships.filter((membership) => membership.teamId !== id)
       });
       await this.writeDataset(nextDataset);
+      try {
+        await this.pruneBackups(options.backupDirectoryPath, options.retentionCount, "beepers-before-delete");
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[BackupRetention] Failed to prune beepers-before-delete-* backups — ${errMsg}`);
+      }
     });
   }
 

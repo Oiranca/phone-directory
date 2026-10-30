@@ -380,7 +380,7 @@ describe("registerBeepersIpc", () => {
       await invoke("beepers:set-team-members", "team_1", ["bsc_abc12345"]);
       expect(serviceMock.addTeam).toHaveBeenCalledWith(team);
       expect(serviceMock.updateTeam).toHaveBeenCalledWith("team_1", team);
-      expect(serviceMock.removeTeam).toHaveBeenCalledWith("team_1");
+      expect(serviceMock.removeTeam).toHaveBeenCalledWith("team_1", { backupDirectoryPath: "/tmp/backups", retentionCount: 5 });
       expect(serviceMock.setTeamMembers).toHaveBeenCalledWith("team_1", ["bsc_abc12345"]);
     });
 

@@ -395,13 +395,14 @@ describe("DataManagementSection (Configuración data section)", () => {
   it("imports a combined JSON dataset and reports both stores", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "json-preview",
-      preview: { importToken: "combined-json", fileName: "all.json", detectedType: "combined", recordCount: 1, beeperRecordCount: 2, importedBeeperRecordCount: 3, currentRecordCount: 2, currentBeeperRecordCount: 4 }
+      preview: { importToken: "combined-json", fileName: "all.json", detectedType: "combined", recordCount: 1, beeperRecordCount: 2, importedBeeperRecordCount: 3, teamCount: 2, currentRecordCount: 2, currentBeeperRecordCount: 4 }
     });
     window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "combined-import", result: { ...defaultJsonImportResult, beeperRecordCount: 2, importedBeeperRecordCount: 3 } });
 
     renderPage();
     await screen.findByText("Datos e importación");
     await openImportPicker();
+    expect(await screen.findByText(/1 contactos y 5 buscas y 2 equipos/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Importar archivo" }));
 
     await waitFor(() => expect(useAppStore.getState().contacts?.records[0]?.displayName).toBe("Directorio importado"));
@@ -428,7 +429,7 @@ describe("DataManagementSection (Configuración data section)", () => {
   it("imports a beepers JSON dataset through the unified picker", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
       kind: "json-preview",
-      preview: { importToken: "beepers-json", fileName: "beepers.json", detectedType: "beepers", recordCount: 0, importedBeeperRecordCount: 231, currentBeeperRecordCount: 4 }
+      preview: { importToken: "beepers-json", fileName: "beepers.json", detectedType: "beepers", recordCount: 0, importedBeeperRecordCount: 231, teamCount: 0, currentBeeperRecordCount: 4 }
     });
     window.hospitalDirectory.confirmJsonImport = vi.fn().mockResolvedValue({ kind: "beepers-import", recordCount: 0, importedRecordCount: 231 });
 

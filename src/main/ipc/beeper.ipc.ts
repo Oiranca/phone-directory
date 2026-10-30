@@ -136,7 +136,7 @@ export const registerBeepersIpc = (
   handle(BEEPERS_CHANNELS.removeTeam, async (_event, id: unknown) => {
     if (typeof id !== "string" || id.length > 255 || !id.trim()) throw new Error("ID de equipo inválido.");
     try {
-      return await service.removeTeam(id);
+      return await service.removeTeam(id, await appDataService.getBeeperBackupOptions());
     } catch (err) {
       throw toRendererError(err, BEEPERS_CHANNELS.removeTeam);
     }

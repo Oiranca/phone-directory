@@ -375,6 +375,7 @@ export const BeepersPage = () => {
 
   const selectTeam = (team: BeeperTeam | null) => {
     setSelectedTeamId(team?.id ?? null);
+    setCurrentPage(1);
     setEditingTeamId(team?.id ?? null);
     setTeamForm(team ? { name: team.name, displayId: team.displayId } : emptyTeamForm());
     setTeamError("");

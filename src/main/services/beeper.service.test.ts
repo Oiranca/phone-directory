@@ -432,7 +432,7 @@ describe("BeepersService — teams", () => {
     const beeper = await service.add({ deviceNumber: "B-701", assignedTo: "Luis", department: "UCI", role: "Médico", shift: "tarde" });
     const team = await service.addTeam({ name: "UCI", displayId: "9001" });
     await service.setTeamMembers(team.id, [beeper.id]);
-    await service.removeTeam(team.id);
+    await service.removeTeam(team.id, { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 1 });
     expect(await service.listTeamMemberships()).toEqual([]);
 
     const replacementTeam = await service.addTeam({ name: "UCI Guardia", displayId: "9002" });
@@ -440,6 +440,36 @@ describe("BeepersService — teams", () => {
     await service.remove(beeper.id, { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 1 });
     expect(await service.listTeamMemberships()).toEqual([]);
     expect(await service.listTeams()).toEqual([replacementTeam]);
+  });
+
+  it("backs up the team and memberships before deletion", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const beeper = await service.add({ deviceNumber: "B-703", assignedTo: "Sara", department: "UCI", role: "Médica", shift: "noche" });
+    const team = await service.addTeam({ name: "UCI", displayId: "9001" });
+    await service.setTeamMembers(team.id, [beeper.id]);
+    const backupDirectoryPath = path.join(testRoot, "backups");
+
+    await service.removeTeam(team.id, { backupDirectoryPath, retentionCount: 1 });
+
+    const backupNames = await fs.readdir(backupDirectoryPath);
+    const backup = JSON.parse(await fs.readFile(path.join(backupDirectoryPath, backupNames[0] ?? ""), "utf8"));
+    expect(backup.teams).toContainEqual(team);
+    expect(backup.teamMemberships).toContainEqual({ teamId: team.id, beeperId: beeper.id });
+  });
+
+  it("keeps a team and memberships when its pre-delete backup path is a file", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+    const beeper = await service.add({ deviceNumber: "B-704", assignedTo: "Noa", department: "UCI", role: "Enfermera", shift: "tarde" });
+    const team = await service.addTeam({ name: "UCI", displayId: "9001" });
+    await service.setTeamMembers(team.id, [beeper.id]);
+    const backupDirectoryPath = path.join(testRoot, "backup-path-file");
+    await fs.writeFile(backupDirectoryPath, "not a directory");
+
+    await expect(service.removeTeam(team.id, { backupDirectoryPath, retentionCount: 1 })).rejects.toThrow();
+    expect(await service.listTeams()).toEqual([team]);
+    expect(await service.listTeamMemberships()).toEqual([{ teamId: team.id, beeperId: beeper.id }]);
   });
 
   it("prunes replaced ODS IDs while retaining manual and surviving imported memberships", async () => {

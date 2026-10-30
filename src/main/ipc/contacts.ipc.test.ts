@@ -957,8 +957,8 @@ describe("contacts:pick-and-import-dataset — JSON preview confirmation", () =>
   });
 
   it.each([
-    ["combined", { contacts: { records: [] }, beepers: { records: [], importedRecords: [] } }, "combined"],
-    ["beepers", { records: [], importedRecords: [] }, "beepers"],
+    ["combined", { contacts: { records: [] }, beepers: { records: [], importedRecords: [], teams: [{}, {}] } }, "combined"],
+    ["beepers", { records: [], importedRecords: [], teams: [{}, {}, {}] }, "beepers"],
     ["settings", {}, "settings"]
   ])("returns a %s JSON preview without applying it", async (kind, data, detectedType) => {
     serviceMock.previewJsonFile.mockResolvedValueOnce({ kind, data });
@@ -967,6 +967,25 @@ describe("contacts:pick-and-import-dataset — JSON preview confirmation", () =>
 
     expect(response).toMatchObject({ kind: "json-preview", preview: { detectedType } });
     expect(serviceMock.importPreviewedJson).not.toHaveBeenCalled();
+  });
+
+  it("includes teams in native and combined Busca previews", async () => {
+    const handler = handlers.get("contacts:pick-and-import-dataset");
+    if (!handler) throw new Error("JSON preview handler is not registered.");
+
+    serviceMock.previewJsonFile.mockResolvedValueOnce({
+      kind: "beepers",
+      data: { records: [], importedRecords: [], teams: [{}, {}, {}] }
+    });
+    const nativePreview = await handler({ sender: makeWebContentsSender(74) }) as { preview: { teamCount: number } };
+    expect(nativePreview.preview.teamCount).toBe(3);
+
+    serviceMock.previewJsonFile.mockResolvedValueOnce({
+      kind: "combined",
+      data: { contacts: { records: [] }, beepers: { records: [], importedRecords: [], teams: [{}, {}] } }
+    });
+    const combinedPreview = await handler({ sender: makeWebContentsSender(75) }) as { preview: { teamCount: number } };
+    expect(combinedPreview.preview.teamCount).toBe(2);
   });
 
   it("previews active iMessage Buscas and teams, then forwards confirmation", async () => {
