@@ -100,10 +100,16 @@ let connected = false;
 let vitePort;
 
 const hasText = (value) => browserCommand("eval", `document.body.innerText.includes(${JSON.stringify(value)})`) === "true";
-const clickRole = (role, name) => browserCommand("find", "role", role, "click", "--name", name);
+// Role names match as case-insensitive substrings; pass exact when another control's name contains this one
+// (e.g. the "Buscas" link vs the "Gestión Buscas" link, "Nuevo busca" vs "Nuevo busca en <equipo>").
+const clickRole = (role, name, exact = false) =>
+  browserCommand("find", "role", role, "click", "--name", name, ...(exact ? ["--exact"] : []));
+const h2Is = (title) => browserCommand("eval", `document.querySelector("main h2")?.textContent?.trim() === ${JSON.stringify(title)}`) === "true";
+const teamIdByName = (name) => JSON.parse(browserCommand("eval",
+  `(async () => (await window.hospitalDirectory.listBeeperTeams()).find((team) => team.name === ${JSON.stringify(name)})?.id ?? null)()`));
 const navigateWithinBudget = async (link, heading) => {
   const startedAt = Date.now();
-  clickRole("link", link);
+  clickRole("link", link, true);
   while (Date.now() - startedAt < 3_000) {
     if (browserCommand("eval", `document.querySelector('main h2')?.textContent?.trim() === ${JSON.stringify(heading)}`) === "true") {
       return Date.now() - startedAt;
@@ -912,7 +918,7 @@ try {
   await waitFor("merged contact appears once in directory", () => browserCommand("eval", `document.querySelectorAll('[data-record-id="${mergedWorkshop.id}"]').length`) === "1");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con Busca y Teléfono");
   await waitFor("contact with phone and pager remains in directory", () => browserCommand("is", "visible", `[data-record-id="${phoneAndBeeper.id}"]`) === "true");
-  clickRole("link", "Buscas");
+  clickRole("link", "Buscas", true);
   await waitFor("beeper catalog after master import", () => hasText("Registro de Buscas"));
   await waitFor("imported team loaded separately without invented memberships", () => browserCommand("eval", `(async () => {
     const [teams, memberships] = await Promise.all([
@@ -920,12 +926,10 @@ try {
       window.hospitalDirectory.listBeeperTeamMemberships()
     ]);
     const tableText = document.querySelector("table")?.innerText ?? "";
-    const filterButtons = [...document.querySelectorAll('[aria-label="Filtro de equipos"] button')].map((button) => button.textContent?.trim());
     return teams.length === 1 &&
       teams[0]?.name === "Equipo Importado" &&
       teams[0]?.displayId === "9801" &&
       memberships.length === 0 &&
-      filterButtons.includes("Equipo Importado · 9801") &&
       !tableText.includes("Equipo Importado") &&
       !tableText.includes("9801");
   })()`) === "true");
@@ -944,81 +948,96 @@ try {
       tableText.includes("9001") &&
       tableText.includes("9002");
   })()`) === "true");
-  clickRole("button", "Nuevo equipo");
+  const setMemberViaPanel = async (deviceNumber, action, participle, teamLabel) => {
+    browserCommand("fill", "#team-member-search", deviceNumber);
+    await waitFor(`${action} ${deviceNumber} button ready`, () => browserCommand("eval", `[...document.querySelectorAll("ul li button")].some((button) =>
+      button.getAttribute("aria-label")?.startsWith(${JSON.stringify(`${action} ${deviceNumber} `)}) && button.getAttribute("aria-disabled") !== "true")`) === "true");
+    clickRole("button", `${action} ${deviceNumber} `);
+    await waitFor(`${deviceNumber} ${participle} ${teamLabel}`, () => hasText(`${deviceNumber} ${participle} equipo ${teamLabel}`));
+  };
+  const onCreateRoute = () => browserCommand("get", "url").endsWith("#/beeper/new");
+
+  // New teams are created from the "Gestión Buscas" chooser and keep the user on the members panel.
+  clickRole("link", "Gestión Buscas", true);
+  await waitFor("beeper chooser", () => h2Is("Gestión Buscas"));
+  clickRole("button", "Nuevo equipo", true);
+  await waitFor("new team form", () => browserCommand("is", "visible", "#team-name") === "true");
   browserCommand("fill", "#team-name", "Equipo E2E");
   browserCommand("fill", "#team-display-id", "9901");
-  clickRole("button", "Guardar equipo");
-  await waitFor("team created", () => hasText("Equipo E2E · 9901"));
+  clickRole("button", "Guardar equipo", true);
+  await waitFor("new team members panel", () => h2Is("Equipo Equipo E2E · 9901") && hasText("Buscas del equipo"));
+  if (!onCreateRoute()) throw new Error("Saving a new team must keep the user on /beeper/new");
+
+  clickRole("button", "Nuevo busca en Equipo E2E · 9901", true);
+  await waitFor("team-scoped busca form", () => browserCommand("is", "visible", "#form-device-number") === "true");
+  browserCommand("fill", "#form-device-number", "9990");
+  browserCommand("fill", "#form-assigned-to", "Titular E2E");
+  browserCommand("fill", "#form-department", "Planta E2E");
+  browserCommand("fill", "#form-role", "Rol E2E");
+  clickRole("button", "Crear busca", true);
+  await waitFor("busca created and added to the new team", () => hasText("9990 creado y añadido al equipo Equipo E2E · 9901"));
+  if (hasText("Busca guardado.") || !onCreateRoute() || !h2Is("Equipo Equipo E2E · 9901")) {
+    throw new Error("Creating a busca from the members panel must stay on the panel without the 'Busca guardado.' toast");
+  }
+
+  await setMemberViaPanel("9001", "Añadir al equipo", "añadido al", "Equipo E2E · 9901");
+  await setMemberViaPanel("9002", "Añadir al equipo", "añadido al", "Equipo E2E · 9901");
+  await setMemberViaPanel("9002", "Quitar del equipo", "quitado del", "Equipo E2E · 9901");
+  clickRole("button", "Listo", true);
+  await waitFor("back on the beeper catalog", () => h2Is("Registro de Buscas") && !onCreateRoute());
+
+  // Teams stay editable from /beeper.
+  clickRole("button", "Gestionar equipos", true);
+  await waitFor("team select ready", () => browserCommand("is", "visible", "#team-select") === "true");
+  browserCommand("select", "#team-select", teamIdByName("Equipo E2E"));
+  await waitFor("team edit form populated", () => browserCommand("eval", `document.querySelector("#team-name")?.value === "Equipo E2E"`) === "true");
   browserCommand("fill", "#team-name", "Equipo E2E Editado");
   browserCommand("fill", "#team-display-id", "9902");
-  clickRole("button", "Guardar equipo");
+  clickRole("button", "Guardar equipo", true);
   await waitFor("team renamed and displayId updated", () => browserCommand("eval", `(async () => {
     const teams = await window.hospitalDirectory.listBeeperTeams();
-    const filterButtons = [...document.querySelectorAll('[aria-label="Filtro de equipos"] button')].map((button) => button.textContent?.trim());
-    return filterButtons.includes("Equipo E2E Editado · 9902") &&
-      !filterButtons.includes("Equipo E2E · 9901") &&
+    const options = [...document.querySelectorAll("#team-select option")].map((option) => option.textContent?.trim());
+    return options.includes("Equipo E2E Editado · 9902") &&
+      !options.includes("Equipo E2E · 9901") &&
       teams.length === 2 &&
       teams.some((team) => team.name === "Equipo Importado" && team.displayId === "9801") &&
       teams.some((team) => team.name === "Equipo E2E Editado" && team.displayId === "9902") &&
       !teams.some((team) => team.name === "Equipo E2E" || team.displayId === "9901");
   })()`) === "true");
-  browserCommand("click", "summary");
-  const toggleTeamMember = async (deviceNumber, expectedChecked) => {
-    await waitFor(`team member ${deviceNumber} checkbox ready`, () => browserCommand("eval", `(() => {
-      const input = [...document.querySelectorAll('label')].find((label) => label.textContent.includes(${JSON.stringify(deviceNumber)}))?.querySelector('input[type="checkbox"]');
-      return Boolean(input && !input.disabled && input.checked === ${JSON.stringify(!expectedChecked)});
-    })()`) === "true");
-    browserCommand("eval", `(() => {
-      const input = [...document.querySelectorAll('label')].find((label) => label.textContent.includes(${JSON.stringify(deviceNumber)}))?.querySelector('input[type="checkbox"]');
-      input?.click();
-      return Boolean(input);
-    })()`);
-    await waitFor(`team member ${deviceNumber} checkbox=${expectedChecked}`, () => browserCommand("eval", `(() => {
-      const input = [...document.querySelectorAll('label')].find((label) => label.textContent.includes(${JSON.stringify(deviceNumber)}))?.querySelector('input[type="checkbox"]');
-      return Boolean(input && !input.disabled && input.checked === ${JSON.stringify(expectedChecked)});
-    })()`) === "true");
-  };
-  await toggleTeamMember("9001", true);
-  await toggleTeamMember("9002", true);
-  await waitFor("edited team filter shows both added members", () => browserCommand("eval", `(() => {
-    const tableText = document.querySelector('table')?.innerText ?? "";
-    return tableText.includes("9001") && tableText.includes("9002");
-  })()`) === "true");
-  await toggleTeamMember("9002", false);
-  await waitFor("edited team filter keeps 9001 and removes 9002", () => browserCommand("eval", `(() => {
-    const tableText = document.querySelector('table')?.innerText ?? "";
-    return tableText.includes("9001") && !tableText.includes("9002");
-  })()`) === "true");
-  clickRole("button", "Equipo Importado · 9801");
-  await waitFor("imported team starts with no members", () => hasText("Equipo sin buscas"));
-  await toggleTeamMember("9001", true);
-  await waitFor("imported team filter shows 9001 and not 9002", () => browserCommand("eval", `(async () => {
-    const [teams, memberships, importedBeepers] = await Promise.all([
+
+  browserCommand("select", "#team-select", teamIdByName("Equipo Importado"));
+  await waitFor("imported team starts with no members", () => hasText("Este equipo aún no tiene buscas."));
+  await setMemberViaPanel("9001", "Añadir al equipo", "añadido al", "Equipo Importado · 9801");
+  await waitFor("memberships and team pills reflect every change", () => browserCommand("eval", `(async () => {
+    const [teams, memberships, importedBeepers, beepers] = await Promise.all([
       window.hospitalDirectory.listBeeperTeams(),
       window.hospitalDirectory.listBeeperTeamMemberships(),
-      window.hospitalDirectory.listImportedBeepers()
+      window.hospitalDirectory.listImportedBeepers(),
+      window.hospitalDirectory.listBeepers()
     ]);
     const beeper9001 = importedBeepers.find((record) => record.deviceNumber === "9001");
-    const tableText = document.querySelector('table')?.innerText ?? "";
+    const beeper9990 = beepers.find((record) => record.deviceNumber === "9990");
+    const editedTeam = teams.find((team) => team.name === "Equipo E2E Editado");
+    const rows = [...document.querySelectorAll("tbody tr")].map((row) => row.innerText);
+    const row9001 = rows.filter((text) => text.includes("9001"));
+    const row9002 = rows.filter((text) => text.includes("9002"));
+    const row9990 = rows.filter((text) => text.includes("9990"));
     const distinctTeamsFor9001 = new Set(
       memberships.filter((membership) => membership.beeperId === beeper9001?.id).map((membership) => membership.teamId)
     );
     return Boolean(
-      beeper9001 &&
+      beeper9001 && beeper9990 && editedTeam &&
       teams.length === 2 &&
-      memberships.length === 2 &&
+      memberships.length === 3 &&
       distinctTeamsFor9001.size === 2 &&
-      tableText.includes("9001") &&
-      !tableText.includes("9002")
+      memberships.some((membership) => membership.beeperId === beeper9990.id && membership.teamId === editedTeam.id) &&
+      rows.length === 3 && row9001.length === 1 && row9002.length === 1 && row9990.length === 1 &&
+      row9001[0].includes("Equipos:") &&
+      row9001[0].includes("Equipo Importado · 9801") &&
+      row9001[0].includes("Equipo E2E Editado · 9902") &&
+      !row9002[0].includes("Equipos:") && !row9002[0].includes(" · 99") &&
+      row9990[0].includes("Equipo E2E Editado · 9902") && !row9990[0].includes("Equipo Importado")
     );
-  })()`) === "true");
-  browserCommand("click", "summary");
-  clickRole("button", "Todas las buscas");
-  await waitFor("all beepers view shows 9001 once and restores 9002", () => browserCommand("eval", `(() => {
-    const rows = [...document.querySelectorAll('tbody tr')].map((row) => row.innerText);
-    const rows9001 = rows.filter((text) => text.includes("9001"));
-    const rows9002 = rows.filter((text) => text.includes("9002"));
-    return rows.length === 2 && rows9001.length === 1 && rows9002.length === 1;
   })()`) === "true");
   browserCommand("fill", "#beeper-search", "9002");
   await waitFor("phone-plus-beeper contact remains in beeper catalog", () => hasText("9002") && hasText("Contacto con Busca y Teléfono"));
@@ -1042,44 +1061,52 @@ try {
   browserCommand("screenshot", path.join(visualArtifactDirectory, "generated-master-location-import.png"));
   await closeElectron();
   await launchElectron([], masterUserDataPath);
-  clickRole("link", "Buscas");
+  clickRole("link", "Buscas", true);
   await waitFor("beeper catalog after restart", () => hasText("Registro de Buscas"));
-  await waitFor("teams and memberships persisted after restart", () => browserCommand("eval", `(async () => {
-    const [teams, memberships, importedBeepers] = await Promise.all([
+  await waitFor("teams, memberships and team pills persisted after restart", () => browserCommand("eval", `(async () => {
+    const [teams, memberships, importedBeepers, beepers] = await Promise.all([
       window.hospitalDirectory.listBeeperTeams(),
       window.hospitalDirectory.listBeeperTeamMemberships(),
-      window.hospitalDirectory.listImportedBeepers()
+      window.hospitalDirectory.listImportedBeepers(),
+      window.hospitalDirectory.listBeepers()
     ]);
     const beeper9001 = importedBeepers.find((record) => record.deviceNumber === "9001");
-    const filterButtons = [...document.querySelectorAll('[aria-label="Filtro de equipos"] button')].map((button) => button.textContent?.trim());
-    const rows = [...document.querySelectorAll('tbody tr')].map((row) => row.innerText);
+    const beeper9990 = beepers.find((record) => record.deviceNumber === "9990");
+    const rows = [...document.querySelectorAll("tbody tr")].map((row) => row.innerText);
+    const row9001 = rows.filter((text) => text.includes("9001"));
+    const row9002 = rows.filter((text) => text.includes("9002"));
+    const row9990 = rows.filter((text) => text.includes("9990"));
     const distinctTeamsFor9001 = new Set(
       memberships.filter((membership) => membership.beeperId === beeper9001?.id).map((membership) => membership.teamId)
     );
     return Boolean(
-      beeper9001 &&
+      beeper9001 && beeper9990 &&
       teams.length === 2 &&
       teams.some((team) => team.name === "Equipo Importado" && team.displayId === "9801") &&
       teams.some((team) => team.name === "Equipo E2E Editado" && team.displayId === "9902") &&
-      memberships.length === 2 &&
+      memberships.length === 3 &&
       distinctTeamsFor9001.size === 2 &&
-      filterButtons.includes("Equipo Importado · 9801") &&
-      filterButtons.includes("Equipo E2E Editado · 9902") &&
-      rows.length === 2 &&
-      rows.filter((text) => text.includes("9001")).length === 1 &&
-      rows.filter((text) => text.includes("9002")).length === 1
+      rows.length === 3 && row9001.length === 1 && row9002.length === 1 && row9990.length === 1 &&
+      row9001[0].includes("Equipo Importado · 9801") &&
+      row9001[0].includes("Equipo E2E Editado · 9902") &&
+      !row9002[0].includes("Equipos:") &&
+      row9990[0].includes("Equipo E2E Editado · 9902")
     );
   })()`) === "true");
-  clickRole("button", "Equipo Importado · 9801");
-  await waitFor("imported team filter after restart", () => browserCommand("eval", `(() => {
-    const tableText = document.querySelector('table')?.innerText ?? "";
-    return tableText.includes("9001") && !tableText.includes("9002");
-  })()`) === "true");
-  clickRole("button", "Equipo E2E Editado · 9902");
-  await waitFor("edited team filter after restart", () => browserCommand("eval", `(() => {
-    const tableText = document.querySelector('table')?.innerText ?? "";
-    return tableText.includes("9001") && !tableText.includes("9002");
-  })()`) === "true");
+  clickRole("button", "Gestionar equipos", true);
+  await waitFor("team select ready after restart", () => browserCommand("is", "visible", "#team-select") === "true");
+  const memberRowsText = () => JSON.parse(browserCommand("eval", `[...document.querySelectorAll('ul[aria-label="Buscas del equipo"] li')].map((item) => item.innerText)`));
+  browserCommand("select", "#team-select", teamIdByName("Equipo Importado"));
+  await waitFor("imported team members after restart", () => {
+    const members = memberRowsText();
+    return members.length === 1 && members[0].includes("9001");
+  });
+  browserCommand("select", "#team-select", teamIdByName("Equipo E2E Editado"));
+  await waitFor("edited team members after restart", () => {
+    const members = memberRowsText();
+    return members.length === 2 && members.some((text) => text.includes("9001")) &&
+      members.some((text) => text.includes("9990")) && !members.some((text) => text.includes("9002"));
+  });
   console.log("[agent-browser-e2e] Generated master import split shared-extension people, separated beeper-only and phone-only rows, and rendered locations");
   });
 
@@ -1136,7 +1163,7 @@ try {
     await waitFor("directory after provided master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
     browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', searchableRecord.displayName);
     await waitFor("provided master contact card", () => browserCommand("is", "visible", `[data-record-id="${searchableRecord.id}"]`) === "true");
-    clickRole("link", "Buscas");
+    clickRole("link", "Buscas", true);
     await waitFor("beeper catalog after provided master import", () => hasText("Registro de Buscas"));
     browserCommand("fill", "#beeper-search", searchableBeeper.deviceNumber);
     await waitFor("provided master beeper result", () => hasText(searchableBeeper.deviceNumber));
