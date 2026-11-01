@@ -385,6 +385,15 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(screen.queryByLabelText("Equipo a gestionar")).not.toBeInTheDocument();
   });
 
+  it("Ctrl+N on the members panel still goes to Nuevo registro", async () => {
+    renderApp();
+    await saveNewTeam();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Listo" }), { key: "n", code: "KeyN", ctrlKey: true });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/contacts/new"));
+  });
+
   it("Escape on the members panel leaves to /beeper, but cancels the busca form first", async () => {
     renderApp();
     await saveNewTeam();

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useMatch, useNavigate } from "react-router";
 import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
@@ -259,6 +259,7 @@ export const BeepersPage = () => {
     return () => cancelAnimationFrame(frame);
   }, [chooserReady]);
   useFocusOnMount(teamNameRef, teamCreateMode);
+  useFocusOnMount(memberSearchRef, teamMembersMode);
 
   const visibleImportedRecords = useMemo(() => {
     const visibleKeys = new Set(filteredRecords.map(manualBeeperDisplayKey));
@@ -307,17 +308,18 @@ export const BeepersPage = () => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
-  const restoreEditFocus = () => {
-    requestAnimationFrame(() => {
-      (editTriggerRef.current?.isConnected ? editTriggerRef.current : searchRef.current)?.focus();
-    });
-  };
-
-  const restoreCreateFocus = () => {
-    requestAnimationFrame(() => {
-      (createTriggerRef.current?.isConnected ? createTriggerRef.current : searchRef.current)?.focus();
-    });
-  };
+  // Focus goes back to the control that opened a busca form. The triggers are
+  // disabled while the form is open, so this has to run after the commit that
+  // closes it (a requestAnimationFrame queued before that commit can fire first
+  // and find the trigger still disabled). Callers set the kind; the layout
+  // effect consumes it once `showForm` is false.
+  const pendingFocusRef = useRef<"edit" | "create" | null>(null);
+  useLayoutEffect(() => {
+    if (showForm || !pendingFocusRef.current) return;
+    const trigger = pendingFocusRef.current === "edit" ? editTriggerRef.current : createTriggerRef.current;
+    pendingFocusRef.current = null;
+    (trigger?.isConnected ? trigger : searchRef.current)?.focus();
+  }, [showForm]);
 
   const handleCreateNew = (teamId: string | null = null) => {
     setNewBeeperTeamId(teamId);
@@ -360,16 +362,16 @@ export const BeepersPage = () => {
   const handleCancel = () => {
     if (isSaving) return;
     const wasEditing = Boolean(editingId || editingImportedId);
+    const wasTeamScoped = newBeeperTeamId !== null;
     setShowForm(false);
     setEditingId(null);
     setEditingImportedId(null);
     setNewBeeperTeamId(null);
     setFormError("");
     // Cancelling the chooser's busca form shows the chooser again (its heading
-    // takes focus). In members mode the trigger button gets focus back instead.
-    if (isCreateRoute && !selectedTeam) return;
-    if (wasEditing) restoreEditFocus();
-    else restoreCreateFocus();
+    // takes focus). A team-scoped form gets its trigger button back instead.
+    if (isCreateRoute && !wasTeamScoped) return;
+    pendingFocusRef.current = wasEditing ? "edit" : "create";
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -416,8 +418,9 @@ export const BeepersPage = () => {
       if (isCreateRoute && !newBeeperTeamId) {
         pushToast({ type: "success", message: "Busca guardado." });
         navigate("/beeper");
-      } else if (wasEditing) restoreEditFocus();
-      else restoreCreateFocus();
+      } else {
+        pendingFocusRef.current = wasEditing ? "edit" : "create";
+      }
     } catch (err) {
       setFormError(
         toCompactToastMessage(
@@ -515,7 +518,6 @@ export const BeepersPage = () => {
         // Selecting the new team swaps the form for the members panel in the
         // same commit, so "Guardar equipo" is never offered again.
         selectTeam(created);
-        requestAnimationFrame(() => memberSearchRef.current?.focus());
       }
       pushToast({ type: "success", message: "Equipo guardado." });
     } catch (err) {
@@ -651,54 +653,53 @@ export const BeepersPage = () => {
   );
 
   const membersPanelElement = selectedTeam ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
-              <button type="button" aria-label={`Nuevo busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
-                <BeepersIcon /> Nuevo busca
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {!membershipsLoaded && <p role="alert" className="sm:col-span-2 text-sm font-medium text-red-700">No se pudieron cargar los miembros del equipo.</p>}
-              {memberError && <p role="alert" className="text-sm font-medium text-red-700">{memberError}</p>}
-              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{isSavingMembers ? "Actualizando miembros…" : memberStatus}</p>
-              <div>
-                <label htmlFor="team-member-search" className="mb-2 block text-sm font-medium text-slate-700">Buscar busca</label>
-                <input ref={memberSearchRef} id="team-member-search" type="search" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} placeholder="Número o titular" className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
-              </div>
-              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{memberResultStatus}</p>
-              {memberSearchActive && teamMemberRows.length === 0 && (
-                <div>
-                  <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">Limpiar búsqueda</button>
-                </div>
-              )}
-              {records.length === 0 && importedRecords.length === 0 && (
-                <p className="text-sm text-slate-600">No hay buscas registrados para asignar a este equipo.</p>
-              )}
-              {records.length + importedRecords.length > 0 && !memberSearchActive && (
-                <p className="text-sm text-slate-600">
-                  {selectedTeamMemberIds.size === 0 ? "Este equipo aún no tiene buscas. " : ""}Busca por número o titular para añadir buscas al equipo.
-                </p>
-              )}
-              {teamMemberRows.length > 0 && (
-                <ul aria-label={memberSearchActive ? "Buscas que coinciden" : "Buscas del equipo"} className="grid gap-3">
-                  {teamMemberRows.map((record) => {
-                    const isMember = selectedTeamMemberIds.has(record.id);
-                    const action = isMember ? "Quitar del equipo" : "Añadir al equipo";
-                    return (
-                      <li key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
-                        <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {memberHolder(record)}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
-                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:border-slate-200 aria-disabled:text-slate-400 aria-disabled:hover:bg-transparent">
-                          {action}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
+        <button type="button" aria-label={`Nuevo busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
+          <BeepersIcon /> Nuevo busca
+        </button>
+      </div>
+      <div className="mt-4 grid gap-3">
+        {!membershipsLoaded && <p role="alert" className="sm:col-span-2 text-sm font-medium text-red-700">No se pudieron cargar los miembros del equipo.</p>}
+        {memberError && <p role="alert" className="text-sm font-medium text-red-700">{memberError}</p>}
+        <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{isSavingMembers ? "Actualizando miembros…" : memberStatus}</p>
+        <div>
+          <label htmlFor="team-member-search" className="mb-2 block text-sm font-medium text-slate-700">Buscar busca</label>
+          <input ref={memberSearchRef} id="team-member-search" type="search" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} placeholder="Número o titular" className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+        </div>
+        <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{memberResultStatus}</p>
+        {memberSearchActive && teamMemberRows.length === 0 && (
+          <div>
+            <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">Limpiar búsqueda</button>
           </div>
-        
+        )}
+        {records.length === 0 && importedRecords.length === 0 && (
+          <p className="text-sm text-slate-600">No hay buscas registrados para asignar a este equipo.</p>
+        )}
+        {records.length + importedRecords.length > 0 && !memberSearchActive && (
+          <p className="text-sm text-slate-600">
+            {selectedTeamMemberIds.size === 0 ? "Este equipo aún no tiene buscas. " : ""}Busca por número o titular para añadir buscas al equipo.
+          </p>
+        )}
+        {teamMemberRows.length > 0 && (
+          <ul aria-label={memberSearchActive ? "Buscas que coinciden" : "Buscas del equipo"} className="grid gap-3">
+            {teamMemberRows.map((record) => {
+              const isMember = selectedTeamMemberIds.has(record.id);
+              const action = isMember ? "Quitar del equipo" : "Añadir al equipo";
+              return (
+                <li key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {memberHolder(record)}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
+                  <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:border-slate-200 aria-disabled:text-slate-400 aria-disabled:hover:bg-transparent">
+                    {action}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   ) : null;
 
   return (
@@ -777,17 +778,26 @@ export const BeepersPage = () => {
       )}
 
       {teamMembersMode && selectedTeam && (
-        <section aria-labelledby="beeper-team-members-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+        <section
+          aria-labelledby="beeper-team-members-title"
+          className="rounded-3xl bg-white p-4 shadow-panel sm:p-5"
+          onKeyDown={(event) => {
+            // Nothing is unsaved here, so Escape is handled locally (not through
+            // [data-keyboard-cancel], which would also swallow Ctrl/Cmd+N). Typing
+            // in the search box keeps Escape, like the rest of the app.
+            const target = event.target;
+            if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+            if (event.key === "Escape" && !showForm && !isSavingMembers) navigate("/beeper");
+          }}
+        >
           <h3 id="beeper-team-members-title" className="text-lg font-semibold text-scs-blueDark">Equipo {teamLabel(selectedTeam)}</h3>
-          {showForm && <p id={TEAM_LOCK_REASON_ID} className="mt-2 text-sm text-slate-600">Cierra el formulario de busca para seguir con el equipo.</p>}
+          {showForm && <p id={TEAM_LOCK_REASON_ID} className="mt-2 text-sm text-slate-600">Crea o cancela el busca para seguir con el equipo.</p>}
           {membersPanelElement}
           <div className="mt-4 flex justify-end">
-            {/* The busca form's own cancel must win Escape, so Listo only carries the marker while no form is open. */}
             <button
               type="button"
-              data-keyboard-cancel={showForm ? undefined : ""}
               onClick={() => navigate("/beeper")}
-              disabled={showForm}
+              disabled={showForm || isSavingMembers}
               aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined}
               className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -820,7 +830,7 @@ export const BeepersPage = () => {
             </button>}
           </div>
           {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «<Link to="/beeper/new" className="focus-ring rounded font-semibold text-scs-blue underline">Gestión Buscas</Link>».</p>}
-          {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Cierra el formulario de busca para editar el equipo.</p>}
+          {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Crea o cancela el busca para editar el equipo.</p>}
         </div>
 
         {showTeamManager && teams.length > 0 && <div id="team-manager">
