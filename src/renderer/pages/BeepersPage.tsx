@@ -718,7 +718,7 @@ export const BeepersPage = () => {
               Gestionar equipos
             </button>}
           </div>
-          {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «Nueva busca o equipo» en el menú lateral.</p>}
+          {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «Gestión Buscas» en el menú lateral.</p>}
           {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Cierra el formulario de busca para editar el equipo.</p>}
         </div>
 

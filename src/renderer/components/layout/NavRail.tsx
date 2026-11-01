@@ -73,7 +73,7 @@ const primaryNavItems: RailNavItem[] = [
 
 const bottomNavItems: RailNavItem[] = [
   { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
-  { to: "/beeper/new", label: "Nueva busca o equipo", title: "Nueva busca o equipo", icon: <NewBeeperIcon /> },
+  { to: "/beeper/new", label: "Gestión Buscas", title: "Gestión Buscas", icon: <NewBeeperIcon /> },
   { to: "/settings", label: "Configuración", title: "Configuración — Alt+3", icon: <SettingsIcon /> }
 ];
 

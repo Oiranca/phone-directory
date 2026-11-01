@@ -35,7 +35,7 @@ describe("AppShell — default mode", () => {
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
     // "Importar/Exportar" was folded into Configuración; the tab no longer exists.
@@ -46,7 +46,7 @@ describe("AppShell — default mode", () => {
     renderShell();
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("href", "/beeper/new");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("href", "/beeper/new");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
@@ -56,7 +56,7 @@ describe("AppShell — default mode", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("title", "Nueva busca o equipo");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("title", "Gestión Buscas");
   });
 
   it("nav links keep the shared focus visibility class", () => {

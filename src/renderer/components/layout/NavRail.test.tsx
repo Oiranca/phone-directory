@@ -29,7 +29,7 @@ describe("NavRail — items", () => {
       "Directorio",
       "Buscas",
       "Nuevo registro",
-      "Nueva busca o equipo",
+      "Gestión Buscas",
       "Configuración"
     ]);
     expect(nav.children[2]).toHaveAttribute("aria-hidden", "true");
@@ -44,7 +44,7 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("href", "/beeper/new");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("href", "/beeper/new");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
@@ -65,7 +65,7 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("title", "Nueva busca o equipo");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("title", "Gestión Buscas");
   });
 });
 
@@ -82,16 +82,16 @@ describe("NavRail — active route highlighting", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
   });
 
-  it("highlights only Nueva busca o equipo at /beeper/new, not Buscas", () => {
+  it("highlights only Gestión Buscas at /beeper/new, not Buscas", () => {
     renderRail(["/beeper/new"]);
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Buscas" })).not.toHaveAttribute("aria-current");
   });
 
   it("highlights Buscas at /beeper", () => {
     renderRail(["/beeper"]);
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).not.toHaveAttribute("aria-current");
   });
 
   it("does not expose a separate Duplicados item at /deduplicate", () => {
@@ -109,7 +109,7 @@ describe("NavRail — visible labels", () => {
       "Directorio",
       "Buscas",
       "Nuevo registro",
-      "Nueva busca o equipo",
+      "Gestión Buscas",
       "Configuración"
     ]);
     expect(screen.queryByRole("button", { name: /títulos/i })).not.toBeInTheDocument();

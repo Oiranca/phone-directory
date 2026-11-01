@@ -1573,11 +1573,11 @@ describe("BeepersPage", () => {
     expect(screen.queryByLabelText("Buscar busca")).not.toBeInTheDocument();
   });
 
-  it("points to 'Nueva busca o equipo' when there are no teams", async () => {
+  it("points to 'Gestión Buscas' when there are no teams", async () => {
     renderPage();
     await screen.findByText("B-001");
 
-    expect(screen.getByText(/Crea uno desde «Nueva busca o equipo»/)).toBeInTheDocument();
+    expect(screen.getByText(/Crea uno desde «Gestión Buscas»/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gestionar equipos" })).not.toBeInTheDocument();
   });
 
