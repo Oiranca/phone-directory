@@ -128,7 +128,7 @@ describe("BeepersService", () => {
         role: "Sin rol",
         shift: "mañana"
       })
-    ).rejects.toThrow("No se encontró la busca solicitada.");
+    ).rejects.toThrow("No se encontró el busca solicitado.");
   });
 
   it("remove record — record is gone after remove", async () => {
@@ -164,7 +164,7 @@ describe("BeepersService", () => {
     const service = new BeepersService();
 
     await expect(service.remove("bsc_nonexist", { backupDirectoryPath: path.join(testRoot, "backups"), retentionCount: 5 })).rejects.toThrow(
-      "No se encontró la busca solicitada."
+      "No se encontró el busca solicitado."
     );
   });
 

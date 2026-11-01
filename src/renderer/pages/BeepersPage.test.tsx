@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { BeepersPage } from "./BeepersPage";
@@ -77,14 +77,69 @@ const setupWindowApi = (overrides: Partial<typeof window.hospitalDirectory> = {}
   });
 };
 
-const renderPage = () =>
+const LocationProbe = () => <span data-testid="pathname">{useLocation().pathname}</span>;
+
+const renderPage = (path = "/beeper") =>
   render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter initialEntries={[path]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ToastProvider>
         <BeepersPage />
+        <LocationProbe />
       </ToastProvider>
     </MemoryRouter>
   );
+
+// Exact match: toHaveTextContent is a substring check and "/beeper" is a prefix of "/beeper/new".
+const expectPathname = (pathname: string) => expect(screen.getByTestId("pathname").textContent).toBe(pathname);
+
+// /beeper/new opens on a chooser; these pick one of its two options.
+const openBuscaForm = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: "Nuevo busca" }));
+};
+
+const openTeamCreateForm = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+};
+
+const openTeamManager = async (teamId: string) => {
+  await screen.findByText("B-001");
+  fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+  fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: teamId } });
+};
+
+// Opens the team-scoped create form for the selected team, fills it and submits.
+const createBuscaFromTeam = (deviceNumber: string) => {
+  fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" }));
+  const form = screen.getByRole("form", { name: "Nuevo busca en UCI · 9001" });
+  fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: deviceNumber } });
+  fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+  fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+  fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+  fireEvent.submit(form);
+};
+
+const newTeam = { id: "team_new", name: "Quirófano", displayId: "9010" };
+
+// On /beeper/new: choose "Nuevo equipo", fill the form and save. Leaves the page on the
+// new team's members panel.
+const saveNewTeamFromChooser = async () => {
+  await openTeamCreateForm();
+  fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: newTeam.name } });
+  fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: newTeam.displayId } });
+  fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+  await screen.findByRole("heading", { name: "Buscas del equipo" });
+};
+
+// Exactly one h2 titles the page in every state (ready, empty, load error and /beeper/new), and
+// the root section is named by it. StatePanel titles inside the page are h3.
+const expectSinglePageTitle = (text: string) => {
+  const titles = document.querySelectorAll("#beeper-page-title");
+  expect(titles).toHaveLength(1);
+  expect(titles[0]).toHaveTextContent(text);
+  expect(titles[0].tagName).toBe("H2");
+  expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(1);
+  expect(screen.getByRole("region", { name: text })).toBeInTheDocument();
+};
 
 describe("BeepersPage", () => {
   beforeEach(() => {
@@ -110,14 +165,14 @@ describe("BeepersPage", () => {
     });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar las buscas o los equipos.");
+      expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los buscas o los equipos.");
     });
     // Retry button must be present
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
     // Must NOT show the empty-dataset creation prompt
-    expect(screen.queryByText(/No hay buscas registradas/)).not.toBeInTheDocument();
-    // Must NOT show the "Nueva busca" button
-    expect(screen.queryByRole("button", { name: /nueva busca/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No hay buscas registrados/)).not.toBeInTheDocument();
+    // Must NOT show the "Nuevo busca" button
+    expect(screen.queryByRole("button", { name: /nuevo busca/i })).not.toBeInTheDocument();
   });
 
   it("retries load when Reintentar is clicked after a failure", async () => {
@@ -143,7 +198,7 @@ describe("BeepersPage", () => {
     setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/No hay buscas registradas/)).toBeInTheDocument();
+      expect(screen.getByText(/No hay buscas registrados/)).toBeInTheDocument();
     });
   });
 
@@ -188,7 +243,23 @@ describe("BeepersPage", () => {
     });
   });
 
-  it("filters individual and imported buscas by team membership", async () => {
+  it("toggles the team manager without resetting its selected team", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await screen.findByText("B-001");
+    const toggle = screen.getByRole("button", { name: "Gestionar equipos" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).not.toHaveAttribute("aria-controls");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "team-manager");
+    fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Equipo a gestionar")).toHaveValue("team_uci");
+  });
+
+  it("lists the team's current members when the member search is empty", async () => {
     setupWindowApi({
       listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
       listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
@@ -198,19 +269,16 @@ describe("BeepersPage", () => {
       ])
     });
     renderPage();
-    await screen.findByText("B-001");
+    await openTeamManager("team_uci");
 
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
-
-    await waitFor(() => {
-      expect(screen.getAllByText("B-001").some((item) => item.closest("table"))).toBe(false);
-      expect(screen.getAllByText("B-002").some((item) => item.closest("table"))).toBe(true);
-      expect(screen.getAllByText("5001").some((item) => item.closest("table"))).toBe(true);
-      expect(screen.getAllByText("5002").some((item) => item.closest("table"))).toBe(false);
-    });
+    const members = within(screen.getByRole("list", { name: "Buscas del equipo" }));
+    expect(members.getByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" })).toBeInTheDocument();
+    expect(members.getByRole("button", { name: "Quitar del equipo 5001 · Principal, Buscas_Facultativos fila 2" })).toBeInTheDocument();
+    expect(members.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Añadir al equipo/ })).not.toBeInTheDocument();
   });
 
-  it("removes a current member and refreshes the selected team", async () => {
+  it("removes a member from the current-members list without removing the Busca from the main list", async () => {
     const setMembers = vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "ibsc_00000001" }]);
     setupWindowApi({
       listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
@@ -222,97 +290,282 @@ describe("BeepersPage", () => {
       setBeeperTeamMembers: setMembers
     });
     renderPage();
-    await screen.findByText("B-001");
+    await openTeamManager("team_uci");
 
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
-    fireEvent.click(screen.getByText("Miembros del equipo"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /B-002/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" }));
 
     await waitFor(() => expect(setMembers).toHaveBeenCalledWith("team_uci", ["ibsc_00000001"]));
-    expect(screen.getAllByText("B-002").some((item) => item.closest("table"))).toBe(false);
-    expect(screen.getAllByText("5001").some((item) => item.closest("table"))).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" })).not.toBeInTheDocument());
+    expect(screen.getAllByText("B-002").some((item) => item.closest("table"))).toBe(true);
+    await waitFor(() => expect(screen.getByLabelText("Buscar busca")).toHaveFocus());
   });
 
-  it("shows a membership update error beside the member controls", async () => {
+  it("adds an existing Busca through an explicit button and the button flips to remove", async () => {
     setupWindowApi({
       listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
-      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_002" }]),
-      setBeeperTeamMembers: vi.fn().mockRejectedValue(new Error("save failed"))
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([]),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_001" }])
     });
     renderPage();
-    await screen.findByText("B-001");
+    await openTeamManager("team_uci");
 
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
-    fireEvent.click(screen.getByText("Miembros del equipo"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /B-002/i }));
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
 
-    const members = screen.getByText("Buscas incluidas en el equipo").closest("fieldset");
-    expect(members).not.toBeNull();
-    await waitFor(() => expect(within(members!).getByRole("alert")).toHaveTextContent("save failed"));
+    await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalledWith("team_uci", ["bsc_001"]));
+    expect(await screen.findByRole("button", { name: "Quitar del equipo B-001 · Ana García" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Añadir al equipo B-001 · Ana García" })).not.toBeInTheDocument();
   });
 
-  it("clears a membership error when selecting another team", async () => {
-    const teams = [...mockTeams, { id: "team_guardia", name: "Guardia", displayId: "9002" }];
+  it("adds and removes an imported Busca through explicit buttons", async () => {
+    const setMembers = vi.fn()
+      .mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "ibsc_00000001" }])
+      .mockResolvedValueOnce([]);
     setupWindowApi({
-      listBeeperTeams: vi.fn().mockResolvedValue(teams),
-      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_002" }]),
-      setBeeperTeamMembers: vi.fn().mockRejectedValue(new Error("save failed"))
-    });
-    renderPage();
-    await screen.findByText("B-001");
-
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
-    fireEvent.click(screen.getByText("Miembros del equipo"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /B-002/i }));
-    await screen.findByRole("alert", { name: "" });
-
-    fireEvent.click(screen.getByRole("button", { name: /Guardia · 9002/i }));
-
-    expect(screen.queryByText("save failed")).not.toBeInTheDocument();
-  });
-
-  it("guides the operator to add members when the selected team is empty", async () => {
-    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
       listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
-      listBeeperTeamMemberships: vi.fn().mockResolvedValue([])
-    });
-    renderPage();
-    await screen.findByText("B-001");
-
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
-
-    await waitFor(() => expect(screen.getByText("Equipo sin buscas")).toBeInTheDocument());
-    expect(screen.getByText("Este equipo no tiene buscas. Añádelas en Miembros del equipo.")).toBeInTheDocument();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-  });
-
-  it("shows an empty state inside team members when no buscas are registered", async () => {
-    setupWindowApi({
-      listBeepers: vi.fn().mockResolvedValue([]),
-      listImportedBeepers: vi.fn().mockResolvedValue([]),
-      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
-      listBeeperTeamMemberships: vi.fn().mockResolvedValue([])
-    });
-    renderPage();
-
-    fireEvent.click(await screen.findByRole("button", { name: /UCI · 9001/i }));
-    fireEvent.click(screen.getByText("Miembros del equipo"));
-
-    expect(screen.getByText("No hay buscas registradas para asignar a este equipo.")).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-  });
-
-  it("shows a retryable load error when memberships could not be loaded", async () => {
-    const setMembers = vi.fn();
-    setupWindowApi({
-      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
-      listBeeperTeamMemberships: vi.fn().mockRejectedValue(new Error("read failed")),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([]),
       setBeeperTeamMembers: setMembers
     });
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar las buscas o los equipos.");
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(setMembers).not.toHaveBeenCalled();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "5001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo 5001 · Principal, Buscas_Facultativos fila 2" }));
+    await waitFor(() => expect(setMembers).toHaveBeenLastCalledWith("team_uci", ["ibsc_00000001"]));
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar del equipo 5001 · Principal, Buscas_Facultativos fila 2" }));
+    await waitFor(() => expect(setMembers).toHaveBeenLastCalledWith("team_uci", []));
+  });
+
+  it("announces which Busca was added to or removed from which team", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      setBeeperTeamMembers: vi.fn()
+        .mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "bsc_002" }])
+        .mockResolvedValueOnce([])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-002" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-002 · Luis Pérez" }));
+    await waitFor(() => expect(screen.getByText("B-002 añadido al equipo UCI · 9001")).toBeInTheDocument());
+    expect(screen.getByText("B-002 añadido al equipo UCI · 9001")).toHaveAttribute("role", "status");
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" }));
+    await waitFor(() => expect(screen.getByText("B-002 quitado del equipo UCI · 9001")).toBeInTheDocument());
+  });
+
+  it("keeps the member button enabled while saving, blocks scoped create, and ignores a second click", async () => {
+    let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
+    const setMembers = vi.fn().mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }));
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams), setBeeperTeamMembers: setMembers });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    const button = screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" });
+    button.focus();
+
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    // `disabled` would drop focus to <body> in Chromium; jsdom cannot show that, so
+    // asserting the button is not disabled is the real guard.
+    expect(button).not.toBeDisabled();
+    // A scoped create during the save would link against stale memberships.
+    expect(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" })).toBeDisabled();
+    expect(screen.getByLabelText("Buscar busca")).not.toBeDisabled();
+    fireEvent.click(button);
+    expect(setMembers).toHaveBeenCalledTimes(1);
+
+    resolveSave([{ teamId: "team_uci", beeperId: "bsc_001" }]);
+    await waitFor(() => expect(button).not.toHaveAttribute("aria-disabled"));
+  });
+
+  it("keeps membership unchanged and shows an error when an update fails", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_002" }]),
+      setBeeperTeamMembers: vi.fn().mockRejectedValue(new Error("save failed"))
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
+    expect(screen.getByRole("button", { name: "Quitar del equipo B-002 · Luis Pérez" })).toBeInTheDocument();
+  });
+
+  it("clears a member error and the member search when switching team", async () => {
+    const otherTeam: BeeperTeam = { id: "team_urg", name: "Urgencias", displayId: "9002" };
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, otherTeam]),
+      setBeeperTeamMembers: vi.fn().mockRejectedValue(new Error("save failed"))
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
+
+    fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_urg" } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Buscar busca")).toHaveValue("");
+  });
+
+  it("locks team editing with a visible reason while the team-scoped busca form is open", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" }));
+
+    expect(screen.getByLabelText("Equipo a gestionar")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" })).toBeDisabled();
+    expect(screen.getByLabelText("Buscar busca")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toHaveAccessibleDescription("Crea o cancela el busca para editar el equipo.");
+    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveAccessibleDescription("Crea o cancela el busca para editar el equipo.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" })).toHaveFocus());
+  });
+
+  it("locks and unlocks team editing around a non-team busca form", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Número del equipo/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeDisabled();
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Guarda o cancela el busca para editar el equipo.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
+    expect(screen.queryByText("Guarda o cancela el busca para editar el equipo.")).not.toBeInTheDocument();
+  });
+
+  it("words the lock reason as 'Guarda' while editing an imported busca", async () => {
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: /editar busca 5001/i }));
+
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Guarda o cancela el busca para editar el equipo.");
+  });
+
+  it("disables 'Limpiar búsqueda' while a busca form is open", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "sin coincidencia" } });
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" }));
+
+    const clear = screen.getByRole("button", { name: "Limpiar búsqueda" });
+    expect(clear).toBeDisabled();
+    expect(clear).toHaveAccessibleDescription("Crea o cancela el busca para editar el equipo.");
+    fireEvent.click(clear);
+    expect(screen.getByLabelText("Buscar busca")).toHaveValue("sin coincidencia");
+  });
+
+  it("does not say the team is empty when its members are hidden because imported buscas failed to load", async () => {
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockRejectedValue(new Error("import failed")),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "ibsc_00000001" }])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+
+    expect(screen.queryByRole("list", { name: "Buscas del equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Este equipo aún no tiene buscas\./)).not.toBeInTheDocument();
+    expect(screen.getByText(/Busca por número o titular para añadir buscas al equipo\./)).toBeInTheDocument();
+  });
+
+  it("names the team in the team-scoped create form", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" }));
+
+    expect(screen.getByRole("form", { name: "Nuevo busca en UCI · 9001" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nuevo busca en UCI · 9001" })).toBeInTheDocument();
+  });
+
+  it("filters manager candidates and distinguishes duplicate device actions", async () => {
+    const importedDuplicate = { ...mockImportedRecords[0], id: "ibsc_00000003", sourceRow: 9 };
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue([...mockImportedRecords, importedDuplicate]),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "5001" } });
+    expect(screen.getByRole("button", { name: "Añadir al equipo 5001 · Principal, Buscas_Facultativos fila 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Añadir al equipo 5001 · Principal, Buscas_Facultativos fila 9" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "Luis" } });
+    expect(screen.getByRole("button", { name: "Añadir al equipo B-002 · Luis Pérez" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Añadir al equipo 5001/ })).not.toBeInTheDocument();
+  });
+
+  it("announces the member search result count in one status region", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    const search = screen.getByLabelText("Buscar busca");
+
+    fireEvent.change(search, { target: { value: "B-0" } });
+    const status = screen.getByText("2 buscas coinciden");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status).toHaveAttribute("aria-atomic", "true");
+
+    fireEvent.change(search, { target: { value: "B-001" } });
+    expect(screen.getByText("1 busca coincide")).toBe(status);
+
+    fireEvent.change(search, { target: { value: "sin coincidencia" } });
+    expect(screen.getByText("Sin buscas que coincidan")).toBe(status);
+    expect(status).not.toContainElement(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+  });
+
+  it("guides the user when a team member search has no matches", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    expect(screen.queryAllByRole("button", { name: /(?:Añadir|Quitar) del equipo/ })).toHaveLength(0);
+    expect(screen.getByText(/Este equipo aún no tiene buscas\./)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "sin coincidencia" } });
+    expect(screen.getAllByRole("status").some((status) => status.textContent === "Sin buscas que coincidan")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+    expect(screen.getByText(/Busca por número o titular para añadir buscas al equipo\./)).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /(?:Añadir|Quitar) del equipo/ })).toHaveLength(0);
+    await waitFor(() => expect(screen.getByLabelText("Buscar busca")).toHaveFocus());
+  });
+
+  it("explains that there are no buscas to assign when the registry is empty", async () => {
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue([]),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestionar equipos" }));
+    fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+
+    expect(screen.getByText("No hay buscas registrados para asignar a este equipo.")).toBeInTheDocument();
+  });
+
+  it("shows the load error and hides team management when memberships could not be loaded", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockRejectedValue(new Error("read failed"))
+    });
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar los buscas o los equipos.");
+    expect(screen.queryByRole("button", { name: "Gestionar equipos" })).not.toBeInTheDocument();
   });
 
   it("shows a retryable load error when teams could not be loaded", async () => {
@@ -321,16 +574,16 @@ describe("BeepersPage", () => {
     });
     renderPage();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar las buscas o los equipos.");
-    expect(screen.queryByRole("button", { name: "Nuevo equipo" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar los buscas o los equipos.");
+    expect(screen.queryByRole("button", { name: "Gestionar equipos" })).not.toBeInTheDocument();
   });
 
   it("shows a duplicate team number error beside the number field", async () => {
     setupWindowApi({
       addBeeperTeam: vi.fn().mockRejectedValue(new Error("El número de equipo ya está registrado."))
     });
-    renderPage();
-    await screen.findByText("B-001");
+    renderPage("/beeper/new");
+    await openTeamCreateForm();
     fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "UCI" } });
     fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9001" } });
     fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
@@ -341,8 +594,8 @@ describe("BeepersPage", () => {
   });
 
   it("shows inline errors for whitespace-only team fields", async () => {
-    renderPage();
-    await screen.findByText("B-001");
+    renderPage("/beeper/new");
+    await openTeamCreateForm();
     fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "   " } });
     fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "   " } });
     fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
@@ -354,8 +607,8 @@ describe("BeepersPage", () => {
   });
 
   it("shows inline errors for oversized team fields", async () => {
-    renderPage();
-    await screen.findByText("B-001");
+    renderPage("/beeper/new");
+    await openTeamCreateForm();
     fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "n".repeat(256) } });
     fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9".repeat(256) } });
     fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
@@ -372,13 +625,14 @@ describe("BeepersPage", () => {
     });
     renderPage();
     await screen.findByText("B-001");
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+    fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
     fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "UCI adultos" } });
     fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9002" } });
     fireEvent.submit(screen.getByRole("form", { name: "Editar equipo" }));
 
     await waitFor(() => expect(window.hospitalDirectory.updateBeeperTeam).toHaveBeenCalledWith("team_uci", { name: "UCI adultos", displayId: "9002" }));
-    expect(screen.getByRole("button", { name: /UCI adultos · 9002/i })).toBeInTheDocument();
+    expect(screen.getAllByText("UCI adultos · 9002")).not.toHaveLength(0);
   });
 
   it("confirms and deletes the selected team without deleting its buscas", async () => {
@@ -388,52 +642,304 @@ describe("BeepersPage", () => {
     });
     renderPage();
     await screen.findByText("B-001");
-    fireEvent.click(screen.getByRole("button", { name: /UCI · 9001/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+    fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
     fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
     expect(screen.getByText("Confirmar eliminación del equipo")).toBeInTheDocument();
-    expect(screen.getByText(/Las buscas seguirán disponibles de forma individual/)).toBeInTheDocument();
+    expect(screen.getByText(/Los buscas seguirán disponibles de forma individual/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
 
     await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalledWith("team_uci"));
-    expect(screen.queryByRole("button", { name: /UCI · 9001/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("UCI · 9001")).not.toBeInTheDocument();
     expect(screen.getByText("B-001")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Todas las buscas" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("creates a team and adds an individual Busca as a member", async () => {
-    const created = { id: "team_new", name: "Quirófano", displayId: "9010" };
+  it("shows the members panel for a new team without leaving /beeper/new", async () => {
+    setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+
+    expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledWith({ name: "Quirófano", displayId: "9010" });
+    expect(screen.getByRole("heading", { name: "Equipo Quirófano · 9010" })).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Editar equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Eliminar equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Buscar busca")).toHaveFocus());
+    // ToastProvider dedupes identical toasts, so "exactly once" cannot be asserted from the DOM.
+    expect(screen.getByText("Equipo guardado.")).toBeInTheDocument();
+    expectPathname("/beeper/new");
+  });
+
+  it("adds an existing busca to the new team from the database", async () => {
     setupWindowApi({
-      addBeeperTeam: vi.fn().mockResolvedValue(created),
+      addBeeperTeam: vi.fn().mockResolvedValue(newTeam),
       setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_new", beeperId: "bsc_001" }])
     });
-    renderPage();
-    await screen.findByText("B-001");
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
 
-    fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
-    fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
-    fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
-
-    await waitFor(() => expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledWith({ name: "Quirófano", displayId: "9010" }));
-    fireEvent.click(screen.getByText("Miembros del equipo"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /B-001/i }));
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
 
     await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalledWith("team_new", ["bsc_001"]));
+    expect(await screen.findByRole("button", { name: "Quitar del equipo B-001 · Ana García" })).toBeInTheDocument();
+    expectPathname("/beeper/new");
   });
 
-  it("opens create form when 'Nueva busca' is clicked", async () => {
+  it("adds an imported busca to the new team", async () => {
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+      addBeeperTeam: vi.fn().mockResolvedValue(newTeam),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_new", beeperId: "ibsc_00000001" }])
+    });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "5001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo 5001 · Principal, Buscas_Facultativos fila 2" }));
+
+    await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalledWith("team_new", ["ibsc_00000001"]));
+  });
+
+  it("creates a busca for the new team, links it and stays on /beeper/new without a toast", async () => {
+    setupWindowApi({
+      addBeeperTeam: vi.fn().mockResolvedValue(newTeam),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_new", beeperId: "bsc_003" }])
+    });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+    const form = screen.getByRole("form", { name: "Nuevo busca en Quirófano · 9010" });
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalledWith("team_new", ["bsc_003"]));
+    expect(await screen.findByText("B-003 creado y añadido al equipo Quirófano · 9010")).toBeInTheDocument();
+    expectPathname("/beeper/new");
+    expect(screen.queryByText("Busca guardado.")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" })).toHaveFocus());
+  });
+
+  it("cancelling the team-scoped busca form keeps the members panel", async () => {
+    setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.getByRole("heading", { name: "Buscas del equipo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nuevo equipo" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" })).toHaveFocus());
+  });
+
+  it("focuses the member search after saving a team even if animation frames run immediately", async () => {
+    // An animation frame queued while saving would fire before the members panel is
+    // committed; the focus must come from the commit that mounts the input.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    try {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+
+      expect(screen.getByLabelText("Buscar busca")).toHaveFocus();
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
+  it("'Listo' leaves the members panel for /beeper", async () => {
+    setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+
+    fireEvent.click(screen.getByRole("button", { name: "Listo" }));
+
+    expectPathname("/beeper");
+  });
+
+  it("disables 'Listo' while a busca form is open", async () => {
+    setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+    const done = screen.getByRole("button", { name: "Listo" });
+    expect(done).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+
+    expect(done).toBeDisabled();
+    expect(done).toHaveAccessibleDescription("Crea o cancela el busca para seguir con el equipo.");
+  });
+
+  it("keeps 'Listo' disabled and ignores Escape while a member update is saving", async () => {
+    let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
+    setupWindowApi({
+      addBeeperTeam: vi.fn().mockResolvedValue(newTeam),
+      setBeeperTeamMembers: vi.fn().mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }))
+    });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    const add = screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" });
+    fireEvent.click(add);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Listo" })).toBeDisabled());
+    fireEvent.keyDown(add, { key: "Escape" });
+    expectPathname("/beeper/new");
+
+    resolveSave([{ teamId: "team_new", beeperId: "bsc_001" }]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Listo" })).toBeEnabled());
+  });
+
+  it("Escape on a members-panel button leaves to /beeper, but not from the member search box", async () => {
+    setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+    renderPage("/beeper/new");
+    await saveNewTeamFromChooser();
+
+    fireEvent.keyDown(screen.getByLabelText("Buscar busca"), { key: "Escape" });
+    expectPathname("/beeper/new");
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Listo" }), { key: "Escape" });
+    expectPathname("/beeper");
+  });
+
+  it("restores focus to the trigger even when the animation frame fires before React commits", async () => {
+    // Run animation frames immediately, i.e. before the commit that closes the form
+    // and re-enables the (disabled-while-open) trigger.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    try {
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+        setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_003" }])
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+      createBuscaFromTeam("B-003");
+
+      await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" })).toHaveFocus());
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
+  it("creates an individual Busca from a team and links it", async () => {
+    const created = { ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" };
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue(created),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_003" }])
+    });
     renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
-    expect(screen.getByRole("form", { name: /Nueva busca/i })).toBeInTheDocument();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+
+    await waitFor(() => expect(window.hospitalDirectory.setBeeperTeamMembers).toHaveBeenCalledWith("team_uci", ["bsc_003"]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" })).toHaveFocus());
+  });
+
+  it("announces a busca created from a team and added to it", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_003" }])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+
+    expect(await screen.findByText("B-003 creado y añadido al equipo UCI · 9001")).toHaveAttribute("role", "status");
+  });
+
+  it("keeps a newly created Busca available when its team link fails", async () => {
+    const created = { ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" };
+    const setMembers = vi.fn().mockRejectedValueOnce(new Error("link failed")).mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "bsc_003" }]);
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue(created),
+      setBeeperTeamMembers: setMembers
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+    expect(await screen.findByRole("alert")).toHaveTextContent("El busca se creó");
+    expect(screen.getAllByText("B-003")).not.toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-003" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-003 · Ana García" }));
+    await waitFor(() => expect(setMembers).toHaveBeenLastCalledWith("team_uci", ["bsc_003"]));
+    expect(window.hospitalDirectory.addBeeper).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces the earlier creation announcement when a later scoped create fails to link", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn()
+        .mockResolvedValueOnce({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" })
+        .mockResolvedValueOnce({ ...mockRecords[0], id: "bsc_004", deviceNumber: "B-004" }),
+      setBeeperTeamMembers: vi.fn()
+        .mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "bsc_003" }])
+        .mockRejectedValueOnce(new Error("link failed"))
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+    await screen.findByText("B-003 creado y añadido al equipo UCI · 9001");
+
+    createBuscaFromTeam("B-004");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("El busca se creó");
+    expect(screen.queryByText("B-003 creado y añadido al equipo UCI · 9001")).not.toBeInTheDocument();
+  });
+
+  it("clears an earlier member error when a scoped create succeeds", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn()
+        .mockRejectedValueOnce(new Error("save failed"))
+        .mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "bsc_003" }])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
+
+    createBuscaFromTeam("B-003");
+
+    await screen.findByText("B-003 creado y añadido al equipo UCI · 9001");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("opens the busca form from the chooser's 'Nuevo busca'", async () => {
+    renderPage("/beeper/new");
+    await openBuscaForm();
+    expect(screen.getByRole("form", { name: /Nuevo busca/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/número de busca/i)).toBeInTheDocument();
   });
 
-  it("cancels form without saving", async () => {
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+  it("cancelling the busca form returns to the chooser without saving", async () => {
+    renderPage("/beeper/new");
+    await openBuscaForm();
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
-    expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: /Nuevo busca/i })).not.toBeInTheDocument();
+    expect(window.hospitalDirectory.addBeeper).not.toHaveBeenCalled();
+    expectPathname("/beeper/new");
+    const heading = screen.getByRole("heading", { name: "Gestión Buscas" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
   });
 
   it("creates a new beeper on form submit", async () => {
@@ -446,11 +952,10 @@ describe("BeepersPage", () => {
       shift: "noche"
     };
     setupWindowApi({ addBeeper: vi.fn().mockResolvedValue(newRecord) });
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    renderPage("/beeper/new");
+    await openBuscaForm();
 
-    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    const form = screen.getByRole("form", { name: /Nuevo busca/i });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
     // Use the form-department input directly to avoid table column header ambiguity
@@ -472,15 +977,15 @@ describe("BeepersPage", () => {
       );
       expect(screen.getByText("B-003")).toBeInTheDocument();
     });
+    await waitFor(() => expectPathname("/beeper"));
   });
 
   it("keeps the default shift when creating from the main fields", async () => {
     setupWindowApi({ addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], deviceNumber: "B-003" }) });
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    renderPage("/beeper/new");
+    await openBuscaForm();
 
-    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    const form = screen.getByRole("form", { name: /Nuevo busca/i });
     expect((screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement).open).toBe(false);
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
@@ -503,11 +1008,10 @@ describe("BeepersPage", () => {
           )
         )
     });
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    renderPage("/beeper/new");
+    await openBuscaForm();
 
-    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    const form = screen.getByRole("form", { name: /Nuevo busca/i });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
@@ -560,7 +1064,7 @@ describe("BeepersPage", () => {
     await waitFor(() => screen.getByText("B-001"));
     fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-001/i }));
     expect(screen.getByText(/Confirmar eliminación/i)).toBeInTheDocument();
-    expect(screen.getByText(/Estás seguro de que quieres eliminar la busca/i)).toBeInTheDocument();
+    expect(screen.getByText(/Estás seguro de que quieres eliminar el busca/i)).toBeInTheDocument();
   });
 
   it("deletes a record after confirm", async () => {
@@ -575,6 +1079,82 @@ describe("BeepersPage", () => {
       expect(window.hospitalDirectory.deleteBeeper).toHaveBeenCalledWith("bsc_001");
       expect(screen.queryByText("B-001")).not.toBeInTheDocument();
     });
+  });
+
+  it("drops the 'El busca se creó…' error when that busca is deleted", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn().mockRejectedValue(new Error("link failed")),
+      deleteBeeper: vi.fn().mockResolvedValue(undefined)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+    expect(await screen.findByRole("alert")).toHaveTextContent("El busca se creó");
+
+    fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-003/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Eliminar$/i }));
+
+    await waitFor(() => expect(window.hospitalDirectory.deleteBeeper).toHaveBeenCalledWith("bsc_003"));
+    await waitFor(() => expect(screen.queryByText(/El busca se creó/)).not.toBeInTheDocument());
+  });
+
+  it("drops the 'creado y añadido' announcement when that busca is deleted", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_003" }]),
+      deleteBeeper: vi.fn().mockResolvedValue(undefined)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    createBuscaFromTeam("B-003");
+    await screen.findByText("B-003 creado y añadido al equipo UCI · 9001");
+
+    fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-003/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Eliminar$/i }));
+
+    await waitFor(() => expect(screen.queryByText(/creado y añadido/)).not.toBeInTheDocument());
+  });
+
+  const deleteBuscaB002 = async () => {
+    fireEvent.click(screen.getByRole("button", { name: /eliminar busca B-002/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Eliminar$/i }));
+    await waitFor(() => expect(window.hospitalDirectory.deleteBeeper).toHaveBeenCalledWith("bsc_002"));
+  };
+
+  it("shows the empty-team copy after deleting the team's only member busca", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_002" }]),
+      deleteBeeper: vi.fn().mockResolvedValue(undefined)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    expect(screen.queryByText(/Este equipo aún no tiene buscas\./)).not.toBeInTheDocument();
+
+    await deleteBuscaB002();
+
+    expect(await screen.findByText(/Este equipo aún no tiene buscas\./)).toBeInTheDocument();
+  });
+
+  it("does not send a deleted busca's id when updating the team's members afterwards", async () => {
+    const setMembers = vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_001" }]);
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_002" }]),
+      deleteBeeper: vi.fn().mockResolvedValue(undefined),
+      setBeeperTeamMembers: setMembers
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    await deleteBuscaB002();
+
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
+
+    await waitFor(() => expect(setMembers).toHaveBeenCalledWith("team_uci", ["bsc_001"]));
   });
 
   it("closes confirm dialog on cancel", async () => {
@@ -628,33 +1208,6 @@ describe("BeepersPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
       expect(screen.getByText("B-001")).toBeInTheDocument();
-    });
-  });
-
-  it("resets to the first page when the team filter changes", async () => {
-    const records = makeRecords(21);
-    setupWindowApi({
-      listBeepers: vi.fn().mockResolvedValue(records),
-      listBeeperTeams: vi.fn().mockResolvedValue([
-        { id: "team_alpha", name: "Alfa", displayId: "9001" },
-        { id: "team_beta", name: "Beta", displayId: "9002" }
-      ]),
-      listBeeperTeamMemberships: vi.fn().mockResolvedValue([
-        ...records.slice(0, 11).map((record) => ({ teamId: "team_alpha", beeperId: record.id })),
-        ...records.slice(10).map((record) => ({ teamId: "team_beta", beeperId: record.id }))
-      ])
-    });
-    renderPage();
-
-    await screen.findByText("B-001");
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
-    expect(await screen.findByText("B-011")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Alfa · 9001/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
-      expect(screen.getAllByText("B-001").some((item) => item.closest("table"))).toBe(true);
     });
   });
 
@@ -754,31 +1307,17 @@ describe("BeepersPage", () => {
 
   it("prevents Cancel and form dismissal while save is in-flight", async () => {
     let resolveSave!: (value: BeeperRecord) => void;
-    const newRecord: BeeperRecord = {
-      id: "bsc_003",
-      deviceNumber: "B-003",
-      assignedTo: "Marta Ruiz",
-      department: "Planta 2",
-      role: "Auxiliar",
-      shift: "noche"
-    };
-    const slowAdd = new Promise<BeeperRecord>((resolve) => {
+    const slowUpdate = new Promise<BeeperRecord>((resolve) => {
       resolveSave = resolve;
     });
-    setupWindowApi({ addBeeper: vi.fn().mockReturnValueOnce(slowAdd) });
+    setupWindowApi({ updateBeeper: vi.fn().mockReturnValueOnce(slowUpdate) });
 
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
 
-    // Open the create form
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
-    const form = screen.getByRole("form", { name: /Nueva busca/i });
-
-    // Fill out required fields
-    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
-    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
-    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
-    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    // Open the edit form for B-001
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+    const form = screen.getByRole("form", { name: /Editar busca/i });
 
     // Submit — save is now in-flight
     fireEvent.submit(form);
@@ -792,24 +1331,20 @@ describe("BeepersPage", () => {
 
     // Clicking the disabled Cancel button must not dismiss the form
     fireEvent.click(cancelButton);
-    expect(screen.getByRole("form", { name: /Nueva busca/i })).toBeInTheDocument();
-
-    // "Nueva busca" header button must be disabled while saving
-    expect(screen.getByRole("button", { name: /nueva busca/i })).toBeDisabled();
+    expect(screen.getByRole("form", { name: /Editar busca/i })).toBeInTheDocument();
 
     // Table row action buttons must be disabled while saving
-    expect(screen.getByRole("button", { name: /editar busca B-001/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /eliminar busca B-001/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /editar busca B-002/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /eliminar busca B-002/i })).toBeDisabled();
 
-    // Let the save complete — form should close and record should appear
-    resolveSave(newRecord);
+    // Let the save complete — form should close
+    resolveSave({ ...mockRecords[0], assignedTo: "Ana García Ruiz" });
     await waitFor(() => {
-      expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
-      expect(screen.getByText("B-003")).toBeInTheDocument();
+      expect(screen.queryByRole("form", { name: /Editar busca/i })).not.toBeInTheDocument();
     });
 
     // Controls must be re-enabled after save
-    expect(screen.getByRole("button", { name: /nueva busca/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /editar busca B-002/i })).not.toBeDisabled();
   });
 
   it("prevents double-submit on rapid form submit events", async () => {
@@ -828,12 +1363,9 @@ describe("BeepersPage", () => {
     const addBeeperMock = vi.fn().mockReturnValueOnce(slowAdd);
     setupWindowApi({ addBeeper: addBeeperMock });
 
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-
-    // Open the create form
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
-    const form = screen.getByRole("form", { name: /Nueva busca/i });
+    renderPage("/beeper/new");
+    await openBuscaForm();
+    const form = screen.getByRole("form", { name: /Nuevo busca/i });
 
     // Fill required fields
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-004" } });
@@ -856,7 +1388,7 @@ describe("BeepersPage", () => {
     // Resolve the save and confirm the record appears
     resolveSave(newRecord);
     await waitFor(() => {
-      expect(screen.queryByRole("form", { name: /Nueva busca/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("form", { name: /Nuevo busca/i })).not.toBeInTheDocument();
       expect(screen.getByText("B-004")).toBeInTheDocument();
     });
 
@@ -1148,9 +1680,8 @@ describe("BeepersPage", () => {
   });
 
   it("focuses the first form field when the create form opens", async () => {
-    renderPage();
-    await waitFor(() => screen.getByText("B-001"));
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    renderPage("/beeper/new");
+    await openBuscaForm();
     await waitFor(() => {
       const firstInput = screen.getByLabelText(/número de busca/i);
       expect(document.activeElement).toBe(firstInput);
@@ -1167,12 +1698,12 @@ describe("BeepersPage", () => {
     });
   });
 
-  it("refocuses first form field when switching from create to edit while form is already open", async () => {
+  it("refocuses first form field when switching between edit targets while the form is already open", async () => {
     renderPage();
     await waitFor(() => screen.getByText("B-001"));
 
-    // Open create form — focus lands on first field
-    fireEvent.click(screen.getByRole("button", { name: /nueva busca/i }));
+    // Open the edit form — focus lands on first field
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
     });
@@ -1181,11 +1712,12 @@ describe("BeepersPage", () => {
     screen.getByLabelText(/asignado a/i).focus();
     expect(document.activeElement).not.toBe(screen.getByLabelText(/número de busca/i));
 
-    // Switch to editing B-001 while form is still open — focus must return to first field
-    fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+    // Switch to editing B-002 while the form is still open — focus must return to first field
+    fireEvent.click(screen.getByRole("button", { name: /editar busca B-002/i }));
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByLabelText(/número de busca/i));
     });
+    expect(screen.getByLabelText(/número de busca/i)).toHaveValue("B-002");
   });
 
   it("search label and placeholder describe visible searchable fields", async () => {
@@ -1194,5 +1726,619 @@ describe("BeepersPage", () => {
     const searchInput = screen.getByLabelText(/Buscar buscas/i);
     expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/titular/i));
     expect(searchInput).toHaveAttribute("placeholder", expect.stringMatching(/departamento/i));
+  });
+
+  it("shows no chooser, no header 'Nuevo busca' button and no create option on /beeper", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+
+    expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nuevo equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nuevo busca" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
+  });
+
+  it("lists only existing teams in the select, with an 'Elige un equipo' placeholder", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await screen.findByText("B-001");
+    fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+
+    const options = within(screen.getByLabelText("Equipo a gestionar")).getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual(["Elige un equipo", "UCI · 9001"]);
+    expect(screen.queryByLabelText(/Nombre del equipo/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Buscar busca")).not.toBeInTheDocument();
+  });
+
+  it("points to 'Gestión Buscas' when there are no teams", async () => {
+    renderPage();
+    await screen.findByText("B-001");
+
+    expect(screen.getByText(/Crea uno desde/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("href", "/beeper/new");
+    expect(screen.queryByText(/menú lateral/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gestionar equipos" })).not.toBeInTheDocument();
+  });
+
+  it("opens on a chooser at /beeper/new, focuses its heading and hides the list", async () => {
+    renderPage("/beeper/new");
+
+    const heading = await screen.findByRole("heading", { name: "Gestión Buscas" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Nuevo busca" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Buscar buscas/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gestionar equipos" })).not.toBeInTheDocument();
+  });
+
+  it("opens the team form in create mode from the chooser and focuses its name field", async () => {
+    renderPage("/beeper/new");
+    await openTeamCreateForm();
+
+    expect(screen.getByRole("form", { name: "Nuevo equipo" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveFocus());
+    expect(screen.queryByRole("button", { name: "Eliminar equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Equipo a gestionar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Nuevo busca" })).not.toBeInTheDocument();
+  });
+
+  it("cancelling the team form returns to the chooser", async () => {
+    renderPage("/beeper/new");
+    await openTeamCreateForm();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expectPathname("/beeper/new");
+    expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Gestión Buscas" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(window.hospitalDirectory.addBeeperTeam).not.toHaveBeenCalled();
+  });
+
+  it("returns to /beeper from the chooser with Cancelar or Escape", async () => {
+    renderPage("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    expectPathname("/beeper");
+
+    cleanup();
+    renderPage("/beeper/new");
+    const heading = await screen.findByRole("heading", { name: "Gestión Buscas" });
+    fireEvent.keyDown(heading, { key: "Escape" });
+    expectPathname("/beeper");
+  });
+
+  it("returns to /beeper after saving a new busca", async () => {
+    setupWindowApi({ addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }) });
+    renderPage("/beeper/new");
+    await openBuscaForm();
+    const form = screen.getByRole("form", { name: "Nuevo busca" });
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => expectPathname("/beeper"));
+  });
+
+  it("shows a success toast after saving a busca from the chooser", async () => {
+    setupWindowApi({ addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }) });
+    renderPage("/beeper/new");
+    await openBuscaForm();
+    const form = screen.getByRole("form", { name: "Nuevo busca" });
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.submit(form);
+
+    expect(await screen.findByText("Busca guardado.")).toBeInTheDocument();
+  });
+
+  it("shows no empty-state panel on /beeper/new", async () => {
+    setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
+    renderPage("/beeper/new");
+
+    await screen.findByRole("heading", { name: "Gestión Buscas" });
+    expect(screen.queryByText("Sin registros")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No hay buscas registrados/)).not.toBeInTheDocument();
+  });
+
+  it("offers a link to /beeper/new when there are no buscas, but not when a search finds nothing", async () => {
+    setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
+    renderPage();
+
+    expect(await screen.findByText("No hay buscas registrados. Crea el primer busca o un equipo.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Crear busca o equipo" })).toHaveAttribute("href", "/beeper/new");
+
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "zzz" } });
+    expect(await screen.findByText("Sin resultados")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Crear busca o equipo" })).not.toBeInTheDocument();
+  });
+
+  describe("page title per state", () => {
+    it("is 'Registro de Buscas' on /beeper, with the busca form as an h3", async () => {
+      renderPage();
+      await screen.findByText("B-001");
+      expectSinglePageTitle("Registro de Buscas");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Editar busca", level: 3 })).toBeInTheDocument();
+    });
+
+    it("is 'Gestión Buscas' on the chooser", async () => {
+      renderPage("/beeper/new");
+
+      await screen.findByRole("button", { name: "Nuevo equipo" });
+      expectSinglePageTitle("Gestión Buscas");
+      expect(screen.queryByRole("group", { name: /Equipo/ })).not.toBeInTheDocument();
+    });
+
+    it("becomes the busca form title, and the chooser heading goes away", async () => {
+      renderPage("/beeper/new");
+      await openBuscaForm();
+
+      expectSinglePageTitle("Nuevo busca");
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      // Same size as the chooser's title, not smaller.
+      expect(screen.getByRole("heading", { name: "Nuevo busca", level: 2 })).toHaveClass("text-xl");
+    });
+
+    it("becomes 'Nuevo equipo' on the team form, and the chooser heading goes away", async () => {
+      renderPage("/beeper/new");
+      await openTeamCreateForm();
+
+      expectSinglePageTitle("Nuevo equipo");
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: /Equipo/ })).not.toBeInTheDocument();
+    });
+
+    it("becomes the team heading on the members panel, with h3 subsections", async () => {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+
+      expectSinglePageTitle("Equipo Quirófano · 9010");
+      expect(screen.getByRole("group", { name: "Equipo Quirófano · 9010" })).toContainElement(screen.getByLabelText("Buscar busca"));
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Buscas del equipo", level: 3 })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
+    });
+
+    it("stays the team heading while a team-scoped busca form is open", async () => {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+      fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+
+      expectSinglePageTitle("Equipo Quirófano · 9010");
+      const formTitle = screen.getByRole("heading", { name: "Nuevo busca en Quirófano · 9010", level: 3 });
+      expect(formTitle).toHaveClass("text-lg");
+      expect(formTitle).not.toHaveClass("text-xl");
+    });
+
+    it("comes back to 'Gestión Buscas' when a form is cancelled to the chooser", async () => {
+      renderPage("/beeper/new");
+      await openBuscaForm();
+      fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+
+      expectSinglePageTitle("Gestión Buscas");
+    });
+  });
+
+  describe("state panel headings", () => {
+    it("titles the empty state with an h3 under the single page h2", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
+      renderPage();
+
+      await screen.findByText("No hay buscas registrados. Crea el primer busca o un equipo.");
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Sin registros", level: 3 })).toBeInTheDocument();
+    });
+
+    it("titles the load error with an h3 under the single page h2", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockRejectedValue(new Error("read failed")) });
+      renderPage();
+
+      await screen.findByRole("alert");
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Error al cargar", level: 3 })).toBeInTheDocument();
+    });
+
+    it("titles the load error on /beeper/new 'Gestión Buscas'", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockRejectedValue(new Error("read failed")) });
+      renderPage("/beeper/new");
+
+      await screen.findByRole("alert");
+      expectSinglePageTitle("Gestión Buscas");
+      expect(screen.queryByRole("heading", { name: "Registro de Buscas" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("focus after deleting a team", () => {
+    const deleteSelectedTeam = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+      await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalled());
+    };
+
+    it("moves focus to the team select after deleting one of several teams", async () => {
+      const urgencias: BeeperTeam = { id: "team_urg", name: "Urgencias", displayId: "9002" };
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, urgencias]),
+        deleteBeeperTeam: vi.fn().mockResolvedValue(undefined)
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+
+      await deleteSelectedTeam();
+
+      await waitFor(() => expect(screen.getByLabelText("Equipo a gestionar")).toHaveFocus());
+      expect(screen.getByLabelText("Equipo a gestionar")).toBeEnabled();
+    });
+
+    it("moves focus to the 'Equipos' heading after deleting the last team", async () => {
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        deleteBeeperTeam: vi.fn().mockResolvedValue(undefined)
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+
+      await deleteSelectedTeam();
+
+      await waitFor(() => expect(screen.getByRole("heading", { name: "Equipos" })).toHaveFocus());
+    });
+
+    it("returns focus to the 'Eliminar equipo' trigger when the delete fails", async () => {
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        deleteBeeperTeam: vi.fn().mockRejectedValue(new Error("delete failed"))
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+      const trigger = screen.getByRole("button", { name: "Eliminar equipo" });
+      // A real click focuses the button; fireEvent.click does not.
+      trigger.focus();
+
+      fireEvent.click(trigger);
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+
+      await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveFocus());
+    });
+  });
+
+  describe("team deletion guard", () => {
+    it("blocks team deletion while a member update is saving", async () => {
+      let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        setBeeperTeamMembers: vi.fn().mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }))
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeDisabled());
+      resolveSave([{ teamId: "team_uci", beeperId: "bsc_001" }]);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeEnabled());
+    });
+  });
+
+  describe("team pills", () => {
+    const urgencias: BeeperTeam = { id: "team_urg", name: "Urgencias", displayId: "9002" };
+    const seedMembers = (overrides: Partial<typeof window.hospitalDirectory> = {}) =>
+      setupWindowApi({
+        listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+        listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, urgencias]),
+        listBeeperTeamMemberships: vi.fn().mockResolvedValue([
+          { teamId: "team_uci", beeperId: "bsc_001" },
+          { teamId: "team_urg", beeperId: "bsc_001" },
+          { teamId: "team_uci", beeperId: "ibsc_00000001" }
+        ]),
+        ...overrides
+      });
+    const rowOf = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return within(row);
+    };
+
+    it("shows every team of a manual busca as a non-interactive pill", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("B-001");
+
+      const row = rowOf("B-001");
+      const pill = row.getByText("UCI · 9001");
+      expect(row.getByText("Urgencias · 9002")).toBeInTheDocument();
+      const list = row.getByRole("list", { name: "Equipos" });
+      expect(within(list).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["UCI · 9001", "Urgencias · 9002"]);
+      // Keeps "name · number" together when the column is narrow.
+      expect(pill).toHaveClass("whitespace-nowrap");
+      expect(within(list).queryByRole("button")).not.toBeInTheDocument();
+      expect(row.queryByRole("button", { name: /UCI · 9001/ })).not.toBeInTheDocument();
+      expect(row.queryByRole("link", { name: /UCI · 9001/ })).not.toBeInTheDocument();
+      fireEvent.click(pill);
+      expect(window.hospitalDirectory.setBeeperTeamMembers).not.toHaveBeenCalled();
+      expect(screen.queryByRole("form")).not.toBeInTheDocument();
+      expect(rowOf("B-001").getByText("UCI · 9001")).toBeInTheDocument();
+    });
+
+    it("shows the team pill on an imported busca row", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("5001");
+
+      const row = rowOf("5001");
+      expect(row.getByText("UCI · 9001")).toBeInTheDocument();
+      expect(row.queryByText("Urgencias · 9002")).not.toBeInTheDocument();
+    });
+
+    it("puts the pills right under the holder, before Horario and Notas, on an imported row", async () => {
+      seedMembers({
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], schedule: "Mañanas", notes: "Guardia" },
+          mockImportedRecords[1]
+        ])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      const row = rowOf("5001");
+      const list = row.getByRole("list", { name: "Equipos" });
+      const holder = row.getByText("Principal");
+      expect(holder.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(list.compareDocumentPosition(row.getByText(/Horario:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(list.compareDocumentPosition(row.getByText(/Notas:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("shows no pill and no placeholder on a busca without teams", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("B-002");
+
+      const row = rowOf("B-002");
+      expect(row.queryByText(/· 90/)).not.toBeInTheDocument();
+      expect(row.queryByRole("list", { name: "Equipos" })).not.toBeInTheDocument();
+      expect(row.getByText("Luis Pérez").closest("td")?.textContent).toBe("Luis Pérez");
+    });
+
+    it("drops the pill when the busca is removed from the team", async () => {
+      seedMembers({ setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "ibsc_00000001" }]) });
+      renderPage();
+      await openTeamManager("team_uci");
+      expect(rowOf("B-001").getByText("UCI · 9001")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Quitar del equipo B-001 · Ana García" }));
+
+      await waitFor(() => expect(rowOf("B-001").queryByText("UCI · 9001")).not.toBeInTheDocument());
+      expect(rowOf("B-001").getByText("Urgencias · 9002")).toBeInTheDocument();
+    });
+
+    it("drops the pill when its team is deleted", async () => {
+      seedMembers({ deleteBeeperTeam: vi.fn().mockResolvedValue(undefined) });
+      renderPage();
+      await openTeamManager("team_uci");
+      expect(rowOf("5001").getByText("UCI · 9001")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+
+      await waitFor(() => expect(rowOf("5001").queryByText("UCI · 9001")).not.toBeInTheDocument());
+      expect(rowOf("B-001").queryByText("UCI · 9001")).not.toBeInTheDocument();
+      expect(rowOf("B-001").getByText("Urgencias · 9002")).toBeInTheDocument();
+    });
+  });
+
+  describe("holder display case", () => {
+    const rowOf = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return within(row);
+    };
+    const rowOfDevice = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return row;
+    };
+    const shouting: BeeperRecord = { ...mockRecords[0], id: "bsc_010", deviceNumber: "B-010", assignedTo: "FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS" };
+
+    it("shows a manual holder with the first letter of each word capitalized", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Farmacia Urgenci Hector Alonso Farmaceutico Urgencias")).toBeInTheDocument();
+      expect(rowOf("B-010").queryByText("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS")).not.toBeInTheDocument();
+    });
+
+    it("normalizes an imported holder name or holder type, and keeps the placeholder", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], name: "MECANICO MECANICO DE GASES" },
+          { ...mockImportedRecords[1], holderType: undefined }
+        ])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      expect(rowOf("5001").getByText("Mecanico Mecanico De Gases")).toBeInTheDocument();
+      expect(rowOf("5002").getByText("—", { selector: "span" })).toBeInTheDocument();
+      cleanup();
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], holderType: "RESIDENTE" }])
+      });
+      renderPage();
+      await screen.findByText("5001");
+      expect(rowOf("5001").getByText("Residente")).toBeInTheDocument();
+    });
+
+    it("capitalizes accented words", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "ÁNGEL PÉREZ" }]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Ángel Pérez")).toBeInTheDocument();
+    });
+
+    it("starts a new word after spaces, hyphens, dots, slashes and parentheses, but not after digits or apostrophes", async () => {
+      const holders = [
+        ["B-011", "M.INTERNA-INFECCIOSOS", "M.Interna-Infecciosos"],
+        ["B-012", "D'ANGELO SANTI", "D'angelo Santi"],
+        ["B-013", "MECANICO 2DA GUARDIA", "Mecanico 2da Guardia"],
+        ["B-014", "(URGENCIAS) JEFE/A", "(Urgencias) Jefe/A"],
+        ["B-015", "Endocrino Guardia Endocrino Guardia", "Endocrino Guardia Endocrino Guardia"],
+        ["B-016", "ÁNGEL PÉREZ", "Ángel Pérez"],
+        // Decomposed accents (letter + combining mark) must not split the word.
+        ["B-017", "A\u0301NGEL PE\u0301REZ", "A\u0301ngel Pe\u0301rez"],
+        ["B-018", "JOSE\u0301 MARI\u0301A", "Jose\u0301 Mari\u0301a"],
+        ["B-019", "İSTANBUL", "I\u0307stanbul"],
+        ["B-020", "D\u2019ANGELO SANTI", "D\u2019angelo Santi"]
+      ] as const;
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
+      });
+      renderPage();
+      await screen.findByText("B-011");
+
+      for (const [deviceNumber, , expected] of holders) {
+        expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
+      }
+    });
+
+    it("shows an already capitalized holder unchanged", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "Ángel Pérez" }]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Ángel Pérez", { selector: "span" })).toBeInTheDocument();
+    });
+
+    const openMemberPanel = async (readyText: string) => {
+      await screen.findByText(readyText);
+      fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+      fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+    };
+
+    it("shows the holder title-cased in the members panel row and its toggle's name", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("B-010");
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-010" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
+      expect(within(list).queryByText(/LUIS PEREZ GUARDIA/)).not.toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Luis Perez Guardia" })).toBeInTheDocument();
+    });
+
+    it("finds a holder in the members panel by lowercase and uppercase queries", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("B-010");
+
+      for (const query of ["luis perez", "LUIS PEREZ"]) {
+        fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: query } });
+        expect(within(screen.getByRole("list", { name: "Buscas que coinciden" })).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
+      }
+    });
+
+    it("shows a stored holder that reads 'Sin titular' the same in the table and the members panel", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "Sin titular" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("B-010");
+      expect(rowOf("B-010").getByText("Sin Titular")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-010" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Sin Titular/)).toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Sin Titular" })).toBeInTheDocument();
+    });
+
+    it("keeps the 'Sin titular' fallback as is for a busca without a holder in the members panel", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], name: undefined, holderType: undefined }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("5001");
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "5001" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Sin titular/)).toBeInTheDocument();
+      expect(within(list).queryByText(/Sin Titular/)).not.toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: /^Añadir al equipo 5001 · Sin titular,/ })).toBeInTheDocument();
+    });
+
+    it("keeps the raw holder in the edit form", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca B-010/i }));
+
+      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS");
+    });
+
+    it("keeps the raw holder in the edit form of an imported busca", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], name: "MECANICO DE GASES" }])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca 5001/i }));
+
+      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("MECANICO DE GASES");
+    });
+
+    it("finds a holder by lowercase and uppercase queries", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting, mockRecords[1]]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      for (const query of ["farmacia urgenci", "FARMACIA URGENCI"]) {
+        fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: query } });
+        await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
+        expect(screen.getByText("B-010")).toBeInTheDocument();
+      }
+    });
+
+    it("only transforms the holder column, not Rol or Departamento", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, role: "UCI", department: "URGENCIAS" }]),
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], name: "MECANICO DE GASES", category: "UCI", department: "URGENCIAS" }
+        ])
+      });
+      renderPage();
+      await screen.findByText("B-010");
+
+      for (const deviceNumber of ["B-010", "5001"]) {
+        const cells = within(rowOfDevice(deviceNumber)).getAllByRole("cell");
+        expect(cells[1]).toHaveTextContent(/^UCI$/);
+        expect(cells[2]).toHaveTextContent(/^URGENCIAS$/);
+      }
+    });
   });
 });

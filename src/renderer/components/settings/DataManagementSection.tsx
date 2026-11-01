@@ -345,7 +345,7 @@ export const DataManagementSection = () => {
       if (result.beeperImportStatus?.status === "partial-failure") {
         pushToast({
           type: "warning",
-          message: "Contactos importados; no se pudieron guardar las buscas."
+          message: "Contactos importados; no se pudieron guardar los buscas."
         });
         return;
       }
@@ -481,9 +481,9 @@ export const DataManagementSection = () => {
       const replacement = preview.detectedType === "contacts"
         ? preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`
         : preview.detectedType === "combined"
-          ? `${preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`}${preview.currentBeeperRecordCount === null ? " Las buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`}`
+          ? `${preview.currentRecordCount === null ? " El directorio actual no se puede leer." : ` Reemplazará ${preview.currentRecordCount} contactos actuales.`}${preview.currentBeeperRecordCount === null ? " Los buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`}`
           : preview.detectedType === "beepers"
-            ? preview.currentBeeperRecordCount === null ? " Las buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`
+            ? preview.currentBeeperRecordCount === null ? " Los buscas actuales no se pueden leer." : ` Reemplazará ${preview.currentBeeperRecordCount} buscas actuales.`
             : "";
       return {
         title: "Revisar importación JSON",
@@ -520,7 +520,7 @@ export const DataManagementSection = () => {
         ? " Formato incierto: revisa la vista previa."
         : "";
       const beeperReplacement = preview.incomingBeeperRecordCount > 0
-        ? ` Se importarán ${preview.incomingBeeperRecordCount} ${preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán ${preview.currentBeeperRecordCount ?? "las"} ${preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.`
+        ? ` Se importarán ${preview.incomingBeeperRecordCount} ${preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán ${preview.currentBeeperRecordCount ?? "los"} ${preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.`
         : "";
 
       return {

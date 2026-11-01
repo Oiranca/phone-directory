@@ -1613,7 +1613,7 @@ describe("contacts:export-dataset — sensitive-data warning", () => {
     expect(showMessageBoxMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Exportar datos sensibles",
-        message: "El archivo exportado contiene datos sensibles de la agenda y las buscas."
+        message: "El archivo exportado contiene datos sensibles de la agenda y los buscas."
       })
     );
     expect(showSaveDialogMock).toHaveBeenCalledTimes(1);

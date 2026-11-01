@@ -54,6 +54,10 @@ export const router = createHashRouter([
         element: withSuspense(() => import("../pages/BeepersPage").then((mod) => ({ default: mod.BeepersPage })))
       },
       {
+        path: "beeper/new",
+        element: withSuspense(() => import("../pages/BeepersPage").then((mod) => ({ default: mod.BeepersPage })))
+      },
+      {
         path: "deduplicate",
         element: <Navigate to="/" replace />
       },
