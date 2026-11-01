@@ -62,24 +62,27 @@ const validateTeamField = (value: string, label: string): string => {
 
 const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayId}`;
 
+// Spanish connectors that stay lowercase inside a displayed name (never as its first word).
+const LOWERCASE_CONNECTORS = new Set(["de", "del", "la"]);
+
 // Display only: lowercases the text and uppercases the first letter of every word, whatever
-// the case of the source data. A word starts at the beginning or after any character that is
-// not a letter, combining mark, digit or apostrophe (spaces, hyphens, dots, slashes,
-// parentheses). Marks keep decomposed accents ("e" + U+0301) inside their word. Text
-// without letters (the "—" placeholder) is unchanged.
+// the case of the source data. A word is a run of letters, combining marks, digits and
+// apostrophes, so spaces, hyphens, dots, slashes and parentheses separate words and decomposed
+// accents ("e" + U+0301) stay inside theirs. The whole words "de", "del" and "la" stay
+// lowercase unless they are the first word of the value, wherever they sit (also after
+// punctuation); accented variants are different words. Text without letters (the "—"
+// placeholder) is unchanged.
 const titleCaseWords = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return value;
-  const characters = Array.from(trimmed.toLocaleLowerCase("es"));
-  let startsWord = true;
-  return characters
-    .map((character) => {
-      const isLetter = /\p{L}/u.test(character);
-      const result = isLetter && startsWord ? character.toLocaleUpperCase("es") : character;
-      startsWord = !/[\p{L}\p{M}\p{N}'’]/u.test(character);
-      return result;
-    })
-    .join("");
+  let wordIndex = 0;
+  return trimmed.toLocaleLowerCase("es").replace(/[\p{L}\p{M}\p{N}'’]+/gu, (word) => {
+    const isConnector = wordIndex > 0 && LOWERCASE_CONNECTORS.has(word);
+    wordIndex += 1;
+    if (isConnector) return word;
+    const [first = "", ...rest] = Array.from(word);
+    return first.toLocaleUpperCase("es") + rest.join("");
+  });
 };
 
 // Read-only list of the teams a busca belongs to (one busca can be in several).
