@@ -103,8 +103,17 @@ const joinIds = (...ids: Array<string | false | undefined>): string | undefined 
 
 const TEAM_LOCK_REASON_ID = "team-lock-reason";
 
-const memberHolder = (record: BeeperRecord | ImportedBeeperRecord): string =>
-  "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "Sin titular";
+const NO_HOLDER = "Sin titular";
+
+// Stored value, used for matching the member search.
+const rawMemberHolder = (record: BeeperRecord | ImportedBeeperRecord): string =>
+  "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? NO_HOLDER;
+
+// Same display case as the table's holder column; for rendering and labels only.
+const memberHolder = (record: BeeperRecord | ImportedBeeperRecord): string => {
+  const holder = rawMemberHolder(record);
+  return holder === NO_HOLDER ? holder : titleCaseWords(holder);
+};
 
 // Built from what the row shows (number, holder and, for imported rows, source
 // sheet and row) so duplicate device numbers stay distinguishable.
@@ -615,7 +624,7 @@ export const BeepersPage = () => {
     const candidates = [...records, ...importedRecords];
     if (!normalizedQuery) return candidates.filter((record) => selectedTeamMemberIds.has(record.id));
     return candidates.filter((record) =>
-      `${record.deviceNumber} ${memberHolder(record)}`.toLocaleLowerCase("es").includes(normalizedQuery)
+      `${record.deviceNumber} ${rawMemberHolder(record)}`.toLocaleLowerCase("es").includes(normalizedQuery)
     );
   }, [importedRecords, memberQuery, records, selectedTeamMemberIds]);
   const memberSearchActive = Boolean(memberQuery.trim());

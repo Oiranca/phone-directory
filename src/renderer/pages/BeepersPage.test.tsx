@@ -2209,6 +2209,25 @@ describe("BeepersPage", () => {
       expect(rowOf("B-010").getByText("Ángel Pérez", { selector: "span" })).toBeInTheDocument();
     });
 
+    it("shows the holder title-cased in the members panel row and its toggle's name, and still searches the raw value", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await screen.findByText("B-010");
+      fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+      fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+
+      for (const query of ["luis perez", "LUIS PEREZ", "B-010"]) {
+        fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: query } });
+        const row = screen.getByRole("list", { name: "Buscas que coinciden" });
+        expect(within(row).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
+        expect(within(row).queryByText(/LUIS PEREZ GUARDIA/)).not.toBeInTheDocument();
+        expect(within(row).getByRole("button", { name: "Añadir al equipo B-010 · Luis Perez Guardia" })).toBeInTheDocument();
+      }
+    });
+
     it("leaves the stored value, the edit form and the search on the raw data", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting, mockRecords[1]]) });
       renderPage();
