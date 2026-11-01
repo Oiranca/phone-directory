@@ -340,9 +340,9 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
     fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
 
-    // The route commits in a transition after isSavingTeam clears. If the form is
-    // still mounted in between, its save button is enabled and a second click
-    // would create the team twice. Watch every DOM commit for that state.
+    // If the form stayed mounted after the save settled, its save button would be
+    // enabled again and a second click would create the team twice. Watch every DOM
+    // commit for that state.
     let savedButtonReEnabled = false;
     const observer = new MutationObserver(() => {
       const save = document.querySelector('form[aria-label="Nuevo equipo"] button[type="submit"]');
@@ -354,7 +354,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
 
     try {
       fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
-      await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
+      await screen.findByRole("heading", { name: "Buscas del equipo" });
       await waitFor(() => expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument());
     } finally {
       observer.disconnect();
@@ -362,6 +362,41 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
 
     expect(savedButtonReEnabled).toBe(false);
     expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledTimes(1);
+    expect(router.state.location.pathname).toBe("/beeper/new");
+  });
+
+  const saveNewTeam = async () => {
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+    fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
+    fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+    await screen.findByRole("heading", { name: "Buscas del equipo" });
+  };
+
+  it("drops the new team's members panel when leaving /beeper/new", async () => {
+    renderApp();
+    await saveNewTeam();
+
+    await goTo("/beeper");
+
+    expect(await screen.findByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Buscas del equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Equipo a gestionar")).not.toBeInTheDocument();
+  });
+
+  it("Escape on the members panel leaves to /beeper, but cancels the busca form first", async () => {
+    renderApp();
+    await saveNewTeam();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+    expect(screen.getByRole("form", { name: "Nuevo busca en Quirófano · 9010" })).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cancelar" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("form", { name: /Nuevo busca/ })).not.toBeInTheDocument());
+    expect(router.state.location.pathname).toBe("/beeper/new");
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Listo" }), { key: "Escape" });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
   });
 
   it("returns to page 1 when coming back to /beeper", async () => {
