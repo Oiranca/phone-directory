@@ -689,7 +689,7 @@ export const BeepersPage = () => {
           </button>
         )}
         {editingTeamId && (
-          <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
+          <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || isSavingMembers || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
             Eliminar equipo
           </button>
         )}

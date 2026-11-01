@@ -1929,7 +1929,7 @@ describe("BeepersPage", () => {
     });
   });
 
-  describe("pre-existing fixes", () => {
+  describe("state panel headings", () => {
     it("titles the empty state with an h3 under the single page h2", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
       renderPage();
@@ -1957,6 +1957,9 @@ describe("BeepersPage", () => {
       expect(screen.queryByRole("heading", { name: "Registro de Buscas" })).not.toBeInTheDocument();
     });
 
+  });
+
+  describe("focus after deleting a team", () => {
     const deleteSelectedTeam = async () => {
       fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
       fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
@@ -1989,6 +1992,23 @@ describe("BeepersPage", () => {
       await deleteSelectedTeam();
 
       await waitFor(() => expect(screen.getByRole("heading", { name: "Equipos" })).toHaveFocus());
+    });
+
+    it("blocks team deletion while a member update is saving", async () => {
+      let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        setBeeperTeamMembers: vi.fn().mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }))
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-001" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-001 · Ana García" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeDisabled());
+      resolveSave([{ teamId: "team_uci", beeperId: "bsc_001" }]);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeEnabled());
     });
   });
 
