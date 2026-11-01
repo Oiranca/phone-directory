@@ -2170,7 +2170,7 @@ describe("BeepersPage", () => {
       renderPage();
       await screen.findByText("5001");
 
-      expect(rowOf("5001").getByText("Mecanico Mecanico De Gases")).toBeInTheDocument();
+      expect(rowOf("5001").getByText("Mecanico Mecanico de Gases")).toBeInTheDocument();
       expect(rowOf("5002").getByText("—", { selector: "span" })).toBeInTheDocument();
       cleanup();
       setupWindowApi({
@@ -2209,6 +2209,77 @@ describe("BeepersPage", () => {
       });
       renderPage();
       await screen.findByText("B-011");
+
+      for (const [deviceNumber, , expected] of holders) {
+        expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
+      }
+    });
+
+    it("keeps the connectors de, del and la lowercase, except as the first word", async () => {
+      const holders = [
+        ["B-030", "MECANICO MECANICO DE GASES", "Mecanico Mecanico de Gases"],
+        ["B-031", "JEFE DEL SERVICIO", "Jefe del Servicio"],
+        ["B-032", "HECTOR ALONSO DE LA CRUZ", "Hector Alonso de la Cruz"],
+        ["B-033", "DE LA CRUZ", "De la Cruz"],
+        ["B-034", "DEL RIO", "Del Rio"],
+        // Only whole words are connectors.
+        ["B-035", "DELGADO LAURA DEBORA", "Delgado Laura Debora"],
+        // After punctuation they still are connectors, unless they are the first word of the value.
+        ["B-036", "M.INTERNA-DE GUARDIA", "M.Interna-de Guardia"],
+        ["B-037", "(DE LA CRUZ) DEL RIO", "(De la Cruz) del Rio"],
+        // Accented variants are different words.
+        ["B-038", "DÉ LÁ CRUZ", "Dé Lá Cruz"],
+        // Idempotent.
+        ["B-039", "Jefe del Servicio de la Zona", "Jefe del Servicio de la Zona"]
+      ] as const;
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
+      });
+      renderPage();
+      await screen.findByText("B-030");
+
+      for (const [deviceNumber, , expected] of holders) {
+        expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
+      }
+    });
+
+    it("keeps the connectors lowercase for an imported holder too", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], name: "HECTOR ALONSO DE LA CRUZ" }])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      expect(rowOf("5001").getByText("Hector Alonso de la Cruz")).toBeInTheDocument();
+    });
+
+    it("shows the same connector casing in the members panel row and its toggle's name", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "HECTOR ALONSO DE LA CRUZ" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await screen.findByText("B-010");
+      fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+      fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-010" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Hector Alonso de la Cruz/)).toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Hector Alonso de la Cruz" })).toBeInTheDocument();
+    });
+
+    it("only uppercases letters: a Roman numeral and a word-initial combining mark stay as they are", async () => {
+      const holders = [
+        ["B-021", "\u217B ANA", "\u217B Ana"],
+        ["B-022", "\u0345ABC", "\u0345abc"]
+      ] as const;
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
+      });
+      renderPage();
+      await screen.findByText("B-021");
 
       for (const [deviceNumber, , expected] of holders) {
         expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
