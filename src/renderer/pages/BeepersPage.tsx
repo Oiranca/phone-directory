@@ -472,8 +472,8 @@ export const BeepersPage = () => {
   // BeepersPage serves /beeper and /beeper/new from two routes and is NOT
   // remounted when moving between them, so local state would leak across.
   // Reset the open forms, confirm dialogs, team manager and selected team
-  // (with its member search and messages) and the page search on route change
-  // instead of remounting, so the data is not fetched again.
+  // (with its member search and messages), the page search and the results page
+  // on route change instead of remounting, so the data is not fetched again.
   const [lastIsCreateRoute, setLastIsCreateRoute] = useState(isCreateRoute);
   if (lastIsCreateRoute !== isCreateRoute) {
     setLastIsCreateRoute(isCreateRoute);
@@ -486,6 +486,7 @@ export const BeepersPage = () => {
     setDeleteConfirm(null);
     setTeamDeleteConfirm(null);
     setQuery("");
+    setCurrentPage(1);
     selectTeam(null);
   }
 
@@ -507,8 +508,12 @@ export const BeepersPage = () => {
       } else {
         const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
         setTeams((current) => [...current, created]);
-        // Only reachable from /beeper/new (/beeper only edits existing teams);
-        // the route-change reset closes the manager and clears the team state.
+        // Only reachable from /beeper/new (/beeper only edits existing teams).
+        // The route commits in a transition, after `finally` has cleared
+        // isSavingTeam; the route-change reset runs later still. Close the form
+        // now so it is not re-rendered with an enabled "Guardar equipo".
+        setShowTeamManager(false);
+        selectTeam(null);
         navigate("/beeper");
       }
       pushToast({ type: "success", message: "Equipo guardado." });

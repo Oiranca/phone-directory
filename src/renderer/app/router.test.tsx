@@ -179,6 +179,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
         listBeeperTeams: vi.fn().mockResolvedValue([uci]),
         listBeeperTeamMemberships: vi.fn().mockResolvedValue([]),
         addBeeper: vi.fn().mockResolvedValue({ ...ana, id: "bsc_003", deviceNumber: "B-003" }),
+        addBeeperTeam: vi.fn().mockResolvedValue({ id: "team_new", name: "Quirófano", displayId: "9010" }),
         setBeeperTeamMembers: vi.fn()
       }
     });
@@ -302,7 +303,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(screen.getByLabelText(/Buscar buscas/i)).toHaveValue("");
   });
 
-  it("drops a team-scoped busca form opened on /beeper and never links a team from the chooser", async () => {
+  it("drops a team-scoped busca form opened on /beeper when entering /beeper/new", async () => {
     renderApp();
     await selectUciInManager();
     fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
@@ -312,8 +313,15 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
 
     expect(await screen.findByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: /Nueva busca/ })).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Nueva busca" }));
+  // Guards the chooser's create path itself (handleCreateNew() passes no team),
+  // not the route-change reset.
+  it("a busca created from the chooser is never linked to a team", async () => {
+    renderApp();
+    await selectUciInManager();
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nueva busca" }));
     const form = screen.getByRole("form", { name: "Nueva busca" });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
@@ -324,5 +332,54 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     await waitFor(() => expect(window.hospitalDirectory.addBeeper).toHaveBeenCalled());
     await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
     expect(window.hospitalDirectory.setBeeperTeamMembers).not.toHaveBeenCalled();
+  });
+
+  it("never offers an enabled 'Guardar equipo' again once a new team is saved", async () => {
+    renderApp();
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+    fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
+    fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
+
+    // The route commits in a transition after isSavingTeam clears. If the form is
+    // still mounted in between, its save button is enabled and a second click
+    // would create the team twice. Watch every DOM commit for that state.
+    let savedButtonReEnabled = false;
+    const observer = new MutationObserver(() => {
+      const save = document.querySelector('form[aria-label="Nuevo equipo"] button[type="submit"]');
+      if (save && !save.hasAttribute("disabled") && vi.mocked(window.hospitalDirectory.addBeeperTeam).mock.calls.length > 0) {
+        savedButtonReEnabled = true;
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+
+    fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument());
+    observer.disconnect();
+
+    expect(savedButtonReEnabled).toBe(false);
+    expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns to page 1 when coming back to /beeper", async () => {
+    vi.mocked(window.hospitalDirectory.listBeepers).mockResolvedValue(
+      Array.from({ length: 12 }, (_, index) => ({
+        ...ana,
+        id: `bsc_${String(index + 1).padStart(3, "0")}`,
+        deviceNumber: `B-${String(index + 1).padStart(3, "0")}`
+      }))
+    );
+    renderApp();
+    await goTo("/beeper");
+    await screen.findByText("Página 1 de 2");
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(screen.getByText("Página 2 de 2")).toBeInTheDocument();
+
+    await goTo("/beeper/new");
+    await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    await goTo("/beeper");
+
+    expect(await screen.findByText("Página 1 de 2")).toBeInTheDocument();
   });
 });
