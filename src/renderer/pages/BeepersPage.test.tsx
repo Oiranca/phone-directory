@@ -427,12 +427,12 @@ describe("BeepersPage", () => {
     expect(screen.getByLabelText(/Nombre del equipo/i)).toBeDisabled();
     expect(screen.getByLabelText(/Número del equipo/i)).toBeDisabled();
     expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeDisabled();
-    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Crea o cancela el busca para editar el equipo.");
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Guarda o cancela el busca para editar el equipo.");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.getByLabelText(/Nombre del equipo/i)).toBeEnabled();
     expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
-    expect(screen.queryByText("Crea o cancela el busca para editar el equipo.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Guarda o cancela el busca para editar el equipo.")).not.toBeInTheDocument();
   });
 
   it("disables 'Limpiar búsqueda' while a busca form is open", async () => {
@@ -713,6 +713,24 @@ describe("BeepersPage", () => {
     expect(screen.getByRole("heading", { name: "Buscas del equipo" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nuevo equipo" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" })).toHaveFocus());
+  });
+
+  it("focuses the member search after saving a team even if animation frames run immediately", async () => {
+    // An animation frame queued while saving would fire before the members panel is
+    // committed; the focus must come from the commit that mounts the input.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    try {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+
+      expect(screen.getByLabelText("Buscar busca")).toHaveFocus();
+    } finally {
+      raf.mockRestore();
+    }
   });
 
   it("'Listo' leaves the members panel for /beeper", async () => {
