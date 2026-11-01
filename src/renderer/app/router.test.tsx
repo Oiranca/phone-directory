@@ -319,7 +319,6 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
   // not the route-change reset.
   it("a busca created from the chooser is never linked to a team", async () => {
     renderApp();
-    await selectUciInManager();
     await goTo("/beeper/new");
     fireEvent.click(await screen.findByRole("button", { name: "Nueva busca" }));
     const form = screen.getByRole("form", { name: "Nueva busca" });
@@ -353,10 +352,13 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     });
     observer.observe(document.body, { subtree: true, childList: true, attributes: true });
 
-    fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
-    await waitFor(() => expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument());
-    observer.disconnect();
+    try {
+      fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
+      await waitFor(() => expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument());
+    } finally {
+      observer.disconnect();
+    }
 
     expect(savedButtonReEnabled).toBe(false);
     expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledTimes(1);
