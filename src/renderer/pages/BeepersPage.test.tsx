@@ -2270,6 +2270,22 @@ describe("BeepersPage", () => {
       expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Hector Alonso de la Cruz" })).toBeInTheDocument();
     });
 
+    it("only uppercases letters: a Roman numeral and a word-initial combining mark stay as they are", async () => {
+      const holders = [
+        ["B-021", "\u217B ANA", "\u217B Ana"],
+        ["B-022", "\u0345ABC", "\u0345abc"]
+      ] as const;
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
+      });
+      renderPage();
+      await screen.findByText("B-021");
+
+      for (const [deviceNumber, , expected] of holders) {
+        expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
+      }
+    });
+
     it("shows an already capitalized holder unchanged", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "Ángel Pérez" }]) });
       renderPage();

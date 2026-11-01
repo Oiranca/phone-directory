@@ -81,7 +81,7 @@ const titleCaseWords = (value: string): string => {
     wordIndex += 1;
     if (isConnector) return word;
     const [first = "", ...rest] = Array.from(word);
-    return first.toLocaleUpperCase("es") + rest.join("");
+    return (/\p{L}/u.test(first) ? first.toLocaleUpperCase("es") : first) + rest.join("");
   });
 };
 
