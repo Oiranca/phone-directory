@@ -619,6 +619,11 @@ export const BeepersPage = () => {
     );
   }
 
+  // The busca form titles the page when it is all there is (the chooser's busca
+  // form); next to a team heading or the /beeper header it is a subsection.
+  const formIsPageTitle = isCreateRoute && !teamMembersMode;
+  const FormHeading = formIsPageTitle ? "h2" : "h3";
+
   const teamFormElement = (
     <form onSubmit={(event) => void saveTeam(event)} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label={editingTeamId ? "Editar equipo" : "Nuevo equipo"}>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -652,10 +657,13 @@ export const BeepersPage = () => {
     </form>
   );
 
+  // Under the page h2 on /beeper/new the panel title is an h3; on /beeper the
+  // header h2 and the Equipos h3 sit above it.
+  const PanelHeading = isCreateRoute ? "h3" : "h4";
   const membersPanelElement = selectedTeam ? (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
+        <PanelHeading className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</PanelHeading>
         <button type="button" aria-label={`Nuevo busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
           <BeepersIcon /> Nuevo busca
         </button>
@@ -741,45 +749,40 @@ export const BeepersPage = () => {
       </div>
       )}
 
-      {isCreateRoute && (
+      {showChooser && (
         <div
           className="rounded-3xl bg-white p-4 shadow-panel sm:p-5"
           onKeyDown={(event) => {
-            if (showChooser && event.key === "Escape") navigate("/beeper");
+            if (event.key === "Escape") navigate("/beeper");
           }}
         >
           <h2 id="beeper-page-title" ref={chooserHeadingRef} tabIndex={-1} className="text-xl font-semibold text-scs-blueDark focus:outline-hidden">
             Gestión Buscas
           </h2>
-          {showChooser && (
-            <>
-              <p className="mt-2 text-sm text-slate-600">Elige qué quieres crear.</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button type="button" onClick={() => handleCreateNew()} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark">
-                  Nuevo busca
-                </button>
-                <button type="button" onClick={() => { selectTeam(null); setShowTeamManager(true); }} className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist">
-                  Nuevo equipo
-                </button>
-                <button type="button" onClick={() => navigate("/beeper")} className="focus-ring rounded-full px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                  Cancelar
-                </button>
-              </div>
-            </>
-          )}
+          <p className="mt-2 text-sm text-slate-600">Elige qué quieres crear.</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" onClick={() => handleCreateNew()} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark">
+              Nuevo busca
+            </button>
+            <button type="button" onClick={() => { selectTeam(null); setShowTeamManager(true); }} className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist">
+              Nuevo equipo
+            </button>
+            <button type="button" onClick={() => navigate("/beeper")} className="focus-ring rounded-full px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
 
       {teamCreateMode && (
-        <section aria-labelledby="beeper-team-create-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
-          <h3 id="beeper-team-create-title" className="text-lg font-semibold text-scs-blueDark">Nuevo equipo</h3>
+        <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+          <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">Nuevo equipo</h2>
           {teamFormElement}
-        </section>
+        </div>
       )}
 
       {teamMembersMode && selectedTeam && (
-        <section
-          aria-labelledby="beeper-team-members-title"
+        <div
           className="rounded-3xl bg-white p-4 shadow-panel sm:p-5"
           onKeyDown={(event) => {
             // Nothing is unsaved here, so Escape is handled locally (not through
@@ -790,7 +793,7 @@ export const BeepersPage = () => {
             if (event.key === "Escape" && !isSavingMembers) navigate("/beeper");
           }}
         >
-          <h3 id="beeper-team-members-title" className="text-lg font-semibold text-scs-blueDark">Equipo {teamLabel(selectedTeam)}</h3>
+          <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">Equipo {teamLabel(selectedTeam)}</h2>
           {showForm && <p id={TEAM_LOCK_REASON_ID} className="mt-2 text-sm text-slate-600">Crea o cancela el busca para seguir con el equipo.</p>}
           {membersPanelElement}
           <div className="mt-4 flex justify-end">
@@ -804,7 +807,7 @@ export const BeepersPage = () => {
               Listo
             </button>
           </div>
-        </section>
+        </div>
       )}
 
       {!isCreateRoute && (
@@ -857,9 +860,9 @@ export const BeepersPage = () => {
           className="rounded-3xl bg-white p-6 shadow-panel"
           aria-label={formTitle}
         >
-          <h3 className="mb-5 text-lg font-semibold text-scs-blueDark">
+          <FormHeading id={formIsPageTitle ? "beeper-page-title" : undefined} className="mb-5 text-lg font-semibold text-scs-blueDark">
             {formTitle}
-          </h3>
+          </FormHeading>
           {formError && <StatusBanner type="error" message={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

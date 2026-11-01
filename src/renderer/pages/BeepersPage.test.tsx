@@ -130,6 +130,16 @@ const saveNewTeamFromChooser = async () => {
   await screen.findByRole("heading", { name: "Buscas del equipo" });
 };
 
+// Exactly one h2 titles the page in every state, and the root section is named by it.
+const expectSinglePageTitle = (text: string) => {
+  const titles = document.querySelectorAll("#beeper-page-title");
+  expect(titles).toHaveLength(1);
+  expect(titles[0]).toHaveTextContent(text);
+  expect(titles[0].tagName).toBe("H2");
+  expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(1);
+  expect(screen.getByRole("region", { name: text })).toBeInTheDocument();
+};
+
 describe("BeepersPage", () => {
   beforeEach(() => {
     setupWindowApi();
@@ -1832,5 +1842,70 @@ describe("BeepersPage", () => {
     fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "zzz" } });
     expect(await screen.findByText("Sin resultados")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Crear busca o equipo" })).not.toBeInTheDocument();
+  });
+
+  describe("page title per state", () => {
+    it("is 'Registro de Buscas' on /beeper, with the busca form as an h3", async () => {
+      renderPage();
+      await screen.findByText("B-001");
+      expectSinglePageTitle("Registro de Buscas");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca B-001/i }));
+
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Editar busca", level: 3 })).toBeInTheDocument();
+    });
+
+    it("is 'Gestión Buscas' on the chooser", async () => {
+      renderPage("/beeper/new");
+
+      await screen.findByRole("button", { name: "Nuevo equipo" });
+      expectSinglePageTitle("Gestión Buscas");
+    });
+
+    it("becomes the busca form title, and the chooser heading goes away", async () => {
+      renderPage("/beeper/new");
+      await openBuscaForm();
+
+      expectSinglePageTitle("Nuevo busca");
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+    });
+
+    it("becomes 'Nuevo equipo' on the team form, and the chooser heading goes away", async () => {
+      renderPage("/beeper/new");
+      await openTeamCreateForm();
+
+      expectSinglePageTitle("Nuevo equipo");
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+    });
+
+    it("becomes the team heading on the members panel, with h3 subsections", async () => {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+
+      expectSinglePageTitle("Equipo Quirófano · 9010");
+      expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Buscas del equipo", level: 3 })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
+    });
+
+    it("stays the team heading while a team-scoped busca form is open", async () => {
+      setupWindowApi({ addBeeperTeam: vi.fn().mockResolvedValue(newTeam) });
+      renderPage("/beeper/new");
+      await saveNewTeamFromChooser();
+      fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
+
+      expectSinglePageTitle("Equipo Quirófano · 9010");
+      expect(screen.getByRole("heading", { name: "Nuevo busca en Quirófano · 9010", level: 3 })).toBeInTheDocument();
+    });
+
+    it("comes back to 'Gestión Buscas' when a form is cancelled to the chooser", async () => {
+      renderPage("/beeper/new");
+      await openBuscaForm();
+      fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+
+      expectSinglePageTitle("Gestión Buscas");
+    });
   });
 });
