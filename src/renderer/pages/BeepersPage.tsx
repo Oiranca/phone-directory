@@ -373,6 +373,7 @@ export const BeepersPage = () => {
           try {
             const updated = await window.hospitalDirectory.setBeeperTeamMembers(newBeeperTeamId, [...currentMemberIds, created.id]);
             setMemberships((current) => [...current.filter((membership) => membership.teamId !== newBeeperTeamId), ...updated]);
+            if (newBeeperTeam) setMemberStatus(`${created.deviceNumber} creada y añadida al equipo ${teamLabel(newBeeperTeam)}`);
           } catch (err) {
             setMemberError(`${toCompactToastMessage(err, "No se pudo añadir la busca al equipo.")} La busca se creó y puedes añadirla desde este equipo.`);
           }
@@ -665,7 +666,7 @@ export const BeepersPage = () => {
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
-              <button type="button" aria-label={`Nueva busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="button" aria-label={`Nueva busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
                 <BeepersIcon /> Nueva busca
               </button>
             </div>
@@ -680,7 +681,7 @@ export const BeepersPage = () => {
               <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{memberResultStatus}</p>
               {memberSearchActive && teamMemberRows.length === 0 && (
                 <div>
-                  <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} className="focus-ring rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Limpiar búsqueda</button>
+                  <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">Limpiar búsqueda</button>
                 </div>
               )}
               {records.length === 0 && importedRecords.length === 0 && (
@@ -688,7 +689,7 @@ export const BeepersPage = () => {
               )}
               {records.length + importedRecords.length > 0 && !memberSearchActive && (
                 <p className="text-sm text-slate-600">
-                  {teamMemberRows.length === 0 ? "Este equipo aún no tiene buscas. " : ""}Busca por número o titular para añadir buscas al equipo.
+                  {selectedTeamMemberIds.size === 0 ? "Este equipo aún no tiene buscas. " : ""}Busca por número o titular para añadir buscas al equipo.
                 </p>
               )}
               {teamMemberRows.length > 0 && (
@@ -699,7 +700,7 @@ export const BeepersPage = () => {
                     return (
                       <li key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
                         <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {memberHolder(record)}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
-                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 aria-disabled:hover:bg-transparent">
                           {action}
                         </button>
                       </li>

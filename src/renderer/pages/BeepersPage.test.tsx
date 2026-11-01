@@ -306,7 +306,7 @@ describe("BeepersPage", () => {
     await waitFor(() => expect(screen.getByText("B-002 quitada del equipo UCI · 9001")).toBeInTheDocument());
   });
 
-  it("keeps the member button enabled and focused while saving, and ignores a second click", async () => {
+  it("keeps the member button enabled while saving, blocks scoped create, and ignores a second click", async () => {
     let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
     const setMembers = vi.fn().mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }));
     setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams), setBeeperTeamMembers: setMembers });
@@ -318,8 +318,11 @@ describe("BeepersPage", () => {
 
     fireEvent.click(button);
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    // `disabled` would drop focus to <body> in Chromium; jsdom cannot show that, so
+    // asserting the button is not disabled is the real guard.
     expect(button).not.toBeDisabled();
-    expect(button).toHaveFocus();
+    // A scoped create during the save would link against stale memberships.
+    expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toBeDisabled();
     expect(screen.getByLabelText("Buscar busca")).not.toBeDisabled();
     fireEvent.click(button);
     expect(setMembers).toHaveBeenCalledTimes(1);
@@ -359,32 +362,48 @@ describe("BeepersPage", () => {
     expect(screen.getByLabelText("Buscar busca")).toHaveValue("");
   });
 
-  it("locks team editing with a visible reason while any busca form is open", async () => {
+  it("locks team editing with a visible reason while the team-scoped busca form is open", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
+
+    expect(screen.getByLabelText("Equipo a gestionar")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toBeDisabled();
+    expect(screen.getByLabelText("Buscar busca")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
+    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toHaveFocus());
+  });
+
+  it("locks and unlocks team editing around the global busca form", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca" }));
+
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Número del equipo/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeDisabled();
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
+    expect(screen.queryByText("Cierra el formulario de busca para editar el equipo.")).not.toBeInTheDocument();
+  });
+
+  it("does not link a team when a busca is created from the global form", async () => {
     setupWindowApi({
       listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
       addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" })
     });
     renderPage();
     await openTeamManager("team_uci");
-    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
-    expect(screen.getByLabelText("Equipo a gestionar")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
-    expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
-    expect(screen.getByLabelText("Buscar busca")).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toHaveFocus());
-
-    fireEvent.click(screen.getByRole("button", { name: "Nueva busca" }));
-    // The global form (not team-scoped) locks the same controls.
-    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeDisabled();
-    expect(screen.getByLabelText(/Número del equipo/i)).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(screen.getByLabelText(/Nombre del equipo/i)).toBeEnabled();
-    expect(screen.queryByText("Cierra el formulario de busca para editar el equipo.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Nueva busca" }));
     const form = screen.getByRole("form", { name: "Nueva busca" });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
@@ -392,8 +411,37 @@ describe("BeepersPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
     fireEvent.submit(form);
+
     await waitFor(() => expect(window.hospitalDirectory.addBeeper).toHaveBeenCalled());
     expect(window.hospitalDirectory.setBeeperTeamMembers).not.toHaveBeenCalled();
+  });
+
+  it("disables 'Limpiar búsqueda' while a busca form is open", async () => {
+    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "sin coincidencia" } });
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
+
+    const clear = screen.getByRole("button", { name: "Limpiar búsqueda" });
+    expect(clear).toBeDisabled();
+    expect(clear).toHaveAccessibleDescription("Cierra el formulario de busca para editar el equipo.");
+    fireEvent.click(clear);
+    expect(screen.getByLabelText("Buscar busca")).toHaveValue("sin coincidencia");
+  });
+
+  it("does not say the team is empty when its members are hidden because imported buscas failed to load", async () => {
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockRejectedValue(new Error("import failed")),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "ibsc_00000001" }])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+
+    expect(screen.queryByRole("list", { name: "Buscas del equipo" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Este equipo aún no tiene buscas\./)).not.toBeInTheDocument();
+    expect(screen.getByText(/Busca por número o titular para añadir buscas al equipo\./)).toBeInTheDocument();
   });
 
   it("names the team in the team-scoped create form", async () => {
@@ -610,6 +658,26 @@ describe("BeepersPage", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" })).toHaveFocus());
   });
 
+  it("announces a busca created from a team and added to it", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      addBeeper: vi.fn().mockResolvedValue({ ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" }),
+      setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "bsc_003" }])
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
+    const form = screen.getByRole("form", { name: "Nueva busca en UCI · 9001" });
+    fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
+    fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
+    fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
+    fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
+    fireEvent.submit(form);
+
+    const status = await screen.findByText("B-003 creada y añadida al equipo UCI · 9001");
+    expect(status).toHaveAttribute("role", "status");
+  });
+
   it("keeps a newly created Busca available when its team link fails", async () => {
     const created = { ...mockRecords[0], id: "bsc_003", deviceNumber: "B-003" };
     const setMembers = vi.fn().mockRejectedValueOnce(new Error("link failed")).mockResolvedValueOnce([{ teamId: "team_uci", beeperId: "bsc_003" }]);
@@ -629,7 +697,7 @@ describe("BeepersPage", () => {
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
     fireEvent.submit(form);
-    expect(await screen.findByRole("alert")).toHaveTextContent("La busca se creó")
+    expect(await screen.findByRole("alert")).toHaveTextContent("La busca se creó");
     expect(screen.getAllByText("B-003")).not.toHaveLength(0);
     fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-003" } });
     fireEvent.click(screen.getByRole("button", { name: "Añadir al equipo B-003 · Ana García" }));
