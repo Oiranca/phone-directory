@@ -64,7 +64,9 @@ describe("router — lazy route smoke test", () => {
         detectDuplicates: vi.fn().mockResolvedValue({ pairs: [] }),
         mergeContacts: vi.fn(),
         listBeepers: vi.fn().mockResolvedValue([]),
-        listImportedBeepers: vi.fn().mockResolvedValue([])
+        listImportedBeepers: vi.fn().mockResolvedValue([]),
+        listBeeperTeams: vi.fn().mockResolvedValue([]),
+        listBeeperTeamMemberships: vi.fn().mockResolvedValue([])
       }
     });
   });
@@ -137,5 +139,20 @@ describe("router — lazy route smoke test", () => {
     });
 
     expect(await screen.findByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
+  });
+
+  it("resolves the lazy beeper create route and renders the busca-or-team chooser", async () => {
+    render(
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    );
+
+    await act(async () => {
+      await router.navigate("/beeper/new");
+    });
+
+    expect(await screen.findByRole("heading", { name: "Nueva busca o equipo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
   });
 });

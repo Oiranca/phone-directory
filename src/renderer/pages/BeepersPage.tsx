@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useMatch, useNavigate } from "react-router";
 import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -124,6 +125,8 @@ const retainAvailableImportedBeeperDetails = (
 
 export const BeepersPage = () => {
   const { pushToast } = useToast();
+  const navigate = useNavigate();
+  const isCreateRoute = useMatch("/beeper/new") !== null;
   const [records, setRecords] = useState<BeeperRecord[]>([]);
   const [importedRecords, setImportedRecords] = useState<ImportedBeeperRecord[]>([]);
   const [teams, setTeams] = useState<BeeperTeam[]>([]);
@@ -161,6 +164,8 @@ export const BeepersPage = () => {
   const editTriggerRef = useRef<HTMLButtonElement | null>(null);
   const createTriggerRef = useRef<HTMLButtonElement | null>(null);
   const memberSearchRef = useRef<HTMLInputElement>(null);
+  const chooserHeadingRef = useRef<HTMLHeadingElement>(null);
+  const teamNameRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query);
 
   const loadBeepers = async () => {
@@ -198,6 +203,14 @@ export const BeepersPage = () => {
   // "edit" (or vice versa) while the form stays open re-triggers focus, not
   // just the initial open — see useFocusOnMount's docstring.
   useFocusOnMount(firstFieldRef, showForm && (editingId ?? editingImportedId ?? "new"));
+
+  // On /beeper/new the page opens on a chooser (busca or team); creating a
+  // team there reuses the team form in create mode. Cancelling or saving
+  // either form returns to /beeper.
+  const teamCreateMode = isCreateRoute && showTeamManager;
+  const showChooser = isCreateRoute && !showForm && !teamCreateMode;
+  useFocusOnMount(chooserHeadingRef, showChooser && !isLoading && !loadError);
+  useFocusOnMount(teamNameRef, teamCreateMode);
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -341,6 +354,10 @@ export const BeepersPage = () => {
     setEditingImportedId(null);
     setNewBeeperTeamId(null);
     setFormError("");
+    if (isCreateRoute) {
+      navigate("/beeper");
+      return;
+    }
     if (wasEditing) restoreEditFocus();
     else restoreCreateFocus();
   };
@@ -386,7 +403,8 @@ export const BeepersPage = () => {
       setEditingId(null);
       setEditingImportedId(null);
       setNewBeeperTeamId(null);
-      if (wasEditing) restoreEditFocus();
+      if (isCreateRoute) navigate("/beeper");
+      else if (wasEditing) restoreEditFocus();
       else restoreCreateFocus();
     } catch (err) {
       setFormError(
@@ -413,6 +431,9 @@ export const BeepersPage = () => {
       // The main side drops memberships of a deleted busca; mirror it so the
       // next member update does not send a dead id.
       setMemberships((current) => current.filter((membership) => membership.beeperId !== deleteConfirm.id));
+      // A message about a busca (e.g. "La busca se creó…") must not outlive it.
+      setMemberError("");
+      setMemberStatus("");
       setDeleteConfirm(null);
       pushToast({ type: "success", message: "Busca eliminada. Se creó una copia de seguridad previa." });
     } catch {
@@ -457,6 +478,13 @@ export const BeepersPage = () => {
       } else {
         const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
         setTeams((current) => [...current, created]);
+        if (isCreateRoute) {
+          setShowTeamManager(false);
+          selectTeam(null);
+          pushToast({ type: "success", message: "Equipo guardado." });
+          navigate("/beeper");
+          return;
+        }
         setSelectedTeamId(created.id);
         setEditingTeamId(created.id);
       }
@@ -560,9 +588,43 @@ export const BeepersPage = () => {
     );
   }
 
+  const teamFormElement = (
+        <form onSubmit={(event) => void saveTeam(event)} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label={editingTeamId ? "Editar equipo" : "Nuevo equipo"}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="team-name" className="mb-2 block text-sm font-medium text-slate-700">Nombre del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
+              <input ref={teamNameRef} id="team-name" required maxLength={255} disabled={showForm} aria-invalid={teamNameError ? true : undefined} aria-describedby={joinIds(teamNameError && "team-name-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.name} onChange={(event) => { setTeamNameError(""); setTeamForm((current) => ({ ...current, name: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+              {teamNameError && <p id="team-name-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamNameError}</p>}
+            </div>
+            <div>
+              <label htmlFor="team-display-id" className="mb-2 block text-sm font-medium text-slate-700">Número del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
+              <input id="team-display-id" required maxLength={255} disabled={showForm} aria-invalid={teamDisplayIdError ? true : undefined} aria-describedby={joinIds(teamDisplayIdError && "team-display-id-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.displayId} onChange={(event) => { setTeamDisplayIdError(""); setTeamForm((current) => ({ ...current, displayId: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+              {teamDisplayIdError && <p id="team-display-id-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamDisplayIdError}</p>}
+            </div>
+          </div>
+          {teamError && <StatusBanner type="error" message={teamError} />}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="submit" disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:cursor-not-allowed disabled:opacity-60">
+              {isSavingTeam ? "Guardando…" : "Guardar equipo"}
+            </button>
+            {teamCreateMode && (
+              <button type="button" data-keyboard-cancel onClick={() => { setShowTeamManager(false); selectTeam(null); navigate("/beeper"); }} disabled={isSavingTeam} className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                Cancelar
+              </button>
+            )}
+            {editingTeamId && (
+              <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
+                Eliminar equipo
+              </button>
+            )}
+          </div>
+        </form>
+  );
+
   return (
     <section aria-labelledby="beeper-page-title" className="flex flex-col gap-5" aria-busy={isDeleting}>
       {/* Header */}
+      {!isCreateRoute && (
       <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-4">
           <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">
@@ -585,17 +647,6 @@ export const BeepersPage = () => {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
-            <button
-              type="button"
-              onClick={(event) => {
-                createTriggerRef.current = event.currentTarget;
-                handleCreateNew();
-              }}
-              disabled={isSaving}
-              className="focus-ring shrink-0 rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60"
-            >
-              Nueva busca
-            </button>
           </div>
           <p
             role="status"
@@ -607,15 +658,53 @@ export const BeepersPage = () => {
           </p>
         </div>
       </div>
+      )}
 
+      {isCreateRoute && (
+        <div
+          className="rounded-3xl bg-white p-4 shadow-panel sm:p-5"
+          onKeyDown={(event) => {
+            if (showChooser && event.key === "Escape") navigate("/beeper");
+          }}
+        >
+          <h2 id="beeper-page-title" ref={chooserHeadingRef} tabIndex={-1} className="text-xl font-semibold text-scs-blueDark focus:outline-hidden">
+            Nueva busca o equipo
+          </h2>
+          {showChooser && (
+            <>
+              <p className="mt-2 text-sm text-slate-600">Elige qué quieres crear.</p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button type="button" onClick={() => handleCreateNew()} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark">
+                  Nueva busca
+                </button>
+                <button type="button" onClick={() => { selectTeam(null); setShowTeamManager(true); }} className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist">
+                  Nuevo equipo
+                </button>
+                <button type="button" onClick={() => navigate("/beeper")} className="focus-ring rounded-full px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                  Cancelar
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {teamCreateMode && (
+        <section aria-labelledby="beeper-team-create-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
+          <h3 id="beeper-team-create-title" className="text-lg font-semibold text-scs-blueDark">Nuevo equipo</h3>
+          {teamFormElement}
+        </section>
+      )}
+
+      {!isCreateRoute && (
       <section aria-labelledby="beeper-teams-title" className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 id="beeper-teams-title" className="text-lg font-semibold text-scs-blueDark">Equipos</h3>
-              <p className="mt-1 text-sm text-slate-600">Crea equipos y administra sus buscas.</p>
+              <p className="mt-1 text-sm text-slate-600">Edita un equipo o administra sus buscas.</p>
             </div>
-            <button
+            {teams.length > 0 && <button
               type="button"
               onClick={() => {
                 setShowTeamManager((current) => !current);
@@ -627,45 +716,22 @@ export const BeepersPage = () => {
               className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60"
             >
               Gestionar equipos
-            </button>
+            </button>}
           </div>
+          {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «Nueva busca o equipo» en el menú lateral.</p>}
           {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Cierra el formulario de busca para editar el equipo.</p>}
         </div>
 
-        {showTeamManager && <div id="team-manager">
+        {showTeamManager && teams.length > 0 && <div id="team-manager">
         <div className="mt-4">
           <label htmlFor="team-select" className="mb-2 block text-sm font-medium text-slate-700">Equipo a gestionar</label>
           <select id="team-select" disabled={isSavingTeam || isSavingMembers || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} value={selectedTeamId ?? ""} onChange={(event) => selectTeam(teams.find((team) => team.id === event.target.value) ?? null)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60">
-            <option value="">Nuevo equipo</option>
+            <option value="">Elige un equipo</option>
             {teams.map((team) => <option key={team.id} value={team.id}>{team.name} · {team.displayId}</option>)}
           </select>
         </div>
 
-        <form onSubmit={(event) => void saveTeam(event)} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label={editingTeamId ? "Editar equipo" : "Nuevo equipo"}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="team-name" className="mb-2 block text-sm font-medium text-slate-700">Nombre del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
-              <input id="team-name" required maxLength={255} disabled={showForm} aria-invalid={teamNameError ? true : undefined} aria-describedby={joinIds(teamNameError && "team-name-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.name} onChange={(event) => { setTeamNameError(""); setTeamForm((current) => ({ ...current, name: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
-              {teamNameError && <p id="team-name-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamNameError}</p>}
-            </div>
-            <div>
-              <label htmlFor="team-display-id" className="mb-2 block text-sm font-medium text-slate-700">Número del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
-              <input id="team-display-id" required maxLength={255} disabled={showForm} aria-invalid={teamDisplayIdError ? true : undefined} aria-describedby={joinIds(teamDisplayIdError && "team-display-id-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.displayId} onChange={(event) => { setTeamDisplayIdError(""); setTeamForm((current) => ({ ...current, displayId: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
-              {teamDisplayIdError && <p id="team-display-id-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamDisplayIdError}</p>}
-            </div>
-          </div>
-          {teamError && <StatusBanner type="error" message={teamError} />}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button type="submit" disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:cursor-not-allowed disabled:opacity-60">
-              {isSavingTeam ? "Guardando…" : "Guardar equipo"}
-            </button>
-            {editingTeamId && (
-              <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
-                Eliminar equipo
-              </button>
-            )}
-          </div>
-        </form>
+        {selectedTeam && teamFormElement}
 
         {selectedTeam && (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
@@ -718,6 +784,7 @@ export const BeepersPage = () => {
         )}
         </div>}
       </section>
+      )}
 
       {/* Create / Edit Form */}
       {showForm && (
@@ -862,7 +929,7 @@ export const BeepersPage = () => {
       )}
 
       {/* Records table */}
-      {(filteredRecords.length > 0 || visibleImportedRecords.length > 0) && (
+      {!isCreateRoute && (filteredRecords.length > 0 || visibleImportedRecords.length > 0) && (
         <div className="rounded-3xl bg-white shadow-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

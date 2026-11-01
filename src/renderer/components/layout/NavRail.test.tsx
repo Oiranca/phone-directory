@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("NavRail — items", () => {
-  it("keeps primary links first and groups Nuevo registro with Configuración at the bottom", () => {
+  it("keeps primary links first and groups the create entries with Configuración at the bottom", () => {
     renderRail();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
@@ -29,11 +29,13 @@ describe("NavRail — items", () => {
       "Directorio",
       "Buscas",
       "Nuevo registro",
+      "Nueva busca o equipo",
       "Configuración"
     ]);
     expect(nav.children[2]).toHaveAttribute("aria-hidden", "true");
     expect(nav.children[3]).toBe(links[2]);
     expect(nav.children[4]).toBe(links[3]);
+    expect(nav.children[5]).toBe(links[4]);
     expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
   });
 
@@ -42,6 +44,7 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
+    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("href", "/beeper/new");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
@@ -62,6 +65,7 @@ describe("NavRail — items", () => {
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
     expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
+    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("title", "Nueva busca o equipo");
   });
 });
 
@@ -76,6 +80,18 @@ describe("NavRail — active route highlighting", () => {
     renderRail(["/settings"]);
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("highlights only Nueva busca o equipo at /beeper/new, not Buscas", () => {
+    renderRail(["/beeper/new"]);
+    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Buscas" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("highlights Buscas at /beeper", () => {
+    renderRail(["/beeper"]);
+    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Nueva busca o equipo" })).not.toHaveAttribute("aria-current");
   });
 
   it("does not expose a separate Duplicados item at /deduplicate", () => {
@@ -93,6 +109,7 @@ describe("NavRail — visible labels", () => {
       "Directorio",
       "Buscas",
       "Nuevo registro",
+      "Nueva busca o equipo",
       "Configuración"
     ]);
     expect(screen.queryByRole("button", { name: /títulos/i })).not.toBeInTheDocument();

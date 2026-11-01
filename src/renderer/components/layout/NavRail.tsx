@@ -30,6 +30,16 @@ const BeepersIcon = () => (
   </svg>
 );
 
+const NewBeeperIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
+    <rect x="3" y="4" width="10" height="14" rx="2" />
+    <line x1="6" y1="8" x2="10" y2="8" />
+    <circle cx="8" cy="14" r="1" fill="currentColor" stroke="none" />
+    <line x1="16" y1="2.5" x2="16" y2="7.5" />
+    <line x1="13.5" y1="5" x2="18.5" y2="5" />
+  </svg>
+);
+
 const SettingsIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
     <circle cx="10" cy="10" r="3" />
@@ -63,6 +73,7 @@ const primaryNavItems: RailNavItem[] = [
 
 const bottomNavItems: RailNavItem[] = [
   { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
+  { to: "/beeper/new", label: "Nueva busca o equipo", title: "Nueva busca o equipo", icon: <NewBeeperIcon /> },
   { to: "/settings", label: "Configuración", title: "Configuración — Alt+3", icon: <SettingsIcon /> }
 ];
 
@@ -79,6 +90,7 @@ const RailNavLink = ({ item }: { item: RailNavItem }) => {
   return (
   <NavLink
     to={item.to}
+    end={item.to === "/beeper"}
     title={item.title}
     onClick={clearsSearch ? () => setQuery("") : undefined}
     className={({ isActive }) =>
