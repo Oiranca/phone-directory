@@ -205,7 +205,7 @@ describe("BeepersPage", () => {
   it("displays record fields in the table", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Ana García")).toBeInTheDocument();
+      expect(screen.getByText("Ana garcía")).toBeInTheDocument();
       expect(screen.getByText("Urgencias")).toBeInTheDocument();
       expect(screen.getByText("Enfermera")).toBeInTheDocument();
     });
@@ -226,7 +226,7 @@ describe("BeepersPage", () => {
     expect(emphasizedNumber).toHaveClass("bg-scs-mist", "font-bold");
     expect(
       within(emphasizedNumber.closest("tr")!).getAllByRole("cell").slice(0, 4).map((cell) => cell.textContent?.trim())
-    ).toEqual(["B-001", "Enfermera", "Urgencias", "Ana García"]);
+    ).toEqual(["B-001", "Enfermera", "Urgencias", "Ana garcía"]);
   });
 
   it("filters records by search query", async () => {
@@ -1055,7 +1055,7 @@ describe("BeepersPage", () => {
         "bsc_001",
         expect.objectContaining({ assignedTo: "Ana Actualizada" })
       );
-      expect(screen.getByText("Ana Actualizada")).toBeInTheDocument();
+      expect(screen.getByText("Ana actualizada")).toBeInTheDocument();
     });
   });
 
@@ -1555,8 +1555,8 @@ describe("BeepersPage", () => {
       expect(screen.getAllByText("Residente/a")).toHaveLength(3);
       expect(screen.getByText("Adjunto/a")).toBeInTheDocument();
       expect(screen.getByText("Rehabilitación")).toBeInTheDocument();
-      expect(screen.getByText("Ana García")).toBeInTheDocument();
-      expect(screen.getByText("Luis Pérez")).toBeInTheDocument();
+      expect(screen.getByText("Ana garcía")).toBeInTheDocument();
+      expect(screen.getByText("Luis pérez")).toBeInTheDocument();
     });
   });
 
@@ -1647,7 +1647,7 @@ describe("BeepersPage", () => {
     await waitFor(() => {
       expect(screen.getByText("5003")).toBeInTheDocument();
       // Name is displayed instead of a blank "Titular" cell.
-      expect(screen.getByText("María López")).toBeInTheDocument();
+      expect(screen.getByText("María lópez")).toBeInTheDocument();
       // Category is shown in the role column.
       expect(screen.getByText("Enfermero/a")).toBeInTheDocument();
     });
@@ -2104,7 +2104,7 @@ describe("BeepersPage", () => {
       const row = rowOf("B-002");
       expect(row.queryByText(/· 90/)).not.toBeInTheDocument();
       expect(row.queryByRole("list", { name: "Equipos" })).not.toBeInTheDocument();
-      expect(row.getByText("Luis Pérez").closest("td")?.textContent).toBe("Luis Pérez");
+      expect(row.getByText("Luis pérez").closest("td")?.textContent).toBe("Luis pérez");
     });
 
     it("drops the pill when the busca is removed from the team", async () => {
@@ -2131,6 +2131,71 @@ describe("BeepersPage", () => {
       await waitFor(() => expect(rowOf("5001").queryByText("UCI · 9001")).not.toBeInTheDocument());
       expect(rowOf("B-001").queryByText("UCI · 9001")).not.toBeInTheDocument();
       expect(rowOf("B-001").getByText("Urgencias · 9002")).toBeInTheDocument();
+    });
+  });
+
+  describe("holder display case", () => {
+    const rowOf = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return within(row);
+    };
+    const shouting: BeeperRecord = { ...mockRecords[0], id: "bsc_010", deviceNumber: "B-010", assignedTo: "FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS" };
+
+    it("shows a manual holder with only the first letter capitalized", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Farmacia urgenci hector alonso farmaceutico urgencias")).toBeInTheDocument();
+      expect(rowOf("B-010").queryByText("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS")).not.toBeInTheDocument();
+    });
+
+    it("normalizes an imported holder name or holder type, and keeps the placeholder", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], name: "MECANICO MECANICO DE GASES" },
+          { ...mockImportedRecords[1], holderType: undefined }
+        ])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      expect(rowOf("5001").getByText("Mecanico mecanico de gases")).toBeInTheDocument();
+      expect(rowOf("5002").getByText("—", { selector: "span" })).toBeInTheDocument();
+      cleanup();
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], holderType: "RESIDENTE" }])
+      });
+      renderPage();
+      await screen.findByText("5001");
+      expect(rowOf("5001").getByText("Residente")).toBeInTheDocument();
+    });
+
+    it("capitalizes an accented first letter", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "ÁNGEL PÉREZ" }]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Ángel pérez")).toBeInTheDocument();
+    });
+
+    it("leaves the stored value, the edit form and the search on the raw data", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting, mockRecords[1]]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "farmacia urgenci" } });
+      await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
+      expect(screen.getByText("B-010")).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "FARMACIA URGENCI" } });
+      await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
+      expect(screen.getByText("B-010")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca B-010/i }));
+      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS");
     });
   });
 });

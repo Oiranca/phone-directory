@@ -1042,7 +1042,7 @@ try {
     );
   })()`) === "true");
   browserCommand("fill", "#beeper-search", "9002");
-  await waitFor("phone-plus-beeper contact remains in beeper catalog", () => hasText("9002") && hasText("Contacto con Busca y Teléfono"));
+  await waitFor("phone-plus-beeper contact remains in beeper catalog (holder shown with only the first letter capitalized)", () => hasText("9002") && hasText("Contacto con busca y teléfono"));
   browserCommand("fill", "#beeper-search", "Contacto con Ubicación");
   await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
   clickRole("link", "Directorio");
