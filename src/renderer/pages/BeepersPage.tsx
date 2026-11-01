@@ -62,16 +62,23 @@ const validateTeamField = (value: string, label: string): string => {
 
 const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayId}`;
 
-// Display only: lowercases the text and uppercases its first letter, whatever the
-// case of the source data. Text without letters (the "—" placeholder) is unchanged.
-const sentenceCase = (value: string): string => {
+// Display only: lowercases the text and uppercases the first letter of every word, whatever
+// the case of the source data. A word starts at the beginning or after any character that is
+// not a letter, digit or apostrophe (spaces, hyphens, dots, slashes, parentheses). Text
+// without letters (the "—" placeholder) is unchanged.
+const titleCaseWords = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return value;
   const characters = Array.from(trimmed.toLocaleLowerCase("es"));
-  const firstLetter = characters.findIndex((character) => /\p{L}/u.test(character));
-  if (firstLetter === -1) return characters.join("");
-  characters[firstLetter] = characters[firstLetter].toLocaleUpperCase("es");
-  return characters.join("");
+  let startsWord = true;
+  return characters
+    .map((character) => {
+      const isLetter = /\p{L}/u.test(character);
+      const result = isLetter && startsWord ? character.toLocaleUpperCase("es") : character;
+      startsWord = !isLetter && !/[\p{N}']/u.test(character);
+      return result;
+    })
+    .join("");
 };
 
 // Read-only list of the teams a busca belongs to (one busca can be in several).
@@ -1093,7 +1100,7 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-slate-600">{record.role}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="px-4 py-3 text-slate-700">
-                      <span>{sentenceCase(record.assignedTo)}</span>
+                      <span>{titleCaseWords(record.assignedTo)}</span>
                       <TeamPills teams={teamsByBeeperId.get(record.id)} />
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -1134,7 +1141,7 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-slate-600">{record.category ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="px-4 py-3 text-slate-700">
-                      <span>{sentenceCase(record.name ?? record.holderType ?? "—")}</span>
+                      <span>{titleCaseWords(record.name ?? record.holderType ?? "—")}</span>
                       <TeamPills teams={teamsByBeeperId.get(record.id)} />
                       {record.schedule && <span className="mt-1 block text-xs text-slate-500">Horario: {record.schedule}</span>}
                       {record.notes && <span className="mt-1 block text-xs text-slate-500">Notas: {record.notes}</span>}

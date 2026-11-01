@@ -205,7 +205,7 @@ describe("BeepersPage", () => {
   it("displays record fields in the table", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Ana garcía")).toBeInTheDocument();
+      expect(screen.getByText("Ana García")).toBeInTheDocument();
       expect(screen.getByText("Urgencias")).toBeInTheDocument();
       expect(screen.getByText("Enfermera")).toBeInTheDocument();
     });
@@ -226,7 +226,7 @@ describe("BeepersPage", () => {
     expect(emphasizedNumber).toHaveClass("bg-scs-mist", "font-bold");
     expect(
       within(emphasizedNumber.closest("tr")!).getAllByRole("cell").slice(0, 4).map((cell) => cell.textContent?.trim())
-    ).toEqual(["B-001", "Enfermera", "Urgencias", "Ana garcía"]);
+    ).toEqual(["B-001", "Enfermera", "Urgencias", "Ana García"]);
   });
 
   it("filters records by search query", async () => {
@@ -1055,7 +1055,7 @@ describe("BeepersPage", () => {
         "bsc_001",
         expect.objectContaining({ assignedTo: "Ana Actualizada" })
       );
-      expect(screen.getByText("Ana actualizada")).toBeInTheDocument();
+      expect(screen.getByText("Ana Actualizada")).toBeInTheDocument();
     });
   });
 
@@ -1555,8 +1555,8 @@ describe("BeepersPage", () => {
       expect(screen.getAllByText("Residente/a")).toHaveLength(3);
       expect(screen.getByText("Adjunto/a")).toBeInTheDocument();
       expect(screen.getByText("Rehabilitación")).toBeInTheDocument();
-      expect(screen.getByText("Ana garcía")).toBeInTheDocument();
-      expect(screen.getByText("Luis pérez")).toBeInTheDocument();
+      expect(screen.getByText("Ana García")).toBeInTheDocument();
+      expect(screen.getByText("Luis Pérez")).toBeInTheDocument();
     });
   });
 
@@ -1647,7 +1647,7 @@ describe("BeepersPage", () => {
     await waitFor(() => {
       expect(screen.getByText("5003")).toBeInTheDocument();
       // Name is displayed instead of a blank "Titular" cell.
-      expect(screen.getByText("María lópez")).toBeInTheDocument();
+      expect(screen.getByText("María López")).toBeInTheDocument();
       // Category is shown in the role column.
       expect(screen.getByText("Enfermero/a")).toBeInTheDocument();
     });
@@ -2104,7 +2104,7 @@ describe("BeepersPage", () => {
       const row = rowOf("B-002");
       expect(row.queryByText(/· 90/)).not.toBeInTheDocument();
       expect(row.queryByRole("list", { name: "Equipos" })).not.toBeInTheDocument();
-      expect(row.getByText("Luis pérez").closest("td")?.textContent).toBe("Luis pérez");
+      expect(row.getByText("Luis Pérez").closest("td")?.textContent).toBe("Luis Pérez");
     });
 
     it("drops the pill when the busca is removed from the team", async () => {
@@ -2142,12 +2142,12 @@ describe("BeepersPage", () => {
     };
     const shouting: BeeperRecord = { ...mockRecords[0], id: "bsc_010", deviceNumber: "B-010", assignedTo: "FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS" };
 
-    it("shows a manual holder with only the first letter capitalized", async () => {
+    it("shows a manual holder with the first letter of each word capitalized", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting]) });
       renderPage();
       await screen.findByText("B-010");
 
-      expect(rowOf("B-010").getByText("Farmacia urgenci hector alonso farmaceutico urgencias")).toBeInTheDocument();
+      expect(rowOf("B-010").getByText("Farmacia Urgenci Hector Alonso Farmaceutico Urgencias")).toBeInTheDocument();
       expect(rowOf("B-010").queryByText("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS")).not.toBeInTheDocument();
     });
 
@@ -2162,7 +2162,7 @@ describe("BeepersPage", () => {
       renderPage();
       await screen.findByText("5001");
 
-      expect(rowOf("5001").getByText("Mecanico mecanico de gases")).toBeInTheDocument();
+      expect(rowOf("5001").getByText("Mecanico Mecanico De Gases")).toBeInTheDocument();
       expect(rowOf("5002").getByText("—", { selector: "span" })).toBeInTheDocument();
       cleanup();
       setupWindowApi({
@@ -2174,12 +2174,39 @@ describe("BeepersPage", () => {
       expect(rowOf("5001").getByText("Residente")).toBeInTheDocument();
     });
 
-    it("capitalizes an accented first letter", async () => {
+    it("capitalizes accented words", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "ÁNGEL PÉREZ" }]) });
       renderPage();
       await screen.findByText("B-010");
 
-      expect(rowOf("B-010").getByText("Ángel pérez")).toBeInTheDocument();
+      expect(rowOf("B-010").getByText("Ángel Pérez")).toBeInTheDocument();
+    });
+
+    it("starts a new word after spaces, hyphens, dots, slashes and parentheses, but not after digits or apostrophes", async () => {
+      const holders = [
+        ["B-011", "M.INTERNA-INFECCIOSOS", "M.Interna-Infecciosos"],
+        ["B-012", "D'ANGELO SANTI", "D'angelo Santi"],
+        ["B-013", "MECANICO 2DA GUARDIA", "Mecanico 2da Guardia"],
+        ["B-014", "(URGENCIAS) JEFE/A", "(Urgencias) Jefe/A"],
+        ["B-015", "Endocrino Guardia Endocrino Guardia", "Endocrino Guardia Endocrino Guardia"]
+      ] as const;
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
+      });
+      renderPage();
+      await screen.findByText("B-011");
+
+      for (const [deviceNumber, , expected] of holders) {
+        expect(rowOf(deviceNumber).getByText(expected, { selector: "span" })).toBeInTheDocument();
+      }
+    });
+
+    it("shows an already capitalized holder unchanged", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "Ángel Pérez" }]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      expect(rowOf("B-010").getByText("Ángel Pérez", { selector: "span" })).toBeInTheDocument();
     });
 
     it("leaves the stored value, the edit form and the search on the raw data", async () => {
