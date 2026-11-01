@@ -350,7 +350,7 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
       defaultId: 0,
       cancelId: 0,
       title: "Exportar datos sensibles",
-      message: "El archivo exportado contiene datos sensibles de la agenda y las buscas.",
+      message: "El archivo exportado contiene datos sensibles de la agenda y los buscas.",
       detail: "Guárdalo solo en una ubicación protegida y elimínalo cuando ya no sea necesario."
     } satisfies Electron.MessageBoxOptions;
     const warningResult = browserWindow

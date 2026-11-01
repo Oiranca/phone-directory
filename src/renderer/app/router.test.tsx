@@ -155,7 +155,7 @@ describe("router — lazy route smoke test", () => {
       await router.navigate("/beeper/new");
     });
 
-    expect(await screen.findByRole("heading", { name: "Nueva busca o equipo" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Gestión Buscas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
   });
 });
@@ -216,7 +216,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     await screen.findByText("B-001");
 
     await goTo("/beeper/new");
-    await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    await screen.findByRole("heading", { name: "Gestión Buscas" });
 
     expect(window.hospitalDirectory.listBeepers).toHaveBeenCalledTimes(1);
   });
@@ -227,7 +227,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
 
     await goTo("/beeper/new");
 
-    expect(await screen.findByRole("heading", { name: "Nueva busca o equipo" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Gestión Buscas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Editar equipo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument();
@@ -266,13 +266,13 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
   it("closes a half-open busca form when leaving /beeper/new", async () => {
     renderApp();
     await goTo("/beeper/new");
-    fireEvent.click(await screen.findByRole("button", { name: "Nueva busca" }));
-    expect(screen.getByRole("form", { name: "Nueva busca" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo busca" }));
+    expect(screen.getByRole("form", { name: "Nuevo busca" })).toBeInTheDocument();
 
     await goTo("/beeper");
 
     expect(await screen.findByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
-    expect(screen.queryByRole("form", { name: "Nueva busca" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Nuevo busca" })).not.toBeInTheDocument();
   });
 
   it("focuses the chooser heading after AppShell moves focus, and Escape leaves to /beeper", async () => {
@@ -282,7 +282,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
 
     await goTo("/beeper/new");
 
-    const heading = await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    const heading = await screen.findByRole("heading", { name: "Gestión Buscas" });
     await waitFor(() => expect(heading).toHaveFocus());
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
@@ -296,7 +296,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     await screen.findByText("Sin resultados");
 
     await goTo("/beeper/new");
-    await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    await screen.findByRole("heading", { name: "Gestión Buscas" });
     await goTo("/beeper");
 
     expect(await screen.findByText("B-001")).toBeInTheDocument();
@@ -306,13 +306,13 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
   it("drops a team-scoped busca form opened on /beeper when entering /beeper/new", async () => {
     renderApp();
     await selectUciInManager();
-    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
-    expect(screen.getByRole("form", { name: "Nueva busca en UCI · 9001" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en UCI · 9001" }));
+    expect(screen.getByRole("form", { name: "Nuevo busca en UCI · 9001" })).toBeInTheDocument();
 
     await goTo("/beeper/new");
 
     expect(await screen.findByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
-    expect(screen.queryByRole("form", { name: /Nueva busca/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: /Nuevo busca/ })).not.toBeInTheDocument();
   });
 
   // Guards the chooser's create path itself (handleCreateNew() passes no team),
@@ -320,8 +320,8 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
   it("a busca created from the chooser is never linked to a team", async () => {
     renderApp();
     await goTo("/beeper/new");
-    fireEvent.click(await screen.findByRole("button", { name: "Nueva busca" }));
-    const form = screen.getByRole("form", { name: "Nueva busca" });
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo busca" }));
+    const form = screen.getByRole("form", { name: "Nuevo busca" });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
@@ -379,7 +379,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(screen.getByText("Página 2 de 2")).toBeInTheDocument();
 
     await goTo("/beeper/new");
-    await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    await screen.findByRole("heading", { name: "Gestión Buscas" });
     await goTo("/beeper");
 
     expect(await screen.findByText("Página 1 de 2")).toBeInTheDocument();

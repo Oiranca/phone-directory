@@ -399,9 +399,9 @@ export const BeepersPage = () => {
           try {
             const updated = await window.hospitalDirectory.setBeeperTeamMembers(newBeeperTeamId, [...currentMemberIds, created.id]);
             setMemberships((current) => [...current.filter((membership) => membership.teamId !== newBeeperTeamId), ...updated]);
-            if (newBeeperTeam) setMemberStatus(`${created.deviceNumber} creada y añadida al equipo ${teamLabel(newBeeperTeam)}`);
+            if (newBeeperTeam) setMemberStatus(`${created.deviceNumber} creado y añadido al equipo ${teamLabel(newBeeperTeam)}`);
           } catch (err) {
-            setMemberError(`${toCompactToastMessage(err, "No se pudo añadir la busca al equipo.")} La busca se creó y puedes añadirla desde este equipo.`);
+            setMemberError(`${toCompactToastMessage(err, "No se pudo añadir el busca al equipo.")} El busca se creó y puedes añadirlo desde este equipo.`);
           }
         }
       }
@@ -411,7 +411,7 @@ export const BeepersPage = () => {
       setEditingImportedId(null);
       setNewBeeperTeamId(null);
       if (isCreateRoute) {
-        pushToast({ type: "success", message: "Busca guardada." });
+        pushToast({ type: "success", message: "Busca guardado." });
         navigate("/beeper");
       } else if (wasEditing) restoreEditFocus();
       else restoreCreateFocus();
@@ -419,7 +419,7 @@ export const BeepersPage = () => {
       setFormError(
         toCompactToastMessage(
           err,
-          editingId || editingImportedId ? "Error al actualizar la busca." : "Error al crear la busca."
+          editingId || editingImportedId ? "Error al actualizar el busca." : "Error al crear el busca."
         )
       );
     } finally {
@@ -440,13 +440,13 @@ export const BeepersPage = () => {
       // The main side drops memberships of a deleted busca; mirror it so the
       // next member update does not send a dead id.
       setMemberships((current) => current.filter((membership) => membership.beeperId !== deleteConfirm.id));
-      // A message about a busca (e.g. "La busca se creó…") must not outlive it.
+      // A message about a busca (e.g. "El busca se creó…") must not outlive it.
       setMemberError("");
       setMemberStatus("");
       setDeleteConfirm(null);
-      pushToast({ type: "success", message: "Busca eliminada. Se creó una copia de seguridad previa." });
+      pushToast({ type: "success", message: "Busca eliminado. Se creó una copia de seguridad previa." });
     } catch {
-      pushToast({ type: "error", message: "Error al eliminar la busca." });
+      pushToast({ type: "error", message: "Error al eliminar el busca." });
       setDeleteConfirm(null);
     } finally {
       setIsDeleting(false);
@@ -537,7 +537,7 @@ export const BeepersPage = () => {
     try {
       const updated = await window.hospitalDirectory.setBeeperTeamMembers(selectedTeam.id, Array.from(nextMemberIds));
       setMemberships((current) => [...current.filter((membership) => membership.teamId !== selectedTeam.id), ...updated]);
-      setMemberStatus(`${record.deviceNumber} ${include ? "añadida al" : "quitada del"} equipo ${teamLabel(selectedTeam)}`);
+      setMemberStatus(`${record.deviceNumber} ${include ? "añadido al" : "quitado del"} equipo ${teamLabel(selectedTeam)}`);
       // With an empty search the list shows members only, so the removed row's
       // button unmounts; hand focus to the search input instead of <body>.
       if (!include && !memberQuery.trim()) requestAnimationFrame(() => memberSearchRef.current?.focus());
@@ -566,7 +566,7 @@ export const BeepersPage = () => {
       : `${teamMemberRows.length} ${teamMemberRows.length === 1 ? "busca coincide" : "buscas coinciden"}`;
   const formTitle = editingId || editingImportedId
     ? "Editar busca"
-    : newBeeperTeam ? `Nueva busca en ${teamLabel(newBeeperTeam)}` : "Nueva busca";
+    : newBeeperTeam ? `Nuevo busca en ${teamLabel(newBeeperTeam)}` : "Nuevo busca";
 
   const deleteTeam = async () => {
     if (!teamDeleteConfirm || isSavingTeam) return;
@@ -601,7 +601,7 @@ export const BeepersPage = () => {
         <StatePanel
           role="alert"
           title="Error al cargar"
-          message="No se pudieron cargar las buscas o los equipos."
+          message="No se pudieron cargar los buscas o los equipos."
           action={
             <button
               type="button"
@@ -696,14 +696,14 @@ export const BeepersPage = () => {
           }}
         >
           <h2 id="beeper-page-title" ref={chooserHeadingRef} tabIndex={-1} className="text-xl font-semibold text-scs-blueDark focus:outline-hidden">
-            Nueva busca o equipo
+            Gestión Buscas
           </h2>
           {showChooser && (
             <>
               <p className="mt-2 text-sm text-slate-600">Elige qué quieres crear.</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button type="button" onClick={() => handleCreateNew()} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark">
-                  Nueva busca
+                  Nuevo busca
                 </button>
                 <button type="button" onClick={() => { selectTeam(null); setShowTeamManager(true); }} className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist">
                   Nuevo equipo
@@ -765,8 +765,8 @@ export const BeepersPage = () => {
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
-              <button type="button" aria-label={`Nueva busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
-                <BeepersIcon /> Nueva busca
+              <button type="button" aria-label={`Nuevo busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
+                <BeepersIcon /> Nuevo busca
               </button>
             </div>
             <div className="mt-4 grid gap-3">
@@ -784,7 +784,7 @@ export const BeepersPage = () => {
                 </div>
               )}
               {records.length === 0 && importedRecords.length === 0 && (
-                <p className="text-sm text-slate-600">No hay buscas registradas para asignar a este equipo.</p>
+                <p className="text-sm text-slate-600">No hay buscas registrados para asignar a este equipo.</p>
               )}
               {records.length + importedRecords.length > 0 && !memberSearchActive && (
                 <p className="text-sm text-slate-600">
@@ -952,7 +952,7 @@ export const BeepersPage = () => {
           title={query.trim() ? "Sin resultados" : "Sin registros"}
           message={query.trim()
             ? "No hay buscas que coincidan con la búsqueda."
-            : "No hay buscas registradas. Crea la primera busca."}
+            : "No hay buscas registrados. Crea el primero."}
           action={query.trim() ? undefined : (
             <Link
               to="/beeper/new"
@@ -1093,7 +1093,7 @@ export const BeepersPage = () => {
       <ConfirmDialog
         isOpen={deleteConfirm !== null}
         title="Confirmar eliminación"
-        message={`¿Estás seguro de que quieres eliminar la busca "${deleteConfirm?.deviceNumber ?? ""}"? Esta acción no se puede deshacer.`}
+        message={`¿Estás seguro de que quieres eliminar el busca "${deleteConfirm?.deviceNumber ?? ""}"? Esta acción no se puede deshacer.`}
         confirmLabel={isDeleting ? "Eliminando…" : "Eliminar"}
         cancelLabel="Cancelar"
         onConfirm={() => void handleDeleteConfirm()}
@@ -1105,7 +1105,7 @@ export const BeepersPage = () => {
       <ConfirmDialog
         isOpen={teamDeleteConfirm !== null}
         title="Confirmar eliminación del equipo"
-        message={`¿Quieres eliminar el equipo "${teamDeleteConfirm?.name ?? ""}"? Las buscas seguirán disponibles de forma individual.`}
+        message={`¿Quieres eliminar el equipo "${teamDeleteConfirm?.name ?? ""}"? Los buscas seguirán disponibles de forma individual.`}
         confirmLabel={isSavingTeam ? "Eliminando…" : "Eliminar equipo"}
         cancelLabel="Cancelar"
         onConfirm={() => void deleteTeam()}

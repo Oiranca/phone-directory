@@ -90,7 +90,7 @@ export const registerBeepersIpc = (
 
   handle(BEEPERS_CHANNELS.updateImported, async (_event, id: unknown, rawPayload: unknown) => {
     if (typeof id !== "string" || !id.trim()) {
-      throw new Error("ID de busca importada inválido.");
+      throw new Error("ID de busca importado inválido.");
     }
     try {
       const parsed = editableImportedBeeperRecordSchema.parse(rawPayload);

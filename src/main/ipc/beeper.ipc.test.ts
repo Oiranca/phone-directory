@@ -338,7 +338,7 @@ describe("registerBeepersIpc", () => {
       await expect(invoke("beepers:update-imported", "", {
         deviceNumber: "7182",
         department: "Esterilización"
-      })).rejects.toThrow("ID de busca importada inválido.");
+      })).rejects.toThrow("ID de busca importado inválido.");
     });
 
     it("validates and passes an imported edit to the service", async () => {

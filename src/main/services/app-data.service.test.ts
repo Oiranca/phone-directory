@@ -5360,7 +5360,7 @@ describe("AppDataService", () => {
     expect(result.beeperImportStatus).toEqual({
       status: "partial-failure",
       parsedCellCount: 1,
-      message: "No se pudieron guardar las buscas importadas."
+      message: "No se pudieron guardar los buscas importados."
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith("[BeepersImport] Failed to persist beepers records.");
     expect(consoleErrorSpy.mock.calls.flat().join("\n")).not.toContain("beepers write failure");

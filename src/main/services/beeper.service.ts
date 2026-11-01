@@ -85,7 +85,7 @@ const createUniqueId = (records: BeeperRecord[]): string => {
   while (records.some((r) => r.id === candidate)) {
     attempts += 1;
     if (attempts >= maxAttempts) {
-      throw new Error("No se pudo generar un ID único para la busca después de 1000 intentos.");
+      throw new Error("No se pudo generar un ID único para el busca después de 1000 intentos.");
     }
     candidate = createEntityId();
   }
@@ -101,7 +101,7 @@ const createUniqueImportedId = (existingIds: Set<string>): string => {
   while (existingIds.has(candidate)) {
     attempts += 1;
     if (attempts >= maxAttempts) {
-      throw new Error("No se pudo generar un ID único para la busca importada después de 1000 intentos.");
+      throw new Error("No se pudo generar un ID único para el busca importado después de 1000 intentos.");
     }
     candidate = createImportedEntityId();
   }
@@ -203,7 +203,7 @@ export class BeepersService {
     backupDirectoryPath: string,
     prefix: string
   ): Promise<string> {
-    const errorMessage = "No se pudo crear la copia de seguridad de las buscas.";
+    const errorMessage = "No se pudo crear la copia de seguridad de los buscas.";
     await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage, true);
     await ensurePrivateDirectory(backupDirectoryPath);
     await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage);
@@ -233,11 +233,11 @@ export class BeepersService {
       }
     }
 
-    throw new Error("No se pudo generar un nombre único para la copia de seguridad de las buscas.");
+    throw new Error("No se pudo generar un nombre único para la copia de seguridad de los buscas.");
   }
 
   private async pruneBackups(backupDirectoryPath: string, retentionCount: number, prefix: string): Promise<void> {
-    const errorMessage = "No se pudieron rotar las copias de seguridad de las buscas.";
+    const errorMessage = "No se pudieron rotar las copias de seguridad de los buscas.";
     await assertPathChainIsNotSymlink(backupDirectoryPath, errorMessage);
     const canonicalBackupDirectory = await fs.realpath(backupDirectoryPath);
     const entries = await fs.readdir(canonicalBackupDirectory, { withFileTypes: true });
@@ -329,7 +329,7 @@ export class BeepersService {
           const importMessage = error instanceof Error ? error.message : String(error);
           const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
           throw new Error(
-            `No se pudo importar el archivo combinado ni restaurar las buscas anteriores. Importación: ${importMessage}. Restauración: ${rollbackMessage}.`
+            `No se pudo importar el archivo combinado ni restaurar los buscas anteriores. Importación: ${importMessage}. Restauración: ${rollbackMessage}.`
           );
         }
         throw error;
@@ -377,7 +377,7 @@ export class BeepersService {
       const dataset = await this.readDataset();
       const index = dataset.records.findIndex((r) => r.id === id);
       if (index === -1) {
-        throw new Error("No se encontró la busca solicitada.");
+        throw new Error("No se encontró el busca solicitado.");
       }
       assertUniqueDeviceNumber(dataset.records, parsed.deviceNumber, id);
       const updatedRecord = beeperRecordSchema.parse({ ...parsed, id });
@@ -393,7 +393,7 @@ export class BeepersService {
       const dataset = await this.readDataset();
       const index = dataset.records.findIndex((r) => r.id === id);
       if (index === -1) {
-        throw new Error("No se encontró la busca solicitada.");
+        throw new Error("No se encontró el busca solicitado.");
       }
       await this.createBackup(dataset, options.backupDirectoryPath, "beepers-before-delete");
       const nextRecords = dataset.records.filter((r) => r.id !== id);
@@ -480,7 +480,7 @@ export class BeepersService {
       const availableBeeperIds = new Set([...dataset.records, ...dataset.importedRecords].map((record) => record.id));
       const memberIds = new Set(beeperIds);
       for (const beeperId of memberIds) {
-        if (!availableBeeperIds.has(beeperId)) throw new Error("No se encontró la busca solicitada.");
+        if (!availableBeeperIds.has(beeperId)) throw new Error("No se encontró el busca solicitado.");
       }
       const memberships = Array.from(memberIds, (beeperId) => ({ teamId, beeperId }));
       const nextDataset = beepersDatasetSchema.parse({
@@ -500,14 +500,14 @@ export class BeepersService {
       const index = importedRecords.findIndex((record) => record.id === id);
 
       if (index === -1) {
-        throw new Error("No se encontró la busca importada solicitada.");
+        throw new Error("No se encontró el busca importado solicitado.");
       }
 
       const current = importedRecords[index]!;
       const usesNamedLayout = current.name !== undefined || current.category !== undefined || current.holderType === undefined;
 
       if (!usesNamedLayout && !parsed.assignedTo) {
-        throw new Error("El titular de la busca es obligatorio.");
+        throw new Error("El titular del busca es obligatorio.");
       }
 
       const updatedRecord = importedBeeperRecordSchema.parse({

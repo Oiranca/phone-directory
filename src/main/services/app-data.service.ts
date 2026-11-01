@@ -955,7 +955,7 @@ export class AppDataService {
         beeperImportStatus = {
           status: "partial-failure",
           parsedCellCount: beepersParseResult.parsedCellCount,
-          message: "No se pudieron guardar las buscas importadas."
+          message: "No se pudieron guardar los buscas importados."
         };
       }
     }
