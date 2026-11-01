@@ -1994,6 +1994,24 @@ describe("BeepersPage", () => {
       await waitFor(() => expect(screen.getByRole("heading", { name: "Equipos" })).toHaveFocus());
     });
 
+    it("returns focus to the 'Eliminar equipo' trigger when the delete fails", async () => {
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        deleteBeeperTeam: vi.fn().mockRejectedValue(new Error("delete failed"))
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+      const trigger = screen.getByRole("button", { name: "Eliminar equipo" });
+      // A real click focuses the button; fireEvent.click does not.
+      trigger.focus();
+
+      fireEvent.click(trigger);
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+
+      await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveFocus());
+    });
+
     it("blocks team deletion while a member update is saving", async () => {
       let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
       setupWindowApi({
@@ -2039,7 +2057,11 @@ describe("BeepersPage", () => {
       const row = rowOf("B-001");
       const pill = row.getByText("UCI · 9001");
       expect(row.getByText("Urgencias · 9002")).toBeInTheDocument();
-      expect(row.getByText("Equipos:")).toHaveClass("sr-only");
+      const list = row.getByRole("list", { name: "Equipos" });
+      expect(within(list).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["UCI · 9001", "Urgencias · 9002"]);
+      // Keeps "name · number" together when the column is narrow.
+      expect(pill).toHaveClass("whitespace-nowrap");
+      expect(within(list).queryByRole("button")).not.toBeInTheDocument();
       expect(row.queryByRole("button", { name: /UCI · 9001/ })).not.toBeInTheDocument();
       expect(row.queryByRole("link", { name: /UCI · 9001/ })).not.toBeInTheDocument();
       fireEvent.click(pill);
@@ -2058,6 +2080,22 @@ describe("BeepersPage", () => {
       expect(row.queryByText("Urgencias · 9002")).not.toBeInTheDocument();
     });
 
+    it("puts the pills right under the holder, before Horario and Notas, on an imported row", async () => {
+      seedMembers({
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], schedule: "Mañanas", notes: "Guardia" },
+          mockImportedRecords[1]
+        ])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      const row = rowOf("5001");
+      const list = row.getByRole("list", { name: "Equipos" });
+      expect(list.compareDocumentPosition(row.getByText(/Horario:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(list.compareDocumentPosition(row.getByText(/Notas:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it("shows no pill and no placeholder on a busca without teams", async () => {
       seedMembers();
       renderPage();
@@ -2065,7 +2103,7 @@ describe("BeepersPage", () => {
 
       const row = rowOf("B-002");
       expect(row.queryByText(/· 90/)).not.toBeInTheDocument();
-      expect(row.queryByText("Equipos:")).not.toBeInTheDocument();
+      expect(row.queryByRole("list", { name: "Equipos" })).not.toBeInTheDocument();
       expect(row.getByText("Luis Pérez").closest("td")?.textContent).toBe("Luis Pérez");
     });
 

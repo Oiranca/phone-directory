@@ -66,14 +66,14 @@ const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayI
 const TeamPills = ({ teams }: { teams: BeeperTeam[] | undefined }) => {
   if (!teams || teams.length === 0) return null;
   return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      <span className="sr-only">Equipos:</span>
+    // Explicit role: Tailwind's preflight removes list-style, and Safari/VoiceOver then drops list semantics.
+    <ul role="list" aria-label="Equipos" className="mt-1 flex flex-wrap gap-1">
       {teams.map((team) => (
-        <span key={team.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+        <li key={team.id} className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
           {teamLabel(team)}
-        </span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 };
 
@@ -1123,9 +1123,9 @@ export const BeepersPage = () => {
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="px-4 py-3 text-slate-700">
                       <span>{record.name ?? record.holderType ?? "—"}</span>
+                      <TeamPills teams={teamsByBeeperId.get(record.id)} />
                       {record.schedule && <span className="mt-1 block text-xs text-slate-500">Horario: {record.schedule}</span>}
                       {record.notes && <span className="mt-1 block text-xs text-slate-500">Notas: {record.notes}</span>}
-                      <TeamPills teams={teamsByBeeperId.get(record.id)} />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

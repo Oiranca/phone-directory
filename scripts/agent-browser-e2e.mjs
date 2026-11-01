@@ -111,7 +111,7 @@ const navigateWithinBudget = async (link, heading) => {
   const startedAt = Date.now();
   clickRole("link", link, true);
   while (Date.now() - startedAt < 3_000) {
-    if (browserCommand("eval", `document.querySelector('main h2')?.textContent?.trim() === ${JSON.stringify(heading)}`) === "true") {
+    if (h2Is(heading)) {
       return Date.now() - startedAt;
     }
     await delay(50);
@@ -1018,7 +1018,9 @@ try {
     const beeper9001 = importedBeepers.find((record) => record.deviceNumber === "9001");
     const beeper9990 = beepers.find((record) => record.deviceNumber === "9990");
     const editedTeam = teams.find((team) => team.name === "Equipo E2E Editado");
-    const rows = [...document.querySelectorAll("tbody tr")].map((row) => row.innerText);
+    const rowElements = [...document.querySelectorAll("tbody tr")];
+    const rows = rowElements.map((row) => row.innerText);
+    const teamListOf = (text) => rowElements.find((row) => row.innerText.includes(text))?.querySelector('ul[aria-label="Equipos"]') ?? null;
     const row9001 = rows.filter((text) => text.includes("9001"));
     const row9002 = rows.filter((text) => text.includes("9002"));
     const row9990 = rows.filter((text) => text.includes("9990"));
@@ -1032,10 +1034,10 @@ try {
       distinctTeamsFor9001.size === 2 &&
       memberships.some((membership) => membership.beeperId === beeper9990.id && membership.teamId === editedTeam.id) &&
       rows.length === 3 && row9001.length === 1 && row9002.length === 1 && row9990.length === 1 &&
-      row9001[0].includes("Equipos:") &&
+      teamListOf("9001") !== null &&
       row9001[0].includes("Equipo Importado · 9801") &&
       row9001[0].includes("Equipo E2E Editado · 9902") &&
-      !row9002[0].includes("Equipos:") && !row9002[0].includes(" · 99") &&
+      teamListOf("9002") === null && !row9002[0].includes(" · 99") &&
       row9990[0].includes("Equipo E2E Editado · 9902") && !row9990[0].includes("Equipo Importado")
     );
   })()`) === "true");
@@ -1072,7 +1074,9 @@ try {
     ]);
     const beeper9001 = importedBeepers.find((record) => record.deviceNumber === "9001");
     const beeper9990 = beepers.find((record) => record.deviceNumber === "9990");
-    const rows = [...document.querySelectorAll("tbody tr")].map((row) => row.innerText);
+    const rowElements = [...document.querySelectorAll("tbody tr")];
+    const rows = rowElements.map((row) => row.innerText);
+    const teamListOf = (text) => rowElements.find((row) => row.innerText.includes(text))?.querySelector('ul[aria-label="Equipos"]') ?? null;
     const row9001 = rows.filter((text) => text.includes("9001"));
     const row9002 = rows.filter((text) => text.includes("9002"));
     const row9990 = rows.filter((text) => text.includes("9990"));
@@ -1089,7 +1093,7 @@ try {
       rows.length === 3 && row9001.length === 1 && row9002.length === 1 && row9990.length === 1 &&
       row9001[0].includes("Equipo Importado · 9801") &&
       row9001[0].includes("Equipo E2E Editado · 9902") &&
-      !row9002[0].includes("Equipos:") &&
+      teamListOf("9002") === null &&
       row9990[0].includes("Equipo E2E Editado · 9902")
     );
   })()`) === "true");
