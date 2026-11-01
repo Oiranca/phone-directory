@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useMatch, useNavigate } from "react-router";
+import { Link, useMatch, useNavigate } from "react-router";
 import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
@@ -209,7 +209,15 @@ export const BeepersPage = () => {
   // either form returns to /beeper.
   const teamCreateMode = isCreateRoute && showTeamManager;
   const showChooser = isCreateRoute && !showForm && !teamCreateMode;
-  useFocusOnMount(chooserHeadingRef, showChooser && !isLoading && !loadError);
+  const chooserReady = showChooser && !isLoading && !loadError;
+  useEffect(() => {
+    if (!chooserReady) return;
+    // AppShell moves focus to <main> in an effect of its own on every route
+    // change, and parent effects run after this one. Defer one frame so the
+    // heading keeps focus (and Escape on the chooser works).
+    const frame = requestAnimationFrame(() => chooserHeadingRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [chooserReady]);
   useFocusOnMount(teamNameRef, teamCreateMode);
 
   const filteredRecords = useMemo(() => {
@@ -354,10 +362,9 @@ export const BeepersPage = () => {
     setEditingImportedId(null);
     setNewBeeperTeamId(null);
     setFormError("");
-    if (isCreateRoute) {
-      navigate("/beeper");
-      return;
-    }
+    // On /beeper/new, cancelling a form shows the chooser again (its heading
+    // takes focus); no focus restore needed.
+    if (isCreateRoute) return;
     if (wasEditing) restoreEditFocus();
     else restoreCreateFocus();
   };
@@ -403,8 +410,10 @@ export const BeepersPage = () => {
       setEditingId(null);
       setEditingImportedId(null);
       setNewBeeperTeamId(null);
-      if (isCreateRoute) navigate("/beeper");
-      else if (wasEditing) restoreEditFocus();
+      if (isCreateRoute) {
+        pushToast({ type: "success", message: "Busca guardada." });
+        navigate("/beeper");
+      } else if (wasEditing) restoreEditFocus();
       else restoreCreateFocus();
     } catch (err) {
       setFormError(
@@ -460,6 +469,24 @@ export const BeepersPage = () => {
     setMemberQuery("");
   };
 
+  // BeepersPage serves /beeper and /beeper/new from two routes and is NOT
+  // remounted when moving between them, so page state (open forms, selected
+  // team, search and messages) would leak across. Reset it on route change
+  // instead of remounting so the data is not fetched again.
+  const [lastIsCreateRoute, setLastIsCreateRoute] = useState(isCreateRoute);
+  if (lastIsCreateRoute !== isCreateRoute) {
+    setLastIsCreateRoute(isCreateRoute);
+    setShowForm(false);
+    setEditingId(null);
+    setEditingImportedId(null);
+    setNewBeeperTeamId(null);
+    setFormError("");
+    setShowTeamManager(false);
+    setDeleteConfirm(null);
+    setTeamDeleteConfirm(null);
+    selectTeam(null);
+  }
+
   const saveTeam = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSavingTeam) return;
@@ -478,15 +505,10 @@ export const BeepersPage = () => {
       } else {
         const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
         setTeams((current) => [...current, created]);
-        if (isCreateRoute) {
-          setShowTeamManager(false);
-          selectTeam(null);
-          pushToast({ type: "success", message: "Equipo guardado." });
-          navigate("/beeper");
-          return;
-        }
-        setSelectedTeamId(created.id);
-        setEditingTeamId(created.id);
+        // Only reachable from /beeper/new: /beeper only edits existing teams.
+        setShowTeamManager(false);
+        selectTeam(null);
+        navigate("/beeper");
       }
       pushToast({ type: "success", message: "Equipo guardado." });
     } catch (err) {
@@ -608,7 +630,7 @@ export const BeepersPage = () => {
               {isSavingTeam ? "Guardando…" : "Guardar equipo"}
             </button>
             {teamCreateMode && (
-              <button type="button" data-keyboard-cancel onClick={() => { setShowTeamManager(false); selectTeam(null); navigate("/beeper"); }} disabled={isSavingTeam} className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="button" data-keyboard-cancel onClick={() => { setShowTeamManager(false); selectTeam(null); }} disabled={isSavingTeam} className="focus-ring rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
                 Cancelar
               </button>
             )}
@@ -718,7 +740,7 @@ export const BeepersPage = () => {
               Gestionar equipos
             </button>}
           </div>
-          {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «Gestión Buscas» en el menú lateral.</p>}
+          {teams.length === 0 && <p className="text-sm text-slate-600">Todavía no hay equipos. Crea uno desde «<Link to="/beeper/new" className="focus-ring rounded font-semibold text-scs-blue underline">Gestión Buscas</Link>».</p>}
           {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Cierra el formulario de busca para editar el equipo.</p>}
         </div>
 
@@ -919,12 +941,20 @@ export const BeepersPage = () => {
       )}
 
       {/* Empty state */}
-      {filteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
+      {!isCreateRoute && filteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
         <StatePanel
           title={query.trim() ? "Sin resultados" : "Sin registros"}
           message={query.trim()
             ? "No hay buscas que coincidan con la búsqueda."
-            : "No hay buscas registradas. Crea el primer registro."}
+            : "No hay buscas registradas. Crea la primera busca."}
+          action={query.trim() ? undefined : (
+            <Link
+              to="/beeper/new"
+              className="focus-ring inline-block rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark"
+            >
+              Crear busca o equipo
+            </Link>
+          )}
         />
       )}
 
