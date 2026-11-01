@@ -783,6 +783,8 @@ export const BeepersPage = () => {
 
       {teamMembersMode && selectedTeam && (
         <div
+          role="group"
+          aria-labelledby="beeper-page-title"
           className="rounded-3xl bg-white p-4 shadow-panel sm:p-5"
           onKeyDown={(event) => {
             // Nothing is unsaved here, so Escape is handled locally (not through
@@ -860,7 +862,7 @@ export const BeepersPage = () => {
           className="rounded-3xl bg-white p-6 shadow-panel"
           aria-label={formTitle}
         >
-          <FormHeading id={formIsPageTitle ? "beeper-page-title" : undefined} className="mb-5 text-lg font-semibold text-scs-blueDark">
+          <FormHeading id={formIsPageTitle ? "beeper-page-title" : undefined} className={`mb-5 font-semibold text-scs-blueDark ${formIsPageTitle ? "text-xl" : "text-lg"}`}>
             {formTitle}
           </FormHeading>
           {formError && <StatusBanner type="error" message={formError} />}

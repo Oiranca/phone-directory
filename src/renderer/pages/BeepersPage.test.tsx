@@ -130,7 +130,8 @@ const saveNewTeamFromChooser = async () => {
   await screen.findByRole("heading", { name: "Buscas del equipo" });
 };
 
-// Exactly one h2 titles the page in every state, and the root section is named by it.
+// Exactly one h2 titles the page in the ready and /beeper/new states, and the root section is
+// named by it. (The /beeper empty state and the load-error state render a second h2 from StatePanel.)
 const expectSinglePageTitle = (text: string) => {
   const titles = document.querySelectorAll("#beeper-page-title");
   expect(titles).toHaveLength(1);
@@ -443,6 +444,18 @@ describe("BeepersPage", () => {
     expect(screen.getByLabelText(/Nombre del equipo/i)).toBeEnabled();
     expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
     expect(screen.queryByText("Guarda o cancela el busca para editar el equipo.")).not.toBeInTheDocument();
+  });
+
+  it("words the lock reason as 'Guarda' while editing an imported busca", async () => {
+    setupWindowApi({
+      listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+    });
+    renderPage();
+    await openTeamManager("team_uci");
+    fireEvent.click(screen.getByRole("button", { name: /editar busca 5001/i }));
+
+    expect(screen.getByLabelText(/Nombre del equipo/i)).toHaveAccessibleDescription("Guarda o cancela el busca para editar el equipo.");
   });
 
   it("disables 'Limpiar búsqueda' while a busca form is open", async () => {
@@ -1861,6 +1874,7 @@ describe("BeepersPage", () => {
 
       await screen.findByRole("button", { name: "Nuevo equipo" });
       expectSinglePageTitle("Gestión Buscas");
+      expect(screen.queryByRole("group", { name: /Equipo/ })).not.toBeInTheDocument();
     });
 
     it("becomes the busca form title, and the chooser heading goes away", async () => {
@@ -1869,6 +1883,8 @@ describe("BeepersPage", () => {
 
       expectSinglePageTitle("Nuevo busca");
       expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      // Same size as the chooser's title, not smaller.
+      expect(screen.getByRole("heading", { name: "Nuevo busca", level: 2 })).toHaveClass("text-xl");
     });
 
     it("becomes 'Nuevo equipo' on the team form, and the chooser heading goes away", async () => {
@@ -1877,6 +1893,7 @@ describe("BeepersPage", () => {
 
       expectSinglePageTitle("Nuevo equipo");
       expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: /Equipo/ })).not.toBeInTheDocument();
     });
 
     it("becomes the team heading on the members panel, with h3 subsections", async () => {
@@ -1885,6 +1902,7 @@ describe("BeepersPage", () => {
       await saveNewTeamFromChooser();
 
       expectSinglePageTitle("Equipo Quirófano · 9010");
+      expect(screen.getByRole("group", { name: "Equipo Quirófano · 9010" })).toContainElement(screen.getByLabelText("Buscar busca"));
       expect(screen.queryByRole("heading", { name: "Gestión Buscas" })).not.toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Buscas del equipo", level: 3 })).toBeInTheDocument();
       expect(screen.queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
@@ -1897,7 +1915,9 @@ describe("BeepersPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Nuevo busca en Quirófano · 9010" }));
 
       expectSinglePageTitle("Equipo Quirófano · 9010");
-      expect(screen.getByRole("heading", { name: "Nuevo busca en Quirófano · 9010", level: 3 })).toBeInTheDocument();
+      const formTitle = screen.getByRole("heading", { name: "Nuevo busca en Quirófano · 9010", level: 3 });
+      expect(formTitle).toHaveClass("text-lg");
+      expect(formTitle).not.toHaveClass("text-xl");
     });
 
     it("comes back to 'Gestión Buscas' when a form is cancelled to the chooser", async () => {
