@@ -205,8 +205,8 @@ export const BeepersPage = () => {
   useFocusOnMount(firstFieldRef, showForm && (editingId ?? editingImportedId ?? "new"));
 
   // On /beeper/new the page opens on a chooser (busca or team); creating a
-  // team there reuses the team form in create mode. Cancelling or saving
-  // either form returns to /beeper.
+  // team there reuses the team form in create mode. Cancelling a form returns
+  // to the chooser; saving returns to /beeper.
   const teamCreateMode = isCreateRoute && showTeamManager;
   const showChooser = isCreateRoute && !showForm && !teamCreateMode;
   const chooserReady = showChooser && !isLoading && !loadError;
@@ -470,9 +470,10 @@ export const BeepersPage = () => {
   };
 
   // BeepersPage serves /beeper and /beeper/new from two routes and is NOT
-  // remounted when moving between them, so page state (open forms, selected
-  // team, search and messages) would leak across. Reset it on route change
-  // instead of remounting so the data is not fetched again.
+  // remounted when moving between them, so local state would leak across.
+  // Reset the open forms, confirm dialogs, team manager and selected team
+  // (with its member search and messages) and the page search on route change
+  // instead of remounting, so the data is not fetched again.
   const [lastIsCreateRoute, setLastIsCreateRoute] = useState(isCreateRoute);
   if (lastIsCreateRoute !== isCreateRoute) {
     setLastIsCreateRoute(isCreateRoute);
@@ -484,6 +485,7 @@ export const BeepersPage = () => {
     setShowTeamManager(false);
     setDeleteConfirm(null);
     setTeamDeleteConfirm(null);
+    setQuery("");
     selectTeam(null);
   }
 
@@ -505,9 +507,8 @@ export const BeepersPage = () => {
       } else {
         const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
         setTeams((current) => [...current, created]);
-        // Only reachable from /beeper/new: /beeper only edits existing teams.
-        setShowTeamManager(false);
-        selectTeam(null);
+        // Only reachable from /beeper/new (/beeper only edits existing teams);
+        // the route-change reset closes the manager and clears the team state.
         navigate("/beeper");
       }
       pushToast({ type: "success", message: "Equipo guardado." });

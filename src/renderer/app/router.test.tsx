@@ -246,7 +246,7 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(screen.queryByRole("form", { name: "Editar busca" })).not.toBeInTheDocument();
   });
 
-  it("closes a half-open create form when leaving /beeper/new", async () => {
+  it("closes the team manager when leaving /beeper/new in the middle of creating a team", async () => {
     renderApp();
     await goTo("/beeper/new");
     fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
@@ -257,6 +257,9 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(await screen.findByRole("heading", { name: "Registro de Buscas" })).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Nombre del equipo/i)).not.toBeInTheDocument();
+    // The leak: showTeamManager stayed true, so /beeper opened with the manager expanded.
+    expect(screen.queryByLabelText("Equipo a gestionar")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gestionar equipos" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("closes a half-open busca form when leaving /beeper/new", async () => {
@@ -284,11 +287,33 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
   });
 
-  it("does not link a team to a busca created from the chooser after a team was selected on /beeper", async () => {
+  it("clears the search when leaving and re-entering /beeper", async () => {
+    renderApp();
+    await goTo("/beeper");
+    await screen.findByText("B-001");
+    fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "zzz" } });
+    await screen.findByText("Sin resultados");
+
+    await goTo("/beeper/new");
+    await screen.findByRole("heading", { name: "Nueva busca o equipo" });
+    await goTo("/beeper");
+
+    expect(await screen.findByText("B-001")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Buscar buscas/i)).toHaveValue("");
+  });
+
+  it("drops a team-scoped busca form opened on /beeper and never links a team from the chooser", async () => {
     renderApp();
     await selectUciInManager();
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca en UCI · 9001" }));
+    expect(screen.getByRole("form", { name: "Nueva busca en UCI · 9001" })).toBeInTheDocument();
+
     await goTo("/beeper/new");
-    fireEvent.click(await screen.findByRole("button", { name: "Nueva busca" }));
+
+    expect(await screen.findByRole("button", { name: "Nuevo equipo" })).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: /Nueva busca/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nueva busca" }));
     const form = screen.getByRole("form", { name: "Nueva busca" });
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
