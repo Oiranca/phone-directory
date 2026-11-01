@@ -1956,7 +1956,6 @@ describe("BeepersPage", () => {
       expectSinglePageTitle("Gestión Buscas");
       expect(screen.queryByRole("heading", { name: "Registro de Buscas" })).not.toBeInTheDocument();
     });
-
   });
 
   describe("focus after deleting a team", () => {
@@ -2011,7 +2010,9 @@ describe("BeepersPage", () => {
       await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalled());
       await waitFor(() => expect(screen.getByRole("button", { name: "Eliminar equipo" })).toHaveFocus());
     });
+  });
 
+  describe("team deletion guard", () => {
     it("blocks team deletion while a member update is saving", async () => {
       let resolveSave: (value: Array<{ teamId: string; beeperId: string }>) => void = () => undefined;
       setupWindowApi({
@@ -2092,6 +2093,8 @@ describe("BeepersPage", () => {
 
       const row = rowOf("5001");
       const list = row.getByRole("list", { name: "Equipos" });
+      const holder = row.getByText("Principal");
+      expect(holder.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(list.compareDocumentPosition(row.getByText(/Horario:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(list.compareDocumentPosition(row.getByText(/Notas:/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
@@ -2139,6 +2142,11 @@ describe("BeepersPage", () => {
       const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
       if (!row) throw new Error(`No row for ${deviceNumber}`);
       return within(row);
+    };
+    const rowOfDevice = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return row;
     };
     const shouting: BeeperRecord = { ...mockRecords[0], id: "bsc_010", deviceNumber: "B-010", assignedTo: "FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS" };
 
@@ -2209,7 +2217,7 @@ describe("BeepersPage", () => {
       expect(rowOf("B-010").getByText("Ángel Pérez", { selector: "span" })).toBeInTheDocument();
     });
 
-    it("shows the holder title-cased in the members panel row and its toggle's name, and still searches the raw value", async () => {
+    it("shows the holder title-cased in the members panel row and its toggle's name, and finds it case-insensitively", async () => {
       setupWindowApi({
         listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
         listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
@@ -2228,20 +2236,43 @@ describe("BeepersPage", () => {
       }
     });
 
-    it("leaves the stored value, the edit form and the search on the raw data", async () => {
+    it("keeps the raw holder in the edit form", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting]) });
+      renderPage();
+      await screen.findByText("B-010");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca B-010/i }));
+
+      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS");
+    });
+
+    it("finds a holder by lowercase and uppercase queries", async () => {
       setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([shouting, mockRecords[1]]) });
       renderPage();
       await screen.findByText("B-010");
 
-      fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "farmacia urgenci" } });
-      await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
-      expect(screen.getByText("B-010")).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: "FARMACIA URGENCI" } });
-      await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
-      expect(screen.getByText("B-010")).toBeInTheDocument();
+      for (const query of ["farmacia urgenci", "FARMACIA URGENCI"]) {
+        fireEvent.change(screen.getByLabelText(/Buscar buscas/i), { target: { value: query } });
+        await waitFor(() => expect(screen.queryByText("B-002")).not.toBeInTheDocument());
+        expect(screen.getByText("B-010")).toBeInTheDocument();
+      }
+    });
 
-      fireEvent.click(screen.getByRole("button", { name: /editar busca B-010/i }));
-      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS");
+    it("only transforms the holder column, not Rol or Departamento", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, role: "UCI", department: "URGENCIAS" }]),
+        listImportedBeepers: vi.fn().mockResolvedValue([
+          { ...mockImportedRecords[0], name: "MECANICO DE GASES", category: "UCI", department: "URGENCIAS" }
+        ])
+      });
+      renderPage();
+      await screen.findByText("B-010");
+
+      for (const deviceNumber of ["B-010", "5001"]) {
+        const cells = within(rowOfDevice(deviceNumber)).getAllByRole("cell");
+        expect(cells[1]).toHaveTextContent(/^UCI$/);
+        expect(cells[2]).toHaveTextContent(/^URGENCIAS$/);
+      }
     });
   });
 });
