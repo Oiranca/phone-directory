@@ -64,7 +64,8 @@ const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayI
 
 // Display only: lowercases the text and uppercases the first letter of every word, whatever
 // the case of the source data. A word starts at the beginning or after any character that is
-// not a letter, digit or apostrophe (spaces, hyphens, dots, slashes, parentheses). Text
+// not a letter, combining mark, digit or apostrophe (spaces, hyphens, dots, slashes,
+// parentheses). Marks keep decomposed accents ("e" + U+0301) inside their word. Text
 // without letters (the "—" placeholder) is unchanged.
 const titleCaseWords = (value: string): string => {
   const trimmed = value.trim();
@@ -75,7 +76,7 @@ const titleCaseWords = (value: string): string => {
     .map((character) => {
       const isLetter = /\p{L}/u.test(character);
       const result = isLetter && startsWord ? character.toLocaleUpperCase("es") : character;
-      startsWord = !isLetter && !/[\p{N}']/u.test(character);
+      startsWord = !/[\p{L}\p{M}\p{N}'’]/u.test(character);
       return result;
     })
     .join("");
@@ -105,14 +106,18 @@ const TEAM_LOCK_REASON_ID = "team-lock-reason";
 
 const NO_HOLDER = "Sin titular";
 
+const storedMemberHolder = (record: BeeperRecord | ImportedBeeperRecord): string | undefined =>
+  "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType;
+
 // Stored value, used for matching the member search.
 const rawMemberHolder = (record: BeeperRecord | ImportedBeeperRecord): string =>
-  "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? NO_HOLDER;
+  storedMemberHolder(record) ?? NO_HOLDER;
 
 // Same display case as the table's holder column; for rendering and labels only.
+// The fallback is chosen before casing, so a stored "Sin titular" is cased like any holder.
 const memberHolder = (record: BeeperRecord | ImportedBeeperRecord): string => {
-  const holder = rawMemberHolder(record);
-  return holder === NO_HOLDER ? holder : titleCaseWords(holder);
+  const holder = storedMemberHolder(record);
+  return holder === undefined ? NO_HOLDER : titleCaseWords(holder);
 };
 
 // Built from what the row shows (number, holder and, for imported rows, source

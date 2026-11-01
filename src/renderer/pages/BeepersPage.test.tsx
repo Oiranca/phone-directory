@@ -2196,7 +2196,13 @@ describe("BeepersPage", () => {
         ["B-012", "D'ANGELO SANTI", "D'angelo Santi"],
         ["B-013", "MECANICO 2DA GUARDIA", "Mecanico 2da Guardia"],
         ["B-014", "(URGENCIAS) JEFE/A", "(Urgencias) Jefe/A"],
-        ["B-015", "Endocrino Guardia Endocrino Guardia", "Endocrino Guardia Endocrino Guardia"]
+        ["B-015", "Endocrino Guardia Endocrino Guardia", "Endocrino Guardia Endocrino Guardia"],
+        ["B-016", "ÁNGEL PÉREZ", "Ángel Pérez"],
+        // Decomposed accents (letter + combining mark) must not split the word.
+        ["B-017", "A\u0301NGEL PE\u0301REZ", "A\u0301ngel Pe\u0301rez"],
+        ["B-018", "JOSE\u0301 MARI\u0301A", "Jose\u0301 Mari\u0301a"],
+        ["B-019", "İSTANBUL", "I\u0307stanbul"],
+        ["B-020", "D\u2019ANGELO SANTI", "D\u2019angelo Santi"]
       ] as const;
       setupWindowApi({
         listBeepers: vi.fn().mockResolvedValue(holders.map(([deviceNumber, assignedTo]) => ({ ...shouting, id: `bsc_${deviceNumber}`, deviceNumber, assignedTo })))
@@ -2217,23 +2223,70 @@ describe("BeepersPage", () => {
       expect(rowOf("B-010").getByText("Ángel Pérez", { selector: "span" })).toBeInTheDocument();
     });
 
-    it("shows the holder title-cased in the members panel row and its toggle's name, and finds it case-insensitively", async () => {
+    const openMemberPanel = async (readyText: string) => {
+      await screen.findByText(readyText);
+      fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
+      fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+    };
+
+    it("shows the holder title-cased in the members panel row and its toggle's name", async () => {
       setupWindowApi({
         listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
         listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
       });
       renderPage();
-      await screen.findByText("B-010");
-      fireEvent.click(screen.getByRole("button", { name: "Gestionar equipos" }));
-      fireEvent.change(screen.getByLabelText("Equipo a gestionar"), { target: { value: "team_uci" } });
+      await openMemberPanel("B-010");
 
-      for (const query of ["luis perez", "LUIS PEREZ", "B-010"]) {
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-010" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
+      expect(within(list).queryByText(/LUIS PEREZ GUARDIA/)).not.toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Luis Perez Guardia" })).toBeInTheDocument();
+    });
+
+    it("finds a holder in the members panel by lowercase and uppercase queries", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "LUIS PEREZ GUARDIA" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("B-010");
+
+      for (const query of ["luis perez", "LUIS PEREZ"]) {
         fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: query } });
-        const row = screen.getByRole("list", { name: "Buscas que coinciden" });
-        expect(within(row).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
-        expect(within(row).queryByText(/LUIS PEREZ GUARDIA/)).not.toBeInTheDocument();
-        expect(within(row).getByRole("button", { name: "Añadir al equipo B-010 · Luis Perez Guardia" })).toBeInTheDocument();
+        expect(within(screen.getByRole("list", { name: "Buscas que coinciden" })).getByText(/Luis Perez Guardia/)).toBeInTheDocument();
       }
+    });
+
+    it("shows a stored holder that reads 'Sin titular' the same in the table and the members panel", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([{ ...shouting, assignedTo: "Sin titular" }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("B-010");
+      expect(rowOf("B-010").getByText("Sin Titular")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "B-010" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Sin Titular/)).toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: "Añadir al equipo B-010 · Sin Titular" })).toBeInTheDocument();
+    });
+
+    it("keeps the 'Sin titular' fallback as is for a busca without a holder in the members panel", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], name: undefined, holderType: undefined }]),
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams)
+      });
+      renderPage();
+      await openMemberPanel("5001");
+
+      fireEvent.change(screen.getByLabelText("Buscar busca"), { target: { value: "5001" } });
+      const list = screen.getByRole("list", { name: "Buscas que coinciden" });
+      expect(within(list).getByText(/Sin titular/)).toBeInTheDocument();
+      expect(within(list).queryByText(/Sin Titular/)).not.toBeInTheDocument();
+      expect(within(list).getByRole("button", { name: /^Añadir al equipo 5001 · Sin titular,/ })).toBeInTheDocument();
     });
 
     it("keeps the raw holder in the edit form", async () => {
@@ -2244,6 +2297,19 @@ describe("BeepersPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /editar busca B-010/i }));
 
       expect(screen.getByLabelText(/asignado a/i)).toHaveValue("FARMACIA URGENCI HECTOR ALONSO FARMACEUTICO URGENCIAS");
+    });
+
+    it("keeps the raw holder in the edit form of an imported busca", async () => {
+      setupWindowApi({
+        listBeepers: vi.fn().mockResolvedValue([]),
+        listImportedBeepers: vi.fn().mockResolvedValue([{ ...mockImportedRecords[0], name: "MECANICO DE GASES" }])
+      });
+      renderPage();
+      await screen.findByText("5001");
+
+      fireEvent.click(screen.getByRole("button", { name: /editar busca 5001/i }));
+
+      expect(screen.getByLabelText(/asignado a/i)).toHaveValue("MECANICO DE GASES");
     });
 
     it("finds a holder by lowercase and uppercase queries", async () => {
