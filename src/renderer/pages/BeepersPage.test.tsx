@@ -130,8 +130,8 @@ const saveNewTeamFromChooser = async () => {
   await screen.findByRole("heading", { name: "Buscas del equipo" });
 };
 
-// Exactly one h2 titles the page in the ready and /beeper/new states, and the root section is
-// named by it. (The /beeper empty state and the load-error state render a second h2 from StatePanel.)
+// Exactly one h2 titles the page in every state (ready, empty, load error and /beeper/new), and
+// the root section is named by it. StatePanel titles inside the page are h3.
 const expectSinglePageTitle = (text: string) => {
   const titles = document.querySelectorAll("#beeper-page-title");
   expect(titles).toHaveLength(1);
@@ -1926,6 +1926,69 @@ describe("BeepersPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
 
       expectSinglePageTitle("Gestión Buscas");
+    });
+  });
+
+  describe("pre-existing fixes", () => {
+    it("titles the empty state with an h3 under the single page h2", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockResolvedValue([]) });
+      renderPage();
+
+      await screen.findByText("No hay buscas registrados. Crea el primer busca o un equipo.");
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Sin registros", level: 3 })).toBeInTheDocument();
+    });
+
+    it("titles the load error with an h3 under the single page h2", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockRejectedValue(new Error("read failed")) });
+      renderPage();
+
+      await screen.findByRole("alert");
+      expectSinglePageTitle("Registro de Buscas");
+      expect(screen.getByRole("heading", { name: "Error al cargar", level: 3 })).toBeInTheDocument();
+    });
+
+    it("titles the load error on /beeper/new 'Gestión Buscas'", async () => {
+      setupWindowApi({ listBeepers: vi.fn().mockRejectedValue(new Error("read failed")) });
+      renderPage("/beeper/new");
+
+      await screen.findByRole("alert");
+      expectSinglePageTitle("Gestión Buscas");
+      expect(screen.queryByRole("heading", { name: "Registro de Buscas" })).not.toBeInTheDocument();
+    });
+
+    const deleteSelectedTeam = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+      await waitFor(() => expect(window.hospitalDirectory.deleteBeeperTeam).toHaveBeenCalled());
+    };
+
+    it("moves focus to the team select after deleting one of several teams", async () => {
+      const urgencias: BeeperTeam = { id: "team_urg", name: "Urgencias", displayId: "9002" };
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, urgencias]),
+        deleteBeeperTeam: vi.fn().mockResolvedValue(undefined)
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+
+      await deleteSelectedTeam();
+
+      await waitFor(() => expect(screen.getByLabelText("Equipo a gestionar")).toHaveFocus());
+      expect(screen.getByLabelText("Equipo a gestionar")).toBeEnabled();
+    });
+
+    it("moves focus to the 'Equipos' heading after deleting the last team", async () => {
+      setupWindowApi({
+        listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+        deleteBeeperTeam: vi.fn().mockResolvedValue(undefined)
+      });
+      renderPage();
+      await openTeamManager("team_uci");
+
+      await deleteSelectedTeam();
+
+      await waitFor(() => expect(screen.getByRole("heading", { name: "Equipos" })).toHaveFocus());
     });
   });
 });

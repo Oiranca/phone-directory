@@ -166,6 +166,8 @@ export const BeepersPage = () => {
   const memberSearchRef = useRef<HTMLInputElement>(null);
   const chooserHeadingRef = useRef<HTMLHeadingElement>(null);
   const teamNameRef = useRef<HTMLInputElement>(null);
+  const teamSelectRef = useRef<HTMLSelectElement>(null);
+  const teamsHeadingRef = useRef<HTMLHeadingElement>(null);
   const deferredQuery = useDeferredValue(query);
 
   const loadBeepers = async () => {
@@ -320,6 +322,16 @@ export const BeepersPage = () => {
     pendingFocusRef.current = null;
     (trigger?.isConnected ? trigger : searchRef.current)?.focus();
   }, [showForm]);
+
+  // Deleting a team unmounts the form and the "Eliminar equipo" trigger that had
+  // focus. Once the delete has settled (the select is disabled while saving), move
+  // focus to the team select, or to the "Equipos" heading when no team is left.
+  const focusAfterTeamDeleteRef = useRef(false);
+  useLayoutEffect(() => {
+    if (isSavingTeam || !focusAfterTeamDeleteRef.current) return;
+    focusAfterTeamDeleteRef.current = false;
+    (teams.length > 0 ? teamSelectRef.current : teamsHeadingRef.current)?.focus();
+  }, [isSavingTeam, teams.length]);
 
   const handleCreateNew = (teamId: string | null = null) => {
     setNewBeeperTeamId(teamId);
@@ -580,6 +592,7 @@ export const BeepersPage = () => {
       setMemberships((current) => current.filter((membership) => membership.teamId !== teamDeleteConfirm.id));
       selectTeam(null);
       setTeamDeleteConfirm(null);
+      focusAfterTeamDeleteRef.current = true;
       pushToast({ type: "success", message: "Equipo eliminado." });
     } catch (err) {
       setTeamError(toCompactToastMessage(err, "No se pudo eliminar el equipo."));
@@ -598,10 +611,11 @@ export const BeepersPage = () => {
       <section aria-labelledby="beeper-page-title" className="flex flex-col gap-5">
         <div className="rounded-3xl bg-white p-4 shadow-panel sm:p-5">
           <h2 id="beeper-page-title" className="text-xl font-semibold text-scs-blueDark">
-            Registro de Buscas
+            {isCreateRoute ? "Gestión Buscas" : "Registro de Buscas"}
           </h2>
         </div>
         <StatePanel
+          titleAs="h3"
           role="alert"
           title="Error al cargar"
           message="No se pudieron cargar los buscas o los equipos."
@@ -817,7 +831,7 @@ export const BeepersPage = () => {
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 id="beeper-teams-title" className="text-lg font-semibold text-scs-blueDark">Equipos</h3>
+              <h3 id="beeper-teams-title" ref={teamsHeadingRef} tabIndex={-1} className="text-lg font-semibold text-scs-blueDark focus:outline-hidden">Equipos</h3>
               <p className="mt-1 text-sm text-slate-600">Edita un equipo o administra sus buscas.</p>
             </div>
             {teams.length > 0 && <button
@@ -841,7 +855,7 @@ export const BeepersPage = () => {
         {showTeamManager && teams.length > 0 && <div id="team-manager">
         <div className="mt-4">
           <label htmlFor="team-select" className="mb-2 block text-sm font-medium text-slate-700">Equipo a gestionar</label>
-          <select id="team-select" disabled={isSavingTeam || isSavingMembers || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} value={selectedTeamId ?? ""} onChange={(event) => selectTeam(teams.find((team) => team.id === event.target.value) ?? null)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60">
+          <select ref={teamSelectRef} id="team-select" disabled={isSavingTeam || isSavingMembers || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} value={selectedTeamId ?? ""} onChange={(event) => selectTeam(teams.find((team) => team.id === event.target.value) ?? null)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60">
             <option value="">Elige un equipo</option>
             {teams.map((team) => <option key={team.id} value={team.id}>{team.name} · {team.displayId}</option>)}
           </select>
@@ -989,6 +1003,7 @@ export const BeepersPage = () => {
       {/* Empty state */}
       {!isCreateRoute && filteredRecords.length === 0 && visibleImportedRecords.length === 0 && !showForm && (
         <StatePanel
+          titleAs="h3"
           title={query.trim() ? "Sin resultados" : "Sin registros"}
           message={query.trim()
             ? "No hay buscas que coincidan con la búsqueda."
