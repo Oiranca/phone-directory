@@ -367,6 +367,8 @@ export const BeepersPage = () => {
         const created = await window.hospitalDirectory.addBeeper(formData);
         setRecords((prev) => [created, ...prev]);
         if (newBeeperTeamId) {
+          setMemberError("");
+          setMemberStatus("");
           const currentMemberIds = memberships
             .filter((membership) => membership.teamId === newBeeperTeamId)
             .map((membership) => membership.beeperId);
@@ -408,6 +410,9 @@ export const BeepersPage = () => {
     try {
       await window.hospitalDirectory.deleteBeeper(deleteConfirm.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteConfirm.id));
+      // The main side drops memberships of a deleted busca; mirror it so the
+      // next member update does not send a dead id.
+      setMemberships((current) => current.filter((membership) => membership.beeperId !== deleteConfirm.id));
       setDeleteConfirm(null);
       pushToast({ type: "success", message: "Busca eliminada. Se creó una copia de seguridad previa." });
     } catch {
@@ -700,7 +705,7 @@ export const BeepersPage = () => {
                     return (
                       <li key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
                         <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {memberHolder(record)}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
-                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 aria-disabled:hover:bg-transparent">
+                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:border-slate-200 aria-disabled:text-slate-400 aria-disabled:hover:bg-transparent">
                           {action}
                         </button>
                       </li>
