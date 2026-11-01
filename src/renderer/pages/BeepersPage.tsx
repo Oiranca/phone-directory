@@ -62,6 +62,21 @@ const validateTeamField = (value: string, label: string): string => {
 
 const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayId}`;
 
+// Read-only list of the teams a busca belongs to (one busca can be in several).
+const TeamPills = ({ teams }: { teams: BeeperTeam[] | undefined }) => {
+  if (!teams || teams.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      <span className="sr-only">Equipos:</span>
+      {teams.map((team) => (
+        <span key={team.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+          {teamLabel(team)}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 const joinIds = (...ids: Array<string | false | undefined>): string | undefined => {
   const present = ids.filter(Boolean);
   return present.length > 0 ? present.join(" ") : undefined;
@@ -236,6 +251,17 @@ export const BeepersPage = () => {
 
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
   const newBeeperTeam = teams.find((team) => team.id === newBeeperTeamId) ?? null;
+
+  const teamsByBeeperId = useMemo(() => {
+    const byId = new Map<string, BeeperTeam[]>();
+    for (const team of teams) {
+      for (const membership of memberships) {
+        if (membership.teamId !== team.id) continue;
+        byId.set(membership.beeperId, [...(byId.get(membership.beeperId) ?? []), team]);
+      }
+    }
+    return byId;
+  }, [memberships, teams]);
 
   const selectedTeamMemberIds = useMemo(() => new Set(
     selectedTeamId
@@ -1054,7 +1080,10 @@ export const BeepersPage = () => {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{record.role}</td>
                     <td className="px-4 py-3 text-slate-600">{record.department}</td>
-                    <td className="px-4 py-3 text-slate-700">{record.assignedTo}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <span>{record.assignedTo}</span>
+                      <TeamPills teams={teamsByBeeperId.get(record.id)} />
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button
@@ -1096,6 +1125,7 @@ export const BeepersPage = () => {
                       <span>{record.name ?? record.holderType ?? "—"}</span>
                       {record.schedule && <span className="mt-1 block text-xs text-slate-500">Horario: {record.schedule}</span>}
                       {record.notes && <span className="mt-1 block text-xs text-slate-500">Notas: {record.notes}</span>}
+                      <TeamPills teams={teamsByBeeperId.get(record.id)} />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

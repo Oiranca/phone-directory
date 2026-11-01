@@ -1991,4 +1991,88 @@ describe("BeepersPage", () => {
       await waitFor(() => expect(screen.getByRole("heading", { name: "Equipos" })).toHaveFocus());
     });
   });
+
+  describe("team pills", () => {
+    const urgencias: BeeperTeam = { id: "team_urg", name: "Urgencias", displayId: "9002" };
+    const seedMembers = (overrides: Partial<typeof window.hospitalDirectory> = {}) =>
+      setupWindowApi({
+        listImportedBeepers: vi.fn().mockResolvedValue(mockImportedRecords),
+        listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, urgencias]),
+        listBeeperTeamMemberships: vi.fn().mockResolvedValue([
+          { teamId: "team_uci", beeperId: "bsc_001" },
+          { teamId: "team_urg", beeperId: "bsc_001" },
+          { teamId: "team_uci", beeperId: "ibsc_00000001" }
+        ]),
+        ...overrides
+      });
+    const rowOf = (deviceNumber: string) => {
+      const row = within(screen.getByRole("table")).getByText(deviceNumber).closest("tr");
+      if (!row) throw new Error(`No row for ${deviceNumber}`);
+      return within(row);
+    };
+
+    it("shows every team of a manual busca as a non-interactive pill", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("B-001");
+
+      const row = rowOf("B-001");
+      const pill = row.getByText("UCI · 9001");
+      expect(row.getByText("Urgencias · 9002")).toBeInTheDocument();
+      expect(row.getByText("Equipos:")).toHaveClass("sr-only");
+      expect(row.queryByRole("button", { name: /UCI · 9001/ })).not.toBeInTheDocument();
+      expect(row.queryByRole("link", { name: /UCI · 9001/ })).not.toBeInTheDocument();
+      fireEvent.click(pill);
+      expect(window.hospitalDirectory.setBeeperTeamMembers).not.toHaveBeenCalled();
+      expect(screen.queryByRole("form")).not.toBeInTheDocument();
+      expect(rowOf("B-001").getByText("UCI · 9001")).toBeInTheDocument();
+    });
+
+    it("shows the team pill on an imported busca row", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("5001");
+
+      const row = rowOf("5001");
+      expect(row.getByText("UCI · 9001")).toBeInTheDocument();
+      expect(row.queryByText("Urgencias · 9002")).not.toBeInTheDocument();
+    });
+
+    it("shows no pill and no placeholder on a busca without teams", async () => {
+      seedMembers();
+      renderPage();
+      await screen.findByText("B-002");
+
+      const row = rowOf("B-002");
+      expect(row.queryByText(/· 90/)).not.toBeInTheDocument();
+      expect(row.queryByText("Equipos:")).not.toBeInTheDocument();
+      expect(row.getByText("Luis Pérez").closest("td")?.textContent).toBe("Luis Pérez");
+    });
+
+    it("drops the pill when the busca is removed from the team", async () => {
+      seedMembers({ setBeeperTeamMembers: vi.fn().mockResolvedValue([{ teamId: "team_uci", beeperId: "ibsc_00000001" }]) });
+      renderPage();
+      await openTeamManager("team_uci");
+      expect(rowOf("B-001").getByText("UCI · 9001")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Quitar del equipo B-001 · Ana García" }));
+
+      await waitFor(() => expect(rowOf("B-001").queryByText("UCI · 9001")).not.toBeInTheDocument());
+      expect(rowOf("B-001").getByText("Urgencias · 9002")).toBeInTheDocument();
+    });
+
+    it("drops the pill when its team is deleted", async () => {
+      seedMembers({ deleteBeeperTeam: vi.fn().mockResolvedValue(undefined) });
+      renderPage();
+      await openTeamManager("team_uci");
+      expect(rowOf("5001").getByText("UCI · 9001")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar equipo" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Eliminar equipo" }));
+
+      await waitFor(() => expect(rowOf("5001").queryByText("UCI · 9001")).not.toBeInTheDocument());
+      expect(rowOf("B-001").queryByText("UCI · 9001")).not.toBeInTheDocument();
+      expect(rowOf("B-001").getByText("Urgencias · 9002")).toBeInTheDocument();
+    });
+  });
 });
