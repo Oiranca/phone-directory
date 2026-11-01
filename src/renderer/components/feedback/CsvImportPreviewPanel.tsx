@@ -492,7 +492,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           role="status"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
-          Se importarán {preview.incomingBeeperRecordCount} {preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán {preview.currentBeeperRecordCount ?? "las"} {preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.
+          Se importarán {preview.incomingBeeperRecordCount} {preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán {preview.currentBeeperRecordCount ?? "los"} {preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.
         </div>
       )}
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (

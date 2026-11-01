@@ -207,7 +207,7 @@ describe("buildCsvImportPreview", () => {
     expect(preview.validRowCount).toBe(0);
     expect(preview.invalidRowCount).toBe(1);
     expect(preview.rowIssues[0]?.messages).toContain(
-      "Cada fila necesita al menos un teléfono, una busca, un correo, una red social o un dato de ubicación."
+      "Cada fila necesita al menos un teléfono, un busca, un correo, una red social o un dato de ubicación."
     );
   });
 

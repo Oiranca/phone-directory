@@ -707,7 +707,7 @@ describe("DataManagementSection (Configuración data section)", () => {
       beeperImportStatus: {
         status: "partial-failure",
         parsedCellCount: 1,
-        message: "No se pudieron guardar las buscas importadas."
+        message: "No se pudieron guardar los buscas importados."
       }
     });
 
@@ -720,7 +720,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
     expect(
-      await screen.findByText("Contactos importados; no se pudieron guardar las buscas.")
+      await screen.findByText("Contactos importados; no se pudieron guardar los buscas.")
     ).toBeInTheDocument();
     expect(screen.queryByText(/Importación completada/)).not.toBeInTheDocument();
   });
