@@ -59,6 +59,25 @@ const validateTeamField = (value: string, label: string): string => {
   return "";
 };
 
+const teamLabel = (team: BeeperTeam): string => `${team.name} · ${team.displayId}`;
+
+const joinIds = (...ids: Array<string | false | undefined>): string | undefined => {
+  const present = ids.filter(Boolean);
+  return present.length > 0 ? present.join(" ") : undefined;
+};
+
+const TEAM_LOCK_REASON_ID = "team-lock-reason";
+
+const memberHolder = (record: BeeperRecord | ImportedBeeperRecord): string =>
+  "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "Sin titular";
+
+// Built from what the row shows (number, holder and, for imported rows, source
+// sheet and row) so duplicate device numbers stay distinguishable.
+const memberLabel = (record: BeeperRecord | ImportedBeeperRecord): string =>
+  "sourceSheet" in record
+    ? `${record.deviceNumber} · ${memberHolder(record)}, ${record.sourceSheet} fila ${record.sourceRow}`
+    : `${record.deviceNumber} · ${memberHolder(record)}`;
+
 const normalizeVisibleBeeperCell = (value: string): string =>
   value.trim().toLocaleLowerCase("es").replace(/\s+/g, " ");
 
@@ -132,6 +151,7 @@ export const BeepersPage = () => {
   const [isSavingMembers, setIsSavingMembers] = useState(false);
   const [teamError, setTeamError] = useState("");
   const [memberError, setMemberError] = useState("");
+  const [memberStatus, setMemberStatus] = useState("");
   const [teamNameError, setTeamNameError] = useState("");
   const [teamDisplayIdError, setTeamDisplayIdError] = useState("");
   const [teamDeleteConfirm, setTeamDeleteConfirm] = useState<BeeperTeam | null>(null);
@@ -207,6 +227,9 @@ export const BeepersPage = () => {
     );
   }, [importedRecords, deferredQuery]);
 
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
+  const newBeeperTeam = teams.find((team) => team.id === newBeeperTeamId) ?? null;
+
   const selectedTeamMemberIds = useMemo(() => new Set(
     selectedTeamId
       ? memberships.filter((membership) => membership.teamId === selectedTeamId).map((membership) => membership.beeperId)
@@ -279,11 +302,6 @@ export const BeepersPage = () => {
     setFormData(emptyForm());
     setFormError("");
     setShowForm(true);
-  };
-
-  const handleCreateForTeam = () => {
-    if (!selectedTeamId) return;
-    handleCreateNew(selectedTeamId);
   };
 
   const handleEdit = (record: BeeperRecord) => {
@@ -410,6 +428,7 @@ export const BeepersPage = () => {
     setTeamError("");
     setTeamDisplayIdError("");
     setMemberError("");
+    setMemberStatus("");
     setTeamNameError("");
     setMemberQuery("");
   };
@@ -445,16 +464,21 @@ export const BeepersPage = () => {
     }
   };
 
-  const setTeamMember = async (beeperId: string, include: boolean) => {
-    if (!selectedTeamId || !membershipsLoaded || isSavingMembers) return;
+  const setTeamMember = async (record: BeeperRecord | ImportedBeeperRecord, include: boolean) => {
+    if (!selectedTeam || !membershipsLoaded || isSavingMembers) return;
     setIsSavingMembers(true);
     setMemberError("");
+    setMemberStatus("");
     const nextMemberIds = new Set(selectedTeamMemberIds);
-    if (include) nextMemberIds.add(beeperId);
-    else nextMemberIds.delete(beeperId);
+    if (include) nextMemberIds.add(record.id);
+    else nextMemberIds.delete(record.id);
     try {
-      const updated = await window.hospitalDirectory.setBeeperTeamMembers(selectedTeamId, Array.from(nextMemberIds));
-      setMemberships((current) => [...current.filter((membership) => membership.teamId !== selectedTeamId), ...updated]);
+      const updated = await window.hospitalDirectory.setBeeperTeamMembers(selectedTeam.id, Array.from(nextMemberIds));
+      setMemberships((current) => [...current.filter((membership) => membership.teamId !== selectedTeam.id), ...updated]);
+      setMemberStatus(`${record.deviceNumber} ${include ? "añadida al" : "quitada del"} equipo ${teamLabel(selectedTeam)}`);
+      // With an empty search the list shows members only, so the removed row's
+      // button unmounts; hand focus to the search input instead of <body>.
+      if (!include && !memberQuery.trim()) requestAnimationFrame(() => memberSearchRef.current?.focus());
     } catch (err) {
       setMemberError(toCompactToastMessage(err, "No se pudieron actualizar los miembros."));
     } finally {
@@ -462,16 +486,25 @@ export const BeepersPage = () => {
     }
   };
 
-  const teamMemberCandidates = useMemo(() => {
+  // Empty search lists the team's current members; a search lists any busca
+  // matching it, so it can be added.
+  const teamMemberRows = useMemo(() => {
     const normalizedQuery = memberQuery.trim().toLocaleLowerCase("es");
     const candidates = [...records, ...importedRecords];
-    if (!normalizedQuery) return candidates;
-    return candidates.filter((record) => {
-      const holder = "assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "";
-      return `${record.deviceNumber} ${holder}`.toLocaleLowerCase("es").includes(normalizedQuery);
-    });
-  }, [importedRecords, memberQuery, records]);
+    if (!normalizedQuery) return candidates.filter((record) => selectedTeamMemberIds.has(record.id));
+    return candidates.filter((record) =>
+      `${record.deviceNumber} ${memberHolder(record)}`.toLocaleLowerCase("es").includes(normalizedQuery)
+    );
+  }, [importedRecords, memberQuery, records, selectedTeamMemberIds]);
   const memberSearchActive = Boolean(memberQuery.trim());
+  const memberResultStatus = !memberSearchActive
+    ? ""
+    : teamMemberRows.length === 0
+      ? "Sin buscas que coincidan"
+      : `${teamMemberRows.length} ${teamMemberRows.length === 1 ? "busca coincide" : "buscas coinciden"}`;
+  const formTitle = editingId || editingImportedId
+    ? "Editar busca"
+    : newBeeperTeam ? `Nueva busca en ${teamLabel(newBeeperTeam)}` : "Nueva busca";
 
   const deleteTeam = async () => {
     if (!teamDeleteConfirm || isSavingTeam) return;
@@ -545,15 +578,6 @@ export const BeepersPage = () => {
                 title="Buscar buscas — pulsa / para enfocar"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
-              {teams.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2" aria-label="Equipos registrados">
-                  {teams.map((team) => (
-                    <span key={team.id} className="inline-flex max-w-full break-words rounded-full bg-scs-mist px-3 py-1.5 text-sm font-semibold text-scs-blueDark ring-1 ring-scs-blue/15 [overflow-wrap:anywhere]">
-                      {team.name} · {team.displayId}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
             <button
               type="button"
@@ -593,17 +617,19 @@ export const BeepersPage = () => {
               disabled={isSavingTeam || isSavingMembers || showForm}
               aria-expanded={showTeamManager}
               aria-controls={showTeamManager ? "team-manager" : undefined}
-              className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:opacity-60"
+              aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined}
+              className="focus-ring rounded-full border border-scs-blue px-5 py-3 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60"
             >
               Gestionar equipos
             </button>
           </div>
+          {showForm && <p id={TEAM_LOCK_REASON_ID} className="text-sm text-slate-600">Cierra el formulario de busca para editar el equipo.</p>}
         </div>
 
         {showTeamManager && <div id="team-manager">
         <div className="mt-4">
           <label htmlFor="team-select" className="mb-2 block text-sm font-medium text-slate-700">Equipo a gestionar</label>
-          <select id="team-select" disabled={isSavingTeam || isSavingMembers || showForm} value={selectedTeamId ?? ""} onChange={(event) => selectTeam(teams.find((team) => team.id === event.target.value) ?? null)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60">
+          <select id="team-select" disabled={isSavingTeam || isSavingMembers || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} value={selectedTeamId ?? ""} onChange={(event) => selectTeam(teams.find((team) => team.id === event.target.value) ?? null)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60">
             <option value="">Nuevo equipo</option>
             {teams.map((team) => <option key={team.id} value={team.id}>{team.name} · {team.displayId}</option>)}
           </select>
@@ -613,64 +639,74 @@ export const BeepersPage = () => {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="team-name" className="mb-2 block text-sm font-medium text-slate-700">Nombre del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
-              <input id="team-name" required maxLength={255} disabled={Boolean(newBeeperTeamId)} aria-invalid={teamNameError ? true : undefined} aria-describedby={teamNameError ? "team-name-error" : undefined} value={teamForm.name} onChange={(event) => { setTeamNameError(""); setTeamForm((current) => ({ ...current, name: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+              <input id="team-name" required maxLength={255} disabled={showForm} aria-invalid={teamNameError ? true : undefined} aria-describedby={joinIds(teamNameError && "team-name-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.name} onChange={(event) => { setTeamNameError(""); setTeamForm((current) => ({ ...current, name: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
               {teamNameError && <p id="team-name-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamNameError}</p>}
             </div>
             <div>
               <label htmlFor="team-display-id" className="mb-2 block text-sm font-medium text-slate-700">Número del equipo <span aria-hidden="true" className="text-red-600">*</span></label>
-              <input id="team-display-id" required maxLength={255} disabled={Boolean(newBeeperTeamId)} aria-invalid={teamDisplayIdError ? true : undefined} aria-describedby={teamDisplayIdError ? "team-display-id-error" : undefined} value={teamForm.displayId} onChange={(event) => { setTeamDisplayIdError(""); setTeamForm((current) => ({ ...current, displayId: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+              <input id="team-display-id" required maxLength={255} disabled={showForm} aria-invalid={teamDisplayIdError ? true : undefined} aria-describedby={joinIds(teamDisplayIdError && "team-display-id-error", showForm && TEAM_LOCK_REASON_ID)} value={teamForm.displayId} onChange={(event) => { setTeamDisplayIdError(""); setTeamForm((current) => ({ ...current, displayId: event.target.value })); }} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
               {teamDisplayIdError && <p id="team-display-id-error" role="alert" className="mt-2 text-sm font-medium text-red-700">{teamDisplayIdError}</p>}
             </div>
           </div>
           {teamError && <StatusBanner type="error" message={teamError} />}
           <div className="mt-4 flex flex-wrap gap-3">
-            <button type="submit" disabled={isSavingTeam || Boolean(newBeeperTeamId)} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:opacity-60">
+            <button type="submit" disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-scs-blueDark disabled:cursor-not-allowed disabled:opacity-60">
               {isSavingTeam ? "Guardando…" : "Guardar equipo"}
             </button>
             {editingTeamId && (
-              <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || Boolean(newBeeperTeamId)} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">
+              <button type="button" onClick={() => setTeamDeleteConfirm(teams.find((team) => team.id === editingTeamId) ?? null)} disabled={isSavingTeam || showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} className="focus-ring rounded-full border border-red-300 bg-white px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
                 Eliminar equipo
               </button>
             )}
           </div>
         </form>
 
-        {selectedTeamId && (
+        {selectedTeam && (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-busy={isSavingMembers}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h4 className="text-sm font-semibold text-scs-blueDark">Buscas del equipo</h4>
-              <button type="button" aria-label="Nueva busca en equipo" onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateForTeam(); }} disabled={isSavingMembers || showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:opacity-60">
+              <button type="button" aria-label={`Nueva busca en ${teamLabel(selectedTeam)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} onClick={(event) => { createTriggerRef.current = event.currentTarget; handleCreateNew(selectedTeam.id); }} disabled={showForm} className="focus-ring inline-flex items-center gap-2 rounded-full border border-scs-blue px-4 py-2 text-sm font-semibold text-scs-blue transition hover:bg-scs-mist disabled:cursor-not-allowed disabled:opacity-60">
                 <BeepersIcon /> Nueva busca
               </button>
             </div>
-            <div className="mt-4 grid gap-3" aria-label="Buscas incluidas en el equipo">
+            <div className="mt-4 grid gap-3">
               {!membershipsLoaded && <p role="alert" className="sm:col-span-2 text-sm font-medium text-red-700">No se pudieron cargar los miembros del equipo.</p>}
               {memberError && <p role="alert" className="text-sm font-medium text-red-700">{memberError}</p>}
-              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{isSavingMembers ? "Actualizando miembros…" : ""}</p>
+              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{isSavingMembers ? "Actualizando miembros…" : memberStatus}</p>
               <div>
                 <label htmlFor="team-member-search" className="mb-2 block text-sm font-medium text-slate-700">Buscar busca</label>
-                <input ref={memberSearchRef} id="team-member-search" type="search" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} disabled={isSavingMembers || showForm} placeholder="Número o titular" className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
+                <input ref={memberSearchRef} id="team-member-search" type="search" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} disabled={showForm} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} placeholder="Número o titular" className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-hidden ring-scs-blue focus-visible:border-scs-blue focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60" />
               </div>
+              <p role="status" aria-live="polite" aria-atomic="true" className="min-h-5 text-sm text-slate-600">{memberResultStatus}</p>
+              {memberSearchActive && teamMemberRows.length === 0 && (
+                <div>
+                  <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} className="focus-ring rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Limpiar búsqueda</button>
+                </div>
+              )}
               {records.length === 0 && importedRecords.length === 0 && (
                 <p className="text-sm text-slate-600">No hay buscas registradas para asignar a este equipo.</p>
               )}
               {records.length + importedRecords.length > 0 && !memberSearchActive && (
-                <p className="text-sm text-slate-600">Busca por número o titular para añadir o quitar miembros.</p>
+                <p className="text-sm text-slate-600">
+                  {teamMemberRows.length === 0 ? "Este equipo aún no tiene buscas. " : ""}Busca por número o titular para añadir buscas al equipo.
+                </p>
               )}
-              {memberSearchActive && teamMemberCandidates.length === 0 && (
-                <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-                  <span>Sin buscas que coincidan.</span>
-                  <button type="button" onClick={() => { setMemberQuery(""); requestAnimationFrame(() => memberSearchRef.current?.focus()); }} className="focus-ring rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-50">Limpiar búsqueda</button>
-                </div>
+              {teamMemberRows.length > 0 && (
+                <ul aria-label={memberSearchActive ? "Buscas que coinciden" : "Buscas del equipo"} className="grid gap-3">
+                  {teamMemberRows.map((record) => {
+                    const isMember = selectedTeamMemberIds.has(record.id);
+                    const action = isMember ? "Quitar del equipo" : "Añadir al equipo";
+                    return (
+                      <li key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
+                        <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {memberHolder(record)}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
+                        <button type="button" aria-label={`${action} ${memberLabel(record)}`} aria-describedby={showForm ? TEAM_LOCK_REASON_ID : undefined} disabled={!membershipsLoaded || showForm} aria-disabled={isSavingMembers || undefined} onClick={() => void setTeamMember(record, !isMember)} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                          {action}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-              {memberSearchActive && teamMemberCandidates.map((record) => (
-                <div key={record.id} className="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
-                  <span className="min-w-0 break-words [overflow-wrap:anywhere]"><span className="font-semibold">{record.deviceNumber}</span> · {"assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "Sin titular"}{"sourceSheet" in record && <span className="block text-xs text-slate-500">{record.sourceSheet} · fila {record.sourceRow}</span>}</span>
-                  <button type="button" aria-label={`${selectedTeamMemberIds.has(record.id) ? "Quitar del equipo" : "Añadir al equipo"} ${record.deviceNumber} (${record.id})`} disabled={!membershipsLoaded || isSavingMembers || showForm} onClick={() => void setTeamMember(record.id, !selectedTeamMemberIds.has(record.id))} className="focus-ring shrink-0 rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
-                    {selectedTeamMemberIds.has(record.id) ? "Quitar del equipo" : "Añadir al equipo"}
-                  </button>
-                </div>
-              ))}
             </div>
           </div>
         )}
@@ -683,10 +719,10 @@ export const BeepersPage = () => {
           data-keyboard-submit
           onSubmit={(e) => { if (!isSaving) void handleSubmit(e); }}
           className="rounded-3xl bg-white p-6 shadow-panel"
-          aria-label={editingId || editingImportedId ? "Editar busca" : "Nueva busca"}
+          aria-label={formTitle}
         >
           <h3 className="mb-5 text-lg font-semibold text-scs-blueDark">
-            {editingId || editingImportedId ? "Editar busca" : "Nueva busca"}
+            {formTitle}
           </h3>
           {formError && <StatusBanner type="error" message={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
