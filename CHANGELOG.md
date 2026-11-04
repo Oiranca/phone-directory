@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-11-04
+
+### Added
+
+- Show teams as a read-only lookup from the Busca agenda.
+- Preserve explicit team memberships when importing iMessage beepers.
+
 ## [0.2.0] - 2026-10-30
 
 ### Added

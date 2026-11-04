@@ -95,11 +95,17 @@ const iMessageBeeperTeamSchema = z.object({
   name: z.string().trim().min(1).max(255)
 }).passthrough();
 
+const iMessageBeeperTeamMembershipSchema = z.object({
+  teamId: z.string().trim().min(1).max(255),
+  userId: z.string().trim().min(1).max(255)
+});
+
 /** The external pager export is converted into BeepersDataset in main. */
 export const iMessageBeeperExportSchema = z.object({
   datos: z.object({
     usuarios: z.array(iMessageBeeperUserSchema).max(MAX_DATASET_RECORDS),
-    equipos: z.array(iMessageBeeperTeamSchema).max(MAX_DATASET_RECORDS)
+    equipos: z.array(iMessageBeeperTeamSchema).max(MAX_DATASET_RECORDS),
+    teamMemberships: z.array(iMessageBeeperTeamMembershipSchema).max(MAX_DATASET_RECORDS).optional().transform((v) => v ?? [])
   })
 });
 

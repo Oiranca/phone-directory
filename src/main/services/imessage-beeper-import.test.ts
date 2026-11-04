@@ -34,4 +34,65 @@ describe("convertIMessageBeeperExport", () => {
     expect(first.importedRecords[0]?.id).toBe(second.importedRecords[0]?.id);
     expect(first.importedRecords[0]?.sourceFingerprint).toBe(second.importedRecords[0]?.sourceFingerprint);
   });
+
+  it("maps explicit memberships to stable imported Busca IDs", () => {
+    const result = convertIMessageBeeperExport({
+      datos: {
+        usuarios: [
+          { id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true },
+          { id: "user-2", displayId: "7002", department: "UCI", textEnabled: false }
+        ],
+        equipos: [
+          { id: "team-1", displayId: "9001", name: "Rayos" },
+          { id: "team-2", displayId: "9002", name: "UCI" }
+        ],
+        teamMemberships: [
+          { teamId: "team-1", userId: "user-1" },
+          { teamId: "team-2", userId: "user-1" },
+          { teamId: "team-2", userId: "user-2" }
+        ]
+      }
+    });
+
+    expect(result.teamMemberships).toEqual([
+      { teamId: "team-1", beeperId: result.importedRecords[0]?.id },
+      { teamId: "team-2", beeperId: result.importedRecords[0]?.id }
+    ]);
+  });
+
+  it("rejects explicit memberships with missing source references or duplicates", () => {
+    const datos = {
+      usuarios: [{ id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true }],
+      equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }]
+    };
+
+    expect(() => convertIMessageBeeperExport({
+      datos: { ...datos, teamMemberships: [{ teamId: "missing", userId: "user-1" }] }
+    })).toThrow("Team memberships must reference existing teams and beepers.");
+    expect(() => convertIMessageBeeperExport({
+      datos: { ...datos, teamMemberships: [{ teamId: "team-1", userId: "missing" }] }
+    })).toThrow("El export de buscas contiene una membresía de equipo para un usuario desconocido.");
+    expect(() => convertIMessageBeeperExport({
+      datos: {
+        ...datos,
+        teamMemberships: [
+          { teamId: "team-1", userId: "user-1" },
+          { teamId: "team-1", userId: "user-1" }
+        ]
+      }
+    })).toThrow("Team memberships must be unique.");
+  });
+
+  it("rejects duplicate memberships for inactive users", () => {
+    expect(() => convertIMessageBeeperExport({
+      datos: {
+        usuarios: [{ id: "inactive", displayId: "7001", department: "Rayos", textEnabled: false }],
+        equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
+        teamMemberships: [
+          { teamId: "team-1", userId: "inactive" },
+          { teamId: "team-1", userId: "inactive" }
+        ]
+      }
+    })).toThrow("Team memberships must be unique.");
+  });
 });

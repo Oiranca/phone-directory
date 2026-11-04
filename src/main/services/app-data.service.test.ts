@@ -6135,7 +6135,8 @@ describe("AppDataService", () => {
             { id: "active", displayId: "7001", department: "Rayos", textEnabled: true },
             { id: "inactive", displayId: "7002", department: "UCI", textEnabled: false }
           ],
-          equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }]
+          equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
+          teamMemberships: [{ teamId: "team-1", userId: "active" }]
         }
       }
     };
@@ -6144,8 +6145,66 @@ describe("AppDataService", () => {
     expect(importDataset).toHaveBeenCalledWith(expect.objectContaining({
       importedRecords: [expect.objectContaining({ sourceId: "active", deviceNumber: "7001" })],
       teams: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
-      teamMemberships: []
+      teamMemberships: [{ teamId: "team-1", beeperId: expect.any(String) }]
     }), expect.any(Object));
+  });
+
+  it("persists explicit iMessage team memberships", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
+    await service.ensureInitialFiles();
+
+    await service.importPreviewedJson({
+      kind: "imessage-beepers",
+      data: {
+        datos: {
+          usuarios: [{ id: "active", displayId: "7001", department: "Rayos", textEnabled: true }],
+          equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
+          teamMemberships: [{ teamId: "team-1", userId: "active" }]
+        }
+      }
+    }, path.join(testRoot, "import.json"));
+
+    const [imported] = await beepersService.listImported();
+    expect(imported).toBeDefined();
+    expect(await beepersService.listTeamMemberships()).toEqual([
+      { teamId: "team-1", beeperId: imported?.id }
+    ]);
+  });
+
+  it("does not replace imported Busca data when an explicit membership is invalid", async () => {
+    const { AppDataService } = await import("./app-data.service.js");
+    const { BeepersService } = await import("./beeper.service.js");
+    const beepersService = new BeepersService();
+    const service = new AppDataService({ beepersService });
+    await service.ensureInitialFiles();
+
+    await service.importPreviewedJson({
+      kind: "imessage-beepers",
+      data: {
+        datos: {
+          usuarios: [{ id: "kept", displayId: "7001", department: "Rayos", textEnabled: true }],
+          equipos: []
+        }
+      }
+    }, path.join(testRoot, "valid.json"));
+
+    await expect(service.importPreviewedJson({
+      kind: "imessage-beepers",
+      data: {
+        datos: {
+          usuarios: [{ id: "new", displayId: "7002", department: "UCI", textEnabled: true }],
+          equipos: [],
+          teamMemberships: [{ teamId: "missing", userId: "new" }]
+        }
+      }
+    }, path.join(testRoot, "invalid.json"))).rejects.toThrow("Team memberships must reference existing teams and beepers.");
+
+    expect(await beepersService.listImported()).toEqual([
+      expect.objectContaining({ sourceId: "kept", deviceNumber: "7001" })
+    ]);
   });
 
 });

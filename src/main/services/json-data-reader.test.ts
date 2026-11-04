@@ -70,7 +70,24 @@ describe("bounded JSON data reader", () => {
 
     const result = parseAndValidateJson(JSON.stringify(exportData), "auto");
     expect(result.kind).toBe("imessage-beepers");
-    expect(result.data).toEqual(exportData);
+    expect(result.data).toEqual({
+      datos: { ...exportData.datos, teamMemberships: [] }
+    });
+  });
+
+  it("preserves explicit iMessage team memberships", () => {
+    const result = parseAndValidateJson(JSON.stringify({
+      datos: {
+        usuarios: [{ id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true }],
+        equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }],
+        teamMemberships: [{ teamId: "team-1", userId: "user-1" }]
+      }
+    }), "auto");
+
+    expect(result).toMatchObject({
+      kind: "imessage-beepers",
+      data: { datos: { teamMemberships: [{ teamId: "team-1", userId: "user-1" }] } }
+    });
   });
 
   it("terminates the worker when processing is cancelled", async () => {

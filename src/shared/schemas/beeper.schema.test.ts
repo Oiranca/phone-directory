@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema } from "./beeper.schema";
+import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, iMessageBeeperExportSchema } from "./beeper.schema";
 
 const validRecord = {
   id: "bsc_abc12345",
@@ -121,6 +121,31 @@ describe("beeperRecordSchema", () => {
       group: at255
     });
     expect(result.deviceNumber).toHaveLength(255);
+  });
+});
+
+describe("iMessageBeeperExportSchema", () => {
+  const exportData = {
+    datos: {
+      usuarios: [{ id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true }],
+      equipos: [{ id: "team-1", displayId: "9001", name: "Rayos" }]
+    }
+  };
+
+  it("accepts optional explicit team memberships and defaults them to an empty list", () => {
+    expect(iMessageBeeperExportSchema.parse(exportData).datos.teamMemberships).toEqual([]);
+    expect(iMessageBeeperExportSchema.parse({
+      datos: {
+        ...exportData.datos,
+        teamMemberships: [{ teamId: "team-1", userId: "user-1" }]
+      }
+    }).datos.teamMemberships).toEqual([{ teamId: "team-1", userId: "user-1" }]);
+  });
+
+  it("rejects malformed explicit team memberships", () => {
+    expect(() => iMessageBeeperExportSchema.parse({
+      datos: { ...exportData.datos, teamMemberships: [{ teamId: "team-1" }] }
+    })).toThrow();
   });
 });
 

@@ -18,6 +18,24 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
   const sourceIds = new Set<string>();
   const deviceNumbers = new Set<string>();
   const importedIds = new Set<string>();
+  const importedIdsBySourceId = new Map<string, string>();
+  const sourceUserIds = new Set(source.datos.usuarios.map((user) => user.id));
+  const sourceTeamIds = new Set(source.datos.equipos.map((team) => team.id));
+  const sourceMemberships = new Set<string>();
+
+  for (const { teamId, userId } of source.datos.teamMemberships ?? []) {
+    if (!sourceUserIds.has(userId)) {
+      throw new Error("El export de buscas contiene una membresía de equipo para un usuario desconocido.");
+    }
+    if (!sourceTeamIds.has(teamId)) {
+      throw new Error("Team memberships must reference existing teams and beepers.");
+    }
+    const membershipKey = `${teamId}:${userId}`;
+    if (sourceMemberships.has(membershipKey)) {
+      throw new Error("Team memberships must be unique.");
+    }
+    sourceMemberships.add(membershipKey);
+  }
 
   const importedRecords: ImportedBeeperRecord[] = users.map((user, index) => {
     if (sourceIds.has(user.id)) throw new Error("El export de buscas contiene IDs de usuario duplicados.");
@@ -28,6 +46,7 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
     sourceIds.add(user.id);
     deviceNumbers.add(user.displayId);
     importedIds.add(id);
+    importedIdsBySourceId.set(user.id, id);
 
     return {
       id,
@@ -42,6 +61,12 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
     };
   });
 
+  const teamMemberships = (source.datos.teamMemberships ?? []).flatMap(({ teamId, userId }) => {
+    const beeperId = importedIdsBySourceId.get(userId);
+    if (beeperId) return [{ teamId, beeperId }];
+    return [];
+  });
+
   return beepersDatasetSchema.parse({
     version: "1.0.0",
     records: [],
@@ -51,6 +76,6 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
       name: team.name,
       displayId: team.displayId
     })),
-    teamMemberships: []
+    teamMemberships
   });
 };
