@@ -13,15 +13,25 @@ const displayName = (user: IMessageBeeperExport["datos"]["usuarios"][number]): s
   return name || user.userName?.trim() || user.displayId;
 };
 
+const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
+
+const preferNonBlank = (current: string | null | undefined, incoming: string | null | undefined): string | undefined =>
+  current?.trim() ? current : incoming?.trim() ? incoming : undefined;
+
 export const convertIMessageBeeperExport = (source: IMessageBeeperExport): BeepersDataset => {
   const users = source.datos.usuarios.filter((user) => user.textEnabled);
   const sourceIds = new Set<string>();
-  const deviceNumbers = new Set<string>();
   const importedIds = new Set<string>();
   const importedIdsBySourceId = new Map<string, string>();
+  const importedByDeviceNumber = new Map<string, ImportedBeeperRecord>();
   const sourceUserIds = new Set(source.datos.usuarios.map((user) => user.id));
   const sourceTeamIds = new Set(source.datos.equipos.map((team) => team.id));
   const sourceMemberships = new Set<string>();
+
+  for (const user of source.datos.usuarios) {
+    if (sourceIds.has(user.id)) throw new Error("El export de buscas contiene IDs de usuario duplicados.");
+    sourceIds.add(user.id);
+  }
 
   for (const { teamId, userId } of source.datos.teamMemberships ?? []) {
     if (!sourceUserIds.has(userId)) {
@@ -37,20 +47,28 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
     sourceMemberships.add(membershipKey);
   }
 
-  const importedRecords: ImportedBeeperRecord[] = users.map((user, index) => {
-    if (sourceIds.has(user.id)) throw new Error("El export de buscas contiene IDs de usuario duplicados.");
-    if (deviceNumbers.has(user.displayId)) throw new Error("El export de buscas contiene números de busca duplicados.");
+  for (const [index, user] of users.entries()) {
+    const deviceNumberKey = normalizeDeviceNumber(user.displayId);
+    const current = importedByDeviceNumber.get(deviceNumberKey);
+
+    if (current) {
+      const merged = {
+        ...current,
+        name: preferNonBlank(current.name, displayName(user)),
+        category: preferNonBlank(current.category, user.position)
+      };
+      importedByDeviceNumber.set(deviceNumberKey, merged);
+      importedIdsBySourceId.set(user.id, current.id);
+      continue;
+    }
 
     const id = importedBeeperId(user.id);
     if (importedIds.has(id)) throw new Error("El export de buscas contiene IDs que no se pueden importar de forma única.");
-    sourceIds.add(user.id);
-    deviceNumbers.add(user.displayId);
     importedIds.add(id);
     importedIdsBySourceId.set(user.id, id);
-
-    return {
+    importedByDeviceNumber.set(deviceNumberKey, {
       id,
-      deviceNumber: user.displayId,
+      deviceNumber: user.displayId.trim(),
       department: user.department,
       name: displayName(user),
       category: user.position?.trim() || undefined,
@@ -58,14 +76,17 @@ export const convertIMessageBeeperExport = (source: IMessageBeeperExport): Beepe
       sourceRow: index + 1,
       sourceFingerprint: sourceFingerprint(user.id),
       sourceId: user.id
-    };
-  });
+    });
+  }
 
-  const teamMemberships = (source.datos.teamMemberships ?? []).flatMap(({ teamId, userId }) => {
+  const importedRecords = Array.from(importedByDeviceNumber.values());
+
+  const teamMembershipsByKey = new Map<string, { teamId: string; beeperId: string }>();
+  for (const { teamId, userId } of source.datos.teamMemberships ?? []) {
     const beeperId = importedIdsBySourceId.get(userId);
-    if (beeperId) return [{ teamId, beeperId }];
-    return [];
-  });
+    if (beeperId) teamMembershipsByKey.set(`${teamId}:${beeperId}`, { teamId, beeperId });
+  }
+  const teamMemberships = Array.from(teamMembershipsByKey.values());
 
   return beepersDatasetSchema.parse({
     version: "1.0.0",

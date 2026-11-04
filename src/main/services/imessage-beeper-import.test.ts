@@ -60,6 +60,38 @@ describe("convertIMessageBeeperExport", () => {
     ]);
   });
 
+  it("consolidates repeated Busca numbers and their team memberships", () => {
+    const result = convertIMessageBeeperExport({
+      datos: {
+        usuarios: [
+          { id: "user-1", displayId: "7001", department: "Rayos", firstName: "Ana", textEnabled: true },
+          { id: "user-2", displayId: " 7001 ", department: "UCI", surName: "Díaz", position: "Técnica", textEnabled: true }
+        ],
+        equipos: [
+          { id: "team-1", displayId: "9001", name: "Rayos" },
+          { id: "team-2", displayId: "9002", name: "UCI" }
+        ],
+        teamMemberships: [
+          { teamId: "team-1", userId: "user-1" },
+          { teamId: "team-1", userId: "user-2" },
+          { teamId: "team-2", userId: "user-2" }
+        ]
+      }
+    });
+
+    expect(result.importedRecords).toMatchObject([{
+      deviceNumber: "7001",
+      department: "Rayos",
+      name: "Ana",
+      category: "Técnica",
+      sourceId: "user-1"
+    }]);
+    expect(result.teamMemberships).toEqual([
+      { teamId: "team-1", beeperId: result.importedRecords[0]?.id },
+      { teamId: "team-2", beeperId: result.importedRecords[0]?.id }
+    ]);
+  });
+
   it("rejects explicit memberships with missing source references or duplicates", () => {
     const datos = {
       usuarios: [{ id: "user-1", displayId: "7001", department: "Rayos", textEnabled: true }],

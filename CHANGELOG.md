@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-11-04
+
+### Fixed
+
+- Consolidate repeated Busca numbers and team memberships during iMessage import.
+
 ## [0.3.0] - 2026-11-04
 
 ### Added
