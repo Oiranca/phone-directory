@@ -413,6 +413,51 @@ describe("DirectoryPage", () => {
     expect(within(row).getByText("Confidencial")).toBeInTheDocument();
   });
 
+  it("marks only the confidential phone in the detail panel when a record has two phones", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones = [
+      { id: "ph-public", label: "Número 1", number: "70006", kind: "internal", isPrimary: true, confidential: false, noPatientSharing: false },
+      { id: "ph-confidential", label: "Número 2", number: "70005", kind: "internal", isPrimary: false, confidential: true, noPatientSharing: false }
+    ];
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const detail = await screen.findByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(within(detail).getByTestId("contact-phone-ph-confidential")).getByText("Confidencial")).toBeInTheDocument();
+    expect(within(within(detail).getByTestId("contact-phone-ph-public")).queryByText("Confidencial")).not.toBeInTheDocument();
+    expect(within(detail).getAllByText("Confidencial")).toHaveLength(1);
+  });
+
+  it("gives the scroll area room so the first, last and selected cards are not clipped", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    expect(list).toHaveClass("overflow-y-auto", "p-2", "-m-2");
+    // Scroll-into-view (keyboard navigation, focus) must leave the same room.
+    for (const button of within(list).getAllByRole("button")) {
+      expect(button).toHaveClass("scroll-my-2");
+    }
+  });
+
   it("shows a non-confidential primary phone number on the directory card", async () => {
     const contacts = structuredClone(defaultContacts);
     contacts.records[0]!.contactMethods.phones[0]!.confidential = false;

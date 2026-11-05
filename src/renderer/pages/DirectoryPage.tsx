@@ -460,7 +460,7 @@ export const DirectoryPage = () => {
             // cannot reintroduce the page-level scroll fixed by the max-height/
             // min-h-0/overflow-y-auto pattern above (verified by the zero-page-scroll
             // e2e assertion).
-            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-1 -mx-1 -my-1"
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 -m-2"
           >
           {currentPageRecords.map((record) => {
             const primaryPhone = getPreferredResultPhone(record);
@@ -491,7 +491,7 @@ export const DirectoryPage = () => {
                   onClick={() => setSelectedRecordId(record.id)}
                   aria-pressed={isSelected}
                   className={[
-                    "w-full rounded-2xl p-4 text-left transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
+                    "w-full scroll-my-2 rounded-2xl p-4 text-left transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-scs-blue focus-visible:ring-offset-2",
                     isSelected
                       ? "bg-scs-mist shadow-xs ring-1 ring-scs-blue"
                       : "hover:bg-slate-50"
