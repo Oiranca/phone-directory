@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConflictRecordSummary, CsvImportPreview, CsvImportPreviewWithConflicts } from "../../../shared/types/contact";
 import { CsvImportPreviewPanel } from "./CsvImportPreviewPanel";
@@ -32,7 +32,7 @@ const basePreview: CsvImportPreviewWithConflicts = {
 
 const renderPanel = (
   preview: CsvImportPreviewWithConflicts,
-  overrides: Partial<{ isImporting: boolean; isMutating: boolean }> = {}
+  overrides: Partial<{ isImporting: boolean; isMutating: boolean; isRecomputingCounts: boolean }> = {}
 ) => {
   const onConfirm = vi.fn();
   const onClose = vi.fn();
@@ -42,6 +42,7 @@ const renderPanel = (
       preview={preview}
       isImporting={overrides.isImporting ?? false}
       isMutating={overrides.isMutating ?? false}
+      isRecomputingCounts={overrides.isRecomputingCounts}
       onConfirm={onConfirm}
       onPoliciesChange={onPoliciesChange}
       onClose={onClose}
@@ -50,11 +51,141 @@ const renderPanel = (
   return { ...result, onConfirm, onPoliciesChange, onClose };
 };
 
+// The panel has several role="status" regions; pick the one carrying the text.
+const statusWithText = (text: string) => {
+  const match = screen.getAllByRole("status").find((element) => element.textContent?.includes(text));
+  if (!match) throw new Error(`No role="status" region contains "${text}"`);
+  return match;
+};
+
 afterEach(() => {
   cleanup();
 });
 
 describe("CsvImportPreviewPanel", () => {
+  it("announces recomputed update and unchanged counts in one polite status region", () => {
+    const props = {
+      isImporting: false,
+      isMutating: false,
+      onConfirm: vi.fn(),
+      onPoliciesChange: vi.fn(),
+      onClose: vi.fn()
+    };
+    const { rerender } = render(
+      <CsvImportPreviewPanel {...props} preview={{ ...basePreview, updatedCount: 2, unchangedCount: 0 }} />
+    );
+    const region = screen.getByText("2 actualizaciones, 0 registros sin cambios");
+    expect(region).toHaveAttribute("role", "status");
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAttribute("aria-atomic", "true");
+
+    rerender(
+      <CsvImportPreviewPanel {...props} preview={{ ...basePreview, updatedCount: 1, unchangedCount: 1 }} />
+    );
+
+    expect(screen.getByText("1 actualización, 1 registro sin cambios")).toBe(region);
+    expect(region.closest('[role="status"]:not(p)')).toBeNull();
+  });
+
+  it("keeps the unchanged notice mounted at zero and out of the live regions", () => {
+    renderPanel({ ...basePreview, validRowCount: 1, conflictCount: 1, unchangedCount: 0 });
+
+    const notice = screen.getByText("0 registros sin cambios");
+    expect(notice.closest('[role="status"]')).toBeNull();
+  });
+
+  it("blocks confirmation at once and shows the recount hint only after a delay", () => {
+    vi.useFakeTimers();
+    try {
+      renderPanel(
+        { ...basePreview, validRowCount: 1, conflictCount: 0, policiesResolved: true },
+        { isRecomputingCounts: true }
+      );
+
+      const confirm = screen.getByRole("button", { name: /Confirmar importación/ });
+      expect(confirm).toBeDisabled();
+      expect(screen.queryByText("Recalculando recuentos…", { selector: "p:not(.sr-only)" })).not.toBeInTheDocument();
+      expect(screen.getByRole("group", { name: "Recuentos de importación" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Recalculando recuentos…", { selector: ".sr-only" })).toHaveAttribute("role", "status");
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(confirm).toHaveAccessibleDescription("Recalculando recuentos…");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("dims the stale numbers while recounting", () => {
+    renderPanel(
+      { ...basePreview, validRowCount: 1, createdCount: 3 },
+      { isRecomputingCounts: true }
+    );
+
+    expect(screen.getByText("Altas").nextElementSibling).toHaveClass("opacity-60");
+  });
+
+  describe("counts error", () => {
+    const failed = { message: "boom", retryable: true };
+
+    it("explains the failure in the footer, announces it once and focuses the counts on retry", () => {
+      const onRetryCounts = vi.fn();
+      render(
+        <CsvImportPreviewPanel
+          preview={{ ...basePreview, validRowCount: 1 }}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={vi.fn()}
+          onPoliciesChange={vi.fn()}
+          onClose={vi.fn()}
+          countsError={failed}
+          onRetryCounts={onRetryCounts}
+        />
+      );
+
+      const confirm = screen.getByRole("button", { name: /Confirmar importación/ });
+      expect(confirm).toBeDisabled();
+      expect(confirm).toHaveAccessibleDescription(
+        "No se pudieron recalcular los recuentos. Pulsa «Reintentar» junto a los recuentos."
+      );
+      expect(screen.getByText("boom")).toBeInTheDocument();
+      expect(screen.getAllByRole("status").filter((region) =>
+        region.textContent === "No se pudieron recalcular los recuentos")).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+      expect(screen.getByRole("group", { name: "Recuentos de importación" })).toHaveFocus();
+      expect(onRetryCounts).toHaveBeenCalledTimes(1);
+    });
+
+    it("tells the operator to pick the file again when the import expired", () => {
+      render(
+        <CsvImportPreviewPanel
+          preview={{ ...basePreview, validRowCount: 1 }}
+          isImporting={false}
+          isMutating={false}
+          onConfirm={vi.fn()}
+          onPoliciesChange={vi.fn()}
+          onClose={vi.fn()}
+          countsError={{ message: "La importación CSV ya no es válida.", retryable: false }}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toHaveAccessibleDescription(
+        "No se pudieron recalcular los recuentos. Cierra la vista previa y elige el archivo de nuevo."
+      );
+    });
+  });
+
+  it("drops the explanatory tail from the unchanged notice when nothing is unchanged", () => {
+    renderPanel({ ...basePreview, validRowCount: 1, conflictCount: 1, unchangedCount: 0 });
+
+    expect(screen.queryByText(/ya están actualizados/, { exact: false })).not.toBeInTheDocument();
+  });
+
   it("shows incoming and replaced imported-beeper counts", () => {
     renderPanel({
       ...basePreview,
@@ -64,7 +195,7 @@ describe("CsvImportPreviewPanel", () => {
       currentBeeperRecordCount: 3
     });
 
-    expect(screen.getByRole("status", { name: "" })).toHaveTextContent("Se importarán 2 buscas y se reemplazarán 3 buscas actuales.");
+    expect(statusWithText("Se importarán")).toHaveTextContent("Se importarán 2 buscas y se reemplazarán 3 buscas actuales.");
   });
 
   describe("zero-row file", () => {
@@ -252,9 +383,8 @@ describe("CsvImportPreviewPanel", () => {
       renderPanel(mixedPreview);
 
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      const status = screen.getByRole("status");
+      const status = statusWithText("2 filas rechazadas");
       expect(status).toBeInTheDocument();
-      expect(status).toHaveTextContent("2 filas rechazadas");
     });
 
     it("enables the confirm button when at least one row is valid, even with rejected rows present", () => {
@@ -409,8 +539,8 @@ describe("CsvImportPreviewPanel", () => {
     it("renders an informational warning acknowledgement (not an alert)", () => {
       renderPanel(warningOnlyPreview);
 
-      const status = screen.getByRole("status");
-      expect(status).toHaveTextContent("2 advertencias detectadas");
+      const status = statusWithText("2 advertencias detectadas");
+      expect(status).toBeInTheDocument();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
@@ -495,7 +625,7 @@ describe("CsvImportPreviewPanel", () => {
         ]
       });
 
-      expect(screen.getByRole("status")).toHaveTextContent("Todas las políticas");
+      expect(statusWithText("Todas las políticas")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Confirmar importación/ })).not.toBeDisabled();
     });
   });

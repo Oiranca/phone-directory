@@ -26,6 +26,7 @@ export const CONTACTS_CHANNELS = {
   previewCsvImport: "contacts:preview-csv-import",
   cancelCsvImportPreview: "contacts:cancel-csv-import-preview",
   importCsvDataset: "contacts:import-csv-dataset",
+  resolveCsvImportCounts: "contacts:resolve-csv-import-counts",
   // Single unified "Importar" entry point. Opens ONE native dialog
   // (json/csv/ods/xls/xlsx filter) and dispatches internally by extension to
   // the JSON-preview/CSV-preview pipelines.

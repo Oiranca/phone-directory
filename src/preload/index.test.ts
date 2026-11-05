@@ -45,6 +45,7 @@ const ROUTES: Record<InvokeMethod, { channel: string; args?: unknown[] }> = {
   previewCsvImport: { channel: CONTACTS_CHANNELS.previewCsvImport },
   cancelCsvImportPreview: { channel: CONTACTS_CHANNELS.cancelCsvImportPreview },
   importCsvDataset: { channel: CONTACTS_CHANNELS.importCsvDataset, args: ["token", []] },
+  resolveCsvImportCounts: { channel: CONTACTS_CHANNELS.resolveCsvImportCounts, args: ["token", []] },
   pickAndImportDataset: { channel: CONTACTS_CHANNELS.pickAndImportDataset },
   listBeepers: { channel: BEEPERS_CHANNELS.list },
   addBeeper: { channel: BEEPERS_CHANNELS.add, args: [{}] },
@@ -122,6 +123,14 @@ describe("compiled preload API", () => {
     await api.importCsvDataset("token");
 
     expect(electron.invoke).toHaveBeenCalledWith(CONTACTS_CHANNELS.importCsvDataset, "token", []);
+  });
+
+  it("defaults resolveCsvImportCounts policies to an empty list", async () => {
+    electron.invoke.mockResolvedValueOnce(undefined);
+
+    await api.resolveCsvImportCounts("token");
+
+    expect(electron.invoke).toHaveBeenCalledWith(CONTACTS_CHANNELS.resolveCsvImportCounts, "token", []);
   });
 
   it("forwards auto-backup failures and removes the same wrapped listener", () => {

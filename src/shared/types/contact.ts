@@ -522,6 +522,18 @@ export interface CsvImportResultInternal extends ImportContactsResultInternal {
   rowIssues: CsvImportIssue[];
 }
 
+/**
+ * Counts a CSV/ODS import would produce for a full policy selection. Resolved
+ * by the same sequential merge the confirmed import runs, without writing.
+ */
+export interface CsvImportCounts {
+  createdCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  /** Policy choices can change which later rows match or create, so the total moves too. */
+  mergedRecordCount: number;
+}
+
 /** Renderer-facing CSV import result — see CsvImportResultInternal. (OIR-276) */
 export type CsvImportResult = Omit<CsvImportResultInternal, "backupPath" | "importedFilePath">;
 

@@ -39,6 +39,7 @@ const CONTACTS_CHANNELS = {
   previewCsvImport: "contacts:preview-csv-import",
   cancelCsvImportPreview: "contacts:cancel-csv-import-preview",
   importCsvDataset: "contacts:import-csv-dataset",
+  resolveCsvImportCounts: "contacts:resolve-csv-import-counts",
   detectDuplicates: "contacts:detect-duplicates",
   mergeDuplicates:  "contacts:merge-duplicates",
   pickAndImportDataset: "contacts:pick-and-import-dataset",
@@ -100,6 +101,8 @@ const api: HospitalDirectoryApi = {
   ) as ReturnType<HospitalDirectoryApi["cancelCsvImportPreview"]>,
   importCsvDataset: (importToken, policies = []) =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.importCsvDataset, importToken, policies) as ReturnType<HospitalDirectoryApi["importCsvDataset"]>,
+  resolveCsvImportCounts: (importToken, policies = []) =>
+    ipcRenderer.invoke(CONTACTS_CHANNELS.resolveCsvImportCounts, importToken, policies) as ReturnType<HospitalDirectoryApi["resolveCsvImportCounts"]>,
   pickAndImportDataset: () =>
     ipcRenderer.invoke(CONTACTS_CHANNELS.pickAndImportDataset) as ReturnType<HospitalDirectoryApi["pickAndImportDataset"]>,
   confirmJsonImport: (importToken) =>

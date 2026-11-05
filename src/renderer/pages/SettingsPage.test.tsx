@@ -87,6 +87,7 @@ describe("SettingsPage", () => {
         exportDataset: vi.fn(),
         importDataset: vi.fn(),
         previewCsvImport: vi.fn(),
+        resolveCsvImportCounts: vi.fn(),
         importCsvDataset: vi.fn(),
         browseForPath: vi.fn().mockResolvedValue(null)
       }

@@ -680,16 +680,20 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     const pendingImport = pendingJsonImports.get(importToken);
     if (pendingImport && pendingImport.senderId === event.sender.id) clearPendingJsonImport(importToken);
   });
-  handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
-    // Atomically take the token before any await — a second concurrent confirmation
-    // will find nothing in the map and be rejected immediately.
+  // Shared by confirm and count resolution: token lookup, sender binding
+  // (with the wrong-sender attempt cap) and policy parsing. Never consumes the token.
+  const readPendingCsvImport = (
+    event: { sender: { id: number } },
+    importToken: string,
+    rawPolicies: unknown
+  ) => {
     const pendingImport = pendingCsvImports.get(importToken);
 
     if (!pendingImport) {
       throw new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.");
     }
 
-    // Reject if the confirming sender is not the one that requested the preview.
+    // Reject if the requesting sender is not the one that requested the preview.
     // This prevents another renderer in the same process from consuming a foreign token.
     // To prevent indefinite token-validity probing by an adversarial renderer that knows
     // or guesses a token, we bound the number of wrong-sender attempts. Once the cap is
@@ -705,13 +709,26 @@ export const registerContactsIpc = (service: AppDataService, handle: IpcMain["ha
     // Validated via Zod (csvImportPolicySelectionListSchema) instead of
     // hand-rolled typeof/Number.isInteger/Set.has checks, consistent with
     // every other IPC input in this codebase.
-    let policies;
-
     try {
-      policies = csvImportPolicySelectionListSchema.parse(rawPolicies);
+      return { pendingImport, policies: csvImportPolicySelectionListSchema.parse(rawPolicies) };
     } catch {
       throw new Error("Las políticas de conflicto no tienen un formato válido.");
     }
+  };
+
+  handle(CHANNELS.resolveCsvImportCounts, async (event, importToken: string, rawPolicies: unknown = []) => {
+    const { pendingImport, policies } = readPendingCsvImport(event, importToken, rawPolicies);
+    try {
+      return await service.resolveCsvImportCounts(pendingImport.sourceFilePath, policies);
+    } catch (error) {
+      if (isFilesystemError(error)) throw sourceFileAccessError();
+      throw error;
+    }
+  });
+  handle(CHANNELS.importCsvDataset, async (event, importToken: string, rawPolicies: unknown = []) => {
+    // Atomically take the token before any await — a second concurrent confirmation
+    // will find nothing in the map and be rejected immediately.
+    const { pendingImport, policies } = readPendingCsvImport(event, importToken, rawPolicies);
 
     // Synchronously consume the token before the first await so concurrent
     // confirmations cannot race past this point with the same token.

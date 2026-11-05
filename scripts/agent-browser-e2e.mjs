@@ -319,7 +319,7 @@ try {
 
   await runScenario("directory and import workflows", async () => {
   await launchElectron([csvPath, invalidCsvPath, mixedCsvPath, warningCsvPath, cancelCsvPath,
-    overwriteCsvPath, skipCsvPath, mergeCsvPath, bulkCsvPath]);
+    overwriteCsvPath, skipCsvPath, mergeCsvPath, mergeCsvPath, bulkCsvPath]);
   if (!browserCommand("get", "url").startsWith(`http://127.0.0.1:${vitePort}/`)) {
     throw new Error("ELECTRON_RENDERER_URL did not load the configured dev server");
   }
@@ -631,7 +631,8 @@ try {
       throw new Error(`${policy} fixture did not require a conflict policy`);
     }
     clickRole("radio", policy);
-    if (!previewState().enabled) throw new Error(`${policy} did not enable import`);
+    // Enabling waits for the async count recompute.
+    await waitFor(`${policy} enables import`, () => previewState().enabled);
     await confirmPreview();
     await waitFor(`${policy} applied`, async () => {
       const record = (await readRecords()).find((entry) => entry.externalId === "example-1");
@@ -639,6 +640,31 @@ try {
     });
     console.log(`[agent-browser-e2e] Conflict policy passed: ${policy}`);
   }
+
+  await openPreview();
+  if (!previewState().text.includes("Conflictos (1)")) {
+    throw new Error(`Repeated merge-fields import did not produce the expected conflict: ${previewState().text.slice(0, 1500)}`);
+  }
+  clickRole("radio", "Combinar");
+  // The count recompute is async: wait for the "sin cambios" notice before reading any count.
+  await waitFor("unchanged count after merge", () => hasText("1 registro sin cambios"));
+  const mergeUpdatedCount = JSON.parse(browserCommand("eval", `(() => {
+    const label = [...document.querySelectorAll("p")].find(item => item.textContent.trim() === "Actualizaciones");
+    return label?.nextElementSibling?.textContent?.trim() ?? "";
+  })()`));
+  if (mergeUpdatedCount !== "0") {
+    throw new Error(`Unchanged merge-fields preview showed ${mergeUpdatedCount} updates`);
+  }
+  const mergeUnchangedText = JSON.parse(browserCommand("eval", `(() => {
+    const notice = [...document.querySelectorAll("span.font-semibold")].find(item => /^\\d+ registros? sin cambios$/.test(item.textContent.trim()));
+    return notice?.textContent?.trim() ?? "";
+  })()`));
+  if (!/^1 registro sin cambios$/.test(mergeUnchangedText)) {
+    throw new Error(`Unchanged merge-fields preview showed "${mergeUnchangedText}" instead of 1 sin cambios`);
+  }
+  await confirmPreview();
+  await waitFor("unchanged merge-fields import", () => hasText("Importación completada. 0 altas y 0 actualizaciones."));
+  console.log("[agent-browser-e2e] Unchanged merge-fields preview and confirmation reported zero updates");
 
   await openPreview();
   if (previewState().enabled || !previewState().text.includes("Conflictos (2)")) {
@@ -688,9 +714,11 @@ try {
     observer.disconnect();
     return { elapsed: performance.now() - startedAt, longestTask: Math.max(0, ...longTasks) };
   })()`));
-  if (bulkMetrics.elapsed > 250 || bulkMetrics.longestTask > 50 || !previewState().enabled) {
+  if (bulkMetrics.elapsed > 250 || bulkMetrics.longestTask > 50) {
     throw new Error(`5000-conflict renderer budget exceeded: ${JSON.stringify(bulkMetrics)}`);
   }
+  // Import stays disabled until the main-process recount for all 5000 lands.
+  await waitFor("5000 conflict counts recomputed", () => previewState().enabled);
   browserCommand("eval", 'document.querySelector("[aria-label=\\"Vista previa de importación\\"] button").click()');
   await waitFor("discard conflict confirmation", () => browserCommand("eval", 'Boolean(document.querySelector("dialog[open]"))') === "true");
   clickRole("button", "Cerrar igualmente");

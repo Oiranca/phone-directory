@@ -99,6 +99,7 @@ describe("App recovery flow", () => {
         cancelCsvImportPreview: vi.fn(),
         resetDataset: vi.fn(),
         previewCsvImport: vi.fn(),
+        resolveCsvImportCounts: vi.fn(),
         importCsvDataset: vi.fn()
       }
     });

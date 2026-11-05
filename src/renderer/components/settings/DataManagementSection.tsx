@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import type { BackupListItem, CsvImportPreviewWithConflicts, JsonImportPreview, MergePolicy } from "../../../shared/types/contact";
+import type { BackupListItem, CsvImportCounts, CsvImportPolicySelection, CsvImportPreviewWithConflicts, JsonImportPreview, MergePolicy } from "../../../shared/types/contact";
 import { ConfirmDialog } from "../feedback/ConfirmDialog";
-import { CsvImportPreviewPanel } from "../feedback/CsvImportPreviewPanel";
+import { CsvImportPreviewPanel, type CountsError } from "../feedback/CsvImportPreviewPanel";
 import { LoadingStatus } from "../feedback/LoadingStatus";
 import { useToast } from "../feedback/ToastRegion";
 import { useAppStore } from "../../store/useAppStore";
@@ -89,6 +89,13 @@ export const DataManagementSection = () => {
   const jsonPreviewRef = useRef<JsonImportPreview | null>(null);
   const confirmationInFlightRef = useRef(false);
   const policyUpdateSequenceRef = useRef(0);
+  // Serialises resolveCsvImportCounts calls: each one replays the whole merge
+  // on the main thread, so a 5000-conflict bulk change must never have two in
+  // flight. A queued call whose sequence was superseded skips its IPC call.
+  const countsQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const lastCountsRequestRef = useRef<{ importToken: string; policies: CsvImportPolicySelection[] } | null>(null);
+  const [isRecomputingCounts, setIsRecomputingCounts] = useState(false);
+  const [countsError, setCountsError] = useState<CountsError | null>(null);
   const pendingPolicyUpdatesRef = useRef<{
     preview: CsvImportPreviewWithConflicts;
     operations: Array<{
@@ -134,6 +141,7 @@ export const DataManagementSection = () => {
   useFocusOnMount(panelHeadingRef, isPanelOpen);
 
   useEffect(() => () => {
+    policyUpdateSequenceRef.current += 1;
     if (csvPreviewRef.current) {
       void window.hospitalDirectory.cancelCsvImportPreview(csvPreviewRef.current.importToken);
     }
@@ -230,6 +238,16 @@ export const DataManagementSection = () => {
   const handlePickAndImport = async () => {
     try {
       setIsImporting(true);
+      // The open preview is replaced: nothing from it may land on the next one.
+      policyUpdateSequenceRef.current += 1;
+      const previous = csvPreviewRef.current;
+      if (previous) {
+        void window.hospitalDirectory.cancelCsvImportPreview(previous.importToken);
+        csvPreviewRef.current = null;
+      }
+      lastCountsRequestRef.current = null;
+      setIsRecomputingCounts(false);
+      setCountsError(null);
       setCsvPreview(null);
       const response = await window.hospitalDirectory.pickAndImportDataset();
 
@@ -256,6 +274,8 @@ export const DataManagementSection = () => {
       const preview = response.preview;
 
       csvPreviewRef.current = preview;
+      setIsRecomputingCounts(false);
+      setCountsError(null);
       setCsvPreview(preview);
 
     } catch (error) {
@@ -330,6 +350,7 @@ export const DataManagementSection = () => {
     }
 
     try {
+      policyUpdateSequenceRef.current += 1;
       setIsImportingCsv(true);
       const result = await window.hospitalDirectory.importCsvDataset(
         preview.importToken,
@@ -374,22 +395,18 @@ export const DataManagementSection = () => {
     policy: MergePolicy
   ) => {
     const sequence = ++policyUpdateSequenceRef.current;
+    // A pending Reintentar would bump the sequence and drop this change.
+    setCountsError(null);
     const selectedIndices = recordIndices === "all" ? null : new Set(recordIndices);
     const operations = pendingPolicyUpdatesRef.current?.preview === preview
       ? [...pendingPolicyUpdatesRef.current.operations, { selectedIndices, policy }]
       : [{ selectedIndices, policy }];
     pendingPolicyUpdatesRef.current = { preview, operations };
     const conflictedRecords = preview.conflictedRecords.slice();
-    let previousSkippedUpdates = 0;
-    let skippedUpdates = 0;
     let policiesResolved = true;
 
     for (let index = 0; index < conflictedRecords.length; index += 1) {
       const conflict = conflictedRecords[index]!;
-      if (conflict.selectedPolicy === "skip") {
-        previousSkippedUpdates += 1;
-      }
-
       let selectedPolicy = conflict.selectedPolicy;
       for (const operation of operations) {
         if (operation.selectedIndices === null || operation.selectedIndices.has(conflict.recordIndex)) {
@@ -401,9 +418,6 @@ export const DataManagementSection = () => {
         : { ...conflict, selectedPolicy };
       conflictedRecords[index] = updatedConflict;
 
-      if (updatedConflict.selectedPolicy === "skip") {
-        skippedUpdates += 1;
-      }
       if (!updatedConflict.selectedPolicy) {
         policiesResolved = false;
       }
@@ -416,21 +430,74 @@ export const DataManagementSection = () => {
       }
     }
 
-    const baseUpdatedCount = preview.updatedCount + previousSkippedUpdates;
-    const updatedPreview = {
-      ...preview,
-      updatedCount: Math.max(0, baseUpdatedCount - skippedUpdates),
-      conflictedRecords,
-      policiesResolved
-    };
-
+    // Policies show at once; only the counts wait for the main process.
     startTransition(() => {
       setCsvPreview((current) =>
-        sequence === policyUpdateSequenceRef.current && current === preview
-          ? updatedPreview
+        current?.importToken === preview.importToken
+          ? { ...current, conflictedRecords, policiesResolved }
           : current
       );
     });
+
+    if (policiesResolved) {
+      const policies = conflictedRecords.flatMap((conflict) =>
+        conflict.selectedPolicy
+          ? [{ recordIndex: conflict.recordIndex, policy: conflict.selectedPolicy }]
+          : []
+      );
+      await recomputeCounts(sequence, preview.importToken, policies);
+    }
+  };
+
+  const recomputeCounts = async (
+    sequence: number,
+    importToken: string,
+    policies: CsvImportPolicySelection[]
+  ) => {
+    lastCountsRequestRef.current = { importToken, policies };
+    setIsRecomputingCounts(true);
+    setCountsError(null);
+    const request = countsQueueRef.current.then(() =>
+      sequence === policyUpdateSequenceRef.current
+        ? window.hospitalDirectory.resolveCsvImportCounts(importToken, policies)
+        : null
+    );
+    countsQueueRef.current = request.catch(() => undefined);
+
+    let counts: CsvImportCounts | null = null;
+    let failure: unknown;
+    let failed = false;
+    try {
+      counts = await request;
+    } catch (error) {
+      failed = true;
+      failure = error;
+    }
+    // A newer change, a close, an import or another file owns the state now.
+    if (sequence !== policyUpdateSequenceRef.current || csvPreviewRef.current?.importToken !== importToken) {
+      return;
+    }
+
+    setIsRecomputingCounts(false);
+    if (failed) {
+      const message = toCompactToastMessage(failure, "Inténtalo de nuevo.");
+      setCountsError({ message, retryable: !/ya no es válida/i.test(message) });
+      return;
+    }
+    if (counts) {
+      const { createdCount, updatedCount, unchangedCount, mergedRecordCount } = counts;
+      setCsvPreview((current) =>
+        current?.importToken === importToken
+          ? { ...current, createdCount, updatedCount, unchangedCount, mergedRecordCount }
+          : current
+      );
+    }
+  };
+
+  const handleRetryCounts = () => {
+    const last = lastCountsRequestRef.current;
+    if (!last) return;
+    void recomputeCounts(++policyUpdateSequenceRef.current, last.importToken, last.policies);
   };
 
   const handleConfirmAction = async () => {
@@ -680,11 +747,17 @@ export const DataManagementSection = () => {
               void handleConflictPoliciesChange(csvPreview, recordIndices, policy)
             }
             onClose={() => {
+              policyUpdateSequenceRef.current += 1;
+              setIsRecomputingCounts(false);
+              setCountsError(null);
               void window.hospitalDirectory.cancelCsvImportPreview(csvPreview.importToken);
               if (csvPreviewRef.current?.importToken === csvPreview.importToken) csvPreviewRef.current = null;
               setCsvPreview(null);
               triggerButtonRef.current?.focus();
             }}
+            isRecomputingCounts={isRecomputingCounts}
+            countsError={countsError}
+            onRetryCounts={handleRetryCounts}
             headingRef={panelHeadingRef}
           />
         )}

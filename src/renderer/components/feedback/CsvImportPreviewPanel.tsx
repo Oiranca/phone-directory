@@ -207,6 +207,15 @@ const ConflictRecordCol = ({
   );
 };
 
+export type CountsError = {
+  message: string;
+  /** False when the import token is dead: only picking the file again helps. */
+  retryable: boolean;
+};
+
+/** The "Recalculando…" hint only shows for recounts slower than this, to avoid flicker. */
+const RECOMPUTING_HINT_DELAY_MS = 300;
+
 type Props = {
   preview: CsvImportPreviewWithConflicts;
   isImporting: boolean;
@@ -214,10 +223,14 @@ type Props = {
   onConfirm: () => void;
   onPoliciesChange: (recordIndices: readonly number[] | "all", policy: MergePolicy) => void;
   onClose: () => void;
+  /** A policy change is waiting on the main process for fresh counts. */
+  isRecomputingCounts?: boolean;
+  countsError?: CountsError | null;
+  onRetryCounts?: () => void;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 };
 
-export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPoliciesChange, onClose, headingRef }: Props) => {
+export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConfirm, onPoliciesChange, onClose, isRecomputingCounts = false, countsError = null, onRetryCounts, headingRef }: Props) => {
   const conflictedRecords = preview.conflictedRecords ?? [];
   const conflictCount = preview.conflictCount ?? conflictedRecords.length;
   const policiesResolved = preview.policiesResolved ?? conflictCount === 0;
@@ -229,7 +242,27 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
   // Rejected rows alone no longer block confirmation — they are skipped
   // and imported partially alongside the valid rows. The only real blocker left
   // is having nothing importable at all (see hasImportableContent above).
-  const isConfirmDisabled = isMutating || hasUnresolvedConflicts || !hasImportableContent;
+  const isConfirmDisabled =
+    isMutating || hasUnresolvedConflicts || isRecomputingCounts || countsError !== null || !hasImportableContent;
+  const [showRecomputingHint, setShowRecomputingHint] = useState(false);
+  useEffect(() => {
+    if (!isRecomputingCounts) {
+      setShowRecomputingHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowRecomputingHint(true), RECOMPUTING_HINT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isRecomputingCounts]);
+  const showCountsErrorHint = !hasUnresolvedConflicts && !isRecomputingCounts && countsError !== null;
+  const confirmHintId = hasUnresolvedConflicts
+    ? "csv-confirm-disabled-hint"
+    : isRecomputingCounts
+      ? showRecomputingHint ? "csv-confirm-recomputing-hint" : undefined
+      : showCountsErrorHint
+        ? "csv-confirm-counts-error-hint"
+        : undefined;
+  const countsGridRef = useRef<HTMLDivElement>(null);
+  const unchangedCount = preview.unchangedCount ?? 0;
 
   // ---------------------------------------------------------------------------
   // Multi-select state (purely local UI, no IPC/main change needed).
@@ -460,16 +493,16 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
       {/* Unchanged-record notice: rows that matched an existing record but are
           already field-for-field identical to it. These never require manual
           conflict resolution and are never counted as "actualizaciones" — kept
-          deliberately separate (and non-alarming) from both blocks above. */}
-      {hasImportableContent && (preview.unchangedCount ?? 0) > 0 && (
-        <div
-          role="status"
-          className="mt-5 rounded-2xl border border-emerald-200 bg-white/70 px-4 py-3 text-sm text-emerald-950"
-        >
+          deliberately separate (and non-alarming) from both blocks above.
+          Rendered for any conflicting import (even at 0) so the layout does not
+          jump when the async recount lands. Not a live region: the sr-only
+          status below is the single announcement. */}
+      {hasImportableContent && (conflictCount > 0 || unchangedCount > 0) && (
+        <div className="mt-5 rounded-2xl border border-emerald-200 bg-white/70 px-4 py-3 text-sm text-emerald-950">
           <span className="font-semibold">
-            {preview.unchangedCount} {preview.unchangedCount === 1 ? "registro sin cambios" : "registros sin cambios"}
-          </span>{" "}
-          (ya están actualizados en la agenda, no se tocarán).
+            {unchangedCount} {unchangedCount === 1 ? "registro sin cambios" : "registros sin cambios"}
+          </span>
+          {unchangedCount > 0 && " (ya están actualizados en la agenda, no se tocarán)."}
         </div>
       )}
 
@@ -529,20 +562,58 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div
+        ref={countsGridRef}
+        role="group"
+        aria-label="Recuentos de importación"
+        tabIndex={-1}
+        aria-busy={isRecomputingCounts}
+        className="mt-5 grid gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 sm:grid-cols-3"
+      >
         <div className="rounded-2xl bg-white/80 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Altas</p>
-          <p className="mt-2 text-3xl font-semibold text-emerald-950">{preview.createdCount}</p>
+          <p className={`mt-2 text-3xl font-semibold text-emerald-950${isRecomputingCounts ? " opacity-60" : ""}`}>{preview.createdCount}</p>
         </div>
         <div className="rounded-2xl bg-white/80 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Actualizaciones</p>
-          <p className="mt-2 text-3xl font-semibold text-emerald-950">{preview.updatedCount}</p>
+          <p className={`mt-2 text-3xl font-semibold text-emerald-950${isRecomputingCounts ? " opacity-60" : ""}`}>{preview.updatedCount}</p>
         </div>
         <div className="rounded-2xl bg-white/80 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Total final</p>
-          <p className="mt-2 text-3xl font-semibold text-emerald-950">{preview.mergedRecordCount}</p>
+          <p className={`mt-2 text-3xl font-semibold text-emerald-950${isRecomputingCounts ? " opacity-60" : ""}`}>{preview.mergedRecordCount}</p>
         </div>
       </div>
+      {countsError && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-800">
+          <span>No se pudieron recalcular los recuentos.</span>
+          <span>{countsError.message}</span>
+          {countsError.retryable ? (
+            <button
+              type="button"
+              onClick={() => {
+                countsGridRef.current?.focus();
+                onRetryCounts?.();
+              }}
+              disabled={isMutating}
+              className="focus-ring rounded-full border border-red-300 px-3 py-1 text-sm font-semibold text-red-800 disabled:opacity-60"
+            >
+              Reintentar
+            </button>
+          ) : (
+            <span>Cierra la vista previa y elige el archivo de nuevo.</span>
+          )}
+        </div>
+      )}
+      {/* The one announcement for count changes and recount failures. Always
+          mounted so later text changes are announced; the visible numbers and
+          the "sin cambios" notice carry no live region of their own. */}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {isRecomputingCounts
+          ? "Recalculando recuentos…"
+          : countsError
+          ? "No se pudieron recalcular los recuentos"
+          : `${preview.updatedCount} ${preview.updatedCount === 1 ? "actualización" : "actualizaciones"}, ${unchangedCount} ${unchangedCount === 1 ? "registro" : "registros"} sin cambios`}
+      </p>
 
       {conflictedRecords.length > 0 && (
         <div className="mt-6">
@@ -1004,11 +1075,23 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
                 Resuelve todos los conflictos antes de confirmar.
               </p>
             )}
+            {!hasUnresolvedConflicts && isRecomputingCounts && showRecomputingHint && (
+              <p id="csv-confirm-recomputing-hint" className="text-xs text-amber-800">
+                Recalculando recuentos…
+              </p>
+            )}
+            {showCountsErrorHint && (
+              <p id="csv-confirm-counts-error-hint" className="text-xs text-red-800">
+                {countsError?.retryable
+                  ? "No se pudieron recalcular los recuentos. Pulsa «Reintentar» junto a los recuentos."
+                  : "No se pudieron recalcular los recuentos. Cierra la vista previa y elige el archivo de nuevo."}
+              </p>
+            )}
             <button
               type="button"
               onClick={onConfirm}
               disabled={isConfirmDisabled}
-              aria-describedby={hasUnresolvedConflicts ? "csv-confirm-disabled-hint" : undefined}
+              aria-describedby={confirmHintId}
               className="focus-ring rounded-full bg-emerald-700 px-6 py-2 text-center text-sm font-semibold text-white disabled:opacity-60"
             >
               {isImporting ? "Importando…" : "Confirmar importación"}

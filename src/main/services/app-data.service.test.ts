@@ -5,7 +5,8 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../shared/fixtures/defaultContacts.js";
-import type { EditableAppSettings } from "../../shared/types/contact.js";
+import { isRecoveryBootstrap } from "../../shared/types/contact.js";
+import type { ContactRecord, EditableAppSettings } from "../../shared/types/contact.js";
 import type { AppDataAuditFacade } from "./app-data-audit.facade.js";
 import { buildStableMergeKeys } from "./import-match-indexes.js";
 import { writeWorkbook } from "./test-support/xlsxWorkbook.js";
@@ -5678,6 +5679,303 @@ describe("AppDataService", () => {
     });
   });
 
+  describe("merge-fields leaves existing phone labels alone", () => {
+    const mergeFields = async (
+      mutateCurrent: (record: ContactRecord) => ContactRecord,
+      mutateImported: (record: ContactRecord) => ContactRecord
+    ) => {
+      const { AppDataService } = await import("./app-data.service.js");
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const bootstrap = await service.getBootstrapData();
+      if (isRecoveryBootstrap(bootstrap)) throw new Error("Unexpected recovery bootstrap.");
+      const base = bootstrap.contacts.records[0]!;
+      const phone = base.contactMethods.phones[0]!;
+      const withTwoPhones = (labels: [string | undefined, string | undefined]): ContactRecord => ({
+        ...base,
+        location: undefined,
+        contactMethods: {
+          ...base.contactMethods,
+          phones: [
+            { ...phone, id: "ph_a", number: "911111111", label: labels[0], isPrimary: true },
+            { ...phone, id: "ph_b", number: "922222222", label: labels[1], isPrimary: false }
+          ]
+        }
+      });
+      const current = mutateCurrent(withTwoPhones([undefined, "Guardia"]));
+      const imported = mutateImported(withTwoPhones(["Número 1", "Número 2"]));
+      const currentDataset = { ...bootstrap.contacts, records: [current] };
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          currentDataset: typeof currentDataset,
+          imported: { records: ContactRecord[] },
+          editorName: string,
+          policies: Map<number, string>
+        ) => Promise<{ contacts: typeof currentDataset; updatedCount: number; unchangedCount: number }>;
+      };
+      const merged = await privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [imported] },
+        "Tester",
+        new Map([[0, "merge-fields"]])
+      );
+      return { current, merged, final: merged.contacts.records[0]! };
+    };
+
+    it("fills a location without relabelling the existing phones", async () => {
+      const { current, merged, final } = await mergeFields(
+        (record) => record,
+        (record) => ({ ...record, location: { center: "Hospital", floor: "2" } })
+      );
+
+      expect(final.location).toMatchObject({ center: "Hospital", floor: "2" });
+      expect(final.contactMethods.phones).toEqual(current.contactMethods.phones);
+      expect(merged.updatedCount).toBe(1);
+    });
+
+    it("counts a label-only difference as unchanged and keeps the stored labels", async () => {
+      const { current, merged, final } = await mergeFields((record) => record, (record) => record);
+
+      expect(final.contactMethods.phones).toEqual(current.contactMethods.phones);
+      expect(merged).toMatchObject({ updatedCount: 0, unchangedCount: 1 });
+    });
+  });
+
+  describe("beeper refresh for rows identical to the stored record", () => {
+    const mergeRows = async (build: (base: ContactRecord) => { rows: ContactRecord[]; policies: Map<number, string> }) => {
+      const { AppDataService } = await import("./app-data.service.js");
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const bootstrap = await service.getBootstrapData();
+      if (isRecoveryBootstrap(bootstrap)) throw new Error("Unexpected recovery bootstrap.");
+      const base = { ...bootstrap.contacts.records[0]!, beepers: [] };
+      const currentDataset = { ...bootstrap.contacts, records: [base] };
+      const { rows, policies } = build(base);
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          currentDataset: typeof currentDataset,
+          imported: { records: ContactRecord[] },
+          editorName: string,
+          policies: Map<number, string>
+        ) => Promise<{ contacts: typeof currentDataset }>;
+      };
+      const merged = await privateMerge.mergeImportedDataset(currentDataset, { records: rows }, "Tester", policies);
+      return merged.contacts.records[0]!;
+    };
+
+    it("applies the beeper of a row identical to the original without reverting an earlier overwrite", async () => {
+      const final = await mergeRows((base) => ({
+        rows: [
+          { ...base, organization: { ...base.organization, role: "Auxiliar" } },
+          { ...base, beepers: [{ number: "2222" }] }
+        ],
+        policies: new Map([[0, "overwrite"]])
+      }));
+
+      expect(final.organization.role).toBe("Auxiliar");
+      expect(final.beepers).toEqual([{ number: "2222" }]);
+    });
+
+    it("keeps the last beeper when two unconflicted identical rows carry different beepers", async () => {
+      const final = await mergeRows((base) => ({
+        rows: [{ ...base, beepers: [{ number: "1111" }] }, { ...base, beepers: [{ number: "2222" }] }],
+        policies: new Map()
+      }));
+
+      expect(final.beepers).toEqual([{ number: "2222" }]);
+    });
+  });
+
+  describe("resolveCsvImportCounts", () => {
+    const setup = async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+      const bootstrap = await service.getBootstrapData();
+      if (isRecoveryBootstrap(bootstrap)) throw new Error("Unexpected recovery bootstrap.");
+      const existing = bootstrap.contacts.records[0]!;
+      const header = "externalId,type,displayName,department,role,phone1Number,status";
+      const row = (role: string, phone: string) =>
+        `${existing.externalId},service,${existing.displayName},${existing.organization.department},${role},${phone},active`;
+      const writeCsv = async (name: string, rows: string[]) => {
+        const sourceFilePath = path.join(testRoot, "incoming", name);
+        await fs.mkdir(path.dirname(sourceFilePath), { recursive: true });
+        await fs.writeFile(sourceFilePath, [header, ...rows].join("\n") + "\n", "utf-8");
+        return sourceFilePath;
+      };
+      const conflictIndices = async (sourceFilePath: string) =>
+        (await service.previewCsvImport(sourceFilePath)).conflictedRecords.map((conflict) => conflict.recordIndex);
+      const confirmCounts = async (
+        sourceFilePath: string,
+        selections: { recordIndex: number; policy: "overwrite" | "merge-fields" | "skip" }[]
+      ) => {
+        const result = await service.importCsvDataset(sourceFilePath, selections);
+        const audit = await service.getAuditLog({ action: "bulk-import" });
+        return {
+          createdCount: result.createdCount,
+          updatedCount: result.updatedCount,
+          unchangedCount: audit.entries[0]?.changes?.unchangedCount?.new,
+          mergedRecordCount: result.recordCount
+        };
+      };
+      return { service, existing, row, writeCsv, conflictIndices, confirmCounts };
+    };
+
+    it("matches the confirmed import when two rows target one contact and the second becomes a merge no-op", async () => {
+      const { service, row, writeCsv, conflictIndices, confirmCounts } = await setup();
+      // Row 2 differs from the PRISTINE record but equals it once row 1 is applied.
+      const file = await writeCsv("duplicate-target.csv", [row("Enfermera", "55555"), row("Enfermera", "55555")]);
+      const [first, second] = await conflictIndices(file);
+      const selections = [
+        { recordIndex: first!, policy: "overwrite" as const },
+        { recordIndex: second!, policy: "merge-fields" as const }
+      ];
+
+      const resolved = await service.resolveCsvImportCounts(file, selections);
+      const confirmed = await confirmCounts(file, selections);
+
+      expect(resolved).toEqual(confirmed);
+      expect(resolved).toMatchObject({ updatedCount: 1, unchangedCount: 1 });
+    });
+
+    it("moves one identical-reimport conflict between unchanged, updated and skipped as its policy changes", async () => {
+      const { service, row, writeCsv, conflictIndices } = await setup();
+      const file = await writeCsv("transitions.csv", [row("Enfermera", "55555")]);
+      const [seed] = await conflictIndices(file);
+      await service.importCsvDataset(file, [{ recordIndex: seed!, policy: "merge-fields" }]);
+      const [only] = await conflictIndices(file);
+      const countsFor = (policy: "overwrite" | "merge-fields" | "skip") =>
+        service.resolveCsvImportCounts(file, [{ recordIndex: only!, policy }]);
+
+      const merge = await countsFor("merge-fields");
+      const overwrite = await countsFor("overwrite");
+      const skip = await countsFor("skip");
+
+      expect(merge).toMatchObject({ updatedCount: 0, unchangedCount: 1 });
+      expect(overwrite).toMatchObject({ updatedCount: 1, unchangedCount: 0 });
+      expect(skip).toMatchObject({ updatedCount: 0, unchangedCount: 0 });
+    });
+
+    it.each([
+      { first: "overwrite" as const, created: 0, updated: 2, mergedDelta: 0 },
+      { first: "skip" as const, created: 1, updated: 0, mergedDelta: 1 }
+    ])(
+      "createdCount and mergedRecordCount follow the policy of an earlier row ($first) and match the confirmed import",
+      async ({ first: firstPolicy, created, updated, mergedDelta }) => {
+        const { service, existing, writeCsv, conflictIndices, confirmCounts } = await setup();
+        // Row 1 only matches the stored record through the identity row 0 gives it.
+        const rowWith = (externalId: string) =>
+          `${externalId},service,Servicio nuevo,Departamento nuevo,Enfermera,64321,active`;
+        const file = await writeCsv("policy-moves-created.csv", [rowWith(existing.externalId!), rowWith("")]);
+        // The preview already flags row 1 as a conflict (it keys off row 0), so it needs a policy too.
+        const [firstIndex, secondIndex] = await conflictIndices(file);
+        const selections = [
+          { recordIndex: firstIndex!, policy: firstPolicy },
+          { recordIndex: secondIndex!, policy: "overwrite" as const }
+        ];
+        const baseline = await service.getBootstrapData();
+        if (isRecoveryBootstrap(baseline)) throw new Error("Unexpected recovery bootstrap.");
+
+        const resolved = await service.resolveCsvImportCounts(file, selections);
+        const confirmed = await confirmCounts(file, selections);
+
+        expect(resolved).toMatchObject({
+          createdCount: created,
+          updatedCount: updated,
+          mergedRecordCount: baseline.contacts.records.length + mergedDelta
+        });
+        expect(resolved).toEqual(confirmed);
+      }
+    );
+
+    it("throws on an empty workbook like the confirmed import", async () => {
+      const { service, writeCsv } = await setup();
+      const file = await writeCsv("empty.csv", []);
+
+      await expect(service.resolveCsvImportCounts(file, [])).rejects.toThrow(
+        "El archivo no contiene filas válidas para importar."
+      );
+      await expect(service.importCsvDataset(file, [])).rejects.toThrow(
+        "El archivo no contiene filas válidas para importar."
+      );
+    });
+
+    it("counts an identical merge-fields reimport as unchanged and leaves audit and records untouched", async () => {
+      const { service, row, writeCsv, conflictIndices } = await setup();
+      const file = await writeCsv("reimport.csv", [row("Enfermera", "55555")]);
+      const [only] = await conflictIndices(file);
+      await service.importCsvDataset(file, [{ recordIndex: only!, policy: "merge-fields" }]);
+      const auditBefore = await service.getAuditLog({ action: "bulk-import" });
+      const [again] = await conflictIndices(file);
+
+      const counts = await service.resolveCsvImportCounts(file, [{ recordIndex: again!, policy: "merge-fields" }]);
+      const auditAfter = await service.getAuditLog({ action: "bulk-import" });
+
+      expect(counts).toMatchObject({ createdCount: 0, updatedCount: 0, unchangedCount: 1 });
+      expect(auditAfter.entries).toHaveLength(auditBefore.entries.length);
+    });
+
+    describe("a row identical to the stored record, after an earlier conflict row on the same target", () => {
+      const seedStored = async (ctx: Awaited<ReturnType<typeof setup>>) => {
+        const seed = await ctx.writeCsv("seed-identical.csv", [ctx.row("Enfermera", "55555")]);
+        const [seedIndex] = await ctx.conflictIndices(seed);
+        await ctx.service.importCsvDataset(seed, [{ recordIndex: seedIndex!, policy: "overwrite" }]);
+      };
+      const phoneNumbers = (record: ContactRecord) => record.contactMethods.phones.map((phone) => phone.number);
+
+      it.each([
+        { policy: "merge-fields" as const, role: "Enfermera", phones: ["55555", "66666"] },
+        { policy: "overwrite" as const, role: "Auxiliar", phones: ["66666"] }
+      ])(
+        "does not revert the earlier $policy row, counts it unchanged, and matches the preview",
+        async ({ policy, role, phones }) => {
+          const ctx = await setup();
+          await seedStored(ctx);
+          const file = await ctx.writeCsv("identical-after-conflict.csv", [
+            ctx.row("Auxiliar", "66666"),
+            ctx.row("Enfermera", "55555")
+          ]);
+          const selections = [{ recordIndex: 0, policy }];
+
+          const resolved = await ctx.service.resolveCsvImportCounts(file, selections);
+          const result = await ctx.service.importCsvDataset(file, selections);
+          const audit = await ctx.service.getAuditLog({ action: "bulk-import" });
+          const final = result.contacts.records.find((record) => record.externalId === ctx.existing.externalId)!;
+
+          expect(final.organization.role).toBe(role);
+          expect(phoneNumbers(final)).toEqual(phones);
+          expect(result.updatedCount).toBe(1);
+          expect(audit.entries[0]?.changes?.unchangedCount?.new).toBe(1);
+          expect(result.conflictPolicyCounts).toEqual({ [policy]: 1 });
+          expect(resolved).toMatchObject({ updatedCount: 1, unchangedCount: 1 });
+        }
+      );
+
+      it("gives the same record and counts when the identical row comes first", async () => {
+        const ctx = await setup();
+        await seedStored(ctx);
+        const file = await ctx.writeCsv("identical-before-conflict.csv", [
+          ctx.row("Enfermera", "55555"),
+          ctx.row("Auxiliar", "66666")
+        ]);
+        const selections = [{ recordIndex: 1, policy: "merge-fields" as const }];
+
+        const resolved = await ctx.service.resolveCsvImportCounts(file, selections);
+        const result = await ctx.service.importCsvDataset(file, selections);
+        const final = result.contacts.records.find((record) => record.externalId === ctx.existing.externalId)!;
+
+        expect(final.organization.role).toBe("Enfermera");
+        expect(phoneNumbers(final)).toEqual(["55555", "66666"]);
+        expect(result.updatedCount).toBe(1);
+        expect(result.conflictPolicyCounts).toEqual({ "merge-fields": 1 });
+        expect(resolved).toMatchObject({ updatedCount: 1, unchangedCount: 1 });
+      });
+    });
+  });
+
   describe("merge-fields conflict policy (import path) does not drop role/schedule/location/customFields", () => {
     it("fills organization.role/schedule and location.sector/section from the imported row when the current record lacks them", async () => {
       const { AppDataService } = await import("./app-data.service.js");
@@ -5712,6 +6010,23 @@ describe("AppDataService", () => {
       expect(updated.organization.schedule).toBe("8:00-15:00");
       expect(updated.location?.sector).toBe("Enfermería");
       expect(updated.location?.section).toBe("Consulta");
+      const firstUpdatedAt = updated.audit.updatedAt;
+      const secondPreview = await service.previewCsvImport(sourceFilePath);
+      const secondCounts = await service.resolveCsvImportCounts(sourceFilePath, [
+        { recordIndex: secondPreview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+      ]);
+      expect(secondCounts).toMatchObject({ createdCount: 0, updatedCount: 0, unchangedCount: 1 });
+      const secondResult = await service.importCsvDataset(sourceFilePath, [
+        { recordIndex: secondPreview.conflictedRecords[0]!.recordIndex, policy: "merge-fields" }
+      ]);
+      const reimported = secondResult.contacts.records.find((record) => record.id === existing.id)!;
+      const audit = await service.getAuditLog({ action: "bulk-import" });
+
+      expect(secondResult.updatedCount).toBe(0);
+      expect(secondResult.conflictPolicyCounts?.["merge-fields"]).toBe(1);
+      expect(audit.entries[0]?.recordsAffected).toBe(0);
+      expect(audit.entries[0]?.changes?.unchangedCount?.new).toBe(1);
+      expect(reimported.audit.updatedAt).toBe(firstUpdatedAt);
     });
 
     it("unions customFields (current record wins on key conflict), mirroring mergeDuplicates", async () => {
@@ -5920,6 +6235,62 @@ describe("AppDataService", () => {
       expect(persisted.audit.updatedAt).not.toBe(existingWithBeeper.audit.updatedAt);
     });
 
+    it("applies a changed beeper number through merge-fields", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      if (isRecoveryBootstrap(bootstrap)) throw new Error("Unexpected recovery bootstrap.");
+      const contactMethods = {
+        ...baseRecord.contactMethods,
+        phones: baseRecord.contactMethods.phones.map((phone: ContactRecord["contactMethods"]["phones"][number]) => ({ ...phone, label: "Número 1" }))
+      };
+      const existingWithBeeper = { ...baseRecord, contactMethods, beepers: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record: ContactRecord) =>
+          record.id === baseRecord.id ? existingWithBeeper : record
+        )
+      };
+
+      // Re-imported agenda carries an updated pager number for the same
+      // contact — everything else about the row is byte-for-byte identical.
+      const importedRecord = { ...baseRecord, contactMethods, beepers: [{ number: "9876" }] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => Promise<{
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        }>;
+      };
+
+      const merged = await privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map([[0, "merge-fields"]])
+      );
+
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(1);
+      expect(merged.unchangedCount).toBe(0);
+
+      const persisted = merged.contacts.records.find((record: ContactRecord) => record.id === baseRecord.id)!;
+      expect(persisted.beepers).toEqual([{ number: "9876" }]);
+      expect(persisted.audit.updatedAt).not.toBe(existingWithBeeper.audit.updatedAt);
+    });
+
     it("preserves an existing beeper instead of wiping it when the reimported row has no beeper data at all", async () => {
       const { AppDataService } = await import("./app-data.service.js");
 
@@ -5971,6 +6342,66 @@ describe("AppDataService", () => {
       expect(merged.unchangedCount).toBe(1);
 
       const persisted = merged.contacts.records.find((record) => record.id === baseRecord.id)!;
+      expect(persisted.beepers).toEqual([{ number: "4321" }]);
+      expect(persisted.audit.updatedAt).toBe(existingWithBeeper.audit.updatedAt);
+    });
+
+    it("preserves an existing beeper through a merge-fields reimport with no beeper data", async () => {
+      const { AppDataService } = await import("./app-data.service.js");
+
+      const service = new AppDataService();
+      await service.ensureInitialFiles();
+      await service.saveSettings(buildEditableSettings());
+
+      const baseRecord = await createBaseRecord(service);
+      const bootstrap = await service.getBootstrapData();
+      if (isRecoveryBootstrap(bootstrap)) throw new Error("Unexpected recovery bootstrap.");
+      const contactMethods = {
+        ...baseRecord.contactMethods,
+        phones: baseRecord.contactMethods.phones.map((phone: ContactRecord["contactMethods"]["phones"][number]) => ({ ...phone, label: "Número 1" }))
+      };
+      const existingWithBeeper = { ...baseRecord, contactMethods, beepers: [{ number: "4321" }] };
+      const currentDataset = {
+        ...bootstrap.contacts,
+        records: bootstrap.contacts.records.map((record: ContactRecord) =>
+          record.id === baseRecord.id ? existingWithBeeper : record
+        )
+      };
+
+      // The ordinary plain CSV/ODS canonical-template reimport (e.g. a
+      // routine name/phone touch-up) has no column mapped onto `beepers` at
+      // all, so the imported row's beepers is always an empty array — this
+      // must NEVER be read as "the pager number was removed".
+      const importedRecord = { ...baseRecord, contactMethods, beepers: [] };
+
+      const privateMerge = service as unknown as {
+        mergeImportedDataset: (
+          current: typeof currentDataset,
+          imported: { records: (typeof baseRecord)[] },
+          editorName: string,
+          conflictPolicies: Map<number, string>
+        ) => Promise<{
+          contacts: typeof currentDataset;
+          createdCount: number;
+          updatedCount: number;
+          unchangedCount: number;
+        }>;
+      };
+
+      const merged = await privateMerge.mergeImportedDataset(
+        currentDataset,
+        { records: [importedRecord] },
+        "Tester",
+        new Map([[0, "merge-fields"]])
+      );
+
+      // An imported row with no beeper data at all is a true no-op for the
+      // beeper field — not an update, and never counted as one.
+      expect(merged.createdCount).toBe(0);
+      expect(merged.updatedCount).toBe(0);
+      expect(merged.unchangedCount).toBe(1);
+
+      const persisted = merged.contacts.records.find((record: ContactRecord) => record.id === baseRecord.id)!;
       expect(persisted.beepers).toEqual([{ number: "4321" }]);
       expect(persisted.audit.updatedAt).toBe(existingWithBeeper.audit.updatedAt);
     });

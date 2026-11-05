@@ -31,6 +31,7 @@ import type {
   ConflictRecordSummary,
   ConflictedImportRecord,
   CsvImportPreviewWithConflicts,
+  CsvImportCounts,
   CsvImportResultInternal,
   DirectoryDataset,
   EditableAppSettings,
@@ -862,10 +863,10 @@ export class AppDataService {
     // once the first occurrence's in-place merge makes it look identical,
     // under-reporting updatedCount vs. the confirmed-import accounting
     // (see mergeImportedDataset's hasSelectedPolicy guard). The default
-    // "overwrite" policy here only establishes the baseline count assuming
-    // no conflict is skipped — it mirrors handleConflictPolicyChange in the
-    // renderer, which treats preview.updatedCount as the all-resolved
-    // baseline and subtracts skips as the user picks them.
+    // "overwrite" policy here only establishes the all-overwrite baseline for
+    // the preview counts; once the operator has chosen a policy for every
+    // conflict, the renderer replaces them with resolveCsvImportCounts, which
+    // replays the merge with the real selection.
     const previewPolicies = new Map<number, MergePolicy>(
       conflictedRecords.map((conflict) => [conflict.recordIndex, "overwrite" as MergePolicy])
     );
@@ -895,11 +896,10 @@ export class AppDataService {
     };
   }
 
-  async importCsvDataset(
-    sourceFilePath: string,
-    policySelections: CsvImportPolicySelection[] = []
-  ): Promise<CsvImportResultInternal> {
-    return this.enqueueWrite(async () => {
+  // Parse, detect conflicts and run the sequential merge. Shared by
+  // resolveCsvImportCounts and importCsvDataset so both count identically and
+  // both reject an empty workbook.
+  private async planCsvImport(sourceFilePath: string, policySelections: CsvImportPolicySelection[]) {
     const settings = await this.readSettings(true);
     const editorName = this.getEditorName(settings);
     const { dataset, preview, beepersParseResult } = await buildSpreadsheetImportPreview(
@@ -926,6 +926,32 @@ export class AppDataService {
     const { conflicts } = await this.detectConflicts(currentContacts, dataset);
     const policies = this.resolveImportPolicies(conflicts, policySelections);
     const merged = await this.mergeImportedDataset(currentContacts, dataset, editorName, policies);
+    return { settings, editorName, preview, beepersParseResult, conflicts, merged };
+  }
+
+  // Same plan as importCsvDataset minus write/backup/audit, so the counts
+  // match what confirmation will record for this exact policy selection.
+  async resolveCsvImportCounts(
+    sourceFilePath: string,
+    policySelections: CsvImportPolicySelection[] = []
+  ): Promise<CsvImportCounts> {
+    const { merged } = await this.planCsvImport(sourceFilePath, policySelections);
+
+    return {
+      createdCount: merged.createdCount,
+      updatedCount: merged.updatedCount,
+      unchangedCount: merged.unchangedCount,
+      mergedRecordCount: merged.contacts.records.length
+    };
+  }
+
+  async importCsvDataset(
+    sourceFilePath: string,
+    policySelections: CsvImportPolicySelection[] = []
+  ): Promise<CsvImportResultInternal> {
+    return this.enqueueWrite(async () => {
+    const { settings, editorName, preview, beepersParseResult, conflicts, merged } =
+      await this.planCsvImport(sourceFilePath, policySelections);
     const backupPath = await this.createBackupInner();
     const now = new Date().toISOString();
     await this.writeDatasetToPath(settings.dataFilePath, merged.contacts);
@@ -2070,7 +2096,17 @@ export class AppDataService {
         // conflictPolicyCounts/audit for that row.
         const currentMatchedRecord = mergedRecords[matchIndex]!;
         const hasSelectedPolicy = conflictPolicies.has(importRecordIndex);
-        if (!hasSelectedPolicy && this.areMeaningfulFieldsIdentical(currentMatchedRecord, importedRecord)) {
+        // A row identical to the ORIGINAL stored record has no policy (it is
+        // not a conflict) and is a no-op. If an earlier row already changed
+        // this record, comparing only against the mutated copy misses that
+        // and the row would fall to the default "overwrite", reverting the
+        // earlier row.
+        const originalMatchedRecord = currentDataset.records[matchIndex];
+        const isNoOpRow =
+          this.areMeaningfulFieldsIdentical(currentMatchedRecord, importedRecord) ||
+          (originalMatchedRecord !== undefined &&
+            this.areMeaningfulFieldsIdentical(originalMatchedRecord, importedRecord));
+        if (!hasSelectedPolicy && isNoOpRow) {
           // `areMeaningfulFieldsIdentical` deliberately ignores `beepers` (a
           // beeper-only difference must never be treated as a conflict — see
           // its doc comment) but a genuinely changed beeper (pager) number is
@@ -2139,6 +2175,15 @@ export class AppDataService {
               updatedBy: editorName
             }
           });
+
+        if (
+          selectedPolicy === "merge-fields" &&
+          this.areMeaningfulFieldsIdentical(currentRecord, mergedRecord) &&
+          this.areBeepersIdentical(currentRecord, mergedRecord)
+        ) {
+          unchangedCount += 1;
+          continue;
+        }
         mergedRecords[matchIndex] = mergedRecord;
 
         if (mergedRecord.externalId && !currentIndexesByExternalId.has(mergedRecord.externalId)) {
@@ -2265,13 +2310,11 @@ export class AppDataService {
     });
 
     const hasPhone = new Set(refreshedCurrentPhones.map(phoneMethodKey));
-    const nextPhones = [
-      ...refreshedCurrentPhones,
-      ...importedPhones.filter((phone) => {
-        const key = phoneMethodKey(phone);
-        return key && !hasPhone.has(key);
-      })
-    ];
+    const appendedPhones = importedPhones.filter((phone) => {
+      const key = phoneMethodKey(phone);
+      return key && !hasPhone.has(key);
+    });
+    const nextPhones = [...refreshedCurrentPhones, ...appendedPhones];
     const nextEmails = [
       ...currentRecord.contactMethods.emails,
       ...importedRecord.contactMethods.emails.filter((email) => {
@@ -2321,7 +2364,11 @@ export class AppDataService {
         // "Principal" bug for any record touched by a merge-fields conflict
         // resolution. Only reconcile a genuine conflict (more than one
         // explicitly marked) via the shared, non-inventing reconciler.
-        phones: reconcilePrimaryEntries(normalizeDuplicatePhoneLabels(nextPhones)),
+        // Relabel only when phones were appended (labels must stay unique);
+        // otherwise a merge that adds no phone must not rewrite stored labels.
+        phones: reconcilePrimaryEntries(
+          appendedPhones.length > 0 ? normalizeDuplicatePhoneLabels(nextPhones) : nextPhones
+        ),
         emails: reconcilePrimaryEntries(nextEmails),
         socials: reconcilePrimaryEntries(nextSocials)
       },

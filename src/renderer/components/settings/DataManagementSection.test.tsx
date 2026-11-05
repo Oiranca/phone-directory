@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultContacts } from "../../../shared/fixtures/defaultContacts";
@@ -187,6 +187,12 @@ describe("DataManagementSection (Configuración data section)", () => {
         confirmJsonImport: vi.fn(),
         cancelJsonImport: vi.fn().mockResolvedValue(undefined),
         cancelCsvImportPreview: vi.fn().mockResolvedValue(undefined),
+        resolveCsvImportCounts: vi.fn().mockResolvedValue({
+          createdCount: 0,
+          updatedCount: 0,
+          unchangedCount: 0,
+          mergedRecordCount: 0
+        }),
         importCsvDataset: vi.fn().mockResolvedValue({
           contacts: {
             ...defaultContacts,
@@ -793,6 +799,7 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("radio", { name: "Combinar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "Confirmar importación" })).at(-1)!);
 
@@ -804,72 +811,344 @@ describe("DataManagementSection (Configuración data section)", () => {
     });
   });
 
-  it("updates confirmation counts when a conflict is skipped", async () => {
-    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
-      kind: "csv-preview",
-      preview: {
-        importToken: "csv-token-skip-conflict",
-        fileName: "skip-conflicts.csv",
-        totalRowCount: 1,
-        validRowCount: 1,
-        invalidRowCount: 0,
-        warningCount: 0,
-        recordCount: 1,
-        mergedRecordCount: defaultContacts.records.length,
-        createdCount: 0,
-        updatedCount: 1,
-        typeCounts: { service: 1 },
-        areaCounts: {},
-        rowIssues: [],
-        warnings: [],
-        previewRows: [
-          {
-            rowNumber: 2,
-            status: "accepted",
-            displayName: "Mostrador importado",
-            type: "service"
-          }
-        ],
-        conflictCount: 1,
-        policiesResolved: false,
-        conflictedRecords: [
-          {
-            recordIndex: 0,
-            importedRecord: {
-              id: "import-1",
-              type: "service",
-              displayName: "Mostrador importado",
-              status: "active",
-              phones: [],
-              emails: [],
-              socials: []
-            },
-            matchingRecord: {
-              id: "existing-1",
-              type: "service",
-              displayName: "Mostrador actual",
-              status: "active",
-              phones: [],
-              emails: [],
-              socials: []
-            },
-            matchingRecordIndex: 0,
-            matchingRecordSource: "existing",
-            conflictType: "external-id-match",
-            conflictReasonKey: "conflict_reason.external_id"
-          }
-        ]
-      }
+  describe("conflict policy count recompute", () => {
+    const makeConflict = (recordIndex: number) => ({
+      recordIndex,
+      importedRecord: {
+        id: `import-${recordIndex}`,
+        type: "service" as const,
+        displayName: `Mostrador importado ${recordIndex}`,
+        status: "active" as const,
+        phones: [],
+        emails: [],
+        socials: []
+      },
+      matchingRecord: {
+        id: `existing-${recordIndex}`,
+        type: "service" as const,
+        displayName: `Mostrador actual ${recordIndex}`,
+        status: "active" as const,
+        phones: [],
+        emails: [],
+        socials: []
+      },
+      matchingRecordIndex: recordIndex,
+      matchingRecordSource: "existing" as const,
+      conflictType: "external-id-match" as const,
+      conflictReasonKey: "conflict_reason.external_id"
     });
 
-    renderPage();
+    const buildConflictResponse = (conflictCount: number, importToken = "csv-token-counts") => ({
+        kind: "csv-preview" as const,
+        preview: {
+          ...defaultCsvPreview,
+          importToken,
+          fileName: `${importToken}.csv`,
+          totalRowCount: conflictCount,
+          validRowCount: conflictCount,
+          createdCount: 0,
+          updatedCount: conflictCount,
+          unchangedCount: 0,
+          conflictCount,
+          policiesResolved: false,
+          conflictedRecords: Array.from({ length: conflictCount }, (_, index) => makeConflict(index))
+        }
+    });
 
-    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
-    await openImportPicker();
-    fireEvent.click(await screen.findByRole("radio", { name: "Omitir" }));
-    fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+    const mockConflictPreview = (conflictCount: number) => {
+      window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue(buildConflictResponse(conflictCount));
+    };
 
-    expect(await screen.findByText(/Conflictos: 1 se omitirá/)).toBeInTheDocument();
+    const counts = (updatedCount: number, unchangedCount: number, extra: { createdCount?: number; mergedRecordCount?: number } = {}) => ({
+      createdCount: extra.createdCount ?? 0,
+      updatedCount,
+      unchangedCount,
+      mergedRecordCount: extra.mergedRecordCount ?? 1
+    });
+
+    const expectUpdated = (value: string) =>
+      waitFor(() => {
+        expect(screen.getByText("Actualizaciones").parentElement).toHaveTextContent(value);
+      });
+
+    it("applies updated and unchanged counts from the recompute across merge, overwrite and skip", async () => {
+      mockConflictPreview(1);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn(async (_token, policies) => {
+        const policy = policies?.[0]?.policy;
+        if (policy === "merge-fields") return counts(0, 1);
+        if (policy === "overwrite") return counts(1, 0);
+        return counts(0, 0);
+      });
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+      await expectUpdated("0");
+      expect(await screen.findByText("1 registro sin cambios")).toBeInTheDocument();
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenLastCalledWith(
+        "csv-token-counts",
+        [{ recordIndex: 0, policy: "merge-fields" }]
+      );
+
+      fireEvent.click(screen.getByRole("radio", { name: "Sobrescribir" }));
+      await expectUpdated("1");
+      expect(await screen.findByText("0 registros sin cambios")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("radio", { name: "Omitir" }));
+      await expectUpdated("0");
+      expect(screen.getByText("0 registros sin cambios")).toBeInTheDocument();
+    });
+
+    it("does not recompute while a conflict still has no policy", async () => {
+      mockConflictPreview(2);
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click((await screen.findAllByRole("radio", { name: "Combinar" }))[0]!);
+      await waitFor(() => {
+        expect(screen.getAllByRole("radio", { name: "Combinar" })[0]).toBeChecked();
+      });
+
+      expect(window.hospitalDirectory.resolveCsvImportCounts).not.toHaveBeenCalled();
+      expect(screen.getByText("Actualizaciones").parentElement).toHaveTextContent("2");
+    });
+
+    it("ignores an older response and skips queued calls that were superseded", async () => {
+      mockConflictPreview(1);
+      const pending: Array<(value: ReturnType<typeof counts>) => void> = [];
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn(
+        () => new Promise((resolve) => { pending.push(resolve); })
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      fireEvent.click(screen.getByRole("radio", { name: "Sobrescribir" }));
+      fireEvent.click(screen.getByRole("radio", { name: "Omitir" }));
+      // Calls never overlap: the later two wait behind the first. Flush so a
+      // broken queue (which would call at once) has had time to do so.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenCalledTimes(1);
+
+      pending[0]!(counts(9, 9));
+      await waitFor(() => expect(pending).toHaveLength(2));
+      // The middle call was superseded before it started, so it never hit IPC.
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenCalledTimes(2);
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenLastCalledWith(
+        "csv-token-counts",
+        [{ recordIndex: 0, policy: "skip" }]
+      );
+      expect(screen.getByText("Actualizaciones").parentElement).toHaveTextContent("1");
+
+      pending[1]!(counts(0, 0));
+      await expectUpdated("0");
+    });
+
+    it("drops in-flight and queued recomputes once the preview is closed", async () => {
+      mockConflictPreview(1);
+      const pending: Array<{ resolve: (value: ReturnType<typeof counts>) => void; reject: (error: Error) => void }> = [];
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn(
+        () => new Promise((resolve, reject) => { pending.push({ resolve, reject }); })
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      fireEvent.click(screen.getByRole("radio", { name: "Sobrescribir" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar vista previa" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Cerrar igualmente" }));
+      await waitFor(() => expect(screen.queryByText("Vista previa importación")).not.toBeInTheDocument());
+
+      await act(async () => {
+        pending[0]!.reject(new Error("late failure"));
+      });
+
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("late failure")).not.toBeInTheDocument();
+    });
+
+    it("ignores a recompute that settles after another file replaced the preview", async () => {
+      window.hospitalDirectory.pickAndImportDataset = vi.fn()
+        .mockResolvedValueOnce(buildConflictResponse(1, "token-a"))
+        .mockResolvedValueOnce(buildConflictResponse(1, "token-b"));
+      const rejectA: Array<(error: Error) => void> = [];
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn((token) =>
+        token === "token-a"
+          ? new Promise((_, reject) => { rejectA.push(reject); })
+          : Promise.resolve(counts(0, 1))
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+      await waitFor(() => expect(rejectA).toHaveLength(1));
+
+      await openImportPicker();
+      expect(await screen.findByText("token-b.csv")).toBeInTheDocument();
+      await act(async () => {
+        rejectA[0]!(new Error("late failure of A"));
+      });
+
+      expect(screen.queryByText("No se pudieron recalcular los recuentos.")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Recalculando recuentos…")).not.toBeInTheDocument();
+      expect(window.hospitalDirectory.cancelCsvImportPreview).toHaveBeenCalledWith("token-a");
+
+      fireEvent.click(screen.getByRole("radio", { name: "Combinar" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled());
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenLastCalledWith(
+        "token-b",
+        [{ recordIndex: 0, policy: "merge-fields" }]
+      );
+    });
+
+    it("explains an expired import and offers no retry", async () => {
+      mockConflictPreview(1);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn().mockRejectedValue(
+        new Error("La importación CSV ya no es válida. Vuelve a seleccionar el archivo.")
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+
+      expect(await screen.findByText(/La importación CSV ya no es válida/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+    });
+
+    it("removes the retry as soon as a new policy change starts so it cannot drop that change", async () => {
+      mockConflictPreview(300);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn()
+        .mockRejectedValueOnce(new Error("boom"))
+        .mockResolvedValue(counts(0, 1));
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+      fireEvent.click(await screen.findByRole("button", { name: "Omitir a todos" }));
+      expect(await screen.findByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+
+      // 300 conflicts yield mid-loop; the retry must already be gone by then.
+      fireEvent.click(screen.getAllByRole("radio", { name: "Combinar" })[0]!);
+      expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+
+      await waitFor(() => expect(screen.getAllByRole("radio", { name: "Combinar" })[0]).toBeChecked());
+      await waitFor(() => expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled());
+    });
+
+    it("does not apply a pending policy change once the import is confirmed", async () => {
+      mockConflictPreview(300);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn().mockResolvedValue(counts(0, 1));
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+      fireEvent.click(await screen.findByRole("button", { name: "Omitir a todos" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled());
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenCalledTimes(1);
+
+      // Same tick: the change is mid-loop (it yields at 250 of 300) when the import starts.
+      fireEvent.click(screen.getAllByRole("radio", { name: "Combinar" })[0]!);
+      fireEvent.click(screen.getByRole("button", { name: /Confirmar importación/ }));
+      fireEvent.click(screen.getAllByRole("button", { name: "Confirmar importación" }).at(-1)!);
+      await waitFor(() => expect(window.hospitalDirectory.importCsvDataset).toHaveBeenCalled());
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenCalledTimes(1);
+    });
+
+    it("updates the Altas and Total final cards from the recompute", async () => {
+      mockConflictPreview(1);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn().mockResolvedValue(
+        counts(1, 0, { createdCount: 4, mergedRecordCount: 77 })
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+      fireEvent.click(await screen.findByRole("radio", { name: "Sobrescribir" }));
+
+      await waitFor(() => expect(screen.getByText("Altas").parentElement).toHaveTextContent("4"));
+      expect(screen.getByText("Total final").parentElement).toHaveTextContent("77");
+    });
+
+    it("keeps the new policies, blocks import and offers a retry when the recompute fails", async () => {
+      mockConflictPreview(1);
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn()
+        .mockRejectedValueOnce(new Error("boom"))
+        .mockResolvedValueOnce(counts(0, 1));
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+
+      expect(await screen.findByText("No se pudieron recalcular los recuentos.")).toBeInTheDocument();
+      expect(screen.getAllByRole("status").some((region) =>
+        region.textContent === "No se pudieron recalcular los recuentos")).toBe(true);
+      expect(screen.getByText("Actualizaciones").parentElement).toHaveTextContent("1");
+      expect(screen.getByRole("radio", { name: "Combinar" })).toBeChecked();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+      await expectUpdated("0");
+      expect(window.hospitalDirectory.resolveCsvImportCounts).toHaveBeenLastCalledWith(
+        "csv-token-counts",
+        [{ recordIndex: 0, policy: "merge-fields" }]
+      );
+      expect(screen.queryByText("No se pudieron recalcular los recuentos.")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled();
+    });
+
+    it("applies the policy at once, disables import while counts recompute, and warns on close", async () => {
+      mockConflictPreview(1);
+      let resolveCounts: (value: ReturnType<typeof counts>) => void = () => {};
+      window.hospitalDirectory.resolveCsvImportCounts = vi.fn(
+        () => new Promise((resolve) => { resolveCounts = resolve; })
+      );
+
+      renderPage();
+      expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+      await openImportPicker();
+
+      fireEvent.click(await screen.findByRole("radio", { name: "Combinar" }));
+
+      await waitFor(() => expect(screen.getByRole("radio", { name: "Combinar" })).toBeChecked());
+      const confirm = screen.getByRole("button", { name: /Confirmar importación/ });
+      expect(confirm).toBeDisabled();
+      await waitFor(() => expect(confirm).toHaveAccessibleDescription("Recalculando recuentos…"));
+      expect(screen.getByText("Actualizaciones").parentElement?.parentElement).toHaveAttribute("aria-busy", "true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar vista previa" }));
+      expect(await screen.findByText(/Tienes conflictos resueltos/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      await act(async () => {
+        resolveCounts(counts(0, 1));
+      });
+      await expectUpdated("0");
+      expect(screen.getByRole("button", { name: /Confirmar importación/ })).toBeEnabled();
+      expect(screen.queryByText("Recalculando recuentos…")).not.toBeInTheDocument();
+    });
   });
 
   it("blocks stale resolved previews when a conflict is missing its selected policy", async () => {
@@ -1370,7 +1649,7 @@ describe("DataManagementSection (Configuración data section)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Omitir a todos" }));
 
-    expect(screen.getByText("2 de 2 resueltos")).toBeInTheDocument();
+    expect(await screen.findByText("2 de 2 resueltos")).toBeInTheDocument();
     for (const radio of screen.getAllByRole("radio", { name: "Omitir" })) {
       expect(radio).toBeChecked();
     }

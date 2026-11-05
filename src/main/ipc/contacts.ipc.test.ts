@@ -483,6 +483,7 @@ describe("contacts:import-csv-dataset — sender binding", () => {
   let serviceMock: {
     previewCsvImport: ReturnType<typeof vi.fn>;
     importCsvDataset: ReturnType<typeof vi.fn>;
+    resolveCsvImportCounts: ReturnType<typeof vi.fn>;
     getBootstrapData: ReturnType<typeof vi.fn>;
     [key: string]: unknown;
   };
@@ -550,6 +551,12 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     serviceMock = {
       previewCsvImport: vi.fn().mockResolvedValue({ ...previewStub, sourceFilePath }),
       importCsvDataset: vi.fn().mockResolvedValue({ importedCount: 1 }),
+      resolveCsvImportCounts: vi.fn().mockResolvedValue({
+        createdCount: 0,
+        updatedCount: 1,
+        unchangedCount: 0,
+        mergedRecordCount: 1
+      }),
       getJsonImportCurrentCounts: vi.fn().mockResolvedValue({ contacts: 0, beepers: 0 }),
       getSpreadsheetImportCurrentBeeperCount: vi.fn().mockResolvedValue(0),
       getBootstrapData: vi.fn(),
@@ -616,6 +623,97 @@ describe("contacts:import-csv-dataset — sender binding", () => {
     // The legitimate sender can still confirm — token survives a wrong-sender attempt
     await handler({ sender: legitimateSender } as unknown, importToken, []);
     expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("resolve counts — wrong sender rejected without calling the service", async () => {
+    const importToken = await runPreview(makeWebContentsSender(10));
+
+    const handler = handlers.get("contacts:resolve-csv-import-counts");
+    if (!handler) throw new Error("resolve counts handler not registered");
+
+    await expect(
+      handler({ sender: makeWebContentsSender(99) } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+    expect(serviceMock.resolveCsvImportCounts).not.toHaveBeenCalled();
+  });
+
+  it("resolve counts — does not consume the token, so confirmation still succeeds", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+
+    const resolve = handlers.get("contacts:resolve-csv-import-counts");
+    const confirm = handlers.get("contacts:import-csv-dataset");
+    if (!resolve || !confirm) throw new Error("handlers not registered");
+
+    await resolve({ sender } as unknown, importToken, []);
+    await resolve({ sender } as unknown, importToken, []);
+    await confirm({ sender } as unknown, importToken, []);
+
+    expect(serviceMock.resolveCsvImportCounts).toHaveBeenCalledTimes(2);
+    expect(serviceMock.importCsvDataset).toHaveBeenCalledOnce();
+  });
+
+  it("resolve counts — passes the snapshot path and parsed policies to the service", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+    const resolve = handlers.get("contacts:resolve-csv-import-counts");
+    if (!resolve) throw new Error("resolve counts handler not registered");
+
+    const confirm = handlers.get("contacts:import-csv-dataset");
+    if (!confirm) throw new Error("import handler not registered");
+
+    const counts = await resolve({ sender } as unknown, importToken, [{ recordIndex: 0, policy: "skip" }]);
+    await confirm({ sender } as unknown, importToken, []);
+
+    // Counts must read the same snapshot the confirmation will import.
+    const snapshotPath = serviceMock.importCsvDataset.mock.calls[0]![0];
+    expect(serviceMock.resolveCsvImportCounts).toHaveBeenCalledWith(snapshotPath, [
+      { recordIndex: 0, policy: "skip" }
+    ]);
+    expect(counts).toEqual({ createdCount: 0, updatedCount: 1, unchangedCount: 0, mergedRecordCount: 1 });
+  });
+
+  it("resolve counts — a filesystem failure surfaces the opaque source-file error", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+    const resolve = handlers.get("contacts:resolve-csv-import-counts");
+    if (!resolve) throw new Error("resolve counts handler not registered");
+    serviceMock.resolveCsvImportCounts.mockRejectedValueOnce(Object.assign(new Error("x"), { code: "ENOENT" }));
+
+    await expect(resolve({ sender } as unknown, importToken, [])).rejects.toThrow(
+      "No se pudo acceder al archivo seleccionado."
+    );
+  });
+
+  it("resolve counts — invalid policies are rejected before the service runs", async () => {
+    const sender = makeWebContentsSender(10);
+    const importToken = await runPreview(sender);
+    const resolve = handlers.get("contacts:resolve-csv-import-counts");
+    if (!resolve) throw new Error("resolve counts handler not registered");
+
+    await expect(
+      resolve({ sender } as unknown, importToken, [{ recordIndex: -1, policy: "nope" }])
+    ).rejects.toThrow("Las políticas de conflicto no tienen un formato válido.");
+    expect(serviceMock.resolveCsvImportCounts).not.toHaveBeenCalled();
+  });
+
+  it("resolve counts — repeated wrong-sender attempts invalidate the token", async () => {
+    const legitimateSender = makeWebContentsSender(10);
+    const attackerSender = makeWebContentsSender(99);
+    const importToken = await runPreview(legitimateSender);
+    const resolve = handlers.get("contacts:resolve-csv-import-counts");
+    if (!resolve) throw new Error("resolve counts handler not registered");
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        resolve({ sender: attackerSender } as unknown, importToken, [])
+      ).rejects.toThrow("La importación CSV ya no es válida.");
+    }
+
+    await expect(
+      resolve({ sender: legitimateSender } as unknown, importToken, [])
+    ).rejects.toThrow("La importación CSV ya no es válida.");
+    expect(serviceMock.resolveCsvImportCounts).not.toHaveBeenCalled();
   });
 
   it("reuse — a second confirmation with a consumed token is rejected", async () => {

@@ -20,6 +20,7 @@ import type {
   ContactRecord,
   CsvImportPolicySelection,
   CsvImportPreviewWithConflicts,
+  CsvImportCounts,
   CsvImportResult,
   EditableAppSettings,
   EditableContactRecord,
@@ -69,6 +70,7 @@ export interface HospitalDirectoryApi {
   previewCsvImport: () => Promise<CsvImportPreviewWithConflicts | null>;
   cancelCsvImportPreview: (importToken?: string) => Promise<void>;
   importCsvDataset: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportResult>;
+  resolveCsvImportCounts: (importToken: string, policies?: CsvImportPolicySelection[]) => Promise<CsvImportCounts>;
 
   // Unified single-picker import entry point. Opens one native
   // dialog and dispatches by extension to the JSON preview or CSV preview flow.
