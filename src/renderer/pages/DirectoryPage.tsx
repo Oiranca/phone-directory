@@ -340,7 +340,6 @@ export const DirectoryPage = () => {
 
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
-  const selectedRecordPrivacyFlags = selectedRecord ? getPhoneInlinePrivacyFlags(selectedRecord.contactMethods.phones) : [];
   const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
   return (
     <section
@@ -352,12 +351,13 @@ export const DirectoryPage = () => {
       // PAGE_CHROME_CSS_VAR comment above for the exact math.
       className="flex flex-col gap-5 [--directory-page-chrome:3.75rem] sm:[--directory-page-chrome:4.25rem] lg:[--directory-page-chrome:5.25rem]"
     >
-      {/* Search Header — sticky: stays visible below the app header while
-          the results list/detail panel scroll. */}
+      {/* Search Header — sticky only from lg up, where the two columns are
+          viewport-bounded. Below lg the page scrolls as one column and a
+          ~200px sticky bar would cover the pinned card and list cards. */}
       <div
         ref={filterBarRef}
         style={{ top: FILTER_BAR_STICKY_TOP }}
-        className="sticky z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5"
+        className="z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5 lg:sticky"
       >
         <div className="flex flex-col gap-4">
           <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
@@ -505,9 +505,9 @@ export const DirectoryPage = () => {
                     </h3>
                     {listContext && <p className="mt-1 truncate text-xs font-medium text-slate-500">{listContext}</p>}
                   {/* Subtitle: name (unless duplicate of service) and role,
-                      joined with " · ". Always renders — even empty — so the
-                      layout slot/gap stays consistent across rows. */}
-                  <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>
+                      joined with " · ". Omitted when empty — an empty <p>
+                      would still add its top margin as a blank gap. */}
+                  {subtitle && <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{showPhoneOnCard ? primaryPhone?.number : primaryPhone ? "Ver teléfono en detalle" : "Sin teléfono"}</span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{record.status === "active" ? "Activo" : "Inactivo"}</span>
@@ -609,7 +609,7 @@ export const DirectoryPage = () => {
             style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }}
             className="overflow-y-auto rounded-3xl bg-white p-6 shadow-panel sm:p-8"
           >
-            <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="mb-5 flex items-center justify-between gap-4">
               <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">Detalle del registro</h3>
               {selectedRecord && (
                 <Link
@@ -627,26 +627,9 @@ export const DirectoryPage = () => {
                 <div className="rounded-[28px] bg-slate-50/80 p-5 ring-1 ring-slate-100 sm:p-6">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      {/* The type pill (e.g. "SERVICIO") was removed as noise —
-                          only render this row (and its top margin to the title below)
-                          when there's an actual privacy-flag pill to show. */}
-                      {selectedRecordPrivacyFlags.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {selectedRecordPrivacyFlags.map((flag) => (
-                            <span
-                              key={flag}
-                              className={flag === "Confidencial"
-                                ? "rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
-                                : "rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900"}
-                            >
-                              {flag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
-                      <h4 className="mt-4 max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
+                      <h4 className="max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
                         {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
                       </h4>
                       {/* Role/job title (ODS "Categoría") shown alongside the

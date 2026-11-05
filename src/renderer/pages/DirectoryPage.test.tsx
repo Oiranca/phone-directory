@@ -463,12 +463,12 @@ describe("DirectoryPage", () => {
     expect(within(card as HTMLElement).queryByText(/Jefe\/a de Servicio/)).not.toBeInTheDocument();
   });
 
-  it("still renders an empty subtitle <p> when both the name and role lines are suppressed", async () => {
+  it("renders no subtitle element when both the name and role lines are suppressed", async () => {
     const contacts = structuredClone(defaultContacts);
     // displayName duplicates organization.service, so the name line is
     // suppressed, and organization.role is absent, so the category line is
-    // also empty — the subtitle string is "". The <p> element must still
-    // render (empty) so the layout slot/gap stays consistent across rows.
+    // also empty — the subtitle string is "". No empty <p> may render: its
+    // top margin would leave a blank gap between the title and the number row.
     contacts.records[0]!.displayName = contacts.records[0]!.organization.service;
     contacts.records[0]!.organization.role = undefined;
 
@@ -488,10 +488,8 @@ describe("DirectoryPage", () => {
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const heading = within(list).getByRole("heading", { name: contacts.records[0]!.displayName });
     const card = heading.closest("button");
-    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
-    expect(subtitle).toBeInTheDocument();
-    expect(subtitle).toHaveClass("mt-2", "truncate", "text-sm", "text-slate-600");
-    expect(subtitle).toHaveTextContent("");
+    expect(card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600")).not.toBeInTheDocument();
+    expect(card?.querySelectorAll("p:empty")).toHaveLength(0);
   });
 
   it("does not render the Tipo/Unidad subtitle line in list cards", async () => {
@@ -589,10 +587,9 @@ describe("DirectoryPage", () => {
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const heading = within(list).getByRole("heading", { name: /taller comunicaciones/i });
     const card = heading.closest("button");
-    const subtitle = card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600");
 
     expect(heading).toHaveTextContent("Mantenimiento - Taller Comunicaciones");
-    expect(subtitle).toHaveTextContent("");
+    expect(card?.querySelector("p.mt-2.truncate.text-sm.text-slate-600")).not.toBeInTheDocument();
   });
 
   it("shows organization.role in the detail view when present", async () => {
@@ -684,9 +681,10 @@ describe("DirectoryPage", () => {
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
   });
 
-  it("still renders privacy-flag pills in the detail header once the type pill is removed", async () => {
+  it("shows the Confidencial marker once in the detail panel, on the phone it describes", async () => {
     const contacts = structuredClone(defaultContacts);
-    contacts.records[0]!.contactMethods.phones[0]!.confidential = true;
+    const phone = contacts.records[0]!.contactMethods.phones[0]!;
+    phone.confidential = true;
 
     window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
       contacts,
@@ -702,8 +700,9 @@ describe("DirectoryPage", () => {
 
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
-    // "Confidencial" renders both as the header privacy pill and the phone-level badge.
-    expect(within(detail).getAllByText("Confidencial").length).toBeGreaterThan(0);
+    const markers = within(detail).getAllByText("Confidencial");
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.closest(`[data-testid="contact-phone-${phone.id}"]`)).not.toBeNull();
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
   });
 
@@ -1284,8 +1283,8 @@ describe("DirectoryPage", () => {
     expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
 
     const searchInput = screen.getByLabelText("Buscar contactos");
-    const filterBar = searchInput.closest("div.sticky");
-    expect(filterBar).toHaveClass("sticky");
+    const filterBar = searchInput.closest("div.lg\\:sticky");
+    expect(filterBar).toHaveClass("lg:sticky");
 
     const resultsList = screen.getByRole("list", { name: "Resultados del directorio" });
     expect(resultsList).toHaveClass("overflow-y-auto");
@@ -1744,6 +1743,45 @@ describe("DirectoryPage", () => {
     expect(editLink.querySelector("svg")).toBeInTheDocument();
     expect(editLink).toHaveTextContent("");
     expect(editLink.previousElementSibling).toHaveRole("heading", { level: 3 });
+  });
+
+  it("centres the edit action on the detail header label instead of dropping it below", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const editLink = await screen.findByRole("link", { name: `Editar: ${defaultContacts.records[0]!.displayName}` });
+    const headerRow = editLink.parentElement!;
+    expect(headerRow).toHaveClass("items-center");
+    expect(headerRow).not.toHaveClass("items-start");
+  });
+
+  it("keeps the search bar sticky only on the two-column layout and the pinned card in normal flow", async () => {
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts: defaultContacts,
+      settings: {
+        editorName: "",
+        dataFilePath: "/tmp/data/contacts.json",
+        backupDirectoryPath: "/tmp/backups",
+        ui: { showInactiveByDefault: false }
+      }
+    });
+
+    renderPage();
+
+    const searchBar = (await screen.findByLabelText("Buscar contactos")).closest(".lg\\:sticky");
+    expect(searchBar).not.toBeNull();
+    expect(searchBar).not.toHaveClass("sticky");
+    const pinned = screen.getByRole("complementary", { name: "Contacto destacado de citas" });
+    expect(pinned.className).not.toMatch(/\b(sticky|absolute|fixed)\b/);
   });
 
   it("empty detail state icon is hidden from assistive technology", async () => {
