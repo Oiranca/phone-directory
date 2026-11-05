@@ -249,6 +249,72 @@ describe("BeepersPage", () => {
     expect(input).toHaveAccessibleDescription("El número de equipo ya está registrado.");
   });
 
+  describe("saving a new team", () => {
+    const fillTeamForm = async () => {
+      renderPage("/beeper/new");
+      await openTeamCreateForm();
+      fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
+      fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
+    };
+
+    // Watches every DOM commit: once the create call was made, the save button must
+    // never be seen enabled while the form is still mounted.
+    const watchForReEnabledSave = () => {
+      let reEnabled = false;
+      const observer = new MutationObserver(() => {
+        const save = document.querySelector('form[aria-label="Nuevo equipo"] button[type="submit"]');
+        const created = vi.mocked(window.hospitalDirectory.addBeeperTeam).mock.calls.length > 0;
+        if (save && created && !save.hasAttribute("disabled")) reEnabled = true;
+      });
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+      return { stop: () => observer.disconnect(), wasReEnabled: () => reEnabled };
+    };
+
+    it("creates the team once when the save button is clicked twice, and never re-enables it", async () => {
+      const addBeeperTeam = vi.fn().mockResolvedValue(newTeam);
+      setupWindowApi({ addBeeperTeam });
+      await fillTeamForm();
+      const watcher = watchForReEnabledSave();
+
+      const save = screen.getByRole("button", { name: "Guardar equipo" });
+      fireEvent.click(save);
+      fireEvent.click(save);
+      await waitFor(() => expectPathname("/beeper"));
+      watcher.stop();
+
+      expect(addBeeperTeam).toHaveBeenCalledTimes(1);
+      expect(watcher.wasReEnabled()).toBe(false);
+    });
+
+    it("creates the team once when Enter submits the form twice", async () => {
+      const addBeeperTeam = vi.fn().mockResolvedValue(newTeam);
+      setupWindowApi({ addBeeperTeam });
+      await fillTeamForm();
+      const watcher = watchForReEnabledSave();
+
+      const form = screen.getByRole("form", { name: "Nuevo equipo" });
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      await waitFor(() => expectPathname("/beeper"));
+      watcher.stop();
+
+      expect(addBeeperTeam).toHaveBeenCalledTimes(1);
+      expect(watcher.wasReEnabled()).toBe(false);
+    });
+
+    it("re-enables the form and shows the error when the save fails", async () => {
+      const addBeeperTeam = vi.fn().mockRejectedValue(new Error("No se pudo guardar el equipo."));
+      setupWindowApi({ addBeeperTeam });
+      await fillTeamForm();
+
+      fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+
+      expect(await screen.findByText("No se pudo guardar el equipo.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
+      expectPathname("/beeper/new");
+    });
+  });
+
   it("shows inline errors for whitespace-only team fields", async () => {
     renderPage("/beeper/new");
     await openTeamCreateForm();

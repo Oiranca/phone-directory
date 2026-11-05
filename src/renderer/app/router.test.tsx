@@ -318,6 +318,51 @@ describe("router — /beeper and /beeper/new share one mounted page", () => {
     expect(window.hospitalDirectory.setBeeperTeamMembers).not.toHaveBeenCalled();
   });
 
+  it("never offers an enabled 'Guardar equipo' again between saving a new team and leaving the form", async () => {
+    renderApp();
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+    fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
+    fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
+
+    // If the form stayed mounted with an enabled save button after the save settled,
+    // a second click would create the team twice. Watch every DOM commit for that state.
+    let savedButtonReEnabled = false;
+    const observer = new MutationObserver(() => {
+      const save = document.querySelector('form[aria-label="Nuevo equipo"] button[type="submit"]');
+      if (save && !save.hasAttribute("disabled") && vi.mocked(window.hospitalDirectory.addBeeperTeam).mock.calls.length > 0) {
+        savedButtonReEnabled = true;
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+
+    try {
+      fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
+      await waitFor(() => expect(screen.queryByRole("form", { name: "Nuevo equipo" })).not.toBeInTheDocument());
+    } finally {
+      observer.disconnect();
+    }
+
+    expect(savedButtonReEnabled).toBe(false);
+    expect(window.hospitalDirectory.addBeeperTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers an enabled 'Guardar equipo' on a new team form opened after a previous team was saved", async () => {
+    renderApp();
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+    fireEvent.change(screen.getByLabelText(/Nombre del equipo/i), { target: { value: "Quirófano" } });
+    fireEvent.change(screen.getByLabelText(/Número del equipo/i), { target: { value: "9010" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Nuevo equipo" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/beeper"));
+
+    await goTo("/beeper/new");
+    fireEvent.click(await screen.findByRole("button", { name: "Nuevo equipo" }));
+
+    expect(screen.getByRole("button", { name: "Guardar equipo" })).toBeEnabled();
+  });
+
   it("leaves /beeper/new for /beeper once a new team is saved, creating it once", async () => {
     renderApp();
     await goTo("/beeper/new");

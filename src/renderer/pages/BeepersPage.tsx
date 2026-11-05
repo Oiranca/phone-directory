@@ -439,6 +439,7 @@ export const BeepersPage = () => {
     setFormError("");
     setShowTeamManager(false);
     setIsTeamDialogOpen(false);
+    setIsSavingTeam(false);
     setDeleteConfirm(null);
     setQuery("");
     setCurrentPage(1);
@@ -463,12 +464,12 @@ export const BeepersPage = () => {
       const created = await window.hospitalDirectory.addBeeperTeam(teamForm);
       setTeams((current) => [...current, created]);
       pushToast({ type: "success", message: "Equipo guardado." });
+      // Stay busy on success: the route-change reset clears it once the form is gone.
       navigate("/beeper");
     } catch (err) {
       const message = toCompactToastMessage(err, "No se pudo guardar el equipo.");
       if (/número de equipo|ya está registrado/i.test(message)) setTeamDisplayIdError(message);
       else setTeamError(message);
-    } finally {
       setIsSavingTeam(false);
     }
   };
