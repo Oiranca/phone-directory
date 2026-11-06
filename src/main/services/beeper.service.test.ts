@@ -917,6 +917,48 @@ describe("BeepersService — importFromOds + listImported", () => {
     const imported = await service.listImported();
     expect(imported).toHaveLength(0);
   });
+
+  it("importFromOds — stores as many records as the parser previews when a pager differs only by whitespace", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const { parseBeeperSheets } = await import("./spreadsheet-beeper-parser.js");
+    const service = new BeepersService();
+    const base = { department: "Test", holderType: "Principal", sourceSheet: "S1" };
+
+    const parsed = parseBeeperSheets([{
+      name: "Buscas",
+      rows: [["SERVICIO", "PRINCIPAL"], ["Urgencias", "7 321"], ["Anestesia", "7321"]]
+    }]);
+    const previewCount = parsed.records.length;
+    const storedFromParser = await service.importFromOds(parsed);
+    const storedFromRaw = await service.importFromOds({
+      records: [
+        { ...base, deviceNumber: "7 321", sourceRow: 0 },
+        { ...base, deviceNumber: "7321", sourceRow: 1 }
+      ],
+      parsedCellCount: 2,
+      skippedRowCount: 0
+    });
+
+    expect(previewCount).toBe(1);
+    expect(storedFromParser).toBe(previewCount);
+    expect(storedFromRaw).toBe(previewCount);
+  });
+
+  it("importFromOds — rejects oversized source cell counts after parser deduplication", async () => {
+    const { BeepersService } = await import("./beeper.service.js");
+    const { MAX_SPREADSHEET_IMPORT_ROWS } = await import("./spreadsheet-import.service.js");
+    const service = new BeepersService();
+
+    await expect(
+      service.importFromOds({
+        records: [{ deviceNumber: "7000", department: "Test", holderType: "Principal", sourceSheet: "S1", sourceRow: 0 }],
+        parsedCellCount: MAX_SPREADSHEET_IMPORT_ROWS + 1,
+        skippedRowCount: 0
+      })
+    ).rejects.toThrow(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
+
+    expect(await service.listImported()).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -406,6 +406,27 @@ describe("beepersSkippedRowCount / socialHandleSkippedRowCount in SpreadsheetImp
     // Import is not blocked by beepers rows.
     expect(preview.invalidRowCount).toBe(0);
   });
+
+  it("reports source Busca cells separately from deduplicated Busca records", async () => {
+    const { buildSpreadsheetImportPreview } = await import("./spreadsheet-import.service.js");
+    const filePath = writeWorkbook(testRoot, "duplicate-beepers-preview.xlsx", [
+      {
+        name: "Buscas_Facultativos",
+        data: [
+          ["SERVICIO", "PRINCIPAL"],
+          ["ANESTESIA", "7 321"],
+          ["CARDIOLOGÍA", "7321"]
+        ]
+      }
+    ]);
+
+    const { preview, beepersParseResult } = await buildSpreadsheetImportPreview(filePath, "test-editor");
+
+    expect(beepersParseResult.parsedCellCount).toBe(2);
+    expect(beepersParseResult.records).toHaveLength(1);
+    expect(preview.parsedBeepersCellCount).toBe(2);
+    expect(preview.incomingBeeperRecordCount).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

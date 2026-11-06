@@ -266,7 +266,8 @@ it("master fills a confirmed match and keeps a shared-extension match separate",
     assert.deepEqual(beeperContact.contactMethods.phones.map((entry) => entry.number).sort(), ["66666", "699000001"]);
     assert.equal(envelope.contacts.records.filter((record) => record.displayName === "Pager D").length, 1);
     assert.deepEqual(envelope.contacts.records.find((record) => record.displayName === "Pager e").beepers.map((entry) => entry.number), ["7001"]);
-    assert.equal(envelope.beepers.importedRecords.length, 2);
+    assert.equal(envelope.beepers.importedRecords.length, 1);
+    assert.equal(envelope.beepers.importedRecords[0].deviceNumber, "7001");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

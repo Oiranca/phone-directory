@@ -6,6 +6,7 @@ import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, BeepersDataset, Ed
 import { ensurePrivateDirectory, writeJsonFile } from "../utils/fs-json.js";
 import { getBeepersFilePath, getLegacyBeepersFilePath, getManagedDataDirectory } from "../utils/paths.js";
 import { assertPathChainIsNotSymlink } from "../utils/path-safety.js";
+import { beeperDeviceKey, mergeImportedBeeperFields } from "./spreadsheet-beeper-parser.js";
 import type { BeepersSheetParseResult } from "./spreadsheet-beeper-parser.js";
 import { MAX_SPREADSHEET_IMPORT_ROWS } from "./spreadsheet-import.service.js";
 import { MAX_DATASET_RECORDS } from "../../shared/constants/json-limits.js";
@@ -24,30 +25,6 @@ const emptyDataset = (): BeepersDataset => ({
 const normalizeDeviceNumber = (value: string): string => value.trim().toLowerCase();
 
 type ImportableBeeperRecord = Omit<ImportedBeeperRecord, "id">;
-
-const preferNonBlank = (current: string | undefined, incoming: string | undefined): string | undefined =>
-  current?.trim() ? current : incoming?.trim() ? incoming : undefined;
-
-/**
- * Combines two references to the same pager without discarding information
- * already stored by the first record. Imported files frequently list the same
- * pager on complementary sheets, with different optional holder fields.
- */
-const mergeImportedBeeperFields = (
-  current: ImportableBeeperRecord,
-  incoming: ImportableBeeperRecord
-): ImportableBeeperRecord => ({
-  ...incoming,
-  ...current,
-  deviceNumber: preferNonBlank(current.deviceNumber, incoming.deviceNumber)!,
-  department: preferNonBlank(current.department, incoming.department)!,
-  holderType: preferNonBlank(current.holderType, incoming.holderType),
-  name: preferNonBlank(current.name, incoming.name),
-  category: preferNonBlank(current.category, incoming.category),
-  service: preferNonBlank(current.service, incoming.service),
-  sourceSheet: preferNonBlank(current.sourceSheet, incoming.sourceSheet)!,
-  sourceRow: current.sourceRow
-});
 
 const buildImportedSourceFingerprint = (record: Omit<ImportedBeeperRecord, "id">): string =>
   createHash("sha256")
@@ -542,7 +519,7 @@ export class BeepersService {
    */
   async importFromOds(parseResult: BeepersSheetParseResult): Promise<number> {
     return this.enqueueWrite(async () => {
-      if (parseResult.records.length > MAX_SPREADSHEET_IMPORT_ROWS) {
+      if (parseResult.parsedCellCount > MAX_SPREADSHEET_IMPORT_ROWS) {
         throw new Error(`El archivo supera el límite máximo de ${MAX_SPREADSHEET_IMPORT_ROWS} filas. Divide el archivo e importa en lotes.`);
       }
 
@@ -550,7 +527,7 @@ export class BeepersService {
       const incomingByDeviceNumber = new Map<string, ImportableBeeperRecord>();
 
       for (const raw of parseResult.records) {
-        const deviceNumberKey = normalizeDeviceNumber(raw.deviceNumber);
+        const deviceNumberKey = beeperDeviceKey(raw.deviceNumber);
         const existing = incomingByDeviceNumber.get(deviceNumberKey);
         incomingByDeviceNumber.set(
           deviceNumberKey,
@@ -560,7 +537,7 @@ export class BeepersService {
 
       const existingByDeviceNumber = new Map<string, ImportedBeeperRecord>();
       for (const record of dataset.importedRecords ?? []) {
-        const deviceNumberKey = normalizeDeviceNumber(record.deviceNumber);
+        const deviceNumberKey = beeperDeviceKey(record.deviceNumber);
         if (!existingByDeviceNumber.has(deviceNumberKey)) {
           existingByDeviceNumber.set(deviceNumberKey, record);
         }
@@ -580,7 +557,7 @@ export class BeepersService {
         // keep one record and only fill its blank columns. Source identity is
         // the fallback needed when a manually corrected pager number differs
         // from its original ODS value.
-        const existing = existingByDeviceNumber.get(normalizeDeviceNumber(raw.deviceNumber));
+        const existing = existingByDeviceNumber.get(beeperDeviceKey(raw.deviceNumber));
         const edited = existing ?? editedBySource.get(sourceFingerprint);
 
         if (edited) {

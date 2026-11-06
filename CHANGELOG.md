@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2026-11-06
+
+### Fixed
+
+- ODS Busca import now stores one Busca per pager number within and across sheets: the first source wins and blank fields are filled from later duplicates.
+- The import preview and confirmation show source cells versus distinct buscas, and state that imported buscas absent from the file are removed.
+
 ## [0.3.1] - 2026-11-04
 
 ### Fixed

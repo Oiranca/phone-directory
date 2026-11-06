@@ -1363,6 +1363,40 @@ describe("DataManagementSection (Configuración data section)", () => {
     expect(window.hospitalDirectory.importCsvDataset).not.toHaveBeenCalled();
   });
 
+  it("distinguishes source cells from distinct buscas in the confirmation dialog", async () => {
+    window.hospitalDirectory.pickAndImportDataset = vi.fn().mockResolvedValue({
+      kind: "csv-preview",
+      preview: {
+        importToken: "ods-token",
+        fileName: "buscas.ods",
+        totalRowCount: 1,
+        validRowCount: 1,
+        invalidRowCount: 0,
+        warningCount: 0,
+        recordCount: 1,
+        mergedRecordCount: 1,
+        createdCount: 1,
+        updatedCount: 0,
+        parsedBeepersCellCount: 231,
+        incomingBeeperRecordCount: 130,
+        currentBeeperRecordCount: 623,
+        typeCounts: {},
+        areaCounts: {},
+        rowIssues: [],
+        warnings: [],
+        previewRows: []
+      }
+    });
+    renderPage();
+
+    expect(await screen.findByText("Datos e importación")).toBeInTheDocument();
+    await openImportPicker();
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar importación/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Confirmar importación de agenda" });
+    expect(dialog).toHaveTextContent("Se reemplazarán los 623 buscas actuales por 130 buscas del archivo. El archivo tenía 231 números de busca; 101 estaban repetidos y se guardarán una sola vez. Los buscas importados anteriormente que no estén en el archivo se eliminarán.");
+  });
+
   it("clears the previous CSV preview when a new selection is canceled", async () => {
     window.hospitalDirectory.pickAndImportDataset = vi
       .fn()

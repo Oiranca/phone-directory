@@ -6,6 +6,7 @@ import { LoadingStatus } from "../feedback/LoadingStatus";
 import { useToast } from "../feedback/ToastRegion";
 import { useAppStore } from "../../store/useAppStore";
 import { toCompactToastMessage } from "../../utils/toastMessage";
+import { describeBeeperImport } from "../../utils/beeperImportSummary";
 import { useFocusOnMount } from "../../hooks/useFocusOnMount";
 
 const formatTimestamp = (value: string) => {
@@ -587,7 +588,7 @@ export const DataManagementSection = () => {
         ? " Formato incierto: revisa la vista previa."
         : "";
       const beeperReplacement = preview.incomingBeeperRecordCount > 0
-        ? ` Se importarán ${preview.incomingBeeperRecordCount} ${preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán ${preview.currentBeeperRecordCount ?? "los"} ${preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.`
+        ? ` ${describeBeeperImport(preview)}`
         : "";
 
       return {

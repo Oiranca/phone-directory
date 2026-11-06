@@ -195,7 +195,23 @@ describe("CsvImportPreviewPanel", () => {
       currentBeeperRecordCount: 3
     });
 
-    expect(statusWithText("Se importarán")).toHaveTextContent("Se importarán 2 buscas y se reemplazarán 3 buscas actuales.");
+    expect(statusWithText("Se reemplazarán")).toHaveTextContent(
+      "Se reemplazarán los 3 buscas actuales por 2 buscas del archivo. Los buscas importados anteriormente que no estén en el archivo se eliminarán."
+    );
+  });
+
+  it("distinguishes source cells from distinct buscas when repeats were combined", () => {
+    renderPanel({
+      ...basePreview,
+      fileName: "buscas.ods",
+      parsedBeepersCellCount: 231,
+      incomingBeeperRecordCount: 130,
+      currentBeeperRecordCount: 623
+    });
+
+    expect(statusWithText("Se reemplazarán")).toHaveTextContent(
+      "Se reemplazarán los 623 buscas actuales por 130 buscas del archivo. El archivo tenía 231 números de busca; 101 estaban repetidos y se guardarán una sola vez. Los buscas importados anteriormente que no estén en el archivo se eliminarán."
+    );
   });
 
   describe("zero-row file", () => {

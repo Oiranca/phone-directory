@@ -5,6 +5,7 @@ import { RECORD_TYPE_LABELS } from "../../../shared/constants/catalogs";
 import type { RecordType } from "../../../shared/constants/catalogs";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { getVisiblePhoneLabel } from "../../utils/phoneLabel";
+import { describeBeeperImport } from "../../utils/beeperImportSummary";
 import type {
   CsvImportPreviewWithConflicts,
   CsvImportPreviewRow,
@@ -525,7 +526,7 @@ export const CsvImportPreviewPanel = ({ preview, isImporting, isMutating, onConf
           role="status"
           className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
         >
-          Se importarán {preview.incomingBeeperRecordCount} {preview.incomingBeeperRecordCount === 1 ? "busca" : "buscas"} y se reemplazarán {preview.currentBeeperRecordCount ?? "los"} {preview.currentBeeperRecordCount === 1 ? "busca actual" : "buscas actuales"}.
+          {describeBeeperImport(preview)}
         </div>
       )}
       {(preview.socialHandleSkippedRowCount ?? 0) > 0 && (

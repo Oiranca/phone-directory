@@ -113,9 +113,41 @@ const isPagerNumber = (value: string): boolean => {
  */
 const normalizePagerNumber = (value: string): string => value.replace(/\s+/g, "");
 
+type ParsedBeeperRecord = Omit<ImportedBeeperRecord, "id">;
+
+/**
+ * The single identity of a pager across an import: internal whitespace and
+ * case never distinguish two pagers. Used by the parser (preview count) and by
+ * BeepersService (stored records) so both group duplicates identically.
+ */
+export const beeperDeviceKey = (value: string): string => value.replace(/\s+/g, "").toLowerCase();
+
+const preferNonBlank = (current: string | undefined, incoming: string | undefined): string | undefined =>
+  current?.trim() ? current : incoming?.trim() ? incoming : undefined;
+
+/**
+ * Combines two references to the same pager without discarding information
+ * already held by the first record. Imported files frequently list the same
+ * pager on complementary sheets, with different optional holder fields.
+ */
+export const mergeImportedBeeperFields = (
+  current: ParsedBeeperRecord,
+  incoming: ParsedBeeperRecord
+): ParsedBeeperRecord => ({
+  ...incoming,
+  ...current,
+  department: current.department.trim() ? current.department : incoming.department,
+  holderType: preferNonBlank(current.holderType, incoming.holderType),
+  name: preferNonBlank(current.name, incoming.name),
+  category: preferNonBlank(current.category, incoming.category),
+  service: preferNonBlank(current.service, incoming.service),
+  sourceSheet: current.sourceSheet.trim() ? current.sourceSheet : incoming.sourceSheet,
+  sourceRow: current.sourceRow
+});
+
 export type BeepersSheetParseResult = {
-  records: Omit<ImportedBeeperRecord, "id">[];
-  /** Number of non-empty pager cells that were parsed into records. */
+  records: ParsedBeeperRecord[];
+  /** Number of non-empty pager cells recognised in the source workbook. */
   parsedCellCount: number;
   /** Number of rows skipped because they were empty or comment-only. */
   skippedRowCount: number;
@@ -367,13 +399,19 @@ export const parseBeeperSheets = (sheets: RawSheetData[]): BeepersSheetParseResu
     parsedCellCount: 0,
     skippedRowCount: 0
   };
+  const recordsByDeviceKey = new Map<string, ParsedBeeperRecord>();
 
   for (const sheet of sheets) {
     const result = parseBeeperSheet(sheet);
-    combined.records.push(...result.records);
+    for (const record of result.records) {
+      const key = beeperDeviceKey(record.deviceNumber);
+      const existing = recordsByDeviceKey.get(key);
+      recordsByDeviceKey.set(key, existing ? mergeImportedBeeperFields(existing, record) : record);
+    }
     combined.parsedCellCount += result.parsedCellCount;
     combined.skippedRowCount += result.skippedRowCount;
   }
 
+  combined.records = Array.from(recordsByDeviceKey.values());
   return combined;
 };

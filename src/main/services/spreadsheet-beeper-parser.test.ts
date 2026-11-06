@@ -295,6 +295,60 @@ describe("parseBeeperSheets — new per-person layout aggregation", () => {
     const sourceSheets = new Set(result.records.map((r) => r.sourceSheet));
     expect(sourceSheets).toEqual(new Set(["Buscas Todos", "Buscas Usuales", "Buscas Celadores"]));
   });
+
+  it("keeps the first normalized Busca when it repeats within and across sheets", () => {
+    const result = parseBeeperSheets([
+      {
+        name: "Buscas Todos",
+        rows: [
+          ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+          ["Ana", "Doctor/a", "Análisis Clínico", "7 153", ""],
+          ["Bea", "Doctor/a", "Cardiología", "7153", ""]
+        ]
+      },
+      {
+        name: "Buscas Facultativos",
+        rows: [
+          ["SERVICIO", "PRINCIPAL"],
+          ["Urgencias", "7153"],
+          ["Anestesia", "7321"]
+        ]
+      }
+    ]);
+
+    expect(result.parsedCellCount).toBe(4);
+    expect(result.records).toHaveLength(2);
+    expect(result.records.map((record) => record.deviceNumber)).toEqual(["7153", "7321"]);
+    expect(result.records[0]).toMatchObject({
+      name: "Ana",
+      department: "Análisis Clínico",
+      sourceSheet: "Buscas Todos",
+      sourceRow: 0,
+      holderType: "Principal",
+      category: "Doctor/a"
+    });
+  });
+
+  it("fills blank named fields from a repeated Busca in the same sheet", () => {
+    const result = parseBeeperSheets([{
+      name: "Buscas Todos",
+      rows: [
+        ["Nombre", "Categoría", "Servicio", "Busca 1", "Busca 2"],
+        ["", "", "Análisis Clínico", "7153", ""],
+        ["Ana", "Doctor/a", "Cardiología", "7153", ""]
+      ]
+    }]);
+
+    expect(result.parsedCellCount).toBe(2);
+    expect(result.records).toEqual([expect.objectContaining({
+      deviceNumber: "7153",
+      department: "Análisis Clínico",
+      name: "Ana",
+      category: "Doctor/a",
+      sourceSheet: "Buscas Todos",
+      sourceRow: 0
+    })]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -700,11 +754,11 @@ describe("parseBeeperSheets (legacy layout)", () => {
       "Buscas_Varios"
     ];
 
-    const sheets = sheetNames.map((name) => ({
+    const sheets = sheetNames.map((name, index) => ({
       name,
       rows: [
         ["SERVICIO", "PRINCIPAL"],
-        [`Servicio ${name}`, "7000"]
+        [`Servicio ${name}`, String(7000 + index)]
       ]
     }));
 
