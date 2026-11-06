@@ -121,7 +121,7 @@ export const NavRail = () => {
         {primaryNavItems.map((item) => (
           <RailNavLink key={item.to} item={item} />
         ))}
-        <div aria-hidden="true" className="hidden sm:flex-1" />
+        <div aria-hidden="true" className="hidden sm:block sm:flex-1" />
         {bottomNavItems.map((item) => (
           <RailNavLink key={item.to} item={item} />
         ))}

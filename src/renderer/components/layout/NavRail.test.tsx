@@ -33,6 +33,7 @@ describe("NavRail — items", () => {
       "Configuración"
     ]);
     expect(nav.children[2]).toHaveAttribute("aria-hidden", "true");
+    expect(nav.children[2]).toHaveClass("hidden", "sm:block", "sm:flex-1");
     expect(nav.children[3]).toBe(links[2]);
     expect(nav.children[4]).toBe(links[3]);
     expect(nav.children[5]).toBe(links[4]);

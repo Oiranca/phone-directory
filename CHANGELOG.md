@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3] - 2026-11-06
+
+### Fixed
+
+- Pin Nuevo registro, Gestión Buscas and Configuración to the bottom of the desktop navigation rail.
+
 ## [0.3.2] - 2026-11-06
 
 ### Fixed
