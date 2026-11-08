@@ -55,6 +55,7 @@ interface ToastInput {
 }
 
 interface ToastRecord {
+  announcement: string;
   durationMs?: number;
   id: number;
   type: ToastType;
@@ -149,6 +150,7 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
     setToasts((current) => [
       ...current,
       {
+        announcement: "",
         durationMs: isPersistentAlert ? undefined : durationMs,
         id,
         type,
@@ -201,6 +203,22 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!toasts.some((toast) => toast.durationMs === undefined) && toastPosition) setToastPosition(undefined);
   }, [toastPosition, toasts]);
+
+  useEffect(() => {
+    const pendingIds = new Set(toasts.filter((toast) => !toast.announcement).map((toast) => toast.id));
+    if (pendingIds.size === 0) return;
+
+    const timerId = window.setTimeout(() => {
+      setToasts((current) => current.map((toast) => pendingIds.has(toast.id)
+        ? {
+            ...toast,
+            announcement: `${TOAST_SR_PREFIXES[toast.type]} ${toast.title ? `${toast.title}. ` : ""}${toast.message}`
+          }
+        : toast));
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [toasts]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -280,14 +298,19 @@ export const ToastProvider = ({ children }: PropsWithChildren) => {
                   if (element) toastElementsRef.current.set(toast.id, element);
                   else toastElementsRef.current.delete(toast.id);
                 }}
-                role={isAlert ? "alert" : "status"}
-                aria-live={isAlert ? "assertive" : "polite"}
-                aria-atomic="true"
                 className={[
                   "pointer-events-none rounded-3xl border px-4 py-3 shadow-lg shadow-slate-900/10 backdrop-blur",
                   toastStyles[toast.type]
                 ].join(" ")}
               >
+                <span
+                  className="sr-only"
+                  role={isAlert ? "alert" : "status"}
+                  aria-live={isAlert ? "assertive" : "polite"}
+                  aria-atomic="true"
+                >
+                  {toast.announcement}
+                </span>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <ToastIcon type={toast.type} />
                   <div className="min-w-0 flex-1">

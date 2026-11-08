@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.4] - 2026-11-08
+
+### Fixed
+
+- Announce toast messages after their live regions mount.
+
 ## [0.3.3] - 2026-11-06
 
 ### Fixed

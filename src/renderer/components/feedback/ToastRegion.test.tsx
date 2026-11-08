@@ -32,6 +32,14 @@ const renderWithProvider = (
     </ToastProvider>
   );
 
+const getToastElements = () => Array.from(screen.getByLabelText("Notificaciones").children);
+
+const getToastElement = (index = 0) => {
+  const toast = getToastElements()[index];
+  if (!toast) throw new Error("Expected a toast element.");
+  return toast;
+};
+
 const rectangle = (left: number, top: number, width: number, height: number) => ({
   bottom: top + height,
   height,
@@ -130,7 +138,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("status");
+    const toast = getToastElement();
     const control = screen.getByRole("button", { name: "Control cubierto" });
     vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
     vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
@@ -149,7 +157,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("alert");
+    const toast = getToastElement();
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control cubierto" });
     vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
@@ -173,7 +181,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("alert");
+    const toast = getToastElement();
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control inferior" });
     vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, window.innerHeight - 68, 100, 100));
@@ -207,7 +215,7 @@ describe("ToastRegion", () => {
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control cubierto" });
     let controlTop = 20;
-    screen.getAllByRole("alert").forEach((toast) => {
+    getToastElements().forEach((toast) => {
       vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
     });
     vi.spyOn(region, "getBoundingClientRect").mockImplementation(() => rectangle(0, Number.parseInt(region.style.top || "0", 10), 100, 100));
@@ -232,7 +240,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("alert");
+    const toast = getToastElement();
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control cubierto" });
     let controlTop = 160;
@@ -258,7 +266,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("alert");
+    const toast = getToastElement();
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control cubierto" });
     let controlTop = 20;
@@ -285,7 +293,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("alert");
+    const toast = getToastElement();
     const region = screen.getByLabelText("Notificaciones");
     const control = screen.getByRole("button", { name: "Control cubierto" });
     Object.defineProperties(region, {
@@ -317,7 +325,7 @@ describe("ToastRegion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    const toast = screen.getByRole("status");
+    const toast = getToastElement();
     const summary = screen.getByText("Opciones avanzadas");
     vi.spyOn(toast, "getBoundingClientRect").mockReturnValue(rectangle(0, 0, 100, 100));
     vi.spyOn(summary, "getBoundingClientRect").mockReturnValue(rectangle(20, 20, 44, 44));
@@ -342,13 +350,24 @@ describe("ToastRegion", () => {
   it("error toast uses role=alert", () => {
     renderWithProvider({ message: "Err", type: "error" });
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
 
   it("warning toast uses role=alert", () => {
     renderWithProvider({ message: "Warn", type: "warning" });
     fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
+  });
+
+  it("fills the mounted live region after adding a success toast", async () => {
+    renderWithProvider({ message: "Equipo guardado.", type: "success" });
+    fireEvent.click(screen.getByRole("button", { name: "Push toast" }));
+
+    const liveRegion = screen.getByRole("status");
+    expect(liveRegion).toBeEmptyDOMElement();
+
+    await waitFor(() => expect(liveRegion).toHaveTextContent("Correcto: Equipo guardado."));
+    expect(screen.getByRole("status")).toBe(liveRegion);
   });
 
   it("auto-dismisses a warning when an explicit duration is provided", () => {

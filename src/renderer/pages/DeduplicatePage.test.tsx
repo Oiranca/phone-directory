@@ -461,7 +461,7 @@ describe("DeduplicatePage", () => {
 
       // The warning toast confirms graceful degradation fired
       expect(
-        await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/)
+        await screen.findByText(/La fusión se completó, pero la lista no pudo actualizarse/, { selector: "p" })
       ).toBeInTheDocument();
 
       // Focus must be returned to a stable element — the trigger button that opened the
