@@ -792,30 +792,16 @@ export const BeepersPage = () => {
               className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60"
             >
               <summary className="focus-ring cursor-pointer rounded-2xl px-4 py-3 text-sm font-semibold text-scs-blueDark">
-                Turno y grupo (opcional)
+                Turno (opcional)
               </summary>
-              <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
-                <div>
-                  <SelectField
-                    id="form-shift"
-                    label="Turno"
-                    value={formData.shift}
-                    onChange={(value) => setField("shift", value as EditableBeeperRecord["shift"])}
-                    options={SHIFT_OPTIONS}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="form-group" className="mb-2 block text-sm font-medium text-slate-700">
-                    Grupo
-                  </label>
-                  <input
-                    id="form-group"
-                    type="text"
-                    value={formData.group ?? ""}
-                    onChange={(e) => setField("group", e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
-                  />
-                </div>
+              <div className="border-t border-slate-200 p-4">
+                <SelectField
+                  id="form-shift"
+                  label="Turno"
+                  value={formData.shift}
+                  onChange={(value) => setField("shift", value as EditableBeeperRecord["shift"])}
+                  options={SHIFT_OPTIONS}
+                />
               </div>
             </details>
           )}
