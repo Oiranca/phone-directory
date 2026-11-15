@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-11-15
+
+### Fixed
+
+- Reject normalized Busca labels that exceed the 255-character limit after uppercasing.
+
 ## [0.4.0] - 2026-11-15
 
 ### Added

@@ -11,8 +11,8 @@ export const beeperRecordSchema = z.object({
   id: z.string().regex(/^bsc_[0-9a-f]{8}$/, "ID must be bsc_ prefix + 8 hex chars"),
   deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
   assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio.").max(255),
-  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment),
-  role: z.string().trim().min(1, "El rol es obligatorio.").max(255).transform(normalizeBeeperRole),
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment).pipe(z.string().max(255)),
+  role: z.string().trim().min(1, "El rol es obligatorio.").max(255).transform(normalizeBeeperRole).pipe(z.string().max(255)),
   shift: z.enum(BEEPER_SHIFTS, {
     error: "El turno debe ser mañana, tarde o noche."
   }),
@@ -22,8 +22,8 @@ export const beeperRecordSchema = z.object({
 export const editableBeeperRecordSchema = z.object({
   deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
   assignedTo: z.string().trim().min(1, "El nombre del asignado es obligatorio.").max(255),
-  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment),
-  role: z.string().trim().min(1, "El rol es obligatorio.").max(255).transform(normalizeBeeperRole),
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment).pipe(z.string().max(255)),
+  role: z.string().trim().min(1, "El rol es obligatorio.").max(255).transform(normalizeBeeperRole).pipe(z.string().max(255)),
   shift: z.enum(BEEPER_SHIFTS, {
     error: "El turno debe ser mañana, tarde o noche."
   }),
@@ -53,13 +53,13 @@ export const editableBeeperRecordSchema = z.object({
 export const importedBeeperRecordSchema = z.object({
   id: z.string().regex(/^ibsc_[0-9a-f]{8}$/, "ID must be ibsc_ prefix + 8 hex chars"),
   deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
-  department: z.string().trim().min(1, "El servicio/departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment),
+  department: z.string().trim().min(1, "El servicio/departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment).pipe(z.string().max(255)),
   holderType: z.string().trim().min(1, "El tipo de titular es obligatorio.").max(255).optional(),
   // Holder's name, when the source sheet identifies a specific person rather
   // than just a holder-type/department combination.
   name: z.string().trim().max(255).optional(),
   // Category/role of the holder (e.g. "Enfermero/a", "Jefe/a").
-  category: z.string().trim().max(255).optional().transform((v) => v ? normalizeBeeperRole(v) : undefined),
+  category: z.string().trim().max(255).optional().transform((v) => v ? normalizeBeeperRole(v) : undefined).pipe(z.string().max(255).optional()),
   // Service the beeper belongs to, distinct from `department` when the sheet
   // distinguishes the two (e.g. a department with multiple services).
   service: z.string().trim().max(255).optional(),
@@ -78,8 +78,8 @@ export const importedBeeperRecordSchema = z.object({
 export const editableImportedBeeperRecordSchema = z.object({
   deviceNumber: z.string().trim().min(1, "El número de busca es obligatorio.").max(255),
   assignedTo: z.string().trim().max(255).optional().transform((v) => v || undefined),
-  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment),
-  role: z.string().trim().max(255).optional().transform((v) => v ? normalizeBeeperRole(v) : undefined)
+  department: z.string().trim().min(1, "El departamento es obligatorio.").max(255).transform(normalizeBeeperDepartment).pipe(z.string().max(255)),
+  role: z.string().trim().max(255).optional().transform((v) => v ? normalizeBeeperRole(v) : undefined).pipe(z.string().max(255).optional())
 });
 
 const iMessageBeeperUserSchema = z.object({

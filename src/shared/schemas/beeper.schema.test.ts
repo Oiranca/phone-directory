@@ -34,6 +34,12 @@ describe("beeperRecordSchema", () => {
     expect(result.role).toBe("BUSCAS-GUARDIA");
   });
 
+  it("rejects uppercase transformations that exceed the field limit", () => {
+    const result = beeperRecordSchema.safeParse({ ...validRecord, role: "ß".repeat(128) });
+
+    expect(result.success).toBe(false);
+  });
+
   it("accepts an optional group field", () => {
     const result = beeperRecordSchema.parse({ ...validRecord, group: undefined });
     expect(result.group).toBeUndefined();
