@@ -359,7 +359,11 @@ describe("registerBeepersIpc", () => {
 
       await invoke("beepers:update-imported", "ibsc_aabbccdd", payload);
 
-      expect(serviceMock.updateImported).toHaveBeenCalledWith("ibsc_aabbccdd", payload);
+      expect(serviceMock.updateImported).toHaveBeenCalledWith("ibsc_aabbccdd", {
+        ...payload,
+        department: "ESTERILIZACIÓN",
+        role: "CELADOR/A"
+      });
     });
   });
 

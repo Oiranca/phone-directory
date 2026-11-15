@@ -34,6 +34,36 @@ describe("BeepersService", () => {
     expect(records).toEqual([]);
   });
 
+  it("lists legacy role and department values in uppercase", async () => {
+    const beepersFilePath = path.join(testRoot, "data", "beepers.json");
+    await fs.mkdir(path.dirname(beepersFilePath), { recursive: true });
+    await fs.writeFile(beepersFilePath, JSON.stringify({
+      version: "1.0.0",
+      records: [{
+        id: "bsc_deadbeef",
+        deviceNumber: "B-101",
+        assignedTo: "Ana García",
+        department: "urgencias",
+        role: "busca",
+        shift: "mañana"
+      }],
+      importedRecords: [{
+        id: "ibsc_deadbeef",
+        deviceNumber: "7001",
+        department: "radiología",
+        category: "Buscas-guardia",
+        sourceSheet: "iMessage",
+        sourceRow: 1
+      }]
+    }), "utf-8");
+
+    const { BeepersService } = await import("./beeper.service.js");
+    const service = new BeepersService();
+
+    await expect(service.list()).resolves.toMatchObject([{ department: "URGENCIAS", role: "BUSCA" }]);
+    await expect(service.listImported()).resolves.toMatchObject([{ department: "RADIOLOGÍA", category: "BUSCAS-GUARDIA" }]);
+  });
+
   it("readDataset — propagates non-ENOENT fs errors (e.g. EACCES)", async () => {
     const beepersFilePath = path.join(testRoot, "data", "beepers.json");
     await fs.mkdir(path.dirname(beepersFilePath), { recursive: true });
@@ -69,8 +99,8 @@ describe("BeepersService", () => {
     expect(created.id).toMatch(/^bsc_[0-9a-f]{8}$/);
     expect(created.deviceNumber).toBe("B-101");
     expect(created.assignedTo).toBe("Ana García");
-    expect(created.department).toBe("Urgencias");
-    expect(created.role).toBe("Enfermera");
+    expect(created.department).toBe("URGENCIAS");
+    expect(created.role).toBe("ENFERMERA");
     expect(created.shift).toBe("mañana");
 
     const listed = await service.list();
@@ -107,7 +137,7 @@ describe("BeepersService", () => {
 
     expect(updated.id).toBe(created.id);
     expect(updated.assignedTo).toBe("Luis Pérez Actualizado");
-    expect(updated.role).toBe("Médico Jefe");
+    expect(updated.role).toBe("MÉDICO JEFE");
     expect(updated.shift).toBe("noche");
     expect(updated.group).toBe("Turno C");
 
@@ -561,8 +591,8 @@ describe("BeepersService — importFromOds + listImported", () => {
       id: record!.id,
       deviceNumber: "7183",
       name: "Carlos",
-      department: "Esterilización Central",
-      category: "Celador/a",
+      department: "ESTERILIZACIÓN CENTRAL",
+      category: "CELADOR/A",
       sourceSheet: "Buscas_Celadores",
       sourceRow: 4
     });
@@ -593,7 +623,7 @@ describe("BeepersService — importFromOds + listImported", () => {
     });
 
     expect(updated.holderType).toBe("Principal");
-    expect(updated.category).toBe("Médico/a");
+    expect(updated.category).toBe("MÉDICO/A");
   });
 
   it("importFromOds — preserves manual corrections for the same source row", async () => {
@@ -627,15 +657,15 @@ describe("BeepersService — importFromOds + listImported", () => {
       id: original!.id,
       deviceNumber: "7183",
       name: "Carlos",
-      department: "Esterilización Central",
-      category: "Celador/a",
+      department: "ESTERILIZACIÓN CENTRAL",
+      category: "CELADOR/A",
       sourceSheet: "Buscas_Celadores",
       sourceRow: 4,
       manuallyEdited: true
     });
     expect(sibling).toMatchObject({
       deviceNumber: "7934",
-      department: "Esterilización",
+      department: "ESTERILIZACIÓN",
       sourceSheet: "Buscas_Celadores",
       sourceRow: 4
     });
@@ -680,7 +710,7 @@ describe("BeepersService — importFromOds + listImported", () => {
     }
 
     const first = imported.find((r) => r.deviceNumber === "7321");
-    expect(first?.department).toBe("Anestesia");
+    expect(first?.department).toBe("ANESTESIA");
     expect(first?.holderType).toBe("Principal / Residente");
     expect(first?.sourceSheet).toBe("Buscas_Facultativos");
     expect(first?.sourceRow).toBe(0);
@@ -716,10 +746,10 @@ describe("BeepersService — importFromOds + listImported", () => {
     expect(count).toBe(1);
     expect(await service.listImported()).toMatchObject([{
       deviceNumber: "7321",
-      department: "Anestesia",
+      department: "ANESTESIA",
       holderType: "Principal",
       name: "Roberto",
-      category: "Médico/a",
+      category: "MÉDICO/A",
       service: "Quirófano"
     }]);
   });
@@ -757,7 +787,7 @@ describe("BeepersService — importFromOds + listImported", () => {
       deviceNumber: "7400",
       department: "UCI",
       name: "Ana",
-      category: "Enfermera",
+      category: "ENFERMERA",
       service: "Críticos"
     }]);
   });

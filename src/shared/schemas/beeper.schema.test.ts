@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, iMessageBeeperExportSchema } from "./beeper.schema";
+import { beeperRecordSchema, beepersDatasetSchema, editableBeeperRecordSchema, editableImportedBeeperRecordSchema, iMessageBeeperExportSchema, importedBeeperRecordSchema } from "./beeper.schema";
 
 const validRecord = {
   id: "bsc_abc12345",
@@ -25,6 +25,13 @@ describe("beeperRecordSchema", () => {
     expect(result.deviceNumber).toBe("B-001");
     expect(result.shift).toBe("mañana");
     expect(result.group).toBe("Equipo A");
+  });
+
+  it("uppercases manual roles without removing qualifiers", () => {
+    const result = beeperRecordSchema.parse({ ...validRecord, department: " urgencias ", role: "Buscas-guardia" });
+
+    expect(result.department).toBe("URGENCIAS");
+    expect(result.role).toBe("BUSCAS-GUARDIA");
   });
 
   it("accepts an optional group field", () => {
@@ -167,6 +174,19 @@ describe("editableBeeperRecordSchema", () => {
     expect(result.assignedTo).toBe("Juan");
   });
 
+  it("normalizes singular Busca and uppercase department values", () => {
+    const result = editableBeeperRecordSchema.parse({ ...validEditable, department: " uci ", role: "Busca" });
+
+    expect(result.department).toBe("UCI");
+    expect(result.role).toBe("BUSCA");
+  });
+
+  it("keeps plural Buscas distinct from singular Busca", () => {
+    const result = editableBeeperRecordSchema.parse({ ...validEditable, role: "Buscas" });
+
+    expect(result.role).toBe("BUSCAS");
+  });
+
   it("transforms empty group string to undefined", () => {
     const result = editableBeeperRecordSchema.parse({ ...validEditable, group: "" });
     expect(result.group).toBeUndefined();
@@ -188,6 +208,33 @@ describe("editableBeeperRecordSchema", () => {
       const result = editableBeeperRecordSchema.parse({ ...validEditable, shift });
       expect(result.shift).toBe(shift);
     }
+  });
+});
+
+describe("importedBeeperRecordSchema", () => {
+  it("uppercases imported roles without removing qualifiers", () => {
+    const result = importedBeeperRecordSchema.parse({
+      id: "ibsc_deadbeef",
+      deviceNumber: "7001",
+      department: " radiología ",
+      category: "buscas-guardia",
+      sourceSheet: "iMessage",
+      sourceRow: 1
+    });
+
+    expect(result.department).toBe("RADIOLOGÍA");
+    expect(result.category).toBe("BUSCAS-GUARDIA");
+  });
+
+  it("normalizes imported edits without collapsing unrelated roles", () => {
+    const result = editableImportedBeeperRecordSchema.parse({
+      deviceNumber: "7001",
+      department: " radiología ",
+      role: "Médico/a"
+    });
+
+    expect(result.department).toBe("RADIOLOGÍA");
+    expect(result.role).toBe("MÉDICO/A");
   });
 });
 

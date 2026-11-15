@@ -221,8 +221,8 @@ export const directoryDatasetSchema = z.object({
     generatedFrom: z.string(),
     generatedBy: z.string(),
     editorName: z.string(),
-    typeCounts: z.record(z.enum(RECORD_TYPES), z.number()),
-    areaCounts: z.record(z.enum(AREAS), z.number())
+    typeCounts: z.partialRecord(z.enum(RECORD_TYPES), z.number()),
+    areaCounts: z.partialRecord(z.enum(AREAS), z.number())
   }),
   catalogs: z.object({
     recordTypes: z.array(z.enum(RECORD_TYPES)),
@@ -332,7 +332,7 @@ export const auditLogEntrySchema = z.object({
   action: auditActionSchema,
   recordId: z.string().optional(),
   recordName: z.string().optional(),
-  changes: z.record(z.object({ old: z.any(), new: z.any() })).nullable().optional(),
+  changes: z.record(z.string(), z.object({ old: z.any().optional(), new: z.any() })).nullable().optional(),
   reason: z.string().nullable().optional(),
   recordsAffected: z.number().optional(),
   importSource: z.string().optional()
@@ -352,7 +352,7 @@ export const editableContactRecordSchema = z.object({
   id: z.string().optional(),
   externalId: optionalTextField(),
   type: z.enum(RECORD_TYPES, {
-    errorMap: () => ({ message: "Selecciona un tipo de registro válido." })
+    error: "Selecciona un tipo de registro válido."
   }),
   displayName: z.string().trim().min(1, "Falta el nombre del contacto."),
   person: z.object({
@@ -393,7 +393,7 @@ export const editableContactRecordSchema = z.object({
   // See contactRecordSchema.customFields for rationale.
   customFields: z.array(editableCustomFieldSchema).optional(),
   status: z.enum(["active", "inactive"], {
-    errorMap: () => ({ message: "Selecciona un estado válido." })
+    error: "Selecciona un estado válido."
   })
 });
 

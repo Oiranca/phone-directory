@@ -17,9 +17,9 @@ describe("convertIMessageBeeperExport", () => {
     expect(result.importedRecords).toHaveLength(1);
     expect(result.importedRecords[0]).toMatchObject({
       deviceNumber: "7001",
-      department: "Rayos",
+      department: "RAYOS",
       name: "Ana Díaz",
-      category: "Técnica",
+      category: "TÉCNICA",
       sourceId: "user-1"
     });
     expect(result.importedRecords[0]?.id).toMatch(/^ibsc_[0-9a-f]{8}$/);
@@ -81,9 +81,9 @@ describe("convertIMessageBeeperExport", () => {
 
     expect(result.importedRecords).toMatchObject([{
       deviceNumber: "7001",
-      department: "Rayos",
+      department: "RAYOS",
       name: "Ana",
-      category: "Técnica",
+      category: "TÉCNICA",
       sourceId: "user-1"
     }]);
     expect(result.teamMemberships).toEqual([

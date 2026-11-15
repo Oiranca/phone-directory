@@ -87,7 +87,14 @@ export function diffMergeOverrides(
     });
 
   if (phonesChanged) {
-    overrides.contactMethods = { phones: draft.phones };
+    overrides.contactMethods = {
+      phones: draft.phones.map((phone) => ({
+        ...phone,
+        label: phone.label ?? undefined,
+        extension: phone.extension ?? undefined,
+        notes: phone.notes ?? undefined
+      }))
+    };
     changed = true;
   }
 

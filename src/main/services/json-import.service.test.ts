@@ -134,7 +134,12 @@ describe("schema-aware JSON import", () => {
     expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "contacts.json"), "utf8")))
       .toMatchObject({ records: [{ displayName: "Agenda combinada" }] });
     expect(JSON.parse(await fs.readFile(path.join(profileRoot, "data", "beepers.json"), "utf8")))
-      .toEqual({ ...importedBeepers, teams: [], teamMemberships: [] });
+      .toEqual({
+        ...importedBeepers,
+        importedRecords: [{ ...importedBeepers.importedRecords[0], department: "ESTERILIZACIÓN" }],
+        teams: [],
+        teamMemberships: []
+      });
     const backupNames = await fs.readdir(path.join(profileRoot, "backups"));
     expect(backupNames.some((name) => name.startsWith("contacts-"))).toBe(true);
     expect(backupNames.some((name) => name.startsWith("beepers-before-import-"))).toBe(true);

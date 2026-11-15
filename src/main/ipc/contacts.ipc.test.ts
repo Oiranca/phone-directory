@@ -349,7 +349,7 @@ describe("mergeContactsSchema — keepId === discardId guard", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      const discardIdError = result.error.errors.find((e) => e.path.includes("discardId"));
+      const discardIdError = result.error.issues.find((e) => e.path.includes("discardId"));
       expect(discardIdError?.message).toBe("keepId and discardId must be different");
     }
   });
