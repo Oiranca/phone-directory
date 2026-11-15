@@ -3,7 +3,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/feedback/ToastRegion";
 import { BeepersPage } from "./BeepersPage";
-import type { BeeperRecord, BeeperTeam, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
+import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 
 const mockRecords: BeeperRecord[] = [
   {
@@ -1098,15 +1098,104 @@ describe("BeepersPage", () => {
     expect(screen.queryByLabelText(/Nombre del equipo/i)).not.toBeInTheDocument();
   });
 
-  it("does not load or expose team memberships", async () => {
-    setupWindowApi({ listBeeperTeams: vi.fn().mockResolvedValue(mockTeams) });
+  it("lists only each team's linked buscas", async () => {
+    const otherTeam = { id: "team_quirófano", name: "Quirófano", displayId: "9010" };
+    setupWindowApi({
+      listBeepers: vi.fn().mockResolvedValue([{ ...mockRecords[0], assignedTo: "Carla Díaz" }, mockRecords[1]]),
+      listBeeperTeams: vi.fn().mockResolvedValue([...mockTeams, otherTeam]),
+      listImportedBeepers: vi.fn().mockResolvedValue([
+        { ...mockImportedRecords[0], name: "Ana García" },
+        { ...mockImportedRecords[1], name: "Luis Pérez" }
+      ]),
+      listBeeperTeamMemberships: vi.fn().mockResolvedValue([
+        { teamId: "team_uci", beeperId: "ibsc_00000001" },
+        { teamId: otherTeam.id, beeperId: "bsc_001" }
+      ])
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Equipos" }));
+
+    const members = within(screen.getByRole("dialog")).getByRole("list", { name: "Buscas de UCI" });
+    expect(window.hospitalDirectory.listBeeperTeamMemberships).toHaveBeenCalledOnce();
+    expect(within(members).getByText("Ana García")).toBeInTheDocument();
+    expect(within(members).getByText("5001")).toBeInTheDocument();
+    expect(within(members).queryByText("Luis Pérez")).not.toBeInTheDocument();
+    expect(within(members).queryByText("5002")).not.toBeInTheDocument();
+    expect(within(members).queryByText("B-001")).not.toBeInTheDocument();
+    expect(within(members).queryByText("Carla Díaz")).not.toBeInTheDocument();
+    const otherMembers = within(screen.getByRole("dialog")).getByRole("list", { name: "Buscas de Quirófano" });
+    expect(within(otherMembers).getByText("Carla Díaz")).toBeInTheDocument();
+    expect(within(otherMembers).getByText("B-001")).toBeInTheDocument();
+    expect(within(otherMembers).queryByText("Ana García")).not.toBeInTheDocument();
+    expect(within(otherMembers).queryByText("5001")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /editar equipo/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a membership loading error in Equipos", async () => {
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships: vi.fn().mockRejectedValue(new Error("membership lookup failed"))
+    });
     renderPage();
     await screen.findByText("B-001");
     fireEvent.click(screen.getByRole("button", { name: "Equipos" }));
 
-    expect(window.hospitalDirectory.listBeeperTeamMemberships).not.toHaveBeenCalled();
-    expect(screen.queryByText("Buscas del equipo")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /editar equipo/i })).not.toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("No se pudieron cargar las Buscas del equipo.");
+    expect(within(dialog).getAllByRole("alert")).toHaveLength(1);
+    expect(within(dialog).queryByRole("list", { name: "Buscas de UCI" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Sin buscas asignados.")).not.toBeInTheDocument();
+  });
+
+  it("retries loading team memberships", async () => {
+    let resolveMemberships: ((memberships: BeeperTeamMembership[]) => void) | undefined;
+    const listBeeperTeamMemberships = vi.fn()
+      .mockRejectedValueOnce(new Error("membership lookup failed"))
+      .mockImplementationOnce(() => new Promise<BeeperTeamMembership[]>((resolve) => { resolveMemberships = resolve; }));
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listBeeperTeamMemberships
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Equipos" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(screen.getByRole("button", { name: "Cargando Buscas…" })).toBeDisabled();
+    expect(screen.getByRole("status", { name: "Cargando Buscas del equipo." })).toBeInTheDocument();
+    resolveMemberships?.([{ teamId: "team_uci", beeperId: "bsc_001" }]);
+
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByRole("status", { name: "Buscas del equipo actualizadas." })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Buscas de UCI" })).toHaveTextContent("B-001");
+    expect(listBeeperTeamMemberships).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus());
+  });
+
+  it("retries team members after loading imported buscas fails", async () => {
+    const listImportedBeepers = vi.fn()
+      .mockRejectedValueOnce(new Error("import lookup failed"))
+      .mockResolvedValueOnce([{ ...mockImportedRecords[0], name: "Ana García" }]);
+    const listBeeperTeamMemberships = vi.fn().mockResolvedValue([
+      { teamId: "team_uci", beeperId: "ibsc_00000001" }
+    ]);
+    setupWindowApi({
+      listBeeperTeams: vi.fn().mockResolvedValue(mockTeams),
+      listImportedBeepers,
+      listBeeperTeamMemberships
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Equipos" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar las Buscas del equipo.");
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    const members = screen.getByRole("list", { name: "Buscas de UCI" });
+    expect(within(members).getByText("Ana García")).toBeInTheDocument();
+    expect(within(members).getByText("5001")).toBeInTheDocument();
+    expect(listImportedBeepers).toHaveBeenCalledTimes(2);
+    expect(listBeeperTeamMemberships).toHaveBeenCalledTimes(2);
   });
 
   it("closes Equipos with Escape and restores trigger focus", async () => {

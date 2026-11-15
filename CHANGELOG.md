@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.5] - 2026-11-15
+
+### Changed
+
+- Display Busca roles and departments in uppercase while preserving singular and plural labels.
+
+### Fixed
+
+- Retry loading a team's imported Buscas and memberships after a temporary failure.
+
 ## [0.3.4] - 2026-11-08
 
 ### Fixed

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useMatch, useNavigate } from "react-router";
-import type { BeeperRecord, BeeperTeam, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
+import type { BeeperRecord, BeeperTeam, BeeperTeamMembership, EditableBeeperRecord, EditableBeeperTeam, EditableImportedBeeperRecord, ImportedBeeperRecord } from "../../shared/schemas/beeper.schema";
 import { BEEPER_SHIFTS } from "../../shared/schemas/beeper.schema";
 import { ConfirmDialog } from "../components/feedback/ConfirmDialog";
 import { LoadingStatus } from "../components/feedback/LoadingStatus";
@@ -131,6 +131,10 @@ export const BeepersPage = () => {
   const [records, setRecords] = useState<BeeperRecord[]>([]);
   const [importedRecords, setImportedRecords] = useState<ImportedBeeperRecord[]>([]);
   const [teams, setTeams] = useState<BeeperTeam[]>([]);
+  const [teamMemberships, setTeamMemberships] = useState<BeeperTeamMembership[]>([]);
+  const [teamMembershipsError, setTeamMembershipsError] = useState(false);
+  const [isLoadingTeamMemberships, setIsLoadingTeamMemberships] = useState(false);
+  const [teamMembershipsRetryStatus, setTeamMembershipsRetryStatus] = useState<"idle" | "loading" | "complete">("idle");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
@@ -161,14 +165,36 @@ export const BeepersPage = () => {
   const teamDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const deferredQuery = useDeferredValue(query);
 
+  const reloadTeamMembers = async () => {
+    setIsLoadingTeamMemberships(true);
+    setTeamMembershipsError(false);
+    setTeamMembershipsRetryStatus("loading");
+    try {
+      const [imported, memberships] = await Promise.all([
+        window.hospitalDirectory.listImportedBeepers(),
+        window.hospitalDirectory.listBeeperTeamMemberships()
+      ]);
+      setImportedRecords(imported);
+      setTeamMemberships(memberships);
+      setTeamMembershipsRetryStatus("complete");
+    } catch {
+      setTeamMembershipsError(true);
+      setTeamMembershipsRetryStatus("idle");
+    } finally {
+      setIsLoadingTeamMemberships(false);
+    }
+  };
+
   const loadBeepers = async () => {
     try {
       setIsLoading(true);
       setLoadError(false);
-      const [primary, imported, listedTeams] = await Promise.allSettled([
+      setTeamMembershipsError(false);
+      const [primary, imported, listedTeams, memberships] = await Promise.allSettled([
         window.hospitalDirectory.listBeepers(),
         window.hospitalDirectory.listImportedBeepers(),
-        window.hospitalDirectory.listBeeperTeams()
+        window.hospitalDirectory.listBeeperTeams(),
+        window.hospitalDirectory.listBeeperTeamMemberships()
       ]);
       if (primary.status === "rejected") throw primary.reason;
       if (listedTeams.status === "rejected") {
@@ -177,6 +203,8 @@ export const BeepersPage = () => {
       setRecords(primary.value);
       setImportedRecords(imported.status === "fulfilled" ? imported.value : []);
       setTeams(listedTeams.value);
+      setTeamMemberships(memberships.status === "fulfilled" ? memberships.value : []);
+      setTeamMembershipsError(memberships.status === "rejected" || imported.status === "rejected");
     } catch {
       setLoadError(true);
     } finally {
@@ -187,6 +215,11 @@ export const BeepersPage = () => {
   useEffect(() => {
     void loadBeepers();
   }, []);
+
+  useEffect(() => {
+    if (teamMembershipsRetryStatus !== "complete" || !isTeamDialogOpen) return;
+    teamDialogRef.current?.querySelector<HTMLButtonElement>("[data-team-dialog-close]")?.focus();
+  }, [isTeamDialogOpen, teamMembershipsRetryStatus]);
 
   // `when` combines showForm with editingId so switching from "create" to
   // "edit" (or vice versa) while the form stays open re-triggers focus, not
@@ -641,13 +674,45 @@ export const BeepersPage = () => {
             <button type="button" data-team-dialog-close onClick={() => setIsTeamDialogOpen(false)} className="focus-ring shrink-0 rounded-full px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cerrar</button>
           </div>
 
+          {isTeamDialogOpen && (teamMembershipsError || isLoadingTeamMemberships) && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              {teamMembershipsError && <p role="alert" className="text-sm text-red-700">No se pudieron cargar las Buscas del equipo.</p>}
+              <button type="button" onClick={() => void reloadTeamMembers()} disabled={isLoadingTeamMemberships} className="focus-ring rounded-full border border-red-700 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">
+                {isLoadingTeamMemberships ? "Cargando Buscas…" : "Reintentar"}
+              </button>
+            </div>
+          )}
+          {isTeamDialogOpen && teamMembershipsRetryStatus !== "idle" && (
+            <p role="status" aria-atomic="true" aria-label={teamMembershipsRetryStatus === "loading" ? "Cargando Buscas del equipo." : "Buscas del equipo actualizadas."} className="sr-only">
+              {teamMembershipsRetryStatus === "loading" ? "Cargando Buscas del equipo." : "Buscas del equipo actualizadas."}
+            </p>
+          )}
+
           <ul role="list" aria-label="Equipos" className="mt-6 grid gap-2">
-            {teams.map((team) => (
-              <li key={team.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                <span className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">{team.name}</span>
-                <span className="min-w-0 [overflow-wrap:anywhere]"><span className="sr-only">Número del equipo: </span>{team.displayId}</span>
-              </li>
-            ))}
+            {teams.map((team) => {
+              const memberIds = new Set(teamMemberships.filter((membership) => membership.teamId === team.id).map((membership) => membership.beeperId));
+              const members = [...records, ...importedRecords].filter((record) => memberIds.has(record.id));
+
+              return (
+                <li key={team.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">{team.name}</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere]"><span className="sr-only">Número del equipo: </span>{team.displayId}</span>
+                  </div>
+                  {!teamMembershipsError && !isLoadingTeamMemberships && (
+                    <ul role="list" aria-label={`Buscas de ${team.name}`} className="mt-3 grid gap-2 border-t border-slate-200 pt-3">
+                        {members.map((record) => (
+                          <li key={record.id} className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{titleCaseWords("assignedTo" in record ? record.assignedTo : record.name ?? record.holderType ?? "—")}</span>
+                            <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{record.deviceNumber}</span>
+                          </li>
+                        ))}
+                        {members.length === 0 && <li className="text-slate-600">Sin buscas asignados.</li>}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
             {teams.length === 0 && <li className="text-sm text-slate-600">No hay equipos. Crea uno desde Gestión Buscas.</li>}
           </ul>
         </dialog>
