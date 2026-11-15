@@ -51,6 +51,7 @@ const SUPPORTED_COLUMNS = [
   "building",
   "floor",
   "room",
+  "locationCenter",
   "locationText",
   // ODS "Sector"/"Sección" columns.
   "sector",
@@ -182,6 +183,15 @@ const compactObject = <T extends Record<string, unknown>>(value: T) =>
 const buildSource = (externalId: string | undefined) => {
   if (!externalId) {
     return undefined;
+  }
+
+  const healthCentersPrefix = "centros-de-salud-";
+  if (externalId.startsWith(healthCentersPrefix)) {
+    return {
+      externalId,
+      sheetSlug: "centros-de-salud",
+      sheetRow: externalId.slice(healthCentersPrefix.length)
+    };
   }
 
   const separatorIndex = externalId.lastIndexOf("-");
@@ -635,6 +645,7 @@ export const buildImportPreviewFromRows = async (
     const socials = buildSocials(row, rowNumber, displayName, rowWarnings);
     const beepers = buildBeepers(row, rowNumber, displayName, rowWarnings);
     const location = compactObject({
+      center: maybe(row.locationCenter),
       building: maybe(row.building),
       floor: maybe(row.floor),
       room: maybe(row.room),

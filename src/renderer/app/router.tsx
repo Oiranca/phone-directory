@@ -32,6 +32,10 @@ export const router = createHashRouter([
         element: <DirectoryPage />
       },
       {
+        path: "centers/:centerId",
+        element: <DirectoryPage />
+      },
+      {
         path: "contacts/new",
         element: withSuspense(() => import("../pages/RecordFormPage").then((mod) => ({ default: mod.RecordFormPage })))
       },

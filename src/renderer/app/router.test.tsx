@@ -111,7 +111,7 @@ describe("router — lazy route smoke test", () => {
       await router.navigate("/deduplicate");
     });
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByText("No se encontraron duplicados")).not.toBeInTheDocument();
     expect(window.hospitalDirectory.detectDuplicates).not.toHaveBeenCalled();
   });

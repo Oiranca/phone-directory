@@ -1,9 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectoryPage } from "./DirectoryPage";
 import { useAppStore, resetBootstrapInFlight } from "../store/useAppStore";
-import { defaultContacts } from "../../shared/fixtures/defaultContacts";
+import { defaultContacts as sourceDefaultContacts } from "../../shared/fixtures/defaultContacts";
+
+const defaultContacts = structuredClone(sourceDefaultContacts);
+for (const record of defaultContacts.records) {
+  if (!record.location?.center) {
+    record.source.sheetSlug = "urgencias";
+  }
+}
 
 const resetStore = () => {
   resetBootstrapInFlight();
@@ -55,6 +62,29 @@ describe("DirectoryPage", () => {
       </MemoryRouter>
     );
 
+  const renderPageAt = (path: string) =>
+    render(
+      <MemoryRouter initialEntries={[path]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/" element={<DirectoryPage />} />
+          <Route path="/centers/:centerId" element={<DirectoryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  const CenterRouteHarness = () => {
+    const navigate = useNavigate();
+
+    return (
+      <>
+        <button type="button" onClick={() => navigate("/centers/hjci")}>Cambiar a HJCI</button>
+        <Routes>
+          <Route path="/centers/:centerId" element={<DirectoryPage />} />
+        </Routes>
+      </>
+    );
+  };
+
   it("shows a loading state while bootstrap is in progress", async () => {
     let resolveBootstrap: ((value: Awaited<ReturnType<typeof window.hospitalDirectory.getBootstrapData>>) => void) | null = null;
     window.hospitalDirectory.getBootstrapData = vi.fn().mockImplementation(
@@ -66,7 +96,7 @@ describe("DirectoryPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Cargando datos locales");
 
     resolveBootstrap?.({ contacts: defaultContacts, settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } } });
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
   });
 
   it("loads records after a successful bootstrap request", async () => {
@@ -85,10 +115,226 @@ describe("DirectoryPage", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Búsqueda de contactos" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Buscar contactos")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Agenda" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Buscar")).toBeInTheDocument();
     });
     expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+  });
+
+  it("keeps non-Negrín centers out of Directorio", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[1]!.location = { center: "HSRG" };
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/");
+
+    expect((await screen.findAllByText("Admisión General")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Centro de Salud Demo - Información")).not.toBeInTheDocument();
+  });
+
+  it("shows only HSRG records on its center route", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.location = { center: "HUGCDN" };
+    contacts.records[1]!.location = { center: "HSRG" };
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/centers/hsrg");
+
+    expect((await screen.findAllByText("Centro de Salud Demo - Información")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Admisión General")).not.toBeInTheDocument();
+  });
+
+  it("filters the aggregated health-center route by center", async () => {
+    const makeHealthCenterRecord = (id: string, center: string) => ({
+      ...structuredClone(defaultContacts.records[1]!),
+      id,
+      externalId: id,
+      displayName: `${center} - Información`,
+      location: { center },
+      source: { externalId: id, sheetSlug: `centros-de-salud-${center.toLocaleLowerCase("es")}-info`, sheetRow: "1" }
+    });
+    const contacts = structuredClone(defaultContacts);
+    contacts.records = [
+      makeHealthCenterRecord("agaete-info", "Agaete"),
+      makeHealthCenterRecord("agaete-urgent", "Agaete"),
+      makeHealthCenterRecord("galdar-info", "Gáldar")
+    ];
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/centers/health-centers");
+
+    expect(screen.queryByText("C.L. significa Consultorio Local.")).not.toBeInTheDocument();
+    const centerFilter = await screen.findByLabelText("Centro de salud");
+    expect(Array.from((centerFilter as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
+      "Todos los centros",
+      "Agaete",
+      "Gáldar"
+    ]);
+    expect(screen.getByRole("status")).toHaveTextContent("3 resultados");
+
+    fireEvent.change(centerFilter, { target: { value: "Agaete" } });
+    expect(screen.getByRole("status")).toHaveTextContent("2 resultados");
+    expect(screen.getAllByText("Agaete - Información").length).toBeGreaterThan(0);
+
+    fireEvent.change(centerFilter, { target: { value: "Gáldar" } });
+    expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
+    expect(screen.getAllByText("Gáldar - Información").length).toBeGreaterThan(0);
+  });
+
+  it("shows Consultorios Locales separately with the C.L. explanation", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records = [
+      { ...structuredClone(defaultContacts.records[1]!), id: "local-clinic", externalId: "local-clinic", displayName: "Mogán Playa, C.L. - Administración", location: { center: "Mogán Playa, C.L." }, source: { externalId: "local-clinic", sheetSlug: "centros-de-salud-mogan-playa", sheetRow: "1" } },
+      { ...structuredClone(defaultContacts.records[1]!), id: "health-center", externalId: "health-center", displayName: "Agaete - Información", location: { center: "Agaete" }, source: { externalId: "health-center", sheetSlug: "centros-de-salud-agaete", sheetRow: "1" } }
+    ];
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/centers/local-clinics");
+
+    expect(screen.getByText("C.L. significa Consultorio Local.")).toHaveClass("text-base");
+    expect(await screen.findByLabelText("Centro de salud")).toHaveTextContent("Mogán Playa, C.L.");
+    expect(await screen.findAllByText("Mogán Playa, C.L. - Administración")).not.toHaveLength(0);
+    expect(screen.queryByText("Agaete - Información")).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the service in a composed local-clinic title", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records = [{
+      ...structuredClone(defaultContacts.records[1]!),
+      id: "local-clinic-admin",
+      externalId: "local-clinic-admin",
+      displayName: "Mogán Playa, C.L. - Administración",
+      organization: { service: "Administración" },
+      location: { center: "Mogán Playa, C.L." },
+      source: { externalId: "local-clinic-admin", sheetSlug: "centros-de-salud-mogan-playa", sheetRow: "1" }
+    }];
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/centers/local-clinics");
+
+    const result = await screen.findByRole("button", { name: /Mogán Playa, C\.L\. - Administración/ });
+    expect(within(result).getByRole("heading", { name: "Mogán Playa, C.L. - Administración" })).toBeInTheDocument();
+    expect(within(result).queryByRole("heading", { name: /Administración - Mogán Playa/ })).not.toBeInTheDocument();
+  });
+
+  it("shows one visible title for the selected center and keeps the search label accessible", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    renderPageAt("/centers/hsrg");
+
+    const heading = await screen.findByRole("heading", { name: "Hospital San Roque de Guía" });
+    const search = screen.getByLabelText("Buscar");
+
+    expect(heading).not.toHaveClass("sr-only");
+    expect(search.closest("div")?.querySelector("label")).not.toHaveClass("sr-only");
+    expect(search).toHaveAttribute("placeholder", "Buscar contacto o servicio");
+  });
+
+  it("keeps book shortcuts in Directorio and hides them in a secondary center", async () => {
+    useAppStore.setState({
+      contacts: defaultContacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    const { unmount } = renderPageAt("/");
+    expect(await screen.findByRole("group", { name: "Accesos rápidos por libro" })).toBeInTheDocument();
+    unmount();
+
+    renderPageAt("/centers/hsrg");
+    expect(screen.queryByRole("group", { name: "Accesos rápidos por libro" })).not.toBeInTheDocument();
+  });
+
+  it("resets pagination when changing center", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records = Array.from({ length: 11 }, (_, index) => ({
+      ...structuredClone(defaultContacts.records[0]),
+      id: `hsrg-${index}`,
+      displayName: `HSRG ${index + 1}`,
+      location: { center: "HSRG" }
+    }));
+    contacts.records.push(
+      ...Array.from({ length: 11 }, (_, index) => ({
+        ...structuredClone(defaultContacts.records[1]),
+        id: `hjci-${index}`,
+        displayName: `HJCI ${index + 1}`,
+        location: { center: "HJCI" }
+      }))
+    );
+    useAppStore.setState({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+      selectedRecordId: null,
+      isLoading: false,
+      bootstrapStatus: "success",
+      bootstrapError: "",
+      bootstrapHelp: ""
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/centers/hsrg"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <CenterRouteHarness />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Página siguiente" }));
+    expect((await screen.findAllByText("HSRG 11")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar a HJCI" }));
+
+    expect((await screen.findAllByText("HJCI 1")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("HJCI 11")).not.toBeInTheDocument();
   });
 
   it("shows phone numbers as text without a call link", async () => {
@@ -129,7 +375,7 @@ describe("DirectoryPage", () => {
     });
 
     renderPage();
-    fireEvent.change(await screen.findByLabelText("Buscar contactos"), {
+    fireEvent.change(await screen.findByLabelText("Buscar"), {
       target: { value: "Busca sin teléfono" }
     });
 
@@ -204,14 +450,14 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     const resultCount = screen.getByRole("status");
     expect(resultCount).toHaveAttribute("aria-live", "polite");
     expect(resultCount).toHaveAttribute("aria-atomic", "true");
     expect(resultCount).toHaveTextContent("3 resultados");
 
-    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+    fireEvent.change(screen.getByLabelText("Buscar"), {
       target: { value: "Control de planta" }
     });
 
@@ -231,7 +477,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).toHaveBeenCalledTimes(1);
   });
 
@@ -249,7 +495,7 @@ describe("DirectoryPage", () => {
     renderPage();
 
     // Page renders immediately from store — no IPC call
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(window.hospitalDirectory.getBootstrapData).not.toHaveBeenCalled();
   });
 
@@ -277,13 +523,39 @@ describe("DirectoryPage", () => {
     expect(highlight.parentElement).toBe(resultsList.parentElement);
     expect(highlight.nextElementSibling).toBe(resultsList);
 
-    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+    fireEvent.change(screen.getByLabelText("Buscar"), {
       target: { value: "consulta inexistente 79178" }
     });
 
     expect(screen.getByText("0 resultados")).toBeInTheDocument();
     expect(within(highlight).getByText("79178")).toBeInTheDocument();
     expect(within(resultsList).queryByText("79178")).not.toBeInTheDocument();
+  });
+
+  it("shows the CCEE appointments card only in Agenda and the two CAE routes", async () => {
+    const allowedRoutes = ["/", "/centers/cae-arucas", "/centers/cae-galdar"];
+    const otherRoutes = ["/centers/hsrg", "/centers/hjci", "/centers/health-centers", "/centers/local-clinics"];
+
+    for (const path of [...allowedRoutes, ...otherRoutes]) {
+      useAppStore.setState({
+        contacts: defaultContacts,
+        settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } },
+        selectedRecordId: null,
+        isLoading: false,
+        bootstrapStatus: "success",
+        bootstrapError: "",
+        bootstrapHelp: ""
+      });
+      const page = renderPageAt(path);
+      await screen.findByLabelText("Buscar");
+      const expected = allowedRoutes.includes(path);
+      if (expected) {
+        expect(screen.getByRole("complementary", { name: "Contacto destacado de citas" })).toBeInTheDocument();
+      } else {
+        expect(screen.queryByRole("complementary", { name: "Contacto destacado de citas" })).not.toBeInTheDocument();
+      }
+      page.unmount();
+    }
   });
 
   it("shows inactive records without any way to hide them (filters removed)", async () => {
@@ -310,7 +582,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     // This record inherits organization.service ("Información") from
     // the spread fixture record, so the title is composed with that prefix.
     expect((await screen.findAllByText(/control de noche/i)).length).toBeGreaterThan(0);
@@ -332,7 +604,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByLabelText("Tipo")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Área")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Etiqueta")).not.toBeInTheDocument();
@@ -356,7 +628,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = await screen.findByRole("list", { name: "Resultados del directorio" });
     // The subtitle now combines the name and role/category with " · " —
     // record[0]'s displayName ("Admisión General") is not a duplicate of its
@@ -381,7 +653,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const row = within(list).getByRole("button", { name: /admisión general/i });
     expect(within(row).getByText("70005")).toBeInTheDocument();
@@ -475,7 +747,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const row = within(list).getByRole("button", { name: /admisión general/i });
     expect(within(row).getByText("70005")).toBeInTheDocument();
@@ -495,7 +767,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // The title is composed as "{service} - {displayName}" when the
     // service adds context, so match with a regex instead of the exact name.
@@ -529,7 +801,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const heading = within(list).getByRole("heading", { name: contacts.records[0]!.displayName });
     const card = heading.closest("button");
@@ -550,7 +822,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     expect(within(list).queryByText(/Sin unidad/)).not.toBeInTheDocument();
     // Old "Tipo · Unidad" line for record[0] (type "service", department "Admisión").
@@ -575,7 +847,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // The name renders once (the title) — the duplicate service line is skipped.
     expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
@@ -597,7 +869,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // defaultContacts.records[0].organization.service === "Información", distinct
     // from displayName "Admisión General" — the subtitle shows the name itself
@@ -628,7 +900,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     const heading = within(list).getByRole("heading", { name: /taller comunicaciones/i });
     const card = heading.closest("button");
@@ -653,7 +925,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).getByText("Enfermero/a")).toBeInTheDocument();
   });
@@ -676,7 +948,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.getAllByText("Confidencial").length).toBeGreaterThan(0);
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     expect(within(detail).getAllByText("No facilitar a pacientes").length).toBeGreaterThan(0);
@@ -720,7 +992,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     // records[0].type is "service" -> label "Servicio" — the pill must be gone.
     expect(within(detail).queryByText("Servicio")).not.toBeInTheDocument();
@@ -743,7 +1015,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     const markers = within(detail).getAllByText("Confidencial");
     expect(markers).toHaveLength(1);
@@ -768,7 +1040,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     expect(within(list).getByText("Alergia - Nereida")).toBeInTheDocument();
 
@@ -797,7 +1069,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // Service already contains the full name — must NOT render as
     // "Cocina Francisco Artíles - Francisco Artíles". The title (h3) itself
@@ -844,7 +1116,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     expect(within(list).queryByText(/Helipuerto \(Secretaría\) - Helipuerto \(Secretaría\)/)).not.toBeInTheDocument();
     expect(within(list).getAllByText("Helipuerto (Secretaría)")).toHaveLength(1);
@@ -877,7 +1149,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     expect(within(list).getByRole("heading", { name: "Lencería - San Roque de Guía" })).toBeInTheDocument();
 
@@ -903,7 +1175,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
     // The title correctly shows just "Sindicato Médico" (exact-match, no
     // composition) exactly once.
@@ -930,7 +1202,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Resultados del directorio" });
     // "Recepción Central" now appears twice in the list card too — once as
     // the (uncomposed, no-service) title, and once as the subtitle's name
@@ -1126,7 +1398,7 @@ describe("DirectoryPage", () => {
     const target = contacts.records[1]!;
     target.location = {
       ...target.location,
-      center: "Hospital Central",
+      center: "HUGCDN",
       floor: "6",
       room: "301"
     };
@@ -1155,7 +1427,7 @@ describe("DirectoryPage", () => {
     const locationText = within(detail).getByText(/Planta 6/);
     expect(locationText).toBeInTheDocument();
     expect(locationText.textContent).toContain("Planta 6");
-    expect(locationText.textContent).toContain("Hospital Central");
+    expect(locationText.textContent).toContain("HUGCDN");
     expect(locationText.textContent).toContain("Hab 301");
     expect(locationText.textContent).not.toMatch(/·\s*6\s*·/);
   });
@@ -1197,7 +1469,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByText("Número interno confidencial.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartir con pacientes.")).not.toBeInTheDocument();
     expect(screen.queryByText("No compartas este contacto con pacientes ni acompañantes.")).not.toBeInTheDocument();
@@ -1221,7 +1493,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByText("Teléfonos")).not.toBeInTheDocument();
     expect(screen.queryByText("0 disponibles")).not.toBeInTheDocument();
     expect(screen.queryByText("No hay teléfonos registrados.")).not.toBeInTheDocument();
@@ -1242,7 +1514,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     const selectedButton = screen.getByRole("button", { name: /admisión general/i });
     expect(selectedButton).toHaveAttribute("aria-pressed", "true");
@@ -1278,6 +1550,24 @@ describe("DirectoryPage", () => {
     expect(within(detail).getByRole("link", { name: `Editar: ${contacts.records[0]!.displayName}` })).toBeInTheDocument();
   });
 
+  it("shows a short number on the result and selected-record detail", async () => {
+    const contacts = structuredClone(defaultContacts);
+    contacts.records[0]!.contactMethods.phones[0]!.extension = "55102";
+    contacts.records[0]!.contactMethods.phones[0]!.noPatientSharing = false;
+    window.hospitalDirectory.getBootstrapData = vi.fn().mockResolvedValue({
+      contacts,
+      settings: { editorName: "", dataFilePath: "/tmp/data/contacts.json", backupDirectoryPath: "/tmp/backups", ui: { showInactiveByDefault: false } }
+    });
+
+    renderPage();
+
+    const list = await screen.findByRole("list", { name: "Resultados del directorio" });
+    const row = within(list).getByRole("button", { name: /admisión general/i });
+    expect(within(row).getByText("Corto: 55102")).toBeInTheDocument();
+    const detail = screen.getByRole("region", { name: "Detalle del registro seleccionado" });
+    expect(within(detail).getByText("Número corto: 55102")).toBeInTheDocument();
+  });
+
   it("caps visible results to ten per page and exposes pagination", async () => {
     const contacts = structuredClone(defaultContacts);
 
@@ -1303,7 +1593,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir a la página 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Página anterior" })).toHaveClass("focus-ring");
     expect(screen.queryByText("Registro extra 9")).not.toBeInTheDocument();
@@ -1325,9 +1615,9 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
-    const searchInput = screen.getByLabelText("Buscar contactos");
+    const searchInput = screen.getByLabelText("Buscar");
     const filterBar = searchInput.closest("div.lg\\:sticky");
     expect(filterBar).toHaveClass("lg:sticky");
 
@@ -1353,8 +1643,8 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar"), {
       target: { value: "sin-coincidencias" }
     });
 
@@ -1407,7 +1697,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Ir a la página 2" }));
 
@@ -1763,7 +2053,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Detalle del registro seleccionado" })).toBeInTheDocument();
   });
 
@@ -1780,7 +2070,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     const firstRecord = defaultContacts.records[0]!;
     const editLink = screen.getByRole("link", { name: `Editar: ${firstRecord.displayName}` });
@@ -1822,7 +2112,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    const searchBar = (await screen.findByLabelText("Buscar contactos")).closest(".lg\\:sticky");
+    const searchBar = (await screen.findByLabelText("Buscar")).closest(".lg\\:sticky");
     expect(searchBar).not.toBeNull();
     expect(searchBar).not.toHaveClass("sticky");
     const pinned = screen.getByRole("complementary", { name: "Contacto destacado de citas" });
@@ -1842,10 +2132,10 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     // A query with no matches clears the selection, revealing the empty detail state.
-    fireEvent.change(screen.getByLabelText("Buscar contactos"), {
+    fireEvent.change(screen.getByLabelText("Buscar"), {
       target: { value: "sin-coincidencias" }
     });
 
@@ -1868,7 +2158,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     const heading = screen.getByRole("heading", { name: /admisión general/i, level: 4 });
     expect(heading).toBeInTheDocument();
     expect(heading.tagName.toLowerCase()).toBe("h4");
@@ -1900,7 +2190,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.getByText("Correos electrónicos")).toBeInTheDocument();
     expect(screen.getByText("registro.largo@hospital-canarias.local")).toBeInTheDocument();
     expect(screen.getByText("Laboral")).toBeInTheDocument();
@@ -1926,7 +2216,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByText("Correos electrónicos")).not.toBeInTheDocument();
     expect(screen.queryByText("0 disponibles")).not.toBeInTheDocument();
     expect(screen.queryByText("No hay correos registrados.")).not.toBeInTheDocument();
@@ -1976,7 +2266,7 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.queryByText("Confidencial")).not.toBeInTheDocument();
 
     // Simulate the save flow's store update (useContactForm's submit handler
@@ -2021,13 +2311,13 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("3 resultados");
 
     const sindicatosButton = screen.getByRole("button", { name: "Sindicatos" });
     fireEvent.click(sindicatosButton);
 
-    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("Sindicatos");
+    expect(screen.getByLabelText("Buscar")).toHaveValue("Sindicatos");
     expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
     // "Delegado Sindical" now appears twice — once as the list card's
     // subtitle name line, once in the detail view's "Nombre y Apellidos" card.
@@ -2057,15 +2347,15 @@ describe("DirectoryPage", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Buscar contactos")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Buscar")).toBeInTheDocument();
 
     const umiButton = screen.getByRole("button", { name: "UMI" });
     fireEvent.click(umiButton);
-    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("UMI");
+    expect(screen.getByLabelText("Buscar")).toHaveValue("UMI");
     expect(screen.getByRole("status")).toHaveTextContent("1 resultados");
 
     fireEvent.click(umiButton);
-    expect(screen.getByLabelText("Buscar contactos")).toHaveValue("");
+    expect(screen.getByLabelText("Buscar")).toHaveValue("");
     expect(umiButton).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("status")).toHaveTextContent("3 resultados");
   });

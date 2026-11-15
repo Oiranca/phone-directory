@@ -60,6 +60,7 @@ export const blankRecord = (): NormalizedImportRow => ({
   building: "",
   floor: "",
   room: "",
+  locationCenter: "",
   locationText: "",
   // ODS "Sector"/"Sección" columns.
   sector: "",
@@ -171,6 +172,16 @@ const looksLikeCenterHeader = (first: string, second: string) => {
 };
 
 const splitCenterAddress = (raw: string) => {
+  const lines = raw.split(/\r?\n/u).map(clean).filter(Boolean);
+  if (lines.length > 1) {
+    const center = lines[0]!
+      .replace(/,\s*/gu, ", ")
+      .toLocaleLowerCase("es")
+      .replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"))
+      .replace(/C\.L\./giu, "C.L.");
+    return { center, address: clean(lines.slice(1).join(" ")) };
+  }
+
   const value = clean(raw);
   let index = 0;
   const prefixChars: string[] = [];
@@ -207,11 +218,11 @@ const splitCenterAddress = (raw: string) => {
     centerRaw = centerRaw.slice(0, -1).trimEnd();
   }
 
-  const center = clean(
-    centerRaw
-      .toLowerCase()
-      .replace(/\b\w/g, (match) => match.toUpperCase())
-  );
+  const center = centerRaw
+    .replace(/,\s*/gu, ", ")
+    .toLocaleLowerCase("es")
+    .replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"))
+    .replace(/C\.L\./giu, "C.L.");
 
   return {
     center: center || value,
@@ -244,6 +255,7 @@ export const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) =
   let currentAddress = "";
 
   data.forEach((row) => {
+    const rawFirst = row[0] ?? "";
     const cells = row.map((value) => clean(value));
     const first = cells[0] ?? "";
     const second = cells[1] ?? "";
@@ -259,7 +271,7 @@ export const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) =
     let shortNumber = "";
 
     if (looksLikeCenterHeader(first, second)) {
-      const normalized = splitCenterAddress(first);
+      const normalized = splitCenterAddress(rawFirst);
       currentCenter = normalized.center;
       currentAddress = normalized.address;
       service = normalizeCenterService(second);
@@ -289,6 +301,7 @@ export const normalizeCentersSheet = (sheet: SheetData, profile: SheetProfile) =
     ])}`;
     record.type = "external-center";
     record.displayName = `${currentCenter} - ${service}`;
+    record.locationCenter = currentCenter;
     record.area = "otros";
     record.department = "Centros de salud";
     record.service = service;

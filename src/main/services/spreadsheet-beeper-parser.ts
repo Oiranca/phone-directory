@@ -353,6 +353,7 @@ const parseLegacyLayoutSheet = (sheet: RawSheetData): BeepersSheetParseResult =>
       records.push({
         deviceNumber: normalizePagerNumber(cellValue),
         department,
+        category: undefined,
         holderType,
         sourceSheet: sheetName,
         sourceRow: rowIdx

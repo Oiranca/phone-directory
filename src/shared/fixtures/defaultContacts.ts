@@ -9,11 +9,19 @@ export const defaultContacts: DirectoryDataset = {
     generatedBy: "src/shared/fixtures/defaultContacts.ts",
     editorName: "System",
     typeCounts: {
+      person: 0,
       service: 1,
-      "external-center": 1
+      department: 0,
+      control: 0,
+      supervision: 0,
+      room: 0,
+      "external-center": 1,
+      other: 0
     },
     areaCounts: {
+      "sanitaria-asistencial": 0,
       "gestion-administracion": 1,
+      especialidades: 0,
       otros: 1
     }
   },

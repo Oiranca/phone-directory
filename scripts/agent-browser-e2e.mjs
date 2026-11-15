@@ -332,6 +332,16 @@ try {
     }))()`));
     return size.outerWidth <= 390 && size.innerWidth < 640 && size.navPosition === "fixed";
   });
+  const mobileRailItems = JSON.parse(browserCommand("eval", `(() => {
+    const nav = document.querySelector('nav[aria-label="Navegación principal"]');
+    return [...nav.children]
+      .flatMap((item) => getComputedStyle(item).display === 'contents' ? [...item.children] : [item])
+      .filter((item) => item.matches('a, details') && item.getClientRects().length > 0)
+      .map((item) => ({ label: item.textContent.trim(), width: item.getBoundingClientRect().width }));
+  })()`));
+  if (mobileRailItems.length !== 6 || mobileRailItems.some((item) => Math.abs(item.width - mobileRailItems[0].width) > 1)) {
+    throw new Error(`Mobile navigation items must have equal widths: ${JSON.stringify(mobileRailItems)}`);
+  }
   browserCommand("eval", "window.resizeTo(1440, 920)");
   console.log("[agent-browser-e2e] Native 390px window and bottom navigation passed");
 
@@ -349,7 +359,7 @@ try {
   await fs.mkdir(baselineDirectory, { recursive: true });
   const baseline = [];
   for (const page of [
-    { name: "directory", link: null, heading: "Búsqueda de contactos", focus: "#directory-search", border: "main li.rounded-2xl.border" },
+    { name: "directory", link: null, heading: "Agenda", focus: "#directory-search", border: "main li.rounded-2xl.border" },
     { name: "new-record", link: "Nuevo registro", heading: "Alta de contacto", focus: "#displayName", border: "main section.rounded-3xl.border" },
     { name: "beepers", link: "Buscas", heading: "Buscas", focus: "#beeper-search", border: "#beeper-search" },
     { name: "settings", link: "Configuración", heading: "Configuración", focus: "#settings-editor-name", border: "#settings-editor-name" }
@@ -395,7 +405,7 @@ try {
   const reference = JSON.parse(await fs.readFile(path.join(repoRootDir,
     "docs", "visual-baseline", "tailwind4", "metrics.json"), "utf8"));
   assertVisualBaseline(baseline, reference);
-  await navigateWithinBudget("Directorio", "Búsqueda de contactos");
+  await navigateWithinBudget("Agenda", "Agenda");
   browserCommand("set", "viewport", "1440", "900");
   console.log("[agent-browser-e2e] Tailwind baseline: 16 focused screenshots and computed styles match reference");
 
@@ -491,8 +501,9 @@ try {
   await waitFor("retention resaved", () => hasText("Configuración guardada."));
   const toastOverlap = JSON.parse(browserCommand("eval", `(() => {
     const target = document.querySelector(${JSON.stringify(retentionInput)});
-    const toast = document.querySelector('[aria-label="Notificaciones"] [role="status"]');
-    if (!target || !toast) return { overlaps: false, targetAtCenter: false };
+    const toast = document.querySelector('[aria-label="Notificaciones"] > div');
+    const hasStatusAnnouncement = Boolean(document.querySelector('[aria-label="Notificaciones"] [role="status"]'));
+    if (!target || !toast) return { overlaps: false, targetAtCenter: false, hasStatusAnnouncement };
     target.scrollIntoView({ block: "start" });
     const targetBeforeScroll = target.getBoundingClientRect();
     window.scrollBy(0, targetBeforeScroll.top + targetBeforeScroll.height / 2 - 160);
@@ -504,6 +515,7 @@ try {
     const elementAtCenter = document.elementFromPoint(centerX, centerY);
     return {
       innerWidth,
+      hasStatusAnnouncement,
       scrollWidth: document.documentElement.scrollWidth,
       overlaps: centerX >= toastRect.left && centerX <= toastRect.right && centerY >= toastRect.top && centerY <= toastRect.bottom,
       outsideDismissButton: !dismissRect || centerX < dismissRect.left || centerX > dismissRect.right || centerY < dismissRect.top || centerY > dismissRect.bottom,
@@ -512,7 +524,7 @@ try {
       toast: { left: toastRect.left, top: toastRect.top, right: toastRect.right, bottom: toastRect.bottom }
     };
   })()`));
-  if (toastOverlap.innerWidth !== 320 || toastOverlap.scrollWidth > toastOverlap.innerWidth + 1 || !toastOverlap.overlaps || !toastOverlap.outsideDismissButton || !toastOverlap.targetAtCenter) throw new Error(`Toast did not allow pointer hit testing: ${JSON.stringify(toastOverlap)}`);
+  if (toastOverlap.innerWidth !== 320 || toastOverlap.scrollWidth > toastOverlap.innerWidth + 1 || !toastOverlap.hasStatusAnnouncement || !toastOverlap.overlaps || !toastOverlap.outsideDismissButton || !toastOverlap.targetAtCenter) throw new Error(`Toast did not allow pointer hit testing: ${JSON.stringify(toastOverlap)}`);
   browserCommand("screenshot", path.join(visualArtifactDirectory, "settings-320-200-toast-before-focus.png"));
   if (!hasText("Configuración guardada.")) throw new Error("Toast was not present before the retention input click");
   browserCommand("click", retentionInput);
@@ -522,7 +534,7 @@ try {
     const target = document.querySelector(${JSON.stringify(retentionInput)});
     if (!target) return false;
     const targetRect = target.getBoundingClientRect();
-    return [...document.querySelectorAll('[aria-label="Notificaciones"] [role]')].every(toast => {
+    return [...document.querySelectorAll('[aria-label="Notificaciones"] > div')].every(toast => {
       const toastRect = toast.getBoundingClientRect();
       return targetRect.left >= toastRect.right || targetRect.right <= toastRect.left || targetRect.top >= toastRect.bottom || targetRect.bottom <= toastRect.top;
     });
@@ -765,7 +777,7 @@ try {
   }
   console.log("[agent-browser-e2e] Cross-document navigation invalidated import token");
 
-  clickRole("link", "Directorio");
+  clickRole("link", "Agenda", true);
   await waitFor("directory after import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Mostrador E2E");
   await waitFor("imported contact", () => browserCommand("eval", 'Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Mostrador E2E"))') === "true");
@@ -930,7 +942,7 @@ try {
     throw new Error(`Imported master locations were wrong: ${JSON.stringify(imported.records.map(({ displayName, location }) => ({ displayName, location })))}`);
   }
 
-  clickRole("link", "Directorio");
+  clickRole("link", "Agenda", true);
   await waitFor("directory after master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Pilar");
   await waitFor("first shared-extension person in directory", () => browserCommand("is", "visible", `[data-record-id="${pilar.id}"]`) === "true");
@@ -954,7 +966,7 @@ try {
     return teams.length === 1 && teams[0]?.name === "Equipo Importado" && teams[0]?.displayId === "9801";
   })()`) === "true");
   browserCommand("fill", "#beeper-search", "Busca E2E");
-  await waitFor("beeper-only details present in beeper catalog", () => hasText("9001") && hasText("Servicio E2E") && hasText("Horario E2E") && hasText("Nota E2E"));
+  await waitFor("beeper-only details present in beeper catalog", () => hasText("9001") && hasText("SERVICIO E2E") && hasText("Horario E2E") && hasText("Nota E2E"));
   browserCommand("eval", `(() => {
     const input = document.querySelector('#beeper-search');
     if (!input) return false;
@@ -972,16 +984,25 @@ try {
   const teamsDialogIsReadOnly = (expectedTeams) => browserCommand("eval", `(() => {
     const dialog = document.querySelector("dialog[open]");
     if (!dialog) return false;
-    const listed = [...dialog.querySelectorAll('ul[aria-label="Equipos"] li')]
-      .map((item) => {
-        const [name, number] = item.querySelectorAll(":scope > span");
-        return (name?.textContent?.trim() + " " + number?.lastChild?.textContent?.trim()).trim();
-      });
+    const listed = [...dialog.querySelectorAll('ul[aria-label="Equipos"] > li')];
     const buttons = [...dialog.querySelectorAll("button")].map((button) => button.textContent.trim());
-    return listed.length === ${JSON.stringify(expectedTeams)}.length && ${JSON.stringify(expectedTeams)}.every((team) => listed.includes(team)) &&
+    return listed.length === ${JSON.stringify(expectedTeams)}.length && ${JSON.stringify(expectedTeams)}.every(({ name, number, members }) => {
+      const team = listed.find((item) => {
+        const [teamName, teamNumber] = item.querySelectorAll(":scope > div > span");
+        return teamName?.textContent?.trim() === name && teamNumber?.lastChild?.textContent?.trim() === number;
+      });
+      if (!team) return false;
+
+      const membersList = [...team.querySelectorAll(":scope > ul")]
+        .find((list) => list.getAttribute("aria-label") === \`Buscas de \${name}\`);
+      if (!membersList) return false;
+
+      const listedMembers = [...membersList.querySelectorAll(":scope > li")].map((member) => member.textContent?.trim());
+      return members.length > 0
+        ? members.every((member) => listedMembers.includes(member))
+        : listedMembers.length === 1 && listedMembers[0] === "Sin buscas asignados.";
+    }) &&
       buttons.length === 1 && buttons[0] === "Cerrar" &&
-      !dialog.innerText.includes("Nombre y número de busca de cada equipo.") &&
-      !dialog.innerText.includes("Buscas del equipo") &&
       !dialog.querySelector("input, select, textarea");
   })()`) === "true";
   const openTeamsDialog = async (expectedTeams) => {
@@ -989,7 +1010,7 @@ try {
     await waitFor("read-only teams dialog", () => teamsDialogIsReadOnly(expectedTeams));
   };
 
-  await openTeamsDialog(["Equipo Importado 9801"]);
+  await openTeamsDialog([{ name: "Equipo Importado", number: "9801", members: [] }]);
   browserCommand("press", "Escape");
   await waitFor("teams dialog closes with Escape", () => browserCommand("eval", `(() =>
     !document.querySelector("dialog[open]") && document.activeElement?.textContent?.trim() === "Equipos"
@@ -1003,14 +1024,17 @@ try {
   browserCommand("fill", "#team-display-id", "9901");
   clickRole("button", "Guardar equipo", true);
   await waitFor("new team returns to beeper catalog", () => h2Is("Buscas") && !onCreateRoute());
-  await openTeamsDialog(["Equipo Importado 9801", "Equipo E2E 9901"]);
+  await openTeamsDialog([
+    { name: "Equipo Importado", number: "9801", members: [] },
+    { name: "Equipo E2E", number: "9901", members: [] }
+  ]);
   clickRole("button", "Cerrar", true);
   await waitFor("teams dialog closes", () => browserCommand("eval", "!document.querySelector('dialog[open]')") === "true");
   browserCommand("fill", "#beeper-search", "9002");
   await waitFor("phone-plus-beeper contact remains in beeper catalog (holder shown with the first letter of each word capitalized)", () => hasText("9002") && hasText("Contacto Con Busca Y Teléfono"));
   browserCommand("fill", "#beeper-search", "Contacto con Ubicación");
   await waitFor("phone-only record absent from beeper catalog", () => hasText("Sin resultados"));
-  clickRole("link", "Directorio");
+  clickRole("link", "Agenda", true);
   await waitFor("directory restored after beeper check", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
   browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', "Contacto con Ubicación");
   await waitFor("generated master contact card", () => browserCommand("is", "visible", `[data-record-id="${compositeLocation.id}"]`) === "true");
@@ -1030,7 +1054,10 @@ try {
   await launchElectron([], masterUserDataPath);
   clickRole("link", "Buscas", true);
   await waitFor("beeper catalog after restart", () => h2Is("Buscas"));
-  await openTeamsDialog(["Equipo Importado 9801", "Equipo E2E 9901"]);
+  await openTeamsDialog([
+    { name: "Equipo Importado", number: "9801", members: [] },
+    { name: "Equipo E2E", number: "9901", members: [] }
+  ]);
   clickRole("button", "Cerrar", true);
   await waitFor("teams dialog closes after restart", () => browserCommand("eval", "!document.querySelector('dialog[open]')") === "true");
   console.log("[agent-browser-e2e] Generated master import split shared-extension people, separated beeper-only and phone-only rows, and rendered locations");
@@ -1085,7 +1112,7 @@ try {
       throw new Error(`Provided master records changed beyond sequential phone labels: ${imported.records.length}`);
     }
 
-    clickRole("link", "Directorio");
+    clickRole("link", "Agenda", true);
     await waitFor("directory after provided master import", () => browserCommand("is", "visible", 'input[placeholder="Buscar contacto o servicio"]') === "true");
     browserCommand("fill", 'input[placeholder="Buscar contacto o servicio"]', searchableRecord.displayName);
     await waitFor("provided master contact card", () => browserCommand("is", "visible", `[data-record-id="${searchableRecord.id}"]`) === "true");

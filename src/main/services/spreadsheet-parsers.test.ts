@@ -56,6 +56,7 @@ describe("blankRecord", () => {
     expect(record.building).toBe("");
     expect(record.floor).toBe("");
     expect(record.room).toBe("");
+    expect(record.locationCenter).toBe("");
     expect(record.locationText).toBe("");
   });
 
@@ -135,6 +136,7 @@ describe("blankRecord", () => {
       "firstName",
       "floor",
       "lastName",
+      "locationCenter",
       "locationText",
       "notes",
       "phone1Confidential",

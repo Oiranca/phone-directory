@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0] - 2026-11-15
+
+### Added
+
+- Add a dedicated Consultorios Locales destination beside the health-center directory.
+
+### Fixed
+
+- Preserve center names and short numbers when importing workbooks, prevent duplicate center/service titles, and show the CCEE appointments card only in Agenda and the two CAE destinations.
+
 ## [0.3.5] - 2026-11-15
 
 ### Changed

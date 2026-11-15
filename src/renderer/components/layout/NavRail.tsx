@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router";
+import { useEffect, useRef } from "react";
+import { NavLink, useLocation } from "react-router";
 import { useAppStore } from "../../store/useAppStore";
+import { DIRECTORY_CENTER_DESTINATIONS } from "../../services/directory-centers";
 
 const DirectoryIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="h-[18px] w-[18px] shrink-0">
@@ -61,15 +63,49 @@ interface RailNavItem {
   icon: ReactNode;
 }
 
-// Visual order in the rail (top-to-bottom). Kept separate from the Alt+N
-// keyboard shortcut mapping in AppShell, which is documented in
-// docs/KEYBOARD_SHORTCUTS.md and must not change just because the rail's
-// visual grouping (Nuevo registro and Configuración pinned to the bottom)
-// differs from it.
-const primaryNavItems: RailNavItem[] = [
-  { to: "/", label: "Directorio", title: "Directorio — Alt+1", icon: <DirectoryIcon /> },
-  { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> }
+interface RailNavSection {
+  label: string;
+  items: RailNavItem[];
+}
+
+const directoryNavItem: RailNavItem = {
+  to: "/",
+  label: "Agenda",
+  title: "Agenda — Alt+1",
+  icon: <DirectoryIcon />
+};
+
+const centerNavItems: RailNavItem[] = DIRECTORY_CENTER_DESTINATIONS.filter((center) => center.id !== "hugcdn").map((center) => ({
+  to: `/centers/${center.id}`,
+  label: center.label,
+  title: center.title,
+  icon: <DirectoryIcon />
+}));
+
+const getCenterNavItem = (id: string) => {
+  const item = centerNavItems.find((center) => center.to === `/centers/${id}`);
+  if (!item) throw new Error(`Missing navigation item for ${id}`);
+  return item;
+};
+
+const buscasNavItem: RailNavItem = { to: "/beeper", label: "Buscas", title: "Buscas — Alt+4", icon: <BeepersIcon /> };
+
+const directoryNavSections: RailNavSection[] = [
+  { label: "Doctor Negrín", items: [directoryNavItem, buscasNavItem] },
+  { label: "Hospital Polivalente", items: [{ ...getCenterNavItem("hospital-polivalente"), label: "Polivalente" }] },
+  { label: "Juan Carlos I", items: [getCenterNavItem("hjci")] },
+  { label: "Otros centros", items: [getCenterNavItem("hsrg"), getCenterNavItem("cae-arucas"), getCenterNavItem("cae-galdar")] },
+  { label: "Centros de Salud", items: [getCenterNavItem("health-centers"), getCenterNavItem("local-clinics")] },
+  {
+    label: "Unidad de Salud Mental",
+    items: ["usm-canalejas", "usm-casa-del-mar", "usm-costa-ayala", "usm-la-feria"].map((id) => {
+      const item = getCenterNavItem(id);
+      return { ...item, label: `USM · ${item.label.replace("Unidad de Salud Mental de ", "")}` };
+    })
+  }
 ];
+
+const mobileCenterNavSections = directoryNavSections.slice(1);
 
 const bottomNavItems: RailNavItem[] = [
   { to: "/contacts/new", label: "Nuevo registro", title: "Nuevo registro — Alt+2", icon: <NewRecordIcon /> },
@@ -78,23 +114,30 @@ const bottomNavItems: RailNavItem[] = [
 ];
 
 const baseItemClasses =
-  "focus-ring flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[10px] px-1 text-center text-[10px] font-semibold leading-tight transition-colors sm:flex-none sm:flex-row sm:text-left sm:text-[13px]";
-const expandedItemClasses = "sm:h-10 sm:w-full sm:justify-start sm:gap-[10px] sm:px-[11px]";
+  "focus-ring flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[10px] px-1 text-center text-[10px] font-semibold leading-tight transition-colors sm:min-h-0 sm:flex-none sm:flex-row sm:text-left sm:text-[13px]";
+const expandedItemClasses = "sm:min-h-10 sm:h-auto sm:w-full sm:justify-start sm:gap-[10px] sm:px-[11px]";
+const compactExpandedItemClasses = "sm:min-h-8 sm:h-auto sm:w-full sm:justify-start sm:gap-2 sm:px-2";
+const mobileCenterMenuItemClasses =
+  "focus-ring flex min-h-11 items-center gap-2 rounded-[10px] px-3 text-left text-base font-semibold leading-tight transition-colors";
 const activeItemClasses = "bg-scs-blue text-white";
 const inactiveItemClasses = "bg-transparent text-white/55 hover:text-white/80";
+export const NAV_RAIL_HEIGHT_CSS_VAR = "--nav-rail-height";
 
-const RailNavLink = ({ item }: { item: RailNavItem }) => {
+const RailNavLink = ({ item, onNavigate, itemClasses = baseItemClasses, compact = false }: { item: RailNavItem; onNavigate?: () => void; itemClasses?: string; compact?: boolean }) => {
   const setQuery = useAppStore((state) => state.setQuery);
-  const clearsSearch = item.to === "/" || item.to === "/beeper";
+  const clearsSearch = item.to === "/" || item.to.startsWith("/centers/") || item.to === "/beeper";
 
   return (
   <NavLink
     to={item.to}
     end={item.to === "/beeper"}
     title={item.title}
-    onClick={clearsSearch ? () => setQuery("") : undefined}
+    onClick={() => {
+      if (clearsSearch) setQuery("");
+      onNavigate?.();
+    }}
     className={({ isActive }) =>
-      [baseItemClasses, expandedItemClasses, isActive ? activeItemClasses : inactiveItemClasses].join(" ")
+      [itemClasses, compact ? compactExpandedItemClasses : expandedItemClasses, isActive ? activeItemClasses : inactiveItemClasses].join(" ")
     }
   >
     {item.icon}
@@ -103,10 +146,56 @@ const RailNavLink = ({ item }: { item: RailNavItem }) => {
   );
 };
 
+const MobileCenterMenu = () => {
+  const { pathname } = useLocation();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const activeCenter = centerNavItems.find((item) => item.to === pathname);
+  const summaryClasses = activeCenter ? activeItemClasses : "text-white/55 hover:text-white/80";
+
+  useEffect(() => {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }, [pathname]);
+
+  return (
+  <details ref={detailsRef} data-center-menu className="relative min-w-0 w-full sm:hidden">
+    <summary className={`${baseItemClasses} w-full ${summaryClasses} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}>
+      <DirectoryIcon />
+      <span>Centros</span>
+    </summary>
+    <div className="absolute bottom-[calc(100%+8px)] left-0 z-10 grid max-h-[calc(100dvh-var(--nav-rail-height,72px)-24px)] min-w-[192px] gap-3 overflow-y-auto rounded-xl bg-scs-ink p-2 shadow-lg">
+      {mobileCenterNavSections.map((section) => (
+        <section key={section.label} aria-label={section.label} className="grid gap-2 border-t border-white/15 pt-2 first:border-t-0 first:pt-0">
+          {section.items.map((item) => (
+            <RailNavLink key={item.to} item={item} itemClasses={mobileCenterMenuItemClasses} onNavigate={() => { if (detailsRef.current) detailsRef.current.open = false; }} />
+          ))}
+        </section>
+      ))}
+    </div>
+  </details>
+  );
+};
+
 export const NavRail = () => {
+  const railRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail || typeof ResizeObserver === "undefined") return;
+
+    const applyHeight = () => {
+      document.documentElement.style.setProperty(NAV_RAIL_HEIGHT_CSS_VAR, `${rail.getBoundingClientRect().height}px`);
+    };
+
+    applyHeight();
+    const observer = new ResizeObserver(applyHeight);
+    observer.observe(rail);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-50 flex h-[72px] w-screen bg-scs-ink px-2 py-2 sm:sticky sm:inset-auto sm:top-0 sm:h-screen sm:w-[192px] sm:shrink-0 sm:flex-col sm:items-stretch sm:overflow-hidden sm:px-[10px] sm:py-[14px]"
+      ref={railRef}
+      className="fixed inset-x-0 bottom-0 z-50 flex min-h-[72px] w-screen overflow-visible bg-scs-ink px-2 py-2 sm:sticky sm:inset-auto sm:top-0 sm:h-screen sm:w-[192px] sm:shrink-0 sm:flex-col sm:items-stretch sm:overflow-y-auto sm:overflow-x-hidden sm:px-[10px] sm:py-[14px]"
       style={{ gap: "6px" }}
     >
       <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-scs-blue text-[11px] font-bold text-white sm:flex">
@@ -115,12 +204,23 @@ export const NavRail = () => {
 
       <nav
         aria-label="Navegación principal"
-        className="flex min-w-0 flex-1 flex-row items-stretch sm:flex-col sm:items-stretch"
+        className="grid min-w-0 flex-1 grid-cols-6 items-stretch sm:flex sm:flex-col sm:items-stretch"
         style={{ gap: "6px" }}
       >
-        {primaryNavItems.map((item) => (
-          <RailNavLink key={item.to} item={item} />
-        ))}
+        <div data-navigation-sections="desktop" className="hidden sm:flex sm:flex-col sm:gap-3">
+          {directoryNavSections.map((section) => (
+            <section key={section.label} aria-label={section.label} className="flex flex-col gap-1 border-t border-white/15 pt-3 first:border-t-0 first:pt-0">
+              {section.items.map((item) => (
+                <RailNavLink key={item.to} item={item} compact />
+              ))}
+            </section>
+          ))}
+        </div>
+        <div className="contents sm:hidden">
+          <RailNavLink item={directoryNavItem} />
+          <MobileCenterMenu />
+          <RailNavLink item={buscasNavItem} />
+        </div>
         <div aria-hidden="true" className="hidden sm:block sm:flex-1" />
         {bottomNavItems.map((item) => (
           <RailNavLink key={item.to} item={item} />

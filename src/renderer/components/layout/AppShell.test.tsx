@@ -29,11 +29,17 @@ afterEach(() => {
 });
 
 describe("AppShell — default mode", () => {
+  it("reserves the measured mobile rail height", () => {
+    renderShell();
+
+    expect(screen.getByRole("main").parentElement).toHaveClass("pb-[var(--nav-rail-height,72px)]");
+  });
+
   it("renders nav without a standalone duplicates link", () => {
     renderShell();
     const nav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(nav).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Directorio" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Gestión Buscas" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
@@ -44,7 +50,7 @@ describe("AppShell — default mode", () => {
 
   it("nav links have correct hrefs", () => {
     renderShell();
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
     expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("href", "/beeper/new");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
@@ -52,16 +58,16 @@ describe("AppShell — default mode", () => {
 
   it("nav links expose keyboard shortcut hint via title attribute", () => {
     renderShell();
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("title", "Directorio — Alt+1");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).toHaveAttribute("title", "Agenda — Alt+1");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
+    expect(screen.getAllByRole("link", { name: "Buscas" })[0]).toHaveAttribute("title", "Buscas — Alt+4");
     expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("title", "Gestión Buscas");
   });
 
   it("nav links keep the shared focus visibility class", () => {
     renderShell();
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveClass("focus-ring");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).toHaveClass("focus-ring");
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveClass("focus-ring");
   });
 
@@ -324,14 +330,14 @@ describe("AppShell — recovery mode", () => {
 describe("AppShell — active NavLink", () => {
   it("active link at / gets aria-current=page", () => {
     renderShell({}, ["/"]);
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 
   it("active link at /settings gets aria-current=page", () => {
     renderShell({}, ["/settings"]);
     expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).not.toHaveAttribute("aria-current");
   });
 
   it("active link at /contacts/new gets aria-current=page", () => {
@@ -343,7 +349,7 @@ describe("AppShell — active NavLink", () => {
   it("inactive links do not get aria-current", () => {
     renderShell({}, ["/contacts/new"]);
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
+    expect(screen.getAllByRole("link", { name: "Agenda" })[0]).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 });

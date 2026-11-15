@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useParams } from "react-router";
 import { useAppStore, selectVisibleRecords } from "../store/useAppStore";
 import { getPreferredResultPhone } from "../services/search.service";
 import type { PrivacyFlag } from "../services/search.service";
@@ -13,6 +13,8 @@ import { useRovingTabIndex } from "../hooks/useRovingTabIndex";
 import { DirectoryHighlightCard } from "../components/directory/DirectoryHighlightCard";
 import { GENERIC_CCEE_APPOINTMENTS } from "../../shared/constants/directoryHighlights";
 import { getVisiblePhoneLabel } from "../utils/phoneLabel";
+import { getDirectoryCenterDestination, getHealthCenterName, getHealthCenterNames, matchesDirectoryCenter, matchesHealthCenterName } from "../services/directory-centers";
+import { NotFoundPage } from "./NotFoundPage";
 
 // CSS custom property tracking the rendered height of the sticky
 // search/filter bar below, kept in sync via ResizeObserver. Used together with
@@ -57,6 +59,13 @@ const serviceContainsDisplayName = (service: string, displayName: string): boole
   return normalizedDisplayName.length > 0 && normalizeDisplayName(service).includes(normalizedDisplayName);
 };
 
+const isComposedHealthCenterName = (record: ContactRecord): boolean => {
+  const center = getHealthCenterName(record);
+  const service = record.organization.service;
+  return Boolean(center && service && (matchesDirectoryCenter(record, "health-centers") || matchesDirectoryCenter(record, "local-clinics"))) &&
+    normalizeDisplayName(record.displayName) === normalizeDisplayName(`${center} - ${service}`);
+};
+
 const buildLocationTitleFallback = (location: ContactRecord["location"]): string => {
   const seen = new Set<string>();
   return [
@@ -89,11 +98,8 @@ const buildLocationTitleFallback = (location: ContactRecord["location"]): string
 // and "Cocina Francisco Artíles" (whose service merely contains displayName)
 // now renders as just "Cocina Francisco Artíles" instead of duplicating the
 // name a second time.
-const buildDisplayTitle = (
-  displayName: string,
-  organization: { service?: string },
-  location: ContactRecord["location"]
-): string => {
+const buildDisplayTitle = (record: ContactRecord): string => {
+  const { displayName, location, organization } = record;
   const { service } = organization;
   if (!service) {
     return displayName;
@@ -106,6 +112,10 @@ const buildDisplayTitle = (
     return locationFallback && !isDuplicateOfDisplayName(service, locationFallback)
       ? `${service} - ${locationFallback}`
       : service;
+  }
+
+  if (isComposedHealthCenterName(record)) {
+    return displayName;
   }
 
   return serviceContainsDisplayName(service, displayName) ? service : `${service} - ${displayName}`;
@@ -196,6 +206,10 @@ const getPhoneInlinePrivacyFlags = (phones: PhoneContact[]): PrivacyFlag[] => {
 };
 
 export const DirectoryPage = () => {
+  const { centerId } = useParams();
+  const centerDestination = getDirectoryCenterDestination(centerId);
+  const centerDestinationId = centerDestination?.id;
+  const directoryTitle = centerDestination?.id === "hugcdn" ? "Agenda" : (centerDestination?.title ?? "");
   const {
     contacts,
     settings,
@@ -207,22 +221,35 @@ export const DirectoryPage = () => {
     ensureBootstrapLoaded
   } = useAppStore();
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedHealthCenter, setSelectedHealthCenter] = useState("");
 
   useEffect(() => {
     void ensureBootstrapLoaded();
   }, [ensureBootstrapLoaded]);
   const deferredQuery = useDeferredValue(query);
-  // Filters removed from the UI — only free-text search remains.
+  const healthCenterNames = useMemo(
+    () => centerDestinationId === "local-clinics"
+      ? getHealthCenterNames(contacts?.records ?? [], "local-clinics")
+      : centerDestinationId === "health-centers"
+        ? getHealthCenterNames(contacts?.records ?? [])
+        : [],
+    [contacts, centerDestinationId]
+  );
+  // Type, area, and tag filters remain hidden; health-center routes add a center selector.
   // `showInactive: true` keeps every record (active + inactive) visible since
   // there is no longer any UI control to distinguish or hide by status.
   const visibleRecords = useMemo(
     () =>
       selectVisibleRecords(
-        (contacts?.records ?? []).filter((record) => record.contactMethods.phones.length > 0 || record.beepers.length === 0),
+        (contacts?.records ?? []).filter((record) =>
+          (record.contactMethods.phones.length > 0 || record.beepers.length === 0) &&
+          matchesDirectoryCenter(record, centerDestinationId) &&
+          matchesHealthCenterName(record, selectedHealthCenter)
+        ),
         deferredQuery,
         { selectedType: "all", selectedArea: "all", selectedTags: [], showInactive: true }
       ),
-    [contacts, deferredQuery]
+    [contacts, deferredQuery, centerDestinationId, selectedHealthCenter]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / RESULTS_PER_PAGE));
   const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
@@ -234,7 +261,15 @@ export const DirectoryPage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredQuery]);
+  }, [deferredQuery, centerDestinationId]);
+
+  useEffect(() => {
+    setSelectedHealthCenter("");
+  }, [centerDestinationId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedHealthCenter]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -341,6 +376,9 @@ export const DirectoryPage = () => {
   const selectedRecord =
     currentPageRecords.find((record) => record.id === selectedRecordId) ?? currentPageRecords[0] ?? null;
   const selectedRecordLocation = selectedRecord ? buildLocationTitleFallback(selectedRecord.location) : "";
+  if (!centerDestination) {
+    return <NotFoundPage />;
+  }
   return (
     <section
       aria-labelledby="directory-page-title"
@@ -360,12 +398,15 @@ export const DirectoryPage = () => {
         className="z-30 rounded-3xl bg-white p-4 shadow-panel sm:p-5 lg:sticky"
       >
         <div className="flex flex-col gap-4">
-          <h2 id="directory-page-title" className="sr-only">Búsqueda de contactos</h2>
-          {/* Filters removed — only the free-text search remains. */}
+          <h2 id="directory-page-title" className="font-semibold text-scs-blueDark">{directoryTitle}</h2>
+          {centerDestination.id === "local-clinics" && (
+            <p className="text-base text-slate-500">C.L. significa Consultorio Local.</p>
+          )}
+          {/* Free-text search plus a center selector on the aggregated health-center route. */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <div className="flex-1">
-              <label htmlFor="directory-search" className="sr-only">
-                Buscar contactos
+              <label htmlFor="directory-search" className="mb-2 block text-sm font-semibold text-slate-700">
+                Buscar
               </label>
               <input
                 id="directory-search"
@@ -374,11 +415,28 @@ export const DirectoryPage = () => {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar contacto o servicio"
                 type="search"
-                title="Buscar contactos — pulsa / para enfocar"
+                title={`Buscar en ${directoryTitle} — pulsa / para enfocar`}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-hidden ring-scs-blue transition focus-visible:border-scs-blue focus-visible:bg-white focus-visible:ring-2"
               />
             </div>
+          {(centerDestination.id === "health-centers" || centerDestination.id === "local-clinics") && (
+              <div className="md:w-72">
+                <label htmlFor="health-center-filter" className="mb-2 block text-sm font-semibold text-slate-700">
+                  Centro de salud
+                </label>
+                <select
+                  id="health-center-filter"
+                  value={selectedHealthCenter}
+                  onChange={(event) => setSelectedHealthCenter(event.target.value)}
+                  className="focus-ring w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                >
+                  <option value="">Todos los centros</option>
+                  {healthCenterNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
+          {centerDestination.id === "hugcdn" && <>
           {/* Quick-search shortcuts for the 8 known ODS "book" sheets.
               Clicking a chip sets `query` (the same state the search input above
               controls) to the exact department name, reusing the existing
@@ -405,6 +463,7 @@ export const DirectoryPage = () => {
               );
             })}
           </div>
+          </>}
           <p
             role="status"
             aria-live="polite"
@@ -429,7 +488,9 @@ export const DirectoryPage = () => {
             was only reachable via page-level scroll that the internal list's own
             scrollbar silently absorbed. */}
         <div style={{ maxHeight: BOUNDED_CONTENT_MAX_HEIGHT }} className="flex min-h-0 min-w-0 flex-col gap-3">
-          <DirectoryHighlightCard highlight={GENERIC_CCEE_APPOINTMENTS} />
+          {(centerDestination.id === "hugcdn" || centerDestination.id === "cae-arucas" || centerDestination.id === "cae-galdar") && (
+            <DirectoryHighlightCard highlight={GENERIC_CCEE_APPOINTMENTS} />
+          )}
           <ul
             ref={listRef}
             onKeyDown={handleListKeyDown}
@@ -477,7 +538,8 @@ export const DirectoryPage = () => {
             // " · " when both are present. Degrades gracefully to nothing when
             // neither is set.
             const nameLine = record.type === "department" ||
-              isDuplicateOfDisplayName(record.organization.service, record.displayName)
+              isDuplicateOfDisplayName(record.organization.service, record.displayName) ||
+              isComposedHealthCenterName(record)
               ? null
               : record.displayName;
             const categoryLine = record.organization.role || null;
@@ -501,7 +563,7 @@ export const DirectoryPage = () => {
                     {/* Prefix the title with the service when it adds context
                         beyond displayName (see buildDisplayTitle). */}
                     <h3 className="truncate font-semibold text-scs-blueDark">
-                      {buildDisplayTitle(record.displayName, record.organization, record.location)}
+                      {buildDisplayTitle(record)}
                     </h3>
                     {listContext && <p className="mt-1 truncate text-xs font-medium text-slate-500">{listContext}</p>}
                   {/* Subtitle: name (unless duplicate of service) and role,
@@ -510,6 +572,7 @@ export const DirectoryPage = () => {
                   {subtitle && <p className="mt-2 truncate text-sm text-slate-600">{subtitle}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium text-slate-700">{showPhoneOnCard ? primaryPhone?.number : primaryPhone ? "Ver teléfono en detalle" : "Sin teléfono"}</span>
+                    {showPhoneOnCard && primaryPhone.extension && <span className="font-medium text-slate-600">Corto: {primaryPhone.extension}</span>}
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{record.status === "active" ? "Activo" : "Inactivo"}</span>
                     {privacyFlags.map((flag) => (
                       <span
@@ -630,7 +693,7 @@ export const DirectoryPage = () => {
                       {/* Prefix the title with the service when it adds context
                           beyond displayName (see buildDisplayTitle). */}
                       <h4 className="max-w-4xl text-xl font-semibold leading-tight text-scs-blueDark sm:text-2xl">
-                        {buildDisplayTitle(selectedRecord.displayName, selectedRecord.organization, selectedRecord.location)}
+                        {buildDisplayTitle(selectedRecord)}
                       </h4>
                       {/* Role/job title (ODS "Categoría") shown alongside the
                           detail header so it's visible without extra clicks. */}
@@ -663,7 +726,8 @@ export const DirectoryPage = () => {
                     buildDisplayTitle's use of serviceContainsDisplayName for title
                     composition is a separate concern and is unaffected. */}
                 {selectedRecord.displayName.trim() &&
-                  !isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName) && (
+                  !isDuplicateOfDisplayName(selectedRecord.organization.service, selectedRecord.displayName) &&
+                  !isComposedHealthCenterName(selectedRecord) && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nombre y Apellidos</p>
                     <p className="mt-3 break-words text-sm font-medium leading-6 text-slate-800 [overflow-wrap:anywhere]">
@@ -706,6 +770,7 @@ export const DirectoryPage = () => {
                             <div className="min-w-0">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{getVisiblePhoneLabel(phone.label) ?? "Teléfono"}</p>
                             <p className="mt-2 text-3xl font-semibold leading-none text-scs-blueDark">{phone.number}</p>
+                            {phone.extension && <p className="mt-1 text-sm font-medium text-slate-600">Número corto: {phone.extension}</p>}
                             {phone.notes && <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{phone.notes}</p>}
                           </div>
                             <div className="flex flex-wrap gap-2 shrink-0">

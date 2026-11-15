@@ -70,6 +70,7 @@ const NORMALIZED_TEMPLATE_HEADERS = new Set([
   "building",
   "floor",
   "room",
+  "locationCenter",
   "locationText",
   // ODS "Sector"/"Sección" columns.
   "sector",
@@ -486,7 +487,9 @@ const detectSheetProfile = (sheet: SheetData): SheetProfile | null => {
 
   const centersHeader = detectHeaderRowIndex(sheet.rows, scoreCentersHeader);
 
-  if (centersHeader.score >= 7) {
+  const hasCanonicalCentersSheetHeader = sheet.slug === "centros-de-salud" && centersHeader.score >= 6;
+
+  if (centersHeader.score >= 7 || hasCanonicalCentersSheetHeader) {
     return {
       parser: "centers",
       canonicalSlug: "centros-de-salud",
@@ -642,15 +645,26 @@ const summarizeDetectedFormat = (profiles: SheetProfile[]) => {
 // I/O helpers
 // ---------------------------------------------------------------------------
 
-const readSheetRows = (sheet: XLSX.WorkSheet) =>
-  (XLSX.utils.sheet_to_json(sheet, {
+const readSheetRows = (sheet: XLSX.WorkSheet) => {
+  const rows = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     raw: false,
     defval: "",
     blankrows: false
-  }) as Array<Array<string | number | boolean | null>>)
-    .map((row) => row.map((value) => clean(String(value ?? ""))))
+  }) as Array<Array<string | number | boolean | null>>;
+  const isCentersSheet = rows.slice(0, 5).some((row) =>
+    scoreCentersHeader(row.map((value) => clean(String(value ?? "")))) >= 6
+  );
+
+  return rows
+    .map((row) => row.map((value, index) => {
+      const text = String(value ?? "");
+      return isCentersSheet && index === 0
+        ? text.split(/\r?\n/u).map(clean).filter(Boolean).join("\n")
+        : clean(text);
+    }))
     .filter((row) => row.some((value) => value));
+};
 
 const findZipEndOfCentralDirectory = (buffer: Buffer) => {
   const eocdMinSize = 22;
@@ -902,9 +916,9 @@ const readWorkbookSheets = (sourceFilePath: string): SheetData[] => {
   const fileSlug = normalizeAscii(path.parse(sourceFilePath).name);
 
   return workbook.SheetNames.map((sheetName) => {
-    const rows = readSheetRows(workbook.Sheets[sheetName]!);
     const normalizedName = normalizeAscii(sheetName);
     const slug = normalizedName === "sheet1" || normalizedName === "hoja1" ? fileSlug : normalizedName;
+    const rows = readSheetRows(workbook.Sheets[sheetName]!);
 
     return {
       name: sheetName,

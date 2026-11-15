@@ -349,6 +349,21 @@ describe("buildCsvImportPreview", () => {
     expect(record.location?.section).toBe("Consulta");
   });
 
+  it("maps locationCenter into the persisted contact location", async () => {
+    const filePath = await writeFile(
+      "center-location.csv",
+      [
+        "externalId,type,displayName,phone1Number,locationCenter,locationText",
+        "centros-de-salud-agaete-informacion-928118221,external-center,Agaete - Información,928118221,Agaete,Carretera General"
+      ].join("\n") + "\n"
+    );
+
+    const { dataset } = await buildCsvImportPreview(filePath, "TestEditor");
+
+    expect(dataset.records[0]?.location).toEqual({ center: "Agaete", text: "Carretera General" });
+    expect(dataset.records[0]?.source?.sheetSlug).toBe("centros-de-salud");
+  });
+
   it("accepts a CSV without role/schedule/sector/section columns (backward compatible)", async () => {
     const filePath = await writeFile(
       "backward-compat.csv",

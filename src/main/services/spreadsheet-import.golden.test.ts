@@ -308,7 +308,7 @@ describe("golden: centers-sheet format", () => {
   it("produces records for each center+service combination", () => {
     const filePath = writeWorkbook(testRoot, "centers.xlsx", [
       makeCentersSheet([
-        ["Avenida Doctor Álvarez 123", "INF.", "928111111", "1001"],
+        ["AGAETE Carretera General 123", "INF.", "928111111", "1001"],
         ["", "ADM.", "928222222", "1002"],
         ["Carretera del Norte 456", "URG.", "928333333", "2001"],
       ]),
@@ -316,6 +316,7 @@ describe("golden: centers-sheet format", () => {
 
     const result = normalizeWorkbookRowsFromFile(filePath);
     expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    expect(result.rows[0]?.locationCenter).toBe("Agaete");
     // Centers sheets have their own format label distinct from service sheets.
     expect(result.detectedFormat).toBe("exportación cruda de centros de salud");
   });
@@ -331,6 +332,51 @@ describe("golden: centers-sheet format", () => {
     for (const row of result.rows) {
       expect(row.department).toBe("Centros de salud");
     }
+  });
+
+  it("stores the center name separately from its address", () => {
+    const filePath = writeWorkbook(testRoot, "centers-location.xlsx", [
+      makeCentersSheet([["AGAETE Carretera General 123", "INF.", "928111111", ""]])
+    ]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+    expect(result.rows[0]?.locationCenter).toBe("Agaete");
+    expect(result.rows[0]?.locationText).toBe("Carretera General 123");
+  });
+
+  it("recognizes the current Centros_de_salud sheet header with its dash placeholder", () => {
+    const filePath = writeWorkbook(testRoot, "agenda-centers-tab.xlsx", [{
+      name: "Centros_de_salud",
+      data: [
+        ["-", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["AGAETE\nCarretera General 123", "Inf.", "928111111", "58221"],
+        ["", "Urgencias", "928111243", "58243"]
+      ]
+    }]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.map((row) => row.locationCenter)).toEqual(["Agaete", "Agaete"]);
+    expect(result.rows[0]?.locationText).toBe("Carretera General 123");
+    expect(result.rows[0]?.phone1Extension).toBe("58221");
+    expect(result.rows[1]?.service).toBe("Urgencias");
+  });
+
+  it("preserves Spanish accents in center names and C.L. labels", () => {
+    const filePath = writeWorkbook(testRoot, "centers-spanish-names.xlsx", [{
+      name: "Centros_de_salud",
+      data: [
+        ["-", "SERVICIO", "NUMERO LARGO", "NUMERO CORTO"],
+        ["AGÜIMES\nBolivia, s/n – 35260", "Inf.", "928303581", "83581"],
+        ["BAÑADEROS, C.L.\nPadre Hilario Domínguez, 3", "Inf.", "928627502", "87502"]
+      ]
+    }]);
+
+    const result = normalizeWorkbookRowsFromFile(filePath);
+
+    expect(result.rows.map((row) => row.locationCenter)).toEqual(["Agüimes", "Bañaderos, C.L."]);
+    expect(result.rows[1]?.locationText).toBe("Padre Hilario Domínguez, 3");
   });
 
   it("maps service label abbreviations correctly (INF. → Información)", () => {
@@ -1022,6 +1068,7 @@ describe("golden: mergeRecordsByDisplayName unit", () => {
     building: "",
     floor: "",
     room: "",
+    locationCenter: "",
     locationText: "",
     phone1Label: "Principal",
     phone1Number: "11111",

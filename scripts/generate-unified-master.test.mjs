@@ -193,7 +193,7 @@ it("routes beeper-only contact details to the beeper catalog without duplicating
     assert.equal(envelope.contacts.records.some((record) => record.displayName === "Teléfono Sin Busca"), true);
     assert.equal(envelope.beepers.importedRecords.some((record) => record.name === "Teléfono sin busca"), false);
     assert.equal(envelope.beepers.importedRecords.some((record) =>
-      record.deviceNumber === "7157" && record.department === "Neurocirugia – Planta"
+      record.deviceNumber === "7157" && record.department === "NEUROCIRUGIA – PLANTA"
     ), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });

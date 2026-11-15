@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { NavRail } from "./NavRail";
 import { useAppStore } from "../../store/useAppStore";
@@ -13,106 +13,170 @@ const renderRail = (initialEntries = ["/"]) =>
     </MemoryRouter>
   );
 
+const getDesktopSections = () => {
+  const sections = document.querySelector("[data-navigation-sections=desktop]");
+  if (!sections) throw new Error("Desktop navigation sections were not rendered");
+  return sections;
+};
+
+const getDesktopLinks = () => within(getDesktopSections()).getAllByRole("link");
+const getDesktopLink = (name: string) => within(getDesktopSections()).getByRole("link", { name });
+const NavigateToAgenda = () => {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate("/")}>Ir a Agenda</button>;
+};
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
   useAppStore.setState({ query: "" });
 });
 
-describe("NavRail — items", () => {
-  it("keeps primary links first and groups the create entries with Configuración at the bottom", () => {
+describe("NavRail — sections", () => {
+  it("keeps destinations grouped and separated without redundant headings", () => {
     renderRail();
-    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
-    expect(nav).toBeInTheDocument();
-    const links = within(nav).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual([
-      "Directorio",
-      "Buscas",
-      "Nuevo registro",
-      "Gestión Buscas",
-      "Configuración"
+    const sections = getDesktopSections();
+
+    expect(sections.querySelectorAll("section")).toHaveLength(6);
+    expect(sections.querySelector("section > p")).not.toBeInTheDocument();
+    expect(sections.querySelectorAll("section.border-t")).toHaveLength(6);
+    expect(within(sections).getAllByRole("region").map((section) => section.getAttribute("aria-label"))).toEqual([
+      "Doctor Negrín",
+      "Hospital Polivalente",
+      "Juan Carlos I",
+      "Otros centros",
+      "Centros de Salud",
+      "Unidad de Salud Mental"
     ]);
-    expect(nav.children[2]).toHaveAttribute("aria-hidden", "true");
-    expect(nav.children[2]).toHaveClass("hidden", "sm:block", "sm:flex-1");
-    expect(nav.children[3]).toBe(links[2]);
-    expect(nav.children[4]).toBe(links[3]);
-    expect(nav.children[5]).toBe(links[4]);
-    expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
+    expect(getDesktopLinks().map((link) => link.textContent)).toEqual([
+      "Agenda",
+      "Buscas",
+      "Polivalente",
+      "Juan Carlos I",
+      "San Roque Guía",
+      "CAE Arucas",
+      "CAE Gáldar",
+      "Centros de Salud",
+      "Consultorios Locales",
+      "USM · Canalejas",
+      "USM · Casa del Mar",
+      "USM · Costa Ayala",
+      "USM · La Feria"
+    ]);
+    expect(within(sections).getAllByRole("link")).toHaveLength(13);
   });
 
-  it("routes each item to the expected href", () => {
+  it("keeps routes and shortcut hints when labels change", () => {
     renderRail();
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("href", "/");
+    expect(getDesktopLink("Agenda")).toHaveAttribute("href", "/");
+    expect(getDesktopLink("Agenda")).toHaveAttribute("title", "Agenda — Alt+1");
+    expect(getDesktopLinks().map((link) => link.getAttribute("href"))).toEqual([
+      "/",
+      "/beeper",
+      "/centers/hospital-polivalente",
+      "/centers/hjci",
+      "/centers/hsrg",
+      "/centers/cae-arucas",
+      "/centers/cae-galdar",
+      "/centers/health-centers",
+      "/centers/local-clinics",
+      "/centers/usm-canalejas",
+      "/centers/usm-casa-del-mar",
+      "/centers/usm-costa-ayala",
+      "/centers/usm-la-feria"
+    ]);
+    expect(getDesktopLink("Buscas")).toHaveAttribute("title", "Buscas — Alt+4");
     expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("href", "/contacts/new");
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("href", "/beeper");
-    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("href", "/beeper/new");
-    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("href", "/settings");
   });
 
   it("clears the directory query when entering Agenda or Buscas", () => {
     renderRail();
     useAppStore.setState({ query: "filtro anterior" });
-    fireEvent.click(screen.getByRole("link", { name: "Buscas" }));
+    fireEvent.click(getDesktopLink("Buscas"));
     expect(useAppStore.getState().query).toBe("");
 
     useAppStore.setState({ query: "otro filtro" });
-    fireEvent.click(screen.getByRole("link", { name: "Directorio" }));
+    fireEvent.click(getDesktopLink("Agenda"));
     expect(useAppStore.getState().query).toBe("");
-  });
-
-  it("exposes the Alt+N shortcut hint via the title attribute, unchanged from the previous nav", () => {
-    renderRail();
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("title", "Directorio — Alt+1");
-    expect(screen.getByRole("link", { name: "Nuevo registro" })).toHaveAttribute("title", "Nuevo registro — Alt+2");
-    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("title", "Configuración — Alt+3");
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("title", "Buscas — Alt+4");
-    expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("title", "Gestión Buscas");
   });
 });
 
 describe("NavRail — active route highlighting", () => {
   it("marks the item matching the current route as active", () => {
     renderRail(["/"]);
-    expect(screen.getByRole("link", { name: "Directorio" })).toHaveAttribute("aria-current", "page");
+    expect(getDesktopLink("Agenda")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 
-  it("switches the active item when rendered at a different route", () => {
-    renderRail(["/settings"]);
-    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Directorio" })).not.toHaveAttribute("aria-current");
+  it("marks only the selected center destination as active", () => {
+    renderRail(["/centers/hsrg"]);
+    expect(getDesktopLinks().find((link) => link.getAttribute("href") === "/centers/hsrg")).toHaveAttribute("aria-current", "page");
+    expect(getDesktopLink("Agenda")).not.toHaveAttribute("aria-current");
   });
 
   it("highlights only Gestión Buscas at /beeper/new, not Buscas", () => {
     renderRail(["/beeper/new"]);
     expect(screen.getByRole("link", { name: "Gestión Buscas" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Buscas" })).not.toHaveAttribute("aria-current");
-  });
-
-  it("highlights Buscas at /beeper", () => {
-    renderRail(["/beeper"]);
-    expect(screen.getByRole("link", { name: "Buscas" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Gestión Buscas" })).not.toHaveAttribute("aria-current");
-  });
-
-  it("does not expose a separate Duplicados item at /deduplicate", () => {
-    renderRail(["/deduplicate"]);
-    expect(screen.queryByRole("link", { name: "Duplicados" })).not.toBeInTheDocument();
+    expect(getDesktopLink("Buscas")).not.toHaveAttribute("aria-current");
   });
 });
 
-describe("NavRail — visible labels", () => {
-  it("keeps every destination label visible even when a collapsed preference was stored", () => {
-    localStorage.setItem("nav-rail-collapsed:v1", "true");
+describe("NavRail — mobile disclosure", () => {
+  it("keeps grouped center links in the mobile disclosure", () => {
     renderRail();
-    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Directorio",
-      "Buscas",
-      "Nuevo registro",
-      "Gestión Buscas",
-      "Configuración"
+    const mobileCenters = document.querySelector("details[data-center-menu]");
+
+    expect(mobileCenters).toBeInTheDocument();
+    expect(within(mobileCenters!).getByText("Centros")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toHaveClass("grid-cols-6");
+    expect(mobileCenters?.querySelector("summary")).toHaveClass("min-h-11");
+    expect(mobileCenters?.querySelector("section")).toHaveClass("gap-2");
+    expect(mobileCenters!.querySelectorAll("section")).toHaveLength(5);
+    expect(mobileCenters!.querySelector("section > p")).not.toBeInTheDocument();
+    expect(mobileCenters!.querySelectorAll("section.border-t")).toHaveLength(5);
+    expect(within(mobileCenters!).getAllByRole("region").map((section) => section.getAttribute("aria-label"))).toEqual([
+      "Hospital Polivalente",
+      "Juan Carlos I",
+      "Otros centros",
+      "Centros de Salud",
+      "Unidad de Salud Mental"
     ]);
-    expect(screen.queryByRole("button", { name: /títulos/i })).not.toBeInTheDocument();
+    expect(within(mobileCenters!).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Polivalente",
+      "Juan Carlos I",
+      "San Roque Guía",
+      "CAE Arucas",
+      "CAE Gáldar",
+      "Centros de Salud",
+      "Consultorios Locales",
+      "USM · Canalejas",
+      "USM · Casa del Mar",
+      "USM · Costa Ayala",
+      "USM · La Feria"
+    ]);
+  });
+
+  it("keeps the mobile disclosure label short when a center is selected", () => {
+    renderRail(["/centers/hsrg"]);
+    const summary = document.querySelector("details[data-center-menu] summary");
+
+    expect(summary).toHaveClass("bg-scs-blue", "text-white");
+    expect(summary).toHaveTextContent("Centros");
+    expect(summary).not.toHaveTextContent("San Roque Guía");
+  });
+
+  it("closes the mobile disclosure after navigation changes the route", async () => {
+    render(
+      <MemoryRouter initialEntries={["/centers/hsrg"]} future={future}>
+        <NavRail />
+        <NavigateToAgenda />
+      </MemoryRouter>
+    );
+    const mobileCenters = document.querySelector<HTMLDetailsElement>("details[data-center-menu]")!;
+    mobileCenters.open = true;
+
+    fireEvent.click(screen.getByRole("button", { name: "Ir a Agenda" }));
+
+    await waitFor(() => expect(mobileCenters.open).toBe(false));
   });
 });
