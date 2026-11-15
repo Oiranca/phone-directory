@@ -373,15 +373,16 @@ describe("BeepersPage", () => {
     await openBuscaForm();
 
     const form = screen.getByRole("form", { name: /Nuevo busca/i });
+    expect(screen.queryByLabelText(/^Grupo$/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
     // Use the form-department input directly to avoid table column header ambiguity
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
     // "Rol" uniquely matches the label (table header is "Rol" too — use id)
     fireEvent.change(form.querySelector("#form-role")!, { target: { value: "Auxiliar" } });
-    const optionalDetails = screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement;
+    const optionalDetails = screen.getByText("Turno (opcional)").closest("details") as HTMLDetailsElement;
     expect(optionalDetails.open).toBe(false);
-    fireEvent.click(screen.getByText("Turno y grupo (opcional)"));
+    fireEvent.click(screen.getByText("Turno (opcional)"));
     expect(optionalDetails.open).toBe(true);
     fireEvent.click(screen.getByLabelText(/turno/i));
     fireEvent.click(screen.getByRole("option", { name: "Noche" }));
@@ -403,7 +404,7 @@ describe("BeepersPage", () => {
     await openBuscaForm();
 
     const form = screen.getByRole("form", { name: /Nuevo busca/i });
-    expect((screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement).open).toBe(false);
+    expect((screen.getByText("Turno (opcional)").closest("details") as HTMLDetailsElement).open).toBe(false);
     fireEvent.change(screen.getByLabelText(/número de busca/i), { target: { value: "B-003" } });
     fireEvent.change(screen.getByLabelText(/asignado a/i), { target: { value: "Marta Ruiz" } });
     fireEvent.change(form.querySelector("#form-department")!, { target: { value: "Planta 2" } });
@@ -453,8 +454,8 @@ describe("BeepersPage", () => {
     expect(numberInput.value).toBe("B-001");
     const assignedInput = screen.getByLabelText(/asignado a/i) as HTMLInputElement;
     expect(assignedInput.value).toBe("Ana García");
-    expect((screen.getByText("Turno y grupo (opcional)").closest("details") as HTMLDetailsElement).open).toBe(true);
-    expect(screen.getByLabelText(/^Grupo$/i)).toHaveValue("Equipo A");
+    expect((screen.getByText("Turno (opcional)").closest("details") as HTMLDetailsElement).open).toBe(true);
+    expect(screen.queryByLabelText(/^Grupo$/i)).not.toBeInTheDocument();
   });
 
   it("updates a beeper on edit form submit", async () => {
@@ -470,7 +471,7 @@ describe("BeepersPage", () => {
     await waitFor(() => {
       expect(window.hospitalDirectory.updateBeeper).toHaveBeenCalledWith(
         "bsc_001",
-        expect.objectContaining({ assignedTo: "Ana Actualizada" })
+        expect.objectContaining({ assignedTo: "Ana Actualizada", group: "Equipo A" })
       );
       expect(screen.getByText("Ana Actualizada")).toBeInTheDocument();
     });

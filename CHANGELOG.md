@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.2] - 2026-11-15
+
+### Fixed
+
+- Remove the obsolete Group input from Busca forms while preserving saved values.
+
 ## [0.4.1] - 2026-11-15
 
 ### Fixed
