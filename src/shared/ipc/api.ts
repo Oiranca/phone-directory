@@ -1,16 +1,18 @@
 /**
- * HospitalDirectoryApi — single source of truth for the Electron context-bridge public API.
+ * HospitalDirectoryApi — single source of truth for the renderer transport API.
  *
- * This interface is the authoritative contract between the preload script and the renderer.
+ * This interface is the authoritative contract between a desktop transport and the renderer.
  * - The preload implementation is typed against this interface so any missing or mis-typed
  *   method fails `tsc` immediately (tsconfig.electron.json).
+ * - The Tauri transport maps the same methods to deferred Rust command names; it is not
+ *   installed as a runtime bridge until the bootstrap handler exists.
  * - The renderer ambient declaration derives `window.hospitalDirectory` from this interface
  *   (tsconfig.app.json) so any renderer call-site that diverges also fails typecheck.
  *
  * IPC channel-name strings are intentionally kept out of this file — they are private to
  * the main/preload side only (src/shared/ipc/channels.ts).
  *
- * Do NOT import channel names or Electron internals here. Only shared payload types.
+ * Do NOT import transport channel names or desktop internals here. Only shared payload types.
  */
 import type {
   AutoBackupFailureEvent,
