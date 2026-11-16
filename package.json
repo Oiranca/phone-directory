@@ -25,6 +25,8 @@
     "build:dist:win": "pnpm run build && electron-builder --win --x64 --dir",
     "build:dist:mac": "pnpm run build && electron-builder --mac --dir",
     "build:dist:linux": "pnpm run build && electron-builder --linux --x64 --dir",
+    "tauri:dev": "tauri dev",
+    "tauri:build:raw": "tauri build --no-bundle",
     "release:usb": "bash scripts/release-usb.sh",
     "test:audit-gate": "bash scripts/release-usb.audit.test.sh",
     "test:audit-gate:smoke": "AUDIT_GATE_SMOKE=1 bash scripts/release-usb.audit.test.sh",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@tauri-apps/cli": "2.12.4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@types/node": "^24.12.2",

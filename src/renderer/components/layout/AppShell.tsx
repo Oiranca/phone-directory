@@ -76,9 +76,10 @@ const submitKeyboardForm = () => {
 
 interface AppShellProps extends PropsWithChildren {
   isRecoveryMode?: boolean;
+  navigationDisabled?: boolean;
 }
 
-export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) => {
+export const AppShell = ({ children, isRecoveryMode = false, navigationDisabled = false }: AppShellProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const lastImportedAtLabel = useAppStore((state) => formatLastImportedAt(state.settings?.lastImportedAt));
@@ -129,11 +130,18 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
       const shortcutRoute = shortcutRoutes[event.code];
       if (event.altKey && shortcutRoute && !isTextEntryElement(event.target)) {
         event.preventDefault();
+        if (navigationDisabled) {
+          return;
+        }
         navigate(shortcutRoute);
         return;
       }
 
       if (isModifierShortcut && key === "n") {
+        event.preventDefault();
+        if (navigationDisabled) {
+          return;
+        }
         // Ctrl/Cmd+N always jumps to "Nuevo registro", but some pages (e.g. Beepers'
         // inline create/edit form, or an existing contact being edited) keep unsaved
         // work in local component state that isn't tied to the URL and has no
@@ -144,14 +152,9 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
         // before and navigates immediately.
         const hasOpenForm = document.querySelector<HTMLElement>("[data-keyboard-cancel]");
         if (hasOpenForm) {
-          // Still consume the keypress: without preventDefault, Chromium/Electron
-          // keeps its native Ctrl/Cmd+N behavior (new window) available while
-          // unsaved form state is on screen.
-          event.preventDefault();
           return;
         }
 
-        event.preventDefault();
         navigate("/contacts/new");
         return;
       }
@@ -190,7 +193,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isRecoveryMode, navigate]);
+  }, [isRecoveryMode, navigationDisabled, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-scs-mist via-white to-slate-100 text-scs-ink">
@@ -205,7 +208,7 @@ export const AppShell = ({ children, isRecoveryMode = false }: AppShellProps) =>
             is hidden in recovery mode, matching the previous top-nav's
             behavior (the directory is locked and there's nowhere to
             navigate to until recovery completes). */}
-        {!isRecoveryMode && <NavRail />}
+        {!isRecoveryMode && <NavRail disabled={navigationDisabled} />}
         <div className="flex min-w-0 flex-1 flex-col pb-[var(--nav-rail-height,72px)] sm:pb-0">
           <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
             <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">

@@ -489,7 +489,7 @@ describe("ensureBootstrapLoaded", () => {
     expect(state.isLoading).toBe(false);
   });
 
-  it("sets an error with browser-context help when hospitalDirectory bridge is absent", async () => {
+  it("sets migration guidance when the data bridge is absent", async () => {
     // Remove the bridge
     Object.defineProperty(window, "hospitalDirectory", {
       configurable: true,
@@ -499,8 +499,8 @@ describe("ensureBootstrapLoaded", () => {
     await useAppStore.getState().ensureBootstrapLoaded();
     const state = useAppStore.getState();
     expect(state.bootstrapStatus).toBe("error");
-    expect(state.bootstrapError).toContain("navegador");
-    expect(state.bootstrapHelp).toContain("pnpm dev");
+    expect(state.bootstrapError).toContain("aún no puede acceder");
+    expect(state.bootstrapHelp).toContain("migración");
     expect(state.isLoading).toBe(false);
   });
 
@@ -519,7 +519,7 @@ describe("ensureBootstrapLoaded", () => {
     await useAppStore.getState().ensureBootstrapLoaded();
     expect(useAppStore.getState().bootstrapStatus).toBe("error");
 
-    // Restore the bridge to simulate "Reintentar" after Electron reloads the preload
+    // Restore the bridge to simulate a later runtime bridge becoming available.
     Object.defineProperty(window, "hospitalDirectory", {
       configurable: true,
       value: {
@@ -540,8 +540,8 @@ describe("ensureBootstrapLoaded", () => {
     // The bridge IS available (set up by beforeEach).
     useAppStore.setState({
       bootstrapStatus: "error",
-      bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
-      bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo.",
+      bootstrapError: "Esta versión de HospiAgenda aún no puede acceder a los datos locales.",
+      bootstrapHelp: "El acceso a los datos estará disponible cuando finalice la migración del servicio local.",
       isLoading: false
     });
 

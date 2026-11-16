@@ -7,7 +7,7 @@ import { useAppStore } from "../../store/useAppStore";
 
 const future = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
-const renderShell = (props: { isRecoveryMode?: boolean } = {}, initialEntries = ["/"]) =>
+const renderShell = (props: { isRecoveryMode?: boolean; navigationDisabled?: boolean } = {}, initialEntries = ["/"]) =>
   render(
     <MemoryRouter initialEntries={initialEntries} future={future}>
       <AppShell {...props}>
@@ -200,6 +200,23 @@ describe("AppShell — default mode", () => {
     fireEvent.keyDown(window, { key: "n", ctrlKey: true });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/contacts/new");
+  });
+
+  it("consumes navigation shortcuts while navigation is disabled", () => {
+    render(
+      <MemoryRouter future={future}>
+        <AppShell navigationDisabled>
+          <LocationProbe />
+        </AppShell>
+      </MemoryRouter>
+    );
+
+    const altNotPrevented = fireEvent.keyDown(window, { code: "Digit3", key: "¡", altKey: true });
+    const modifierNotPrevented = fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+
+    expect(altNotPrevented).toBe(false);
+    expect(modifierNotPrevented).toBe(false);
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
   });
 
   it("does not steal modifier+n while an in-progress form is open (e.g. Beepers inline form)", () => {

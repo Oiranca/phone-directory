@@ -133,7 +133,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // Error: allow retry (fall through to start a new load)
 
-    // Synchronous bridge-presence check: if the IPC bridge is not available
+    // Synchronous bridge-presence check: if the data bridge is not available
     // we set the error state and return immediately WITHOUT touching
     // bootstrapInFlight, so a later retry (once the bridge exists) is not
     // blocked by a stale resolved promise left in the module-level guard.
@@ -146,8 +146,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set({
           bootstrapStatus: "error",
           isLoading: false,
-          bootstrapError: "La interfaz abierta en el navegador no puede acceder a los datos locales.",
-          bootstrapHelp: "Usa la ventana de Electron que arranca con `pnpm dev`. La URL http://localhost:5173 solo sirve como renderer de desarrollo."
+          bootstrapError: "Esta versión de HospiAgenda aún no puede acceder a los datos locales.",
+          bootstrapHelp: "El acceso a los datos estará disponible cuando finalice la migración del servicio local."
         });
       }
       return Promise.resolve();

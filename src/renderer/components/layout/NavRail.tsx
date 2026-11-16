@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useAppStore } from "../../store/useAppStore";
@@ -121,23 +121,33 @@ const mobileCenterMenuItemClasses =
   "focus-ring flex min-h-11 items-center gap-2 rounded-[10px] px-3 text-left text-base font-semibold leading-tight transition-colors";
 const activeItemClasses = "bg-scs-blue text-white";
 const inactiveItemClasses = "bg-transparent text-white/55 hover:text-white/80";
+const disabledItemClasses = "cursor-not-allowed bg-transparent text-white/40";
 export const NAV_RAIL_HEIGHT_CSS_VAR = "--nav-rail-height";
 
-const RailNavLink = ({ item, onNavigate, itemClasses = baseItemClasses, compact = false }: { item: RailNavItem; onNavigate?: () => void; itemClasses?: string; compact?: boolean }) => {
+const RailNavLink = ({ item, onNavigate, itemClasses = baseItemClasses, compact = false, disabled = false }: { item: RailNavItem; onNavigate?: () => void; itemClasses?: string; compact?: boolean; disabled?: boolean }) => {
   const setQuery = useAppStore((state) => state.setQuery);
   const clearsSearch = item.to === "/" || item.to.startsWith("/centers/") || item.to === "/beeper";
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (disabled) {
+      event.preventDefault();
+      return;
+    }
+
+    if (clearsSearch) setQuery("");
+    onNavigate?.();
+  };
 
   return (
   <NavLink
     to={item.to}
     end={item.to === "/beeper"}
-    title={item.title}
-    onClick={() => {
-      if (clearsSearch) setQuery("");
-      onNavigate?.();
-    }}
+    title={disabled ? `${item.title} — No disponible durante la migración` : item.title}
+    aria-disabled={disabled || undefined}
+    aria-label={disabled ? `${item.label} no disponible durante la migración` : undefined}
+    tabIndex={disabled ? -1 : undefined}
+    onClick={handleClick}
     className={({ isActive }) =>
-      [itemClasses, compact ? compactExpandedItemClasses : expandedItemClasses, isActive ? activeItemClasses : inactiveItemClasses].join(" ")
+      [itemClasses, compact ? compactExpandedItemClasses : expandedItemClasses, disabled ? disabledItemClasses : isActive ? activeItemClasses : inactiveItemClasses].join(" ")
     }
   >
     {item.icon}
@@ -146,7 +156,7 @@ const RailNavLink = ({ item, onNavigate, itemClasses = baseItemClasses, compact 
   );
 };
 
-const MobileCenterMenu = () => {
+const MobileCenterMenu = ({ disabled = false }: { disabled?: boolean }) => {
   const { pathname } = useLocation();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const activeCenter = centerNavItems.find((item) => item.to === pathname);
@@ -155,6 +165,20 @@ const MobileCenterMenu = () => {
   useEffect(() => {
     if (detailsRef.current) detailsRef.current.open = false;
   }, [pathname]);
+
+  if (disabled) {
+    return (
+      <span
+        role="link"
+        aria-disabled="true"
+        aria-label="Centros no disponible durante la migración"
+        className={`${baseItemClasses} w-full cursor-not-allowed ${disabledItemClasses} sm:hidden`}
+      >
+        <DirectoryIcon />
+        <span>Centros</span>
+      </span>
+    );
+  }
 
   return (
   <details ref={detailsRef} data-center-menu className="relative min-w-0 w-full sm:hidden">
@@ -175,7 +199,7 @@ const MobileCenterMenu = () => {
   );
 };
 
-export const NavRail = () => {
+export const NavRail = ({ disabled = false }: { disabled?: boolean }) => {
   const railRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -211,19 +235,19 @@ export const NavRail = () => {
           {directoryNavSections.map((section) => (
             <section key={section.label} aria-label={section.label} className="flex flex-col gap-1 border-t border-white/15 pt-3 first:border-t-0 first:pt-0">
               {section.items.map((item) => (
-                <RailNavLink key={item.to} item={item} compact />
+                <RailNavLink key={item.to} item={item} compact disabled={disabled} />
               ))}
             </section>
           ))}
         </div>
         <div className="contents sm:hidden">
-          <RailNavLink item={directoryNavItem} />
-          <MobileCenterMenu />
-          <RailNavLink item={buscasNavItem} />
+          <RailNavLink item={directoryNavItem} disabled={disabled} />
+          <MobileCenterMenu disabled={disabled} />
+          <RailNavLink item={buscasNavItem} disabled={disabled} />
         </div>
         <div aria-hidden="true" className="hidden sm:block sm:flex-1" />
         {bottomNavItems.map((item) => (
-          <RailNavLink key={item.to} item={item} />
+          <RailNavLink key={item.to} item={item} disabled={disabled} />
         ))}
       </nav>
     </div>

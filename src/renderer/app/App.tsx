@@ -216,6 +216,7 @@ export const App = () => {
   } = useAppStore();
   const { pushToast } = useToast();
   const bootstrapErrorTitleRef = useRef<HTMLHeadingElement>(null);
+  const isDataBridgeUnavailable = typeof window.hospitalDirectory?.getBootstrapData !== "function";
 
   useEffect(() => {
     void ensureBootstrapLoaded();
@@ -245,7 +246,7 @@ export const App = () => {
 
   if (bootstrapError) {
     return (
-      <AppShell>
+      <AppShell navigationDisabled={isDataBridgeUnavailable}>
         <StatePanel
           role="alert"
           title="No se pudieron cargar los datos"
@@ -254,15 +255,17 @@ export const App = () => {
           action={
             <>
               {bootstrapHelp ? <p className="mb-4 text-sm text-slate-500">{bootstrapHelp}</p> : null}
-              <button
-                type="button"
-                onClick={() => {
-                  void ensureBootstrapLoaded();
-                }}
-                className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
-              >
-                Reintentar
-              </button>
+              {!isDataBridgeUnavailable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void ensureBootstrapLoaded();
+                  }}
+                  className="rounded-full bg-scs-blue px-5 py-3 text-sm font-semibold text-white"
+                >
+                  Reintentar
+                </button>
+              ) : null}
             </>
           }
         />

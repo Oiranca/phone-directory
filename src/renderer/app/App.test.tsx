@@ -485,17 +485,26 @@ describe("App recovery flow", () => {
     });
   });
 
-  it("shows a browser-only guidance message when the Electron bridge is unavailable", async () => {
+  it("shows migration guidance when the data bridge is unavailable", async () => {
     // @ts-expect-error test intentionally removes the preload bridge
     delete window.hospitalDirectory;
 
-    renderApp();
+    const router = renderApp();
 
     expect(
-      await screen.findByText("La interfaz abierta en el navegador no puede acceder a los datos locales.")
+      await screen.findByText("Esta versión de HospiAgenda aún no puede acceder a los datos locales.")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Usa la ventana de Electron que arranca con `pnpm dev`\./)
+      screen.getByText(/El acceso a los datos estará disponible cuando finalice la migración del servicio local\./)
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+
+    const settingsLink = screen.getByRole("link", { name: "Configuración no disponible durante la migración" });
+    expect(settingsLink).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.click(settingsLink);
+    fireEvent.keyDown(window, { altKey: true, code: "Digit3", key: "3" });
+
+    expect(router.state.location.pathname).toBe("/");
   });
 });

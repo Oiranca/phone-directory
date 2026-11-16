@@ -6,10 +6,10 @@ import { useAppStore } from "../../store/useAppStore";
 
 const future = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
-const renderRail = (initialEntries = ["/"]) =>
+const renderRail = (initialEntries = ["/"], disabled = false) =>
   render(
     <MemoryRouter initialEntries={initialEntries} future={future}>
-      <NavRail />
+      <NavRail disabled={disabled} />
     </MemoryRouter>
   );
 
@@ -98,6 +98,17 @@ describe("NavRail — sections", () => {
     useAppStore.setState({ query: "otro filtro" });
     fireEvent.click(getDesktopLink("Agenda"));
     expect(useAppStore.getState().query).toBe("");
+  });
+
+  it("removes disabled destinations from the tab order", () => {
+    renderRail(["/"], true);
+
+    for (const link of screen.getAllByRole("link").filter((element) => element instanceof HTMLAnchorElement)) {
+      expect(link).toHaveAttribute("aria-disabled", "true");
+      expect(link).toHaveAttribute("tabindex", "-1");
+    }
+
+    expect(screen.getByRole("link", { name: "Centros no disponible durante la migración" }).tabIndex).toBe(-1);
   });
 });
 
